@@ -14,6 +14,19 @@ with 16,384-tap filters and zero audio dropouts. The fallback to 8,192 taps was
 never needed. These numbers validated assumptions A1 and A2, and gave confidence
 for the aggressive chunksize 256 target that became D-011.
 
+### Reproducibility
+
+| Role | Path |
+|------|------|
+| Runner script | `scripts/test/run_benchmarks.sh` |
+| Config generator | `scripts/test/gen_configs.py` |
+| Filter generator | `scripts/test/gen_dirac.py` |
+| Configs | `configs/camilladsp/test/test_t1a.yml` through `test_t1e.yml` |
+| Results (API) | `results/benchmarks/T1a_api.txt` through `T1e_api.txt` |
+| Results (thermal) | `results/benchmarks/T1a_temp.txt` through `T1e_temp.txt` |
+
+See `scripts/README.md`, `configs/README.md`, and `results/README.md` for details.
+
 ---
 
 ## Task T0: Pre-flight Checks

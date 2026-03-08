@@ -16,6 +16,18 @@ assumption that IEM monitors could bypass CamillaDSP physically impossible.
 This led directly to the D-011 decision to target chunksize 256 with PipeWire
 quantum 256 for live mode.
 
+### Reproducibility
+
+| Role | Path |
+|------|------|
+| Measurement script (canonical) | `scripts/test/measure_latency.py` |
+| Multi-iteration variant | `scripts/test/measure_latency_v2.py` |
+| Runner script | `scripts/test/run_t2a.sh` |
+| Configs | `configs/camilladsp/test/test_t2a.yml`, `test_t2b.yml` |
+| Results | `results/latency/T2a_summary.json`, `T2b_summary.json` |
+
+See `scripts/README.md`, `configs/README.md`, and `results/README.md` for details.
+
 ---
 
 ## Task T0: Pre-flight Verification

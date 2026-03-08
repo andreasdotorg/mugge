@@ -13,6 +13,15 @@ RT kernel package, verify that all audio infrastructure starts and functions
 correctly, then run a 30-minute stability test with concurrent cyclictest to
 measure worst-case scheduling latency under sustained DSP load.
 
+### Reproducibility
+
+| Role | Path |
+|------|------|
+| Runner script | Ad-hoc commands (no script yet; TK-032 pending) |
+| Raw data | `data/US-003/T3e/` |
+
+See `data/README.md` for details.
+
 ---
 
 ## Phase 1: RT Kernel Installation

@@ -1,5 +1,21 @@
 # US-003: Stability and Thermal Tests (Phase 1)
 
+### Reproducibility
+
+| Role | Path |
+|------|------|
+| T3b runner script | `scripts/stability/run-stability-t3b.sh` |
+| T3c runner script | `scripts/stability/run-stability-t3c.sh` |
+| Stability monitor | `scripts/stability/stability-monitor.sh` |
+| Xrun monitor | `scripts/stability/xrun-monitor.sh` |
+| Config | `configs/camilladsp/test/stability_live.yml` |
+| T3b raw data | `data/US-003/T3b/` |
+| T3c raw data | `data/US-003/T3c/` |
+
+See `scripts/README.md`, `configs/README.md`, and `data/README.md` for details.
+
+---
+
 ## Task T0: Pre-flight and Monitoring Infrastructure
 
 **Date:** 2026-03-08 17:30 CET
