@@ -191,12 +191,26 @@ For detailed progress, see [docs/project/status.md](docs/project/status.md).
 ## Repository Layout
 
 ```
-SETUP-MANUAL.md          Comprehensive setup manual (~2200 lines)
-scripts/                 Automation scripts (config generation, benchmarks)
+SETUP-MANUAL.md              Comprehensive setup manual (~2200 lines)
+scripts/                     Automation scripts (see scripts/README.md)
+  test/                      Benchmark and latency measurement scripts
+  stability/                 Long-running stability test scripts
+configs/                     All configuration files (see configs/README.md)
+  camilladsp/production/     Live and DJ mode CamillaDSP configs
+  camilladsp/test/           Benchmark and test CamillaDSP configs
+  pipewire/                  PipeWire audio server configuration
+  wireplumber/               WirePlumber routing rules
+results/                     Processed test results (see results/README.md)
+  benchmarks/                US-001 CPU benchmark results
+  latency/                   US-002 latency measurement results
+data/                        Raw test data (see data/README.md)
+  US-003/T3b/                Live mode stability test data
+  US-003/T3c/                Informational stability test data
+  US-003/T3e/                PREEMPT_RT validation data
 docs/
-  project/               Status, decisions, user stories
-  theory/                Design rationale, signal processing, Zynq exploration
-  lab-notes/             Experiment logs with raw data and exact commands
+  project/                   Status, decisions, user stories, task register
+  theory/                    Design rationale, enclosure topologies, Zynq exploration
+  lab-notes/                 Experiment logs with raw data and exact commands
 ```
 
 ## Scope and Audience
