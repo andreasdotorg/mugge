@@ -150,17 +150,73 @@ immediately once the processing loop stabilizes.
 
 ---
 
-## Phase 3: 30-Minute Stability Test + Cyclictest
+## Phase 3: 30-Minute Stability Test + Cyclictest (PASS)
 
 **Date:** 2026-03-08
-**Status:** Running. Results pending.
+**Operator:** Claude (automated via change-manager)
+**Host:** mugge, Debian 13 Trixie, kernel 6.12.47+rpt-rpi-v8-rt (PREEMPT_RT), aarch64
 
-Phase 3 runs a 30-minute sustained DSP load test (CamillaDSP with live.yml at
-chunksize 256) concurrent with `cyclictest` to measure worst-case scheduling
-latency under the PREEMPT_RT kernel. This is the validation that D-013
-requires before the system can be connected to amplifiers at a venue.
+### Configuration
 
-*Results will be added when Phase 3 completes.*
+- **CamillaDSP:** `live.yml` (chunksize 256, queuelimit 4, 8 channels)
+- **Audio source:** Looped 2-minute 8-channel test tone
+- **Duration:** 30 minutes, 31 samples at 60-second intervals
+- **Concurrent load:** `cyclictest` at priority 89, 1.8 million samples
+
+### CamillaDSP Results
+
+| Metric | Value |
+|--------|-------|
+| State (31/31 samples) | RUNNING |
+| Clipped samples | 0 |
+| Processing load (typical) | 15-19% |
+| Processing load (transient spike) | 54% |
+| CPU temperature range | 72.1-75.0°C |
+
+### PipeWire Results
+
+| Metric | Value |
+|--------|-------|
+| Xruns | 0 |
+
+### Cyclictest Results
+
+Cyclictest ran concurrently with the full DSP workload at FIFO priority 89,
+collecting 1.8 million scheduling latency samples over the 30-minute test.
+
+| Metric | Value |
+|--------|-------|
+| Samples | 1,800,000 |
+| Priority | FIFO 89 |
+| Minimum latency | 4 us |
+| Average latency | 21 us |
+| P99 latency | 90 us |
+| P99.9 latency | 122 us |
+| Maximum latency | 209 us |
+
+The maximum scheduling latency of 209 microseconds is well within the 5.33ms
+processing deadline (chunksize 256 at 48kHz). The worst-case latency consumes
+3.9% of the available processing window. P99.9 at 122 microseconds means
+999 out of every 1,000 scheduling events complete within 0.12ms.
+
+### Pass/Fail Criteria
+
+| Criterion | Threshold | Actual | Pass/Fail |
+|-----------|-----------|--------|-----------|
+| CamillaDSP state | RUNNING for all samples | 31/31 RUNNING | PASS |
+| PipeWire xruns | 0 | 0 | PASS |
+| Clipped samples | 0 | 0 | PASS |
+| CPU temperature | < 80°C | 72.1-75.0°C | PASS |
+| cyclictest max | < 1ms | 209 us | PASS |
+| Duration | 30 minutes | 30 minutes | PASS |
+
+**Verdict: PASS** (all 6 criteria met)
+
+### Raw Data
+
+- `/home/ela/stability_30min_rt.log` -- 31-sample stability log
+- `/home/ela/cyclictest_output.txt` -- cyclictest summary output
+- `/home/ela/cyclictest_rt.txt` -- cyclictest raw data
 
 ---
 
