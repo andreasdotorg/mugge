@@ -189,7 +189,7 @@ fewer than 500 LUTs and no DSP slices -- negligible relative to the ZU5EV's
 
 The physical interface requires one LVDS or single-ended output per ADAT link,
 driving a Toslink optical transmitter module. These are commodity components
-(Toshiba TOTX173, Sharp GP1FAV55TK0F, typically $2-5) that accept 3.3V TTL
+(Toshiba TOTX173, Everlight PLT133/T10, typically $2-5) that accept 3.3V TTL
 input directly from FPGA I/O pins with no level shifting needed. Two Toslink
 transmitters for dual ADAT is the baseline; the ZU5EV has enough I/O pins and
 fabric for eight or more transmitters if the channel count grows.
@@ -406,15 +406,50 @@ needed). The USBStreamer elimination is the largest single saving.
 ### The Only Custom Piece: PMOD-to-TOSLINK Breakout
 
 A trivial adapter board connects the KV260's PMOD header to two TOSLINK
-optical modules. The design:
+optical modules (one TX for ADAT output, one RX for future ADAT input).
 
+**Recommended transmitter: Toshiba TOTX173** (or pin-compatible TOTX147).
+Through-hole package with standard Toslink connector integrated. VCC range
+2.7-5.5V (works directly at 3.3V FPGA I/O). TTL input, active-low (light ON
+when data LOW). Maximum data rate approximately 15 Mbps -- ADAT at 48kHz runs
+at 12.288 Mbps, well within margin. The only external component required is a
+0.1uF decoupling capacitor on VCC. Price: approximately 2.50 EUR at
+Mouser/DigiKey/Farnell, approximately 1 EUR at LCSC. Alternatives: Everlight
+PLT133/T10 (1-2 EUR at LCSC), Toshiba TOTX1350 (newer, wider voltage range).
+
+**Wiring per TOTX173 module:**
+- Pin 1 (VCC) -> 3.3V from PMOD pin 6
+- Pin 2 (GND) -> GND from PMOD pin 5
+- Pin 3 (Data) -> FPGA PL pin directly (set Zynq I/O standard to LVCMOS33)
+- 0.1uF ceramic capacitor across VCC-GND, placed close to the module
+
+No series resistor is needed -- the TOTX173's internal LED driver handles
+current limiting.
+
+**Breakout design:**
 - **Form factor:** 20x30mm perfboard (or $5 PCB from JLCPCB)
 - **Connections:** 2x6 pin header plugging into KV260 PMOD connector
-- **Components:** Two TOSLINK modules (TX + RX), 100 ohm series resistors,
-  100nF bypass capacitors
+- **Components:** 2x TOSLINK modules (TOTX173 TX + TORX173 RX), 2x 0.1uF
+  decoupling caps, pin headers
 - **Pin mapping:** PMOD pin 1 -> ADAT TX data, pin 2 -> ADAT RX data,
   pin 5 -> GND, pin 6 -> 3.3V VCC
-- **Build time:** Under 1 hour on perfboard
+- **Build time:** Under 30 minutes on perfboard
+- **Total component cost:** Under 6 EUR for dual ADAT (TX + RX)
+
+**Ready-made alternative (no soldering):** MikroElektronika OPTO Encoder Click
+boards (approximately 20 EUR each, plug-and-play with Click-to-PMOD adapters).
+More expensive but zero assembly required. Generic "SPDIF optical output
+modules" from AliExpress (2-5 EUR) may also work but require verification that
+they contain a bare transmitter module rather than a converter IC that would
+interfere with the FPGA's raw bitstream.
+
+**For ADAT input (if needed later):** Add Toshiba TORX173 receiver modules --
+same trivial wiring, TTL-level output from the module to an FPGA PL input pin.
+
+**Note on 96kHz operation:** ADAT S/MUX at 96kHz halves the channel count per
+link (4 channels at 96kHz instead of 8 at 48kHz) but does not double the
+optical bitrate. The TOTX173's 15 Mbps rating is not a constraint for any
+standard ADAT mode.
 
 **Caveat:** The KV260 PMOD-to-PL pin mapping needs verification against the
 carrier board schematic to confirm that the PMOD pins connect to programmable
