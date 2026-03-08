@@ -25,7 +25,8 @@ hardware:
 pair of full-range speakers and two subwoofers. Psytrance lives and dies by its
 kick drums -- they need to hit with physical impact, not arrive as a smeared
 thud. The system applies per-venue room correction that preserves that
-transient punch, something traditional crossover designs struggle with.
+transient punch, using combined filters that handle both the crossover and the
+room correction in a single processing step.
 
 **Cole Porter vocal performances.** Reaper (a digital audio workstation) plays
 backing tracks while a singer performs live with a microphone. She wears
@@ -71,24 +72,38 @@ amount of boost can fix that without wasting amplifier power.
 
 ### Crossover and Combined Filters
 
-A crossover splits the audio signal by frequency -- routing bass to the
-subwoofers and mid-to-high frequencies to the main speakers. Traditional
-crossovers (IIR filters) use a compact mathematical formula to split
-frequencies. They are efficient, but physics imposes a tradeoff: near the
-crossover point, different frequencies arrive at slightly different times -- a
-4-5 millisecond spread at 80Hz. That is enough to soften the leading edge of
-a kick drum.
+Subwoofers can reproduce bass but not treble. Main speakers handle midrange
+and treble but would distort or waste power trying to reproduce deep bass. A
+**crossover** splits the audio signal by frequency, sending each range to the
+speakers designed for it. Every multi-speaker PA system has one.
 
-This system takes a different approach. Instead of a separate crossover and a
-separate room correction filter, it combines both into a single
-**minimum-phase FIR filter** per output channel -- a custom-shaped filter
-built from 16,384 individual frequency adjustments that describe exactly how
-to reshape the audio, sample by sample. It achieves the same frequency split
-with less than 2 milliseconds of timing spread and no pre-echo artifacts.
-The result: kick drums that hit with their full transient impact, even after
-room correction and crossover filtering. This is better for psytrance
-specifically because the genre demands sharp transients; for other music,
-different filter designs may be preferable.
+When the crossover happens digitally before amplification (as in this system),
+the standard approach is **IIR filters** (Infinite Impulse Response) -- compact
+mathematical formulas that split frequencies efficiently. This is what PA
+processors from d&b, L-Acoustics, and most commercial DSP use. But when a
+system also needs per-venue room correction, an IIR crossover requires a
+separate processing stage afterwards -- the room correction filter. Two stages
+means more CPU load and no opportunity to co-optimize the crossover with the
+room correction.
+
+A few high-end processors (Lake, Powersoft) offer **FIR** (Finite Impulse
+Response) crossovers -- filters described by a long list of precise
+coefficients called "taps" that give complete control over the filter shape.
+But commercial FIR processors typically max out at around 1,024 taps, which
+is too short for combined crossover and room correction at low frequencies.
+
+This system runs 16,384 taps (16x what commercial FIR processors offer),
+combining both crossover and room correction into a single **minimum-phase
+FIR filter** per output channel. "Minimum-phase" means it introduces the
+smallest possible timing delay for the amount of frequency shaping applied.
+One filter does both jobs: splitting frequencies and correcting for the room.
+This also reduces **group delay** -- the timing spread where different
+frequencies arrive at slightly different times -- from about 4 milliseconds
+with an IIR crossover to about 2 milliseconds. Less group delay means
+sharper transients (the sudden "snap" of a kick drum stays intact rather
+than spreading out), which matters for bass-heavy psytrance. The
+combined-filter efficiency is the primary motivation; the improved transient
+fidelity is a welcome secondary benefit.
 
 ### Latency Management
 

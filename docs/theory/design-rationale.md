@@ -12,61 +12,141 @@ connects the dots between decisions.
 
 ---
 
-## Why FIR Filters Instead of a Traditional Crossover
+## Background: The Concepts Behind the Decisions
+
+Before diving into the design choices, here is a brief introduction to the
+signal processing concepts that come up throughout this document.
+
+**Crossover.** A speaker that is good at reproducing bass is physically
+incapable of reproducing treble, and vice versa. A subwoofer's large, heavy
+cone moves slowly enough to push air at 40Hz but cannot vibrate fast enough
+for 4kHz. A tweeter's tiny diaphragm handles 4kHz effortlessly but would
+tear itself apart trying to reproduce 40Hz. A crossover solves this by
+splitting the audio signal by frequency before it reaches the speakers:
+bass goes to the subwoofers, mid-to-high frequencies go to the main speakers.
+Every multi-speaker PA system has a crossover somewhere in the chain.
+
+**IIR and FIR filters.** These are two fundamentally different approaches to
+digital filtering -- the mathematical operations that reshape an audio signal.
+An IIR (Infinite Impulse Response) filter uses a compact formula with
+feedback: each output sample depends on previous output samples as well as
+the input. This makes IIR filters computationally cheap and responsive, but
+their feedback structure imposes inherent constraints on phase behavior --
+they cannot avoid delaying some frequencies more than others near the
+crossover point. An FIR (Finite Impulse Response) filter uses a long list of
+coefficients called "taps" that describe the filter's shape explicitly,
+sample by sample. There is no feedback. This gives complete control over both
+the frequency response and the phase behavior, but it costs more CPU because
+every output sample requires multiplying the input by thousands of
+coefficients. The number of taps determines how precisely the filter can
+shape low frequencies: more taps means finer control at lower frequencies.
+
+**Group delay.** When a filter processes audio, different frequencies may come
+out at slightly different times. Group delay measures this timing spread. If
+a filter has 4 milliseconds of group delay at 80Hz, that means energy at 80Hz
+arrives 4ms later than energy at higher frequencies. For a steady tone this
+is inaudible -- the ear does not perceive a constant delay. But for a
+transient, it matters.
+
+**Transients.** A transient is a sudden, sharp sound event: the attack of a
+kick drum, a snare hit, a consonant in speech. Transients contain energy
+across many frequencies simultaneously -- the initial "snap" of a kick drum
+has content from 40Hz up through 8kHz. If a filter delays some of those
+frequencies more than others (group delay), the transient's shape spreads
+out in time. The sharp attack becomes a softer onset. For music that depends
+on rhythmic precision and physical impact -- like psytrance -- preserving
+transient shape matters.
+
+**Room correction.** Every room changes how speakers sound. Hard parallel
+walls create standing waves that make certain bass frequencies boom while
+others nearly vanish. Surfaces reflect sound that interferes with the direct
+signal, creating peaks and nulls in the frequency response that change from
+seat to seat. Room correction measures these distortions with a calibrated
+microphone and computes a filter that compensates -- attenuating the
+frequencies the room amplifies so that what reaches the listener is closer
+to the original recording.
+
+**Why this matters for a PA system.** At a live event, the room is the
+problem. Without correction, some positions in the audience get overwhelming
+bass buildup while others get almost none. The crossover determines how
+cleanly the signal splits between the subwoofers and the mains -- a poor
+split wastes amplifier power and muddies the transition between drivers.
+These are not audiophile niceties. They are the difference between a system
+that sounds balanced across the venue and one that only sounds right at the
+one spot where the engineer is standing.
+
+
+## Why Combined FIR Filters Instead of a Separate IIR Crossover
 
 The single most consequential decision in this project is how the audio signal
 gets split between the main speakers and the subwoofers.
 
-A crossover is conceptually simple: it splits the audio signal by frequency,
-routing bass to the subwoofers and mid-to-high frequencies to the main
-speakers. Both outputs are filtered -- the subs receive only low frequencies,
-the mains receive only high frequencies. Every PA system has one. The question
-is how to implement it, and the answer turns out to matter a great deal for
-psytrance.
+A crossover splits the audio signal by frequency, routing bass to the
+subwoofers and mid-to-high frequencies to the main speakers. Both outputs are
+filtered -- the subs receive only low frequencies, the mains receive only high
+frequencies. Every PA system has one, and crossovers exist at different points
+in the signal chain. Passive analog crossovers (capacitors, inductors,
+resistors) live inside speaker cabinets between the amplifier and the
+drivers -- still standard, still state of the art for that application.
+Active digital crossovers split the signal before amplification, allowing each
+driver to have its own amplifier channel. The standard approach for active
+digital crossovers is IIR (Infinite Impulse Response) filters -- typically
+Linkwitz-Riley designs that use a compact mathematical formula to split
+frequencies with precision. PA processors like dbx DriveRack, Behringer DCX,
+and the DSP built into systems from d&b audiotechnik and L-Acoustics all use
+IIR crossovers effectively, including at psytrance events. CamillaDSP supports
+them natively.
 
-**The conventional approach** is an IIR (Infinite Impulse Response) crossover,
-typically a Linkwitz-Riley design. These use a compact mathematical formula to
-split frequencies with precision -- they hit their target frequency response
-exactly. CamillaDSP supports them natively. They would have been the obvious
-choice -- except that physics imposes a tradeoff in the time domain: near the
-crossover point, different frequencies arrive at slightly different times. At
-an 80Hz crossover, this group delay reaches 4-5 milliseconds -- meaning the
-leading edge of a kick drum gets spread across nearly five milliseconds before
-it reaches the listener.
+IIR crossovers would have been the natural choice here, except that this
+system also needs per-venue room correction -- and that changes the calculus.
 
-Five milliseconds does not sound like much, but psytrance kick drums are
-engineered for impact. They are not the rounded thump of a house kick; they
-are short, punchy transients designed to hit the listener in the chest. Five
-milliseconds of smearing turns a punch into a push. At a psytrance event, that
-difference is the gap between a set that makes people dance and one that feels
-lifeless.
+With an IIR crossover, room correction requires a separate FIR convolution
+stage after the crossover. The signal passes through two processing stages:
+first the IIR crossover splits the frequencies, then a FIR filter corrects
+for the room. Two stages means more CPU load, more latency, more numerical
+artifacts at each stage boundary, and no opportunity to co-optimize the
+crossover and the room correction. The crossover and correction are designed
+independently, even though they interact -- the crossover's phase response
+affects what the room correction filter needs to do.
 
-**The linear-phase FIR alternative** solves the group delay problem entirely --
-it introduces zero group delay at any frequency. But it pays for this with
+A few high-end PA processors (Lake, Powersoft) offer FIR crossover capability,
+but they are typically limited to around 1,024 taps. That is enough for a
+standalone crossover but far too short for combined crossover and room
+correction at low frequencies. This project runs 16,384 taps -- 16 times what
+expensive commercial FIR processors offer -- enabling something no commercial
+unit currently does at this filter length: combining the crossover slope and
+room correction into a single convolution per output channel.
+
+**The combined minimum-phase FIR approach** integrates both functions into one
+filter. The crossover shape and the room correction are co-optimized: the
+filter generator accounts for crossover-room interactions and produces a single
+combined result. Fewer processing stages means fewer numerical artifacts and
+lower CPU load -- a meaningful advantage on a Raspberry Pi where every
+processing cycle counts.
+
+A secondary benefit is reduced group delay. An IIR Linkwitz-Riley crossover
+introduces approximately 4ms of group delay at 80Hz -- different frequencies
+near the crossover point arrive at slightly different times. Minimum-phase FIR
+achieves the same frequency split with about 1-2ms of group delay. Whether
+this difference is audible in isolation is debatable: psychoacoustic research
+places the audibility threshold near one full cycle period (12.5ms at 80Hz),
+and real-world speaker placement introduces comparable timing variations. But
+lower group delay is objectively better when achievable at no additional cost,
+and in a system optimized for bass-heavy psytrance, every improvement in
+transient fidelity is worth taking.
+
+A third benefit is the absence of pre-ringing. **Linear-phase FIR** -- the
+other common FIR approach -- introduces zero group delay but produces
 pre-ringing: a faint echo of the transient that arrives *before* the transient
 itself. At 80Hz, this pre-echo is about 6 milliseconds ahead of the kick.
 Human hearing is surprisingly sensitive to sounds that arrive before the event
-that caused them. The result is an audible ghost attack -- a subtle "thwack"
-before the actual kick lands. For studio mixing this might be acceptable. For
-a PA system playing psytrance at volume, it is not.
+that caused them. Minimum-phase FIR avoids this entirely.
 
-**The minimum-phase FIR approach** that this project uses sits between the two.
-It introduces 1-2 milliseconds of group delay at 80Hz -- a fraction of the IIR
-crossover's delay -- and produces no pre-ringing at all. This is the smallest
-delay physically achievable for the amount of frequency shaping being applied.
 The tradeoff is that the crossover frequency cannot be adjusted in the
 CamillaDSP configuration file; changing it requires regenerating the FIR
-filter coefficients. This is not a universally "better" crossover design -- for
-classical music or studio mastering, linear-phase FIR or even IIR can be
-preferable. It is the right choice for this application, where transient
-fidelity in bass-heavy music is the primary concern.
-
-The decisive advantage of minimum-phase FIR goes further: the crossover and
-the room correction filter can be combined into a single convolution per output
-channel. Instead of running the signal through a crossover and then through a
-separate room correction filter (doubling the processing), the system applies
-one combined filter that does both jobs simultaneously. Fewer processing stages
-means fewer opportunities for numerical artifacts and lower CPU load.
+filter coefficients. For systems that do not need room correction, or where
+crossover flexibility matters more than combined-filter efficiency, IIR
+remains the practical choice.
 
 This is formalized in **D-001**. The decision was made before any hardware
 testing, but it was made conditional on CPU validation (D-007) -- if the Pi 4B

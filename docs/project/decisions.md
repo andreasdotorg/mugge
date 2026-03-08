@@ -7,11 +7,11 @@ decision. Add a new one that supersedes it (reference the old one).
 
 ## D-001: Combined minimum-phase FIR filters instead of IIR crossover (2026-03-08)
 
-**Context:** Evaluating crossover implementation for a psytrance DJ/PA system where transient fidelity is critical.
+**Context:** Evaluating crossover implementation for a system that needs both crossover and per-venue room correction. IIR crossovers are the current digital PA standard; high-end FIR processors (Lake, Powersoft) typically max out at ~1,024 taps.
 
-**Decision:** Use combined minimum-phase FIR filters that integrate crossover slope and room correction into a single convolution per output channel. Do not use IIR (Linkwitz-Riley) crossovers.
+**Decision:** Use combined minimum-phase FIR filters (16,384 taps) that integrate crossover slope and room correction into a single convolution per output channel. Do not use IIR (Linkwitz-Riley) crossovers.
 
-**Rationale:** LR4 IIR crossover has 4-5ms group delay at 80Hz — smears kick transients. Linear-phase FIR has ~6ms pre-ringing at 80Hz — audible ghost attacks. Minimum-phase FIR gives ~1-2ms group delay, no pre-ringing, and allows combining crossover with room correction in one operation.
+**Rationale:** 16x the tap count of commercial FIR processors enables combining crossover and room correction into a single convolution — halves processing stages, reduces numerical artifacts, co-optimizes both functions. Secondary: ~1-2ms group delay vs ~4ms for LR4 IIR at 80Hz (lower is objectively better, though audibility of the difference is debatable). Tertiary: no pre-ringing, unlike linear-phase FIR (~6ms pre-echo at 80Hz).
 
 **Impact:** Crossover frequency cannot be adjusted in CamillaDSP YAML. Filter regeneration required for any crossover change. CamillaDSP loads combined WAV files.
 
