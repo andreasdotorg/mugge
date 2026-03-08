@@ -1,0 +1,131 @@
+{
+  "test_id": "T2b",
+  "config": "/etc/camilladsp/configs/test_t2b.yml",
+  "sample_rate": 48000,
+  "num_runs": 5,
+  "latencies_ms": [
+    20.456443000130054,
+    30.567564333164544,
+    31.635395333055705,
+    33.22132066655348,
+    30.340133333361607
+  ],
+  "best_latency_ms": 20.456443000130054,
+  "mean_latency_ms": 29.244171333253075,
+  "std_latency_ms": 4.510262520769132,
+  "cdsp_info": {
+    "state": "ProcessingState.RUNNING"
+  },
+  "runs": [
+    {
+      "run": 1,
+      "total_samples": 192000,
+      "duration_s": 4.0,
+      "max_abs": 0.9999998807907104,
+      "num_peaks": 2,
+      "peak_positions": [
+        "27465",
+        "75465"
+      ],
+      "peak_values": [
+        0.9999998807907104,
+        0.9999998807907104
+      ],
+      "noise_rms": 0.009320848952210713,
+      "snr_db": 40.61088956196777,
+      "peak_delta_samples": "48000",
+      "peak_delta_ms": 1000.0,
+      "delta_error_ms": 0.0,
+      "approx_latency_ms": 22.187499999999915,
+      "precise_latency_ms": 20.456443000130054
+    },
+    {
+      "run": 2,
+      "total_samples": 192000,
+      "duration_s": 4.0,
+      "max_abs": 0.9999998807907104,
+      "num_peaks": 2,
+      "peak_positions": [
+        "28156",
+        "76156"
+      ],
+      "peak_values": [
+        0.9999998807907104,
+        0.9999998807907104
+      ],
+      "noise_rms": 0.009320126464916657,
+      "snr_db": 40.61156285773301,
+      "peak_delta_samples": "48000",
+      "peak_delta_ms": 1000.0,
+      "delta_error_ms": 0.0,
+      "approx_latency_ms": 36.5833333333333,
+      "precise_latency_ms": 30.567564333164544
+    },
+    {
+      "run": 3,
+      "total_samples": 192000,
+      "duration_s": 4.0,
+      "max_abs": 0.9999998807907104,
+      "num_peaks": 2,
+      "peak_positions": [
+        "28021",
+        "76021"
+      ],
+      "peak_values": [
+        0.9999998807907104,
+        0.9999998807907104
+      ],
+      "noise_rms": 0.009325296942520971,
+      "snr_db": 40.60674556846937,
+      "peak_delta_samples": "48000",
+      "peak_delta_ms": 1000.0,
+      "delta_error_ms": 0.0,
+      "approx_latency_ms": 33.77083333333331,
+      "precise_latency_ms": 31.635395333055705
+    },
+    {
+      "run": 4,
+      "total_samples": 192000,
+      "duration_s": 4.0,
+      "max_abs": 0.9999998807907104,
+      "num_peaks": 2,
+      "peak_positions": [
+        "28082",
+        "76082"
+      ],
+      "peak_values": [
+        0.9999998807907104,
+        0.9999998807907104
+      ],
+      "noise_rms": 0.009323422897237822,
+      "snr_db": 40.60849129157539,
+      "peak_delta_samples": "48000",
+      "peak_delta_ms": 1000.0,
+      "delta_error_ms": 0.0,
+      "approx_latency_ms": 35.041666666666636,
+      "precise_latency_ms": 33.22132066655348
+    },
+    {
+      "run": 5,
+      "total_samples": 192000,
+      "duration_s": 4.0,
+      "max_abs": 0.9999998807907104,
+      "num_peaks": 2,
+      "peak_positions": [
+        "28006",
+        "76006"
+      ],
+      "peak_values": [
+        0.9999998807907104,
+        0.9999998807907104
+      ],
+      "noise_rms": 0.009322385182190406,
+      "snr_db": 40.60945810173975,
+      "peak_delta_samples": "48000",
+      "peak_delta_ms": 1000.0,
+      "delta_error_ms": 0.0,
+      "approx_latency_ms": 33.45833333333326,
+      "precise_latency_ms": 30.340133333361607
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+# stability_live.yml — Live mode stability test config
+# Chunksize 256, 16384-tap FIR on ch 0-3, passthrough on ch 4-7
+# Capture: hw:Loopback,1,0 (2ch) -> Playback: hw:USBStreamer,0 (8ch)
+devices:
+  samplerate: 48000
+  chunksize: 256
+  capture:
+    type: Alsa
+    channels: 2
+    device: "hw:Loopback,1,0"
+    format: S32LE
+  playback:
+    type: Alsa
+    channels: 8
+    device: "hw:USBStreamer,0"
+    format: S32LE
+
+mixers:
+  stereo_to_octa:
+    channels:
+      in: 2
+      out: 8
+    mapping:
+      # Ch 0: FOH Left (from input L)
+      - dest: 0
+        sources:
+          - channel: 0
+            gain: 0
+            inverted: false
+      # Ch 1: FOH Right (from input R)
+      - dest: 1
+        sources:
+          - channel: 1
+            gain: 0
+            inverted: false
+      # Ch 2: Sub 1 (L+R mono sum, -6dB each)
+      - dest: 2
+        sources:
+          - channel: 0
+            gain: -6
+          - channel: 1
+            gain: -6
+      # Ch 3: Sub 2 (L+R mono sum, -6dB each)
+      - dest: 3
+        sources:
+          - channel: 0
+            gain: -6
+          - channel: 1
+            gain: -6
+      # Ch 4: Engineer HP L (passthrough)
+      - dest: 4
+        sources:
+          - channel: 0
+            gain: 0
+      # Ch 5: Engineer HP R (passthrough)
+      - dest: 5
+        sources:
+          - channel: 1
+            gain: 0
+      # Ch 6: Singer IEM L (passthrough)
+      - dest: 6
+        sources:
+          - channel: 0
+            gain: 0
+      # Ch 7: Singer IEM R (passthrough)
+      - dest: 7
+        sources:
+          - channel: 1
+            gain: 0
+
+filters:
+  left_hp:
+    type: Conv
+    parameters:
+      type: Wav
+      filename: "/etc/camilladsp/coeffs/dirac_16384.wav"
+  right_hp:
+    type: Conv
+    parameters:
+      type: Wav
+      filename: "/etc/camilladsp/coeffs/dirac_16384.wav"
+  sub1_lp:
+    type: Conv
+    parameters:
+      type: Wav
+      filename: "/etc/camilladsp/coeffs/dirac_16384.wav"
+  sub2_lp:
+    type: Conv
+    parameters:
+      type: Wav
+      filename: "/etc/camilladsp/coeffs/dirac_16384.wav"
+
+pipeline:
+  - type: Mixer
+    name: stereo_to_octa
+  - type: Filter
+    channels: [0]
+    names:
+      - left_hp
+  - type: Filter
+    channels: [1]
+    names:
+      - right_hp
+  - type: Filter
+    channels: [2]
+    names:
+      - sub1_lp
+  - type: Filter
+    channels: [3]
+    names:
+      - sub2_lp

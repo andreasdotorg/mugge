@@ -1,0 +1,5 @@
+State: ProcessingState.RUNNING
+Rate adjust: 0.0
+Buffer level: 259
+Clipped samples: 0
+Processing load: 10.418128
