@@ -59,7 +59,7 @@ Pi: `ela@192.168.178.185` (hostname: mugge), key-based auth, passwordless sudo.
 
 ## Pi Hardware State (verified 2026-03-08)
 
-- **OS:** Debian 13 Trixie, kernel 6.12.47+rpt-rpi-v8-rt with PREEMPT_RT (D-013). Stock PREEMPT kernel retained as fallback.
+- **OS:** Debian 13 Trixie, kernel 6.12.47+rpt-rpi-v8 (stock PREEMPT) per D-015. PREEMPT_RT kernel retained on SD card but causes F-012 (Reaper hard lockup). Fix before shipping.
 - **USB devices:** UMIK-1, USBStreamer, Hercules DJControl Mix Ultra, APCmini mk2, Nektar SE25
 - **UMIK-1 calibration:** `/home/ela/7161942.txt` (magnitude-only, serial 7161942, -1.378dB sensitivity)
 - **Audio:** PipeWire running (pipewire, pipewire-pulse, wireplumber). Currently at quantum 1024 (default). Needs `10-audio-settings.conf` for production quantum values (256 live, 1024 DJ).
@@ -308,7 +308,7 @@ automatically. The script should:
 - [ ] Verify REW runs on Pi 4 ARM (Java-based, should work but needs testing)
 - [ ] Decide if measurement pipeline should use REW or pure Python
 - [ ] Determine if `gpu_mem=128` is needed for Mixxx or if Xvfb works with `gpu_mem=16`
-- [x] ~~Check if Raspberry Pi OS Trixie ships a PREEMPT_RT kernel package~~ YES: `linux-image-6.12.47+rpt-rpi-v8-rt` available. D-013: PREEMPT_RT mandatory for production. Install via US-003 T3e
+- [x] ~~Check if Raspberry Pi OS Trixie ships a PREEMPT_RT kernel package~~ YES: `linux-image-6.12.47+rpt-rpi-v8-rt` available. Installed in T3e (PASS). D-013: PREEMPT_RT mandatory for production — but **D-015 defers to stock PREEMPT** due to F-012 (Reaper hard lockup on RT kernel). Fix before shipping.
 - [ ] Test whether PipeWire or native JACK gives better latency/stability on Pi 4
 - [ ] Investigate CamillaDSP's websocket API for runtime filter hot-swapping
   (can we update coefficients without restarting the service?)

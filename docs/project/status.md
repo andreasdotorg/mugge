@@ -65,7 +65,7 @@ ahead.
 - **US-004** (selected): Assumption register — independent, can run in parallel with US-003.
 - **US-000a** (in-review): 4/4 DoD — F-002 and F-011 both resolved, verified across reboot
 - **Completed this session:** US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
-- **Remaining TODOs**: cloud-init ~3.3s boot overhead (US-024 candidate), PipeWire TS scheduling issue, lab notes T6 latency budget minor correction (old IEM bypass assumption)
+- **Remaining TODOs**: cloud-init ~3.3s boot overhead (TK-007), lab notes T6 latency budget minor correction (TK-013), F-012 Reaper RT lockup (TK-022)
 
 ## Blockers
 
