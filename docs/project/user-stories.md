@@ -171,7 +171,7 @@ and FIR filter length combinations on the Pi 4B,
 **so that** I can confirm the hardware can handle the DSP workload and make
 informed decisions about filter length and chunksize for each operating mode.
 
-**Status:** done (all 5 tests pass 2026-03-08: T1a 5.23%, T1b 10.42%, T1c 20.43%, T1d 5.21%, T1e 10.39%. 16k taps both modes. A1/A2 validated.)
+**Status:** done (all 5 tests pass 2026-03-08: T1a 5.23%, T1b 10.42%, T1c 19.25%, T1d 6.35%, T1e 6.61%. 16k taps both modes. A1/A2 validated.)
 **Depends on:** US-000 (CamillaDSP must be installed)
 **Blocks:** US-003 (stability tests use the config validated here), US-008 through US-011 (pipeline filter length depends on CPU budget), US-010 (correction filter tap count)
 **Decisions:** D-002 (dual chunksize), D-003 (16,384-tap FIR)
