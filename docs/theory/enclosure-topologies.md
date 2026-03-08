@@ -204,6 +204,129 @@ make them less competitive where maximum SPL per watt and per cubic meter are
 priorities. They are, however, the simplest to design and the most
 predictable in behavior.
 
+#### 3.1.6 Sealed alignment tradeoff: Bessel vs Butterworth in a cut-only system
+
+The group delay table in 3.1.2 lists three canonical sealed alignments. Which
+is optimal for a system that applies cut-only (D-009) minimum-phase FIR
+correction targeting psytrance transient fidelity? The answer is not obvious,
+because the cut-only constraint interacts with each alignment differently.
+
+##### The classical tradeoff
+
+| Alignment | Qtc | -3 dB re Fc | Group delay at Fc | Impulse overshoot |
+|-----------|-----|-------------|-------------------|-------------------|
+| Bessel | 0.577 | ~1.55 x Fc | ~0.6 / Fc (flattest) | 0% |
+| Butterworth | 0.707 | 1.00 x Fc | ~0.9 / Fc | ~4.3% |
+| Underdamped | 1.0 | ~0.79 x Fc | ~1.3 / Fc | Visible ringing |
+
+Bessel has the flattest group delay and cleanest impulse response but rolls
+off earliest. Butterworth extends 1.55x lower in frequency for the same Fc.
+Underdamped extends further still but with ringing that degrades transients.
+These are textbook second-order highpass properties [^6] [^7].
+
+##### Why cut-only correction changes the tradeoff
+
+In a system that allows both boost and cut, the standard argument is: choose
+Bessel for its superior transient behavior, then boost the low-frequency
+rolloff to recover bass extension. The FIR filter adds only the minimum
+additional group delay associated with that magnitude correction.
+
+**Our system cannot do this.** D-009 mandates cut-only correction because
+psytrance source material is mastered to within a hair's breadth of digital
+maximum -- any boost risks clipping on a PA system. The consequence for
+alignment choice:
+
+- Bessel at Fc = 40 Hz: -3 dB at ~62 Hz, -6 dB at 40 Hz, -12 dB at 30 Hz.
+- Butterworth at Fc = 40 Hz: -3 dB at 40 Hz, -6 dB at ~30 Hz.
+
+The Bessel box is 6 dB quieter at 40 Hz -- in the heart of the psytrance
+kick fundamental range -- with no recovery path. This is a permanent,
+irrecoverable loss of low-frequency output under D-009.
+
+##### Can FIR correction reduce Butterworth's group delay?
+
+The Butterworth group delay peak at Fc is the minimum-phase delay associated
+with the magnitude response knee. To reduce it, the FIR correction would need
+to make the transition from passband to rolloff more gradual -- effectively
+cutting frequencies near Fc to lower the effective Q. This works, but trades
+bandwidth for group delay:
+
+- Butterworth at Fc = 40 Hz: group delay ~22.5 ms at Fc.
+- Apply ~2 dB shelf cut at Fc (reducing effective Qtc to ~0.63): group delay
+  drops to ~18.8 ms (~17% reduction).
+- Cost: -2 dB at 40 Hz (irrecoverable under D-009), ~-1 dB at 50 Hz.
+
+The fundamental constraint: within a minimum-phase system, you cannot reduce
+group delay without either extending the passband (boost, prohibited) or
+narrowing it (cut, which sacrifices extension). The correction effectively
+slides the system from Butterworth toward Bessel in post-processing [^19].
+
+##### Bigger box Bessel: can a lower Fc recover the extension?
+
+Instead of Bessel at the same Fc, use a larger box to push Fc low enough
+that the -3 dB point matches Butterworth. For a typical PA driver
+(Fs = 30 Hz, Qts = 0.4, Vas = 120 L):
+
+- Butterworth: ~53 L box, Fc ~47 Hz, -3 dB at 47 Hz.
+- Bessel: ~102 L box, Fc ~38 Hz, -3 dB at ~59 Hz.
+
+The Bessel box is nearly 2x the volume but its -3 dB point is still 12 Hz
+higher. For drivers with Qts < 0.577 (most PA drivers), matching the
+Butterworth -3 dB point with a Bessel alignment requires impractically
+large boxes.
+
+##### Intermediate alignments
+
+The Bessel and Butterworth points sit on a continuous Qtc spectrum:
+
+| Qtc | Group delay (re Bessel) | -3 dB re Fc | Overshoot |
+|-----|------------------------|-------------|-----------|
+| 0.577 | 1.00x (reference) | ~1.55 x Fc | 0% |
+| 0.63 | ~1.15x | ~1.35 x Fc | ~1.5% |
+| 0.65 | ~1.25x | ~1.25 x Fc | ~2.5% |
+| 0.707 | 1.50x | 1.00 x Fc | 4.3% |
+
+At Fc = 40 Hz, the Bessel-to-Butterworth spread is 15 ms to 22.5 ms -- a
+7.5 ms difference. A Qtc of 0.65 gives ~18.8 ms (75% of Bessel's advantage)
+while keeping the -3 dB point within ~25% of Butterworth.
+
+##### Practical recommendation
+
+**Butterworth (Qtc = 0.707) is the better default for our system.**
+
+1. **Extension matters more than group delay margin.** Psytrance kick
+   fundamentals at 30-50 Hz. Bessel sacrifices 6+ dB in this range with no
+   recovery path. The group delay improvement (7.5 ms) is in a perceptual
+   regime where audibility is unverified (below Blauert's measured range).
+
+2. **The group delay penalty is bounded.** Butterworth at Fc = 40 Hz:
+   ~22.5 ms -- below the extrapolated Blauert threshold (~25 ms at 40 Hz)
+   and comparable to early reflections (5-30 ms) that remain after room
+   correction.
+
+3. **FIR provides a tunable compromise.** If transient testing reveals
+   Butterworth group delay is audibly problematic, the FIR correction can
+   gently reshape the knee to reduce group delay at the cost of some
+   extension -- sliding the system toward Bessel in post-processing.
+
+4. **Underdamped (Qtc > 0.707) should be avoided.** The ringing produces
+   audible time-domain artifacts; the FIR correction can reduce them only
+   by cutting the magnitude peak, which yields less usable bandwidth than
+   Butterworth with no transient advantage. Strictly worse.
+
+5. **For custom builds,** Qtc = 0.65 in a somewhat larger box is worth
+   considering -- 75% of Bessel's group delay advantage with a -3 dB point
+   within ~25% of Butterworth. But this is a refinement, not a requirement.
+
+##### D-010 speaker profile note
+
+For sealed enclosures, the D-010 speaker profile should record approximate
+Qtc. The pipeline can compute optimal correction from the measured impulse
+response alone, but recording Qtc helps the operator interpret results and
+understand why the measured response rolls off where it does. It also informs
+whether FIR knee reshaping (trading extension for group delay) is available
+or already exhausted.
+
 ### 3.2 Ported (Bass Reflex)
 
 #### 3.2.1 Operating principle
@@ -852,6 +975,13 @@ Raspberry Pi -- shifts a decades-old consensus. Enclosure topology moves from
 "negligible" to "one of several comparable contributors," not because the
 physics changed, but because we removed the thing that was hiding it.
 
+Within sealed designs, the D-009 cut-only constraint favors Butterworth
+(Qtc = 0.707) over Bessel (Qtc = 0.577). Bessel has lower group delay but
+sacrifices 6+ dB of output at 30-50 Hz with no recovery path -- a permanent
+loss in the psytrance kick fundamental range. The FIR correction can slide
+a Butterworth system toward Bessel-like group delay in post-processing if
+needed, but cannot boost a Bessel system's lost extension (see 3.1.6) [^19].
+
 ### Q2: Does our FIR correction pipeline handle all topologies?
 
 Yes. The pipeline measures, corrects, and deploys filters for any enclosure
@@ -962,3 +1092,10 @@ that source in this document.
     correction, per-venue measurement, cut-only correction, subsonic
     protection).
     **Confidence: HIGH** -- project decisions.
+
+[^19]: Bessel vs Butterworth alignment analysis for cut-only corrected
+    systems (this document). Application of second-order transfer function
+    relationships [^6] [^7] to the D-009 cut-only constraint.
+    **Confidence: HIGH** for transfer function relationships; **MEDIUM-HIGH**
+    for the practical recommendation (engineering judgment in an unstudied
+    perceptual regime).
