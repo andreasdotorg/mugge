@@ -302,6 +302,55 @@ formalizing and maintaining the expanded assumption register.
 
 ---
 
+## US-028: Configure PipeWire 8-Channel Loopback for Production Routing
+
+**As** the system builder,
+**I want** PipeWire to expose the ALSA Loopback device as an 8-channel JACK
+sink (not the default stereo),
+**so that** both modes can route independently to multiple output channels
+through the loopback to CamillaDSP: DJ mode needs main stereo (ch 1-2) plus
+headphone cue (ch 5-6), live mode needs all 8 channels (PA, subs, engineer
+HP, singer IEM).
+
+**Status:** draft
+**Depends on:** US-000b (PipeWire configured with RT scheduling), US-003 (stability baseline — validates platform before routing changes)
+**Blocks:** US-006 (Mixxx feasibility — DJ pre-listen/cue requires multi-channel output on ch 5-6), US-017 (IEM routing requires 8-channel loopback for independent PA + IEM paths), US-021 (mode switching must handle 8-channel routing for both modes)
+**Cross-references:** A19 (Loopback channel config assumption), A11 (8-channel CamillaDSP routing), D-011 (live mode chunksize 256 + quantum 256, all 8 channels through CamillaDSP)
+**Decisions:** D-011 (all 8 USBStreamer channels route through CamillaDSP — IEM as passthrough on ch 7-8)
+
+**Note:** This is a production blocker for **both** modes, not just live.
+PipeWire's default ALSA adapter exposes `snd-aloop` as a stereo device.
+- **DJ mode** needs at minimum 4 channels: Mixxx main stereo on ch 1-2 plus
+  headphone pre-listen/cue on ch 5-6. Without multi-channel output, the DJ
+  cannot cue the next track privately — a fundamental DJ workflow requirement.
+- **Live mode** needs all 8 channels: PA L/R on ch 1-2, subs on ch 3-4,
+  engineer HP on ch 5-6, singer IEM on ch 7-8.
+The solution is a custom PipeWire config node with `audio.channels = 8` and
+AUX0-AUX7 channel positions, suppressing ACP auto-profile. This is the same
+proven pattern used for the USBStreamer PipeWire configuration.
+
+**Acceptance criteria:**
+- [ ] `snd-aloop` verified to support 8 channels: `aplay -D hw:Loopback,0 --dump-hw-params` confirms 8ch capability
+- [ ] Custom PipeWire config node created for the Loopback device: `audio.channels = 8`, channel positions AUX0-AUX7, ACP auto-profile suppressed
+- [ ] PipeWire exposes an 8-channel JACK sink on the Loopback device (visible via `pw-jack jack_lsp` or `pw-cli list-objects`)
+- [ ] **Live mode routing:** Reaper via `pw-jack` can route independently to all 8 channels of the Loopback sink
+- [ ] **DJ mode routing:** Mixxx routes main stereo to ch 1-2 and headphone cue to ch 5-6 via the 8-channel Loopback. Subs (ch 3-4) receive mono sum from CamillaDSP mixer. IEM channels (ch 7-8) silent in DJ mode
+- [ ] CamillaDSP captures all 8 channels from the Loopback playback side (`hw:Loopback,1` with 8 channels)
+- [ ] Zero xruns at PipeWire quantum 256 with 8-channel Loopback active (D-011 live mode target)
+- [ ] Zero xruns at PipeWire quantum 1024 with 8-channel Loopback active (DJ mode)
+- [ ] Configuration persists across reboot
+- [ ] No regression: USBStreamer 8-channel config still works correctly alongside the Loopback config
+
+**DoD:**
+- [ ] PipeWire config file written (e.g., `~/.config/pipewire/pipewire.conf.d/loopback-8ch.conf` or system-wide equivalent)
+- [ ] Syntax-validated and tested on Pi 4B
+- [ ] 8-channel routing verified with actual audio: test tone on each channel independently, confirm correct channel mapping end-to-end (Reaper -> Loopback -> CamillaDSP -> USBStreamer)
+- [ ] Lab note documenting: config file contents, verification commands, channel mapping, and how DJ mode stereo coexists with live mode 8-channel
+- [ ] Architect review: config approach is consistent with USBStreamer pattern
+- [ ] Audio engineer review: channel mapping is correct for the production signal flow
+
+---
+
 ## Tier 2 — Hardware and Software Verification
 
 These stories resolve specific unknowns about hardware devices and software
@@ -355,7 +404,7 @@ UI responsiveness and audio performance,
 **so that** I can use it as my DJ software for PA/DJ sets.
 
 **Status:** draft
-**Depends on:** US-000 (Mixxx must be installed), US-005 (need working MIDI controller to test DJ workflow)
+**Depends on:** US-000 (Mixxx must be installed), US-005 (need working MIDI controller to test DJ workflow), US-028 (8-channel Loopback — DJ pre-listen/cue requires ch 5-6)
 **Blocks:** US-003/T3a (stability test with Mixxx requires Mixxx to be working)
 **Decisions:** none yet
 
@@ -824,9 +873,9 @@ PA mix and the engineer headphone mix,
 vocal cues) without affecting what the audience hears.
 
 **Status:** draft
-**Depends on:** US-003 (live mode stability confirmed)
+**Depends on:** US-003 (live mode stability confirmed), US-028 (8-channel PipeWire Loopback must be configured for independent PA + IEM routing)
 **Blocks:** US-018 (singer self-control is a future enhancement of this)
-**Decisions:** D-002 (live mode chunksize 512)
+**Decisions:** D-002 (live mode chunksize 512), D-011 (all 8 channels through CamillaDSP, IEM as passthrough)
 
 **Note:** MVP scope per owner direction: engineer controls the IEM mix. Singer
 self-control of her own mix is a nice-to-have (see US-018). IEM signal path
@@ -1084,9 +1133,9 @@ a gig starts,
 error-prone manual config editing.
 
 **Status:** draft
-**Depends on:** US-003 (both modes validated), US-006 (Mixxx working), US-017 (live IEM mix working)
+**Depends on:** US-003 (both modes validated), US-006 (Mixxx working), US-017 (live IEM mix working), US-028 (8-channel Loopback for live mode routing)
 **Blocks:** none
-**Decisions:** D-002 (dual chunksize)
+**Decisions:** D-002 (dual chunksize), D-011 (live mode chunksize 256 + quantum 256, 8-channel routing)
 
 **Note:** Owner direction: whole-gig switching for now. Mid-event quick switch
 is a future nice-to-have and does not need to be seamless.
@@ -1272,8 +1321,9 @@ US-000 (software install) ──> US-000a (security hardening) ──> [venue de
                           ├──> US-000b (desktop trimming) ──> US-024 (boot time optimization)
                           │
                           ├──> US-001 (CPU benchmark) ──┐
-                          │                             ├──> US-003 (stability) ──> US-017 (IEM mix)
-                          └──> US-002 (latency) ────────┘                      └──> US-021 (mode switch)
+                          │                             ├──> US-003 (stability) ──> US-028 (8ch loopback) ──> US-017 (IEM mix)
+                          └──> US-002 (latency) ────────┘                      │                       └──> US-021 (mode switch)
+                                                                               └──> US-006 (Mixxx — cue needs ch 5-6)
 
 US-001 ──> US-008 (measurement) ──> US-009 (time alignment) ──┐
                                 └──> US-010 (correction) ──> US-011 (crossover) ──> US-011b (profiles/config gen) ──> US-012 (automation) ──> US-013 (T5 verification)
@@ -1285,7 +1335,7 @@ US-000 + US-000a ──> US-022 (web UI platform) ──> US-023 (engineer dashb
 US-004 (expanded assumptions) — independent, informs all
 
 US-005 (Hercules MIDI) ──> US-006 (Mixxx feasibility) ──> US-007 (APCmini mapping)
-                           ↑ depends on US-000          └──> US-025 (USB music library)
+                           ↑ depends on US-000 + US-028  └──> US-025 (USB music library)
 
 US-000a ──> US-026 (remote music transfer)
 
