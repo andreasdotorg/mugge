@@ -203,11 +203,21 @@ than a ported B4 alignment (~25-35 ms) and comparable to a sealed box
 (~15-20 ms). The heavy damping trades away the resonant output boost in
 exchange for time-domain behavior closer to sealed.
 
+**Intermediate designs (moderate damping):** Group delay falls between the
+true TL and quarter-wave resonator bounds, typically 15-25 ms at 50 Hz,
+depending on the damping density and taper profile.
+
 **Lightly damped TL / quarter-wave resonator:** With light damping, the
 quarter-wave resonance is strong, and the group delay behavior approaches
 that of a ported enclosure. Group delay peaks near the tuning frequency, with
 magnitude comparable to a ported B4 alignment (~25-40 ms at 50 Hz depending
 on tuning).
+
+| TL damping level | Approximate behavior | Group delay at 50 Hz |
+|-----------------|---------------------|---------------------|
+| Heavy (true TL) | ~Second order (sealed-like) | ~10-20 ms |
+| Moderate (practical TL) | Between 2nd and 4th order | ~15-25 ms |
+| Light (quarter-wave resonator) | ~Fourth order (ported-like) | ~25-40 ms |
 
 The propagation delay component is straightforward physics. The
 resonance-related group delay depends heavily on the specific damping profile
@@ -254,6 +264,13 @@ The physical basis:
 - Toole's observation that room effects dominate applies equally: any TL
   transient advantage is swamped by the room's modal behavior in practice.
 
+The "tighter bass" reputation likely originates from comparisons between
+well-designed TLs (moderate to heavy damping) and poorly aligned ported boxes
+(underdamped, high-Qtc driver producing a response hump). A properly aligned
+ported box (QB3 or B4 with an appropriate driver) has transient behavior that
+is difficult to distinguish from a moderately damped TL in a real listening
+environment, per Toole's broader conclusion about room dominance.
+
 **Assessment:** The "tighter bass" claim for true TLs has a valid physical
 basis in reduced impulse response ringing and better cone control below
 tuning. For lightly-damped TLs and quarter-wave resonators, the claim is not
@@ -296,9 +313,11 @@ professional PA for several reasons:
    conditions where predictable performance matters most.
 
 Some high-end PA manufacturers (notably PMC -- Professional Monitor Company)
-use transmission line designs in their studio monitors and some PA products.
-However, these are the exception -- the vast majority of PA subwoofers are
-ported or horn-loaded.
+use transmission line designs in their studio monitors and some larger
+systems. Their designs are closer to the lightly-damped (quarter-wave
+resonator) end of the spectrum, optimized for monitoring accuracy rather than
+maximum SPL. However, these are the exception -- the vast majority of PA
+subwoofers are ported or horn-loaded.
 
 For our system, TL subwoofers are unlikely to be used at psytrance events
 (where high SPL, portability, and efficiency are priorities). They might be
@@ -400,12 +419,14 @@ requires subsonic protection for ported enclosures.
 horn is effective. Below the horn's cutoff frequency, the same unloading
 concern applies -- D-010 subsonic protection is required.
 
-**True TL:** The damping material provides relatively uniform acoustic
-loading across frequency, keeping the driver better-controlled than a ported
-design at frequencies below tuning. Subsonic protection is still advisable
-to prevent mechanical limits being reached on sub-bass content, but the
-protection can be less aggressive than for ported enclosures (for example,
-12 dB/octave vs 24 dB/octave).
+**True TL:** The resistive pipe loading provides damping at all frequencies,
+including below the quarter-wave frequency. Cone excursion increases below
+the quarter-wave frequency but more gradually than in a ported box because the
+pipe still provides some resistive loading -- there is no sharp unloading
+transition. Subsonic protection is still advisable (D-010) to prevent
+mechanical limits being reached on sub-bass content, but the failure mode is
+less abrupt than with a port and the protection can be less aggressive (for
+example, 12 dB/octave vs 24 dB/octave).
 
 **Quarter-wave resonator / MLTL:** With light damping, cone excursion
 behavior is closer to ported -- unloading occurs below the tuning frequency.
@@ -612,9 +633,11 @@ internal acoustic path delay. The per-sub FIR correction (D-004) compensates
 for the measured response. The pipeline does not need to know the enclosure
 topology -- it measures the result and corrects accordingly. The speaker
 profile (D-010) should include enclosure type options (sealed, ported, horn,
-transmission line) to set the appropriate subsonic protection behavior, but
-the correction approach is the same: measure, compute inverse, apply as
-minimum-phase FIR.
+transmission line) to set the appropriate subsonic protection behavior.
+For transmission lines, subsonic protection should default to enabled
+(conservative) with the option to disable for verified heavily-damped true
+TLs. The correction approach itself is the same regardless of topology:
+measure, compute inverse, apply as minimum-phase FIR.
 
 ---
 
@@ -646,13 +669,15 @@ thresholds and certain citations should be verified against original sources.
 |--------|-------|-----------|
 | Thiele (1971), Small (1972, 1973) | Thiele-Small parameters, sealed/ported models | HIGH -- foundational, widely reproduced |
 | Olson (1957), Beranek (1954), Keele (1975) | Horn acoustics, acoustic transformer principle | HIGH -- foundational |
-| Bailey (1965), Bradbury (1976), King (1996) | Transmission line theory, quarter-wave reinforcement | HIGH -- foundational |
+| Bailey (1965), Bradbury (1976) | Transmission line loudspeaker theory | MEDIUM-HIGH -- foundational for TL design, widely referenced, but less mainstream than Thiele-Small |
+| King (1996) | Practical TL design methodology | MEDIUM -- referenced in TL design literature, not independently verified against original |
 | Martin King (2001-2010) | TL vs quarter-wave resonator distinction, simulation data | HIGH -- peer-reviewed and independently verifiable |
 | Blauert and Laws (1978) | Group delay audibility ~1.5 cycles, 500 Hz-8 kHz | HIGH for the measured range; sub-bass values are extrapolations, not data |
 | Toole (2008), "Sound Reproduction" | Room effects dominate sub-bass time response | MEDIUM-HIGH -- widely referenced, consistent with field experience |
 | Lipshitz, Pocock, Vanderkooy (1982) | Phase audibility in crossovers | MEDIUM -- cited from memory |
 | Linkwitz | LR4 phase distortion inaudible in listening tests | MEDIUM -- consistent with known positions, specific publication unverified |
 | Thiele (cited by Small) | Ported vs sealed differences "likely inaudible" | MEDIUM -- secondary citation, specific paper unverified |
-| PMC (Professional Monitor Company) | Commercial TL use in PA/monitors | MEDIUM -- well-known in industry, current product line unverified |
+| PMC (Professional Monitor Company) | TL use in professional monitoring | HIGH -- commercially verifiable, well-documented product line |
+| "Tighter bass" claim for TLs | Subjective reputation of TL transient quality | MEDIUM -- physically grounded for true TLs, questionable for lightly-damped designs, likely confounded by comparison methodology |
 | HOQS Paraflex community | Paraflex transient behavior, group delay | LOW -- no peer-reviewed measurements published |
 | D-004, D-008, D-009, D-010 | Per-sub correction, per-venue measurement, cut-only, subsonic protection | HIGH -- project decisions |
