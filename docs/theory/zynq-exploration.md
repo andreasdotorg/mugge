@@ -57,8 +57,9 @@ A53 at 1.5GHz, 2GB DDR4, 360 DSP slices, compact form factor with WiFi/BT.
 The smaller FPGA is still adequate for our workload but leaves less room for
 future expansion.
 
-*SOM pricing is being researched separately. Neither is commodity-priced like
-the Pi 4B.*
+The KV260 Starter Kit is approximately $350. Neither platform is
+commodity-priced like the Pi 4B (~$75), but the KV260 replaces both the Pi
+and the USBStreamer (~$200), narrowing the net cost gap.
 
 ---
 
@@ -351,7 +352,7 @@ costs relative to the proven Pi 4B:
 | Filter hot-swap | CamillaDSP restart/API | Glitch-free DMA swap |
 | ARM performance | Cortex-A72 quad @ 1.8GHz | Cortex-A53 quad @ 1.2-1.5GHz (weaker) |
 | Mixxx viability | Proven | Unknown (GO/NO-GO gate) |
-| Platform cost | ~75 EUR (Pi 4B 8GB) | SOM + carrier (pricing TBD) |
+| Platform cost | ~$75 (Pi 4B 8GB) | ~$400 total (KV260 kit + peripherals) |
 | USB audio bridge | Required (USBStreamer) | Eliminated |
 | Community/support | Massive (Raspberry Pi) | Niche (FPGA development) |
 | Setup complexity | apt-get install | FPGA bitstream + PetaLinux |
@@ -366,29 +367,85 @@ architectural cleanliness.
 
 ---
 
-## Hardware BOM
+## Hardware: Off-the-Shelf BOM
 
-The Zynq platform does not require a custom PCB for prototyping. The approach
-is: off-the-shelf SOM plus a small custom adapter for Toslink optical output.
+The Zynq platform does not require a custom PCB. Everything except a trivial
+breakout board is off-the-shelf.
 
-| Component | Purpose | Notes |
-|-----------|---------|-------|
-| Zynq UltraScale+ SOM | Compute + FPGA | KV260 (ZU5EV) or Ultra96-V2 (ZU3EG), pricing TBD |
-| Toslink adapter board | ADAT optical output (x2) | Custom: PMOD-to-Toslink with commodity transceivers ($2-5 each) |
-| USB hub (if needed) | MIDI controllers, UMIK-1 | SOM's USB ports may suffice |
-| SD card / eMMC | Boot media | PetaLinux or Ubuntu image |
-| Power supply | SOM-specific | 12V or 5V depending on carrier board |
-| Flight case integration | Mounting, cooling, cabling | Same physical enclosure as Pi |
+### New Purchases
 
-The Toslink adapter is the only custom hardware. It connects a PMOD or GPIO
-header on the SOM carrier board to Toslink optical transmitter modules (Toshiba
-TOTX173 or Sharp GP1FAV55TK0F). The electrical interface is simple: a serial
-bitstream from the FPGA drives each optical transceiver directly at 3.3V. Two
-Toslink transmitters for dual ADAT is the baseline.
+| Component | Price (approx.) | Notes |
+|-----------|----------------|-------|
+| AMD Kria KV260 Starter Kit | ~$350 | ZU5EV, 1,248 DSP48E2, 4GB DDR4, PMOD headers with PL pins, 4x USB 3.0, HDMI, GbE, USB-C PD power |
+| MicroSD 64GB A2-rated | ~$12 | Boot media for PetaLinux or Ubuntu |
+| USB-C 5V/3A PD power supply | ~$15 | KV260 uses USB-C Power Delivery |
+| TOSLINK TX module | ~$2.50 | Toshiba TOTX173 (through-hole, 3.3V TTL, 15 Mbps). Alternatives: Everlight PLT133/T10 (~$1-2 at LCSC) |
+| TOSLINK RX module | ~$2.50 | Toshiba TORX173 (through-hole, 3.3V TTL output). Alternatives: Everlight PLR135/T10 |
+| TOSLINK optical cables (2x 1m) | ~$10 | Standard Toslink patch cables |
+| Pin headers + wiring | ~$5 | For PMOD breakout assembly |
+| **Total new purchases** | **~$400** | |
 
-The ADA8200 remains unchanged -- it receives ADAT Lightpipe exactly as it does
-from the USBStreamer today. The amplifier, speakers, MIDI controllers, and
-measurement microphone are all unchanged.
+### Already Owned (from Pi system)
+
+The ADA8200, amplifier, all three MIDI controllers (Hercules, APCmini, SE25),
+UMIK-1 measurement microphone, speakers, and subwoofers carry over unchanged.
+The ADA8200 receives ADAT Lightpipe exactly as it does from the USBStreamer
+today.
+
+### No Longer Needed
+
+| Component | Saved | Notes |
+|-----------|-------|-------|
+| Raspberry Pi 4B 8GB | ~$75 | Replaced by KV260 |
+| miniDSP USBStreamer | ~$200 | Replaced by direct FPGA ADAT |
+| Pi heatsink + fan | ~$15 | KV260 has its own thermal solution |
+
+Net cost delta: approximately +$110 ($400 new purchases minus $290 no longer
+needed). The USBStreamer elimination is the largest single saving.
+
+### The Only Custom Piece: PMOD-to-TOSLINK Breakout
+
+A trivial adapter board connects the KV260's PMOD header to two TOSLINK
+optical modules. The design:
+
+- **Form factor:** 20x30mm perfboard (or $5 PCB from JLCPCB)
+- **Connections:** 2x6 pin header plugging into KV260 PMOD connector
+- **Components:** Two TOSLINK modules (TX + RX), 100 ohm series resistors,
+  100nF bypass capacitors
+- **Pin mapping:** PMOD pin 1 -> ADAT TX data, pin 2 -> ADAT RX data,
+  pin 5 -> GND, pin 6 -> 3.3V VCC
+- **Build time:** Under 1 hour on perfboard
+
+**Caveat:** The KV260 PMOD-to-PL pin mapping needs verification against the
+carrier board schematic to confirm that the PMOD pins connect to programmable
+logic (PL) I/O rather than processing system (PS) GPIO. The KR260 carrier
+(same K26 SOM, different carrier board) is the fallback if the KV260 does not
+expose PL pins on a user-accessible PMOD header.
+
+### Scaling to 64 Channels
+
+Scaling to 8 ADAT links (64 channels) requires 16 TOSLINK modules (8 TX + 8
+RX) and 16 FPGA I/O pins. The KV260's single PMOD header (8 data pins) is
+insufficient. The practical approach: build a "TOSLINK hat" that plugs into
+the KV260's Raspberry Pi 40-pin header, which exposes additional PL pins. This
+is a simple 2-layer PCB (all signals are 12.288MHz LVCMOS, no impedance control
+needed) -- a weekend KiCad project, approximately $20-30 in parts. A full
+custom carrier board is not justified: it would require dealing with 0.5mm-pitch
+Samtec SOM connectors, USB 3.0 impedance-controlled routing, and Ethernet
+magnetics -- a 4-7 week PCB design effort that provides no benefit over the
+KV260 carrier for this use case.
+
+The FPGA fabric handles 64 channels comfortably (32-64 DSP slices for FIR, under
+4,000 LUTs for 8 ADAT transmitters). However, coefficient memory becomes the
+constraint at 64 channels: 64 x 16,384 taps x 4 bytes = 4MB, exceeding the
+ZU5EV's 1.8MB of block RAM. This requires streaming coefficients from DDR4 via
+AXI -- feasible but adds design complexity. The ZU7EV (4.5MB BRAM, available on
+boards at $1,200+) is the first device that can hold all 64 channels'
+coefficients in block RAM without DDR4 streaming. For the current 4-channel
+scope, block RAM is not a concern (192KB needed vs 1.8MB available).
+
+At ~$4 per TOSLINK module, the additional optical hardware for 64-channel
+I/O is under $60.
 
 ---
 
