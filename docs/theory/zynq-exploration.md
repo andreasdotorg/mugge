@@ -48,7 +48,7 @@ development board. It provides:
 - Dual-core Cortex-R5F (available for real-time tasks)
 - 1,248 DSP48E2 slices (FPGA DSP resources)
 - 117,120 LUTs (FPGA logic)
-- 1.8MB block RAM
+- 2.25MB block RAM
 - Mali-400 GPU (OpenGL ES 2.0, needed for Mixxx waveform display)
 - 4GB DDR4 shared between ARM and FPGA via AXI interconnect
 
@@ -57,25 +57,29 @@ conservative choice (best documentation, AMD-provided Ubuntu image, active
 community). Budget alternatives exist for the 4-channel scope where the full
 ZU5EV capacity is not needed:
 
-| Board | Zynq Part | DSP Slices | RAM | Price (approx.) |
-|-------|-----------|-----------|-----|-----------------|
-| AMD Kria KV260 (recommended) | ZU5EV | 1,248 | 4GB DDR4 | ~$350 |
-| Used Kria KR260 | ZU5EV | 1,248 | 4GB DDR4 | ~$180-250 used |
-| ALINX AXU3EG (budget alternative) | ZU3EG | 360 | 2-4GB DDR4 | ~$200-250 |
-| MYiR MYC-CZU3EG | ZU3EG | 360 | 2-4GB DDR4 | ~$150-200 (SOM + carrier) |
-| Trenz TE0820 | ZU3EG | 360 | 2-4GB DDR4 | ~250 EUR (SOM + carrier) |
-| Ultra96-V2 (Avnet) | ZU3EG | 360 | 2GB DDR4 | ~$250 |
-| ALINX AXU2CGB | ZU2CG | 240 | 2GB DDR4 | ~$140-170 |
+| Board | Zynq Part | DSP Slices | BRAM | RAM | Price (approx.) |
+|-------|-----------|-----------|------|-----|-----------------|
+| AMD Kria KV260 (recommended) | ZU5EV | 1,248 | 2.25MB | 4GB DDR4 | ~$350 |
+| Used Kria KR260 | ZU5EV | 1,248 | 2.25MB | 4GB DDR4 | ~$180-250 used |
+| ALINX AXU3EG (budget alternative) | ZU3EG | 360 | 0.95MB | 2-4GB DDR4 | ~$200-250 |
+| MYiR MYC-CZU3EG | ZU3EG | 360 | 0.95MB | 2-4GB DDR4 | ~$150-200 (SOM + carrier) |
+| Trenz TE0820 | ZU3EG | 360 | 0.95MB | 2-4GB DDR4 | ~250 EUR (SOM + carrier) |
+| Ultra96-V2 (Avnet) | ZU3EG | 360 | 0.95MB | 2GB DDR4 | ~$250 |
 
 All ZU3EG boards provide 360 DSP slices -- adequate for the 4-channel FIR
 workload (11-16 slices needed) with room for dual ADAT and future expansion.
-The ZU5EV's 1,248 slices provide more headroom for scaling to 64 channels.
-The ZU2CG (240 slices) is the minimum viable device.
+The ZU5EV's 1,248 slices and 2.25MB BRAM provide more headroom for scaling
+beyond 4 channels. The ZU2CG was evaluated but eliminated: its dual-core A53
+cannot run Mixxx alongside PipeWire, and the 2GB DDR4 on available boards is
+insufficient for the full software stack.
 
-The ALINX AXU3EG is approximately $150 cheaper than the KV260 with adequate
-specs for the current 4-channel scope. The tradeoff is less community support
-and potentially less accessible documentation compared to AMD's own KV260
-ecosystem. The architect's final board recommendation is pending.
+The KV260 is the architect's recommended board. While the ALINX AXU3EG saves
+~$100-150, the savings are a false economy: the KV260 provides AMD's official
+Ubuntu BSP, active community support, and accessible documentation that
+significantly reduce bringup time. The ALINX boards require more BSP
+integration effort with less community backing. For a project where FPGA
+bringup is already the primary risk, choosing the best-supported platform is
+worth the premium.
 
 *Prices are from early 2025 and should be verified before purchase.*
 
@@ -107,7 +111,7 @@ approaching resource limits. The FPGA is not the bottleneck.
 
 Block RAM for coefficient storage is similarly comfortable. Four channels of
 16,384 taps at 24-bit coefficients requires approximately 192KB -- well within
-the ZU5EV's 1.8MB of block RAM.
+the ZU5EV's 2.25MB of block RAM (or even the ZU3EG's 0.95MB).
 
 FPGA power consumption under sustained DSP load is estimated at 3-5W for the
 convolution engine -- comparable to the Pi 4B's CPU consumption under
@@ -494,14 +498,31 @@ Samtec SOM connectors, USB 3.0 impedance-controlled routing, and Ethernet
 magnetics -- a 4-7 week PCB design effort that provides no benefit over the
 KV260 carrier for this use case.
 
-The FPGA fabric handles 64 channels comfortably (32-64 DSP slices for FIR, under
-4,000 LUTs for 8 ADAT transmitters). However, coefficient memory becomes the
-constraint at 64 channels: 64 x 16,384 taps x 4 bytes = 4MB, exceeding the
-ZU5EV's 1.8MB of block RAM. This requires streaming coefficients from DDR4 via
-AXI -- feasible but adds design complexity. The ZU7EV (4.5MB BRAM, available on
-boards at $1,200+) is the first device that can hold all 64 channels'
-coefficients in block RAM without DDR4 streaming. For the current 4-channel
-scope, block RAM is not a concern (192KB needed vs 1.8MB available).
+The FPGA fabric handles 64 channels comfortably in terms of DSP slices: 168
+slices for 64-channel FIR (47% of ZU3EG's 360, 13% of ZU5EV's 1,248), plus
+under 4,000 LUTs for 8 ADAT transmitters. However, DSP slices alone do not
+tell the full story. Coefficient memory becomes the binding constraint at scale:
+64 x 16,384 taps x 4 bytes = 4MB.
+
+The BRAM capacity determines the channel ceiling for each device:
+
+| Device | BRAM | Max Channels (in BRAM) | Notes |
+|--------|------|----------------------|-------|
+| ZU3EG | 0.95MB | ~15 | Budget boards (ALINX, MYiR) |
+| ZU5EV | 2.25MB | ~35 | KV260 / KR260 |
+| ZU7EV | 4.5MB | 64+ | First device to hold all 64ch in BRAM |
+
+For the current 4-channel scope, block RAM is not a concern (192KB needed vs
+0.95-2.25MB available on any viable board). For 64 channels, two paths exist:
+
+1. **DDR4 coefficient streaming** via AXI: feasible on any board with DDR4, but
+   adds design complexity -- the FIR engine must pipeline coefficient fetches
+   through the AXI interconnect alongside ARM memory traffic, requiring careful
+   bandwidth management and adding latency to coefficient hot-swap.
+2. **Larger FPGA**: The ZU7EV (4.5MB BRAM, available on boards at $1,200+) is
+   the natural upgrade path if 64 channels becomes a real requirement. It holds
+   all coefficients in block RAM without DDR4 streaming, keeping the FIR engine
+   design simple and deterministic.
 
 At ~$4 per TOSLINK module, the additional optical hardware for 64-channel
 I/O is under $60.
