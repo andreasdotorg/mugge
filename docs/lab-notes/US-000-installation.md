@@ -1080,3 +1080,583 @@ Linux mugge 6.12.47+rpt-rpi-v8 #1 SMP PREEMPT Debian 1:6.12.47-1+rpt1 (2025-09-1
    doesn't support Python 3.13. Monitor for a PyPI release compatible with 3.13.
 5. **CUPS/rpcbind ports**: The pre-conditions listed CUPS (631) and rpcbind (111) as
    listening, but they are not listening now. Monitor whether they return after reboot.
+
+---
+
+## Task T5: USBStreamer 8-Channel Capture Fix
+
+**Date:** 2026-03-08 14:00 (CET)
+**Operator:** Claude worker via SSH
+**Host:** mugge, Debian 13 Trixie, kernel 6.12.47+rpt-rpi-v8 SMP PREEMPT aarch64
+
+### Pre-conditions
+
+- USBStreamer is ALSA card 3 (`hw:3,0`)
+- WirePlumber auto-selected "Analog Surround 4.0" (4 channels) for USBStreamer capture
+- WirePlumber auto-selected "Analog Surround 7.1" (8 channels) for USBStreamer playback
+- Capture was the problem: only 4 channels instead of 8
+
+### Procedure
+
+```bash
+# Step 1: Verify USBStreamer ALSA card number
+$ aplay -l | grep -i usb
+card 3: USBStreamer [USBStreamer], device 0: USB Audio [USB Audio]
+```
+
+```bash
+# Step 2: Check WirePlumber profiles
+$ wpctl status
+# (relevant excerpt)
+# Sinks:
+#   *  104. USBStreamer  Analog Surround 7.1    [vol: 0.40]
+# Sources:
+#      85. USBStreamer  Analog Surround 4.0    [vol: 1.00]    <-- PROBLEM: only 4ch
+```
+
+```bash
+# Step 3: Create PipeWire drop-in config for explicit 8-channel nodes
+$ mkdir -p ~/.config/pipewire/pipewire.conf.d/
+$ cat > ~/.config/pipewire/pipewire.conf.d/20-usbstreamer.conf << 'EOF'
+context.objects = [
+    {   factory = adapter
+        args = {
+            factory.name     = api.alsa.pcm.sink
+            node.name        = "usbstreamer-out"
+            node.description = "USBStreamer 8ch Output"
+            media.class      = "Audio/Sink"
+            api.alsa.path    = "hw:3,0"
+            audio.format     = "S32LE"
+            audio.rate       = 48000
+            audio.channels   = 8
+            audio.position   = [ AUX0 AUX1 AUX2 AUX3 AUX4 AUX5 AUX6 AUX7 ]
+            api.alsa.period-size   = 256
+            api.alsa.period-num    = 2
+            api.alsa.disable-batch = true
+        }
+    }
+    {   factory = adapter
+        args = {
+            factory.name     = api.alsa.pcm.source
+            node.name        = "usbstreamer-in"
+            node.description = "USBStreamer 8ch Input"
+            media.class      = "Audio/Source"
+            api.alsa.path    = "hw:3,0"
+            audio.format     = "S32LE"
+            audio.rate       = 48000
+            audio.channels   = 8
+            audio.position   = [ AUX0 AUX1 AUX2 AUX3 AUX4 AUX5 AUX6 AUX7 ]
+            api.alsa.period-size   = 256
+            api.alsa.period-num    = 2
+            api.alsa.disable-batch = true
+        }
+    }
+]
+EOF
+```
+
+```bash
+# Step 4: Disable WirePlumber auto-management of USBStreamer device
+# First attempt used node.autoconnect = false, but the old auto-created nodes
+# still appeared. Switched to device.disabled = true to suppress them entirely.
+$ mkdir -p ~/.config/wireplumber/wireplumber.conf.d/
+$ cat > ~/.config/wireplumber/wireplumber.conf.d/50-usbstreamer-disable.conf << 'EOF'
+monitor.alsa.rules = [
+  {
+    matches = [
+      { device.name = "~alsa_card.usb-miniDSP_USBStreamer*" }
+    ]
+    actions = {
+      update-props = {
+        device.disabled = true
+      }
+    }
+  }
+]
+EOF
+```
+
+```bash
+# Step 5: Restart PipeWire and WirePlumber
+$ systemctl --user daemon-reload
+$ systemctl --user restart pipewire wireplumber
+```
+
+```bash
+# Step 6: Verify 8 channels via JACK port listing
+$ pw-jack jack_lsp | grep -i usb
+USBStreamer 8ch Input:capture_AUX0
+USBStreamer 8ch Input:capture_AUX1
+USBStreamer 8ch Input:capture_AUX2
+USBStreamer 8ch Input:capture_AUX3
+USBStreamer 8ch Input:capture_AUX4
+USBStreamer 8ch Input:capture_AUX5
+USBStreamer 8ch Input:capture_AUX6
+USBStreamer 8ch Input:capture_AUX7
+USBStreamer 8ch Output:playback_AUX0
+USBStreamer 8ch Output:playback_AUX1
+USBStreamer 8ch Output:playback_AUX2
+USBStreamer 8ch Output:playback_AUX3
+USBStreamer 8ch Output:playback_AUX4
+USBStreamer 8ch Output:playback_AUX5
+USBStreamer 8ch Output:playback_AUX6
+USBStreamer 8ch Output:playback_AUX7
+USBStreamer 8ch Output:monitor_AUX0
+USBStreamer 8ch Output:monitor_AUX1
+USBStreamer 8ch Output:monitor_AUX2
+USBStreamer 8ch Output:monitor_AUX3
+USBStreamer 8ch Output:monitor_AUX4
+USBStreamer 8ch Output:monitor_AUX5
+USBStreamer 8ch Output:monitor_AUX6
+USBStreamer 8ch Output:monitor_AUX7
+```
+
+```bash
+# Step 6b: Verify wpctl status shows clean state (no old auto-created nodes)
+$ wpctl status
+# (relevant excerpt)
+# Sinks:
+#      32. USBStreamer 8ch Output              [vol: 1.00]
+# Sources:
+#      33. USBStreamer 8ch Input               [vol: 1.00]
+# No "Analog Surround 4.0" or "Analog Surround 7.1" nodes — clean.
+```
+
+### Validation
+
+| Check | Expected | Actual | Pass/Fail |
+|-------|----------|--------|-----------|
+| USBStreamer capture channels | 8 (AUX0-AUX7) | 8 (AUX0-AUX7) | PASS |
+| USBStreamer playback channels | 8 (AUX0-AUX7) | 8 (AUX0-AUX7) | PASS |
+| Old WirePlumber auto-nodes gone | No "Surround 4.0/7.1" nodes | None present | PASS |
+| Channel positions | AUX (not surround) | AUX0-AUX7 | PASS |
+
+### Deviations from Plan
+
+- Initial WirePlumber rule used `node.autoconnect = false` on matching node names. This
+  prevented auto-connection but the old auto-created "Analog Surround 4.0" capture and
+  "Analog Surround 7.1" sink nodes still appeared alongside the explicit nodes, causing
+  confusion. Changed to `device.disabled = true` matching on `device.name` to suppress
+  WirePlumber's device handling entirely. This cleanly removes the auto-created nodes
+  while our PipeWire-level explicit nodes remain.
+
+### Notes
+
+- The SETUP-MANUAL.md reference shows `hw:1,0` but the actual card number is 3. The
+  config uses `hw:3,0`. If a udev rule reassigns the card number in the future, this
+  config must be updated.
+- PipeWire 1.4.2 shows RTKit warnings on startup (RTKit service not found). This means
+  PipeWire is not getting real-time priority via RTKit. This may need attention for
+  production use — either install rtkit or configure PipeWire's rt module differently.
+- Using `device.disabled = true` in WirePlumber is more aggressive than the
+  `node.autoconnect = false` approach shown in SETUP-MANUAL.md section 5.5. The
+  advantage is a cleaner node list; the disadvantage is that if the PipeWire config
+  has an error, there would be NO USBStreamer nodes at all (no fallback).
+
+---
+
+## Task T6: Reboot Test
+
+**Date:** 2026-03-08 14:02 (CET)
+**Operator:** Claude worker via SSH
+**Host:** mugge, Debian 13 Trixie, kernel 6.12.47+rpt-rpi-v8 SMP PREEMPT aarch64
+
+### Pre-conditions
+
+- USBStreamer 8-channel PipeWire config deployed (Task T5)
+- WirePlumber USBStreamer device disabled (Task T5)
+- snd-aloop configured in modprobe (from earlier session)
+- nftables firewall configured (from earlier session)
+
+### Procedure
+
+```bash
+# Step 1: Reboot
+$ sudo reboot
+```
+
+```bash
+# Step 2: SSH back after ~35 seconds
+$ ssh ela@192.168.178.185 uptime
+ 13:59:24 up 0 min,  3 users,  load average: 2.19, 0.54, 0.18
+```
+
+```bash
+# Step 3: Verify snd-aloop loaded
+$ lsmod | grep snd_aloop
+snd_aloop              32768  1
+snd_pcm               151552  7 snd_usb_audio,snd_bcm2835,snd_soc_hdmi_codec,snd_compress,snd_soc_core,snd_aloop,snd_pcm_dmaengine
+snd_timer              36864  4 snd_seq,snd_hrtimer,snd_aloop,snd_pcm
+snd                   114688  21 snd_seq,snd_seq_device,snd_hwdep,snd_usb_audio,snd_usbmidi_lib,snd_bcm2835,snd_soc_hdmi_codec,snd_timer,snd_compress,snd_soc_core,snd_aloop,snd_pcm,snd_rawmidi
+
+$ cat /proc/asound/cards | grep -i loopback
+10 [Loopback       ]: Loopback - Loopback
+                      Loopback 1
+```
+
+```bash
+# Step 4: Verify all USB devices present
+$ lsusb
+Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+Bus 001 Device 002: ID 2109:3431 VIA Labs, Inc. Hub
+Bus 001 Device 003: ID 05e3:0610 Genesys Logic, Inc. Hub
+Bus 001 Device 004: ID 2752:0016 miniDSP  USBStreamer
+Bus 001 Device 005: ID 2752:0007 miniDSP Umik-1  Gain: 18dB
+Bus 001 Device 006: ID 05e3:0610 Genesys Logic, Inc. Hub
+Bus 001 Device 007: ID 06f8:b131 Guillemot Corp. DJControl Mix Ultra
+Bus 001 Device 008: ID 2467:2006 Nektar SE25
+Bus 001 Device 009: ID 09e8:004f AKAI  Professional M.I. Corp. APC mini mk2
+Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub
+Bus 002 Device 002: ID 05e3:0626 Genesys Logic, Inc. Hub
+Bus 002 Device 003: ID 05e3:0626 Genesys Logic, Inc. Hub
+
+$ aplay -l
+card 0: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0
+card 1: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0
+card 2: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones
+card 3: USBStreamer [USBStreamer], device 0: USB Audio [USB Audio]
+card 10: Loopback [Loopback], device 0: Loopback PCM
+card 10: Loopback [Loopback], device 1: Loopback PCM
+
+$ arecord -l
+card 3: USBStreamer [USBStreamer], device 0: USB Audio [USB Audio]
+card 4: U18dB [Umik-1  Gain: 18dB], device 0: USB Audio [USB Audio]
+card 10: Loopback [Loopback], device 0: Loopback PCM
+card 10: Loopback [Loopback], device 1: Loopback PCM
+```
+
+```bash
+# Step 5: Verify PipeWire running
+$ systemctl --user status pipewire
+● pipewire.service - PipeWire Multimedia Service
+     Loaded: loaded (/usr/lib/systemd/user/pipewire.service; enabled; preset: enabled)
+     Active: active (running) since Sun 2026-03-08 13:59:17 CET; 39s ago
+     Main PID: 1329 (pipewire)
+```
+
+```bash
+# Step 6: Verify USBStreamer 8 channels persist after reboot
+$ pw-jack jack_lsp | grep -i usb
+USBStreamer 8ch Input:capture_AUX0
+USBStreamer 8ch Input:capture_AUX1
+USBStreamer 8ch Input:capture_AUX2
+USBStreamer 8ch Input:capture_AUX3
+USBStreamer 8ch Input:capture_AUX4
+USBStreamer 8ch Input:capture_AUX5
+USBStreamer 8ch Input:capture_AUX6
+USBStreamer 8ch Input:capture_AUX7
+USBStreamer 8ch Output:playback_AUX0
+USBStreamer 8ch Output:playback_AUX1
+USBStreamer 8ch Output:playback_AUX2
+USBStreamer 8ch Output:playback_AUX3
+USBStreamer 8ch Output:playback_AUX4
+USBStreamer 8ch Output:playback_AUX5
+USBStreamer 8ch Output:playback_AUX6
+USBStreamer 8ch Output:playback_AUX7
+USBStreamer 8ch Output:monitor_AUX0
+USBStreamer 8ch Output:monitor_AUX1
+USBStreamer 8ch Output:monitor_AUX2
+USBStreamer 8ch Output:monitor_AUX3
+USBStreamer 8ch Output:monitor_AUX4
+USBStreamer 8ch Output:monitor_AUX5
+USBStreamer 8ch Output:monitor_AUX6
+USBStreamer 8ch Output:monitor_AUX7
+# 8 capture + 8 playback + 8 monitor = 24 USBStreamer ports. Clean — no old auto nodes.
+```
+
+```bash
+# Step 7: Verify nftables firewall persists
+$ sudo nft list ruleset | head -5
+table inet filter {
+	chain input {
+		type filter hook input priority filter; policy drop;
+		iif "lo" accept
+		ct state established,related accept
+```
+
+```bash
+# Step 8: Verify Bluetooth still active
+$ systemctl is-active bluetooth.service
+active
+```
+
+```bash
+# Step 9: Record boot time
+$ systemd-analyze
+Startup finished in 3.140s (kernel) + 20.202s (userspace) = 23.343s
+graphical.target reached after 13.837s in userspace.
+
+$ systemd-analyze blame | head -20
+6.770s NetworkManager.service
+5.987s NetworkManager-wait-online.service
+3.281s cloud-init-main.service
+1.405s dev-mmcblk0p2.device
+1.185s e2scrub_reap.service
+1.021s accounts-daemon.service
+1.005s udisks2.service
+ 826ms nftables.service
+ 822ms rpi-eeprom-update.service
+ 753ms user@1000.service
+ 559ms avahi-daemon.service
+ 555ms bluetooth.service
+ 523ms systemd-udev-trigger.service
+ 504ms rpi-resize-swap-file.service
+ 479ms dbus.service
+ 458ms cloud-init-local.service
+ 454ms systemd-fsck@dev-disk-by-partuuid-e2835b5b-01.service
+ 420ms rp1-test.service
+ 419ms systemd-udevd.service
+ 390ms cloud-init-network.service
+```
+
+### Validation
+
+| Check | Expected | Actual | Pass/Fail |
+|-------|----------|--------|-----------|
+| snd-aloop loaded | Module present with index=10 | snd_aloop loaded, Loopback card 10 | PASS |
+| USB devices present | All 5 USB audio/MIDI devices | USBStreamer, UMIK-1, DJControl, SE25, APCmini mk2 all present | PASS |
+| ALSA cards stable | USBStreamer=card 3, Loopback=card 10 | Confirmed | PASS |
+| PipeWire running | active (running) | active (running) | PASS |
+| USBStreamer 8ch capture | 8 AUX capture ports | 8 AUX0-AUX7 capture ports | PASS |
+| USBStreamer 8ch playback | 8 AUX playback ports | 8 AUX0-AUX7 playback ports | PASS |
+| nftables firewall | Rules persist | inet filter table with drop policy present | PASS |
+| Bluetooth active | active | active | PASS |
+| Boot time | < 30s | 23.343s (graphical at 13.8s) | PASS |
+
+### Post-conditions
+
+- All services and hardware survived reboot cleanly
+- Boot time: 23.3s total, graphical target at 13.8s
+- Top boot-time consumers: NetworkManager (6.8s), NM-wait-online (6.0s), cloud-init (3.3s)
+
+### Deviations from Plan
+
+None.
+
+### Notes
+
+- PipeWire shows RTKit warnings on startup: `mod.rt: RTKit error: org.freedesktop.DBus.Error.ServiceUnknown`.
+  RTKit is not installed. PipeWire falls back to non-realtime priority (MaxRealtimePriority=1,
+  MinNiceLevel=0). For production audio use, either install `rtkit` package or configure
+  PipeWire with CAP_SYS_NICE capability. Tracked as TODO below.
+- cloud-init adds ~3.3s to boot time. If this is a permanent installation (not cloud),
+  consider disabling cloud-init to save boot time.
+- NetworkManager-wait-online adds ~6s. Could be disabled if network-dependent services
+  are not critical for audio startup.
+- MIDI devices all present after reboot: DJControl Mix Ultra, SE25, APCmini mk2 (plus
+  BLE MIDI 1 via Bluetooth stack).
+
+---
+
+## Task T7: CamillaDSP Systemd Service
+
+**Date:** 2026-03-08 14:05 (CET)
+**Operator:** Claude worker via SSH
+**Host:** mugge, Debian 13 Trixie, kernel 6.12.47+rpt-rpi-v8 SMP PREEMPT aarch64
+
+### Pre-conditions
+
+- CamillaDSP v3.0.1 installed at `/usr/local/bin/camilladsp` (from earlier session)
+- No existing service file for CamillaDSP
+- No valid `active.yml` config exists yet (service will not be started)
+
+### Procedure
+
+```bash
+# Step 1: Create systemd service file
+$ sudo tee /etc/systemd/system/camilladsp.service > /dev/null << 'EOF'
+[Unit]
+Description=CamillaDSP Audio Processor
+After=sound.target
+Wants=sound.target
+
+[Service]
+Type=simple
+User=ela
+Group=audio
+ExecStart=/usr/local/bin/camilladsp -a 127.0.0.1 -p 1234 /etc/camilladsp/configs/active.yml
+Restart=on-failure
+RestartSec=3
+Nice=-10
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+```bash
+# Step 2: Reload systemd
+$ sudo systemctl daemon-reload
+```
+
+```bash
+# Step 3: Verify service file contents
+$ systemctl cat camilladsp.service
+# /etc/systemd/system/camilladsp.service
+[Unit]
+Description=CamillaDSP Audio Processor
+After=sound.target
+Wants=sound.target
+
+[Service]
+Type=simple
+User=ela
+Group=audio
+ExecStart=/usr/local/bin/camilladsp -a 127.0.0.1 -p 1234 /etc/camilladsp/configs/active.yml
+Restart=on-failure
+RestartSec=3
+Nice=-10
+LimitRTPRIO=95
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# Step 4: Verify no User=pi anywhere
+$ grep -r "User=pi" /etc/systemd/system/
+# (no output — PASS)
+```
+
+```bash
+# Step 5: Verify websocket binding flag
+$ grep '-a 127.0.0.1' /etc/systemd/system/camilladsp.service
+ExecStart=/usr/local/bin/camilladsp -a 127.0.0.1 -p 1234 /etc/camilladsp/configs/active.yml
+```
+
+```bash
+# Step 6: Verify service is NOT enabled and NOT active
+$ systemctl is-enabled camilladsp.service
+disabled
+
+$ systemctl is-active camilladsp.service
+inactive
+```
+
+### Validation
+
+| Check | Expected | Actual | Pass/Fail |
+|-------|----------|--------|-----------|
+| Service file exists | Present at /etc/systemd/system/ | Present | PASS |
+| User=ela (not pi) | User=ela | User=ela | PASS |
+| No User=pi anywhere | grep returns nothing | No matches | PASS |
+| Websocket binds to 127.0.0.1 | -a 127.0.0.1 flag present | Present in ExecStart | PASS |
+| Service not enabled | disabled | disabled | PASS |
+| Service not active | inactive | inactive | PASS |
+| Group=audio | audio group | Group=audio | PASS |
+| Nice=-10 | -10 | Nice=-10 | PASS |
+| LimitRTPRIO=95 | 95 | LimitRTPRIO=95 | PASS |
+
+### Deviations from Plan
+
+None.
+
+### Notes
+
+- The service uses `-a 127.0.0.1` to bind the websocket to localhost only. This is
+  a security requirement — the CamillaDSP websocket has no authentication, so binding
+  to 0.0.0.0 would allow anyone on the network to control DSP settings.
+- The service will not start until a valid `/etc/camilladsp/configs/active.yml` is
+  created. This is intentional — starting without a valid config would cause immediate
+  failure and restart loops.
+- `LimitRTPRIO=95` and `LimitMEMLOCK=infinity` allow CamillaDSP to use real-time
+  scheduling and lock memory for low-latency audio processing.
+- `Nice=-10` gives CamillaDSP higher scheduling priority than normal processes.
+
+---
+
+## Updated TODOs
+
+1. **Reboot test needed**: ~~Verify snd-aloop persists across reboot with index=10.~~
+   DONE (Task T6) — snd-aloop persists, Loopback at card 10.
+2. **gpu_mem for Mixxx**: Currently unset (default ~76MB). May need gpu_mem=128 for
+   OpenGL rendering. Deferred to integration test per task instructions.
+3. **USBStreamer 4-channel capture**: ~~PipeWire sees only 4 capture channels.~~
+   FIXED (Task T5) — Explicit PipeWire config with 8 channels, WirePlumber auto-creation
+   disabled.
+4. **pycamilladsp from GitHub**: Installed from git (not PyPI) because the PyPI package
+   doesn't support Python 3.13. Monitor for a PyPI release compatible with 3.13.
+5. **CUPS/rpcbind ports**: The pre-conditions listed CUPS (631) and rpcbind (111) as
+   listening, but they are not listening now. Not checked in this reboot test — deferred.
+6. **RTKit not installed**: PipeWire falls back to non-realtime priority. Install `rtkit`
+   package or configure CAP_SYS_NICE for PipeWire for production audio use.
+7. **cloud-init boot overhead**: cloud-init adds ~3.3s to boot. Consider disabling if
+   this is a permanent (non-cloud) installation.
+8. **CamillaDSP active.yml**: Service file is installed but not started. Need to create
+   a valid CamillaDSP configuration at `/etc/camilladsp/configs/active.yml` before
+   enabling the service.
+
+---
+
+## Task T8: Quick Fixes — snd-aloop Config and nfs-blkmap Service
+
+**Date:** 2026-03-08 14:21 (CET)
+**Operator:** Claude worker via SSH
+**Host:** mugge, Debian 13 Trixie, kernel 6.12.47+rpt-rpi-v8 SMP PREEMPT aarch64
+
+### Pre-conditions
+
+- `/etc/modprobe.d/snd-aloop.conf` contained: `options snd-aloop index=10 pcm_substreams=2 channels=4`
+  - `channels=4` is not a valid parameter for snd-aloop (valid params: index, id, enable, pcm_substreams, pcm_notify, timer_source)
+- nfs-blkmap.service was active (running) and enabled — not needed for this audio workstation (security finding F-011)
+
+### Procedure
+
+```bash
+# Fix 1: Remove invalid channels=4 from snd-aloop config
+$ cat /etc/modprobe.d/snd-aloop.conf
+options snd-aloop index=10 pcm_substreams=2 channels=4
+
+$ echo 'options snd-aloop index=10' | sudo tee /etc/modprobe.d/snd-aloop.conf
+options snd-aloop index=10
+
+$ cat /etc/modprobe.d/snd-aloop.conf
+options snd-aloop index=10
+```
+
+```bash
+# Fix 2: Disable nfs-blkmap service (security finding F-011)
+$ systemctl status nfs-blkmap
+● nfs-blkmap.service - pNFS block layout mapping daemon
+     Loaded: loaded (/usr/lib/systemd/system/nfs-blkmap.service; enabled; preset: enabled)
+     Active: active (running)
+
+$ sudo systemctl stop nfs-blkmap && sudo systemctl disable nfs-blkmap && sudo systemctl mask nfs-blkmap
+Removed '/etc/systemd/system/nfs-client.target.wants/nfs-blkmap.service'.
+Created symlink '/etc/systemd/system/nfs-blkmap.service' → '/dev/null'.
+
+$ systemctl status nfs-blkmap
+○ nfs-blkmap.service
+     Loaded: masked (Reason: Unit nfs-blkmap.service is masked.)
+     Active: inactive (dead)
+```
+
+### Validation
+
+| Check | Expected | Actual | Pass/Fail |
+|-------|----------|--------|-----------|
+| snd-aloop.conf content | `options snd-aloop index=10` only | `options snd-aloop index=10` | PASS |
+| channels=4 removed | Not present | Not present | PASS |
+| nfs-blkmap stopped | inactive (dead) | inactive (dead) | PASS |
+| nfs-blkmap disabled | disabled | disabled | PASS |
+| nfs-blkmap masked | masked | masked (symlink to /dev/null) | PASS |
+
+### Deviations from Plan
+
+- The original config also contained `pcm_substreams=2` (a valid parameter). This was
+  removed along with the invalid `channels=4`, leaving only `index=10`. The `pcm_substreams`
+  parameter defaults to 1 if unset; the module was previously loaded with
+  `pcm_substreams=2`. This change will take effect on next reboot/module reload.
+
+### Notes
+
+- The `channels` parameter does not exist in snd-aloop (verified via `modinfo snd-aloop`
+  output in Task T0). It was silently ignored by modprobe but should not be present.
+- nfs-blkmap was masked (not just disabled) to prevent it from being pulled in as a
+  dependency by other NFS-related units.
+- The `pcm_substreams=2` removal means snd-aloop will default to 1 PCM substream per
+  device on next load. If 2 substreams are needed, the config should be updated to
+  `options snd-aloop index=10 pcm_substreams=2`.

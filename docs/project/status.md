@@ -2,7 +2,7 @@
 
 ## Overall Status
 
-**US-000 DONE** — all advisors signed off, owner accepted. Follow-up worker running (USBStreamer 8ch, CamillaDSP systemd service, reboot test). Two quick fixes pending (remove snd-aloop `channels=4`, disable nfs-blkmap). Tier 1 begins after follow-up completes.
+**US-000 DONE** — all advisors signed off. Follow-up worker completed (USBStreamer 8ch PASS, CamillaDSP systemd service PASS, reboot test PASS). Quick-fix worker running (snd-aloop `channels=4` removal, nfs-blkmap disable). RTKit not installed — awaiting advisor recommendations. US-000b (Desktop Trimming) next, then Tier 1.
 
 ## Component Status
 
@@ -19,26 +19,29 @@
 | Documentation suite | not started | Stories US-014 through US-016 defined |
 | Web UI platform | not started | Stories US-022, US-023, US-018 defined (deferred per owner: validation first) |
 | Core software (CamillaDSP, Mixxx, Reaper) | installed | CamillaDSP 3.0.1, Mixxx 2.5.0, Reaper 7.31, RustDesk 1.3.9, Python venv. 7.5G/117G disk. |
-| Platform security | partial | US-000a: firewall active, SSH hardened, services disabled. CamillaDSP `-a 127.0.0.1` ready for service setup (F-002). |
+| Platform security | partial | US-000a: firewall active, SSH hardened, services disabled. CamillaDSP systemd service installed with `-a 127.0.0.1` (F-002 resolved). |
 
 ## DoD Tracking
 
 | Story | Score | Status |
 |-------|-------|--------|
 | US-000 | 3/3 | **done** (all advisors signed off: audio engineer, security specialist, technical writer) |
-| US-000a | 2/4 | in-progress (CamillaDSP systemd service with `-a 127.0.0.1` in follow-up worker) |
-| US-001 | 0/4 | ready (awaiting follow-up task completion before worker assignment) |
-| US-002 | 0/4 | ready (awaiting follow-up task completion before worker assignment) |
+| US-000a | 3/4 | in-progress (F-002 resolved: CamillaDSP systemd service with `-a 127.0.0.1` installed; remaining: nfs-blkmap F-011) |
+| US-001 | 0/4 | ready (unblocked — follow-up complete, after US-000b) |
+| US-002 | 0/4 | ready (unblocked — after US-001) |
 | US-004 | 0/3 | ready (independent) |
 | US-005 | 0/3 | ready (after Tier 1; Hercules already visible as USB-MIDI — positive signal) |
 | US-006 | 0/3 | ready (unblocked by US-000 + US-005) |
 
 ## In Progress
 
-- **US-000 follow-up worker** (running): USBStreamer 8ch PipeWire profile, CamillaDSP systemd service (`-a 127.0.0.1`), reboot test
-- **Pending quick fixes** (after worker): remove `channels=4` from snd-aloop config, disable nfs-blkmap (F-011)
-- **US-000a:** CamillaDSP localhost binding being resolved in follow-up worker
-- **Next (after follow-up):** US-001 (CPU benchmarks) then US-002 (latency) — sequential, both need Pi lock
+- **US-000 follow-up worker** (done): USBStreamer 8ch PASS, CamillaDSP systemd service PASS, reboot test PASS
+- **Quick-fix worker** (running): remove `channels=4` from snd-aloop config, disable nfs-blkmap (F-011)
+- **US-000a:** 3/4 DoD — F-002 resolved (CamillaDSP systemd service with `-a 127.0.0.1`); F-011 (nfs-blkmap) in quick-fix worker
+- **RTKit TODO**: PipeWire running without RTKit (non-realtime fallback). Awaiting architect/audio engineer recommendations on whether to bundle with US-000b or fix separately before benchmarks.
+- **Boot time baseline**: 23.3s (relevant to US-024)
+- **Other TODOs from follow-up**: cloud-init ~3.3s boot overhead (US-024 candidate), CamillaDSP needs `active.yml` before service enable
+- **Next:** US-000b (Desktop Trimming) then Tier 1: US-001 (CPU benchmarks) → US-002 (latency) — sequential, both need Pi lock
 
 ## Blockers
 
