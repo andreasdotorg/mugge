@@ -2,8 +2,8 @@
 
 ## Abstract
 
-The conventional wisdom -- established by Toole [5], Thiele [4], and
-Linkwitz [3] -- holds that subwoofer enclosure topology barely matters for
+The conventional wisdom -- established by Toole [^5], Thiele [^4], and
+Linkwitz [^3] -- holds that subwoofer enclosure topology barely matters for
 transient quality because room modal ringing (50-200 ms) buries enclosure group
 delay differences (10-40 ms). That consensus was formed when real-time FIR room
 correction was either nonexistent or prohibitively expensive. Affordable FIR
@@ -60,7 +60,7 @@ them without repetition.
 
 ### 2.1 Blauert and Laws (1978)
 
-The most widely cited study on group delay audibility [1]. Their measured
+The most widely cited study on group delay audibility [^1]. Their measured
 findings:
 
 - Group delay audibility was tested at frequencies from 500 Hz to 8 kHz.
@@ -97,28 +97,28 @@ and comparison sections that follow.
 
 ### 2.2 Other relevant research
 
-**Lipshitz, Pocock, and Vanderkooy (1982)** [2] studied audibility of
+**Lipshitz, Pocock, and Vanderkooy (1982)** [^2] studied audibility of
 linear-phase vs minimum-phase crossovers. Found that group delay differences
 were inaudible in most listening conditions but could be detected with
 specific test signals (clicks, impulses) at moderate SPL. This suggests that
 for complex musical signals, group delay differences below the Blauert and
 Laws threshold are reliably inaudible.
 
-**Linkwitz** [3] (co-inventor of the Linkwitz-Riley crossover) has stated in
+**Linkwitz** [^3] (co-inventor of the Linkwitz-Riley crossover) has stated in
 his published writings that LR4 crossover phase distortion is inaudible in
 his personal listening tests. This is notable because Linkwitz is arguably the
 person most motivated and qualified to detect phase artifacts from his own
 crossover design. The specific publication should be identified for proper
 citation before relying on this claim.
 
-**Thiele** [4] (cited by Small) analyzed the transient behavior of correctly
+**Thiele** [^4] (cited by Small) analyzed the transient behavior of correctly
 designed ported and sealed enclosures and concluded that the differences
 between them are "likely to be inaudible." This is consistent with the
 document's broader conclusion that room effects dominate the sub-bass time
 response. The specific Thiele paper should be identified and verified before
 publication.
 
-**Toole (2008), "Sound Reproduction"** [5] discusses group delay audibility
+**Toole (2008), "Sound Reproduction"** [^5] discusses group delay audibility
 in the context of subwoofer systems. The general conclusion: group delay from
 loudspeaker/room systems is almost always inaudible because room reflections
 dominate the time-domain behavior. The exception is direct-radiator subwoofers
@@ -231,7 +231,7 @@ both the box tuning frequency (Fb) and the alignment type:
   passband.
 
 The general relationships are well-established in electroacoustic theory
-[6] [7]. Exact values depend on the specific alignment parameters and are
+[^6] [^7]. Exact values depend on the specific alignment parameters and are
 best computed from the transfer function for each case.
 
 #### 3.2.3 Cone excursion
@@ -292,7 +292,7 @@ analogous to an electrical transformer. This provides:
   wavelength at the lowest operating frequency) begin to exhibit directional
   behavior, which can be useful for steering bass away from stage areas.
 
-Horn acoustics are well-established [8] [9] [10].
+Horn acoustics are well-established [^8] [^9] [^10].
 
 ##### Folded horns
 
@@ -312,7 +312,7 @@ reliance on quarter-wave resonance, they sit closer to the quarter-wave
 resonator end of the TL spectrum than to a true transmission line.
 
 No peer-reviewed measurements of Paraflex transient behavior or group delay
-have been published [15]. The diyAudio community has noted the lack of
+have been published [^15]. The diyAudio community has noted the lack of
 published measurement data from HOQS. Individual community members have
 shared measurements, but these are not standardized or independently verified.
 
@@ -411,7 +411,7 @@ long-fiber wool, polyester fill) along part or all of its length.
 The pipe may be straight, folded, or tapered. Tapering changes the impedance
 transformation and affects the frequency response shape.
 
-Transmission line theory is well-documented [11] [12] [13].
+Transmission line theory is well-documented [^11] [^12] [^13].
 
 ##### True TL vs quarter-wave resonator
 
@@ -448,7 +448,7 @@ quarter-wave resonator.
 The TL vs quarter-wave resonator distinction is extensively discussed in the
 loudspeaker design literature. Martin King's work (2001-2010, published on
 quarter-wave.com and in peer-reviewed journals) provides detailed analysis
-with simulation and measurement data [14].
+with simulation and measurement data [^14].
 
 Quarter-wave resonators exhibit analogous behavior to ported enclosures: the
 open end of the pipe acts as the radiating element (like a port), with similar
@@ -549,7 +549,7 @@ The physical basis:
   at sub-bass frequencies, group delay differences of 5-15 ms between
   enclosure types are likely below the audibility threshold (with the caveat
   that sub-bass thresholds are extrapolated, not measured).
-- Toole's observation [5] that room effects dominate applies equally: any TL
+- Toole's observation [^5] that room effects dominate applies equally: any TL
   transient advantage is swamped by the room's modal behavior in practice.
 
 The "tighter bass" reputation likely originates from comparisons between
@@ -557,7 +557,7 @@ well-designed TLs (moderate to heavy damping) and poorly aligned ported boxes
 (underdamped, high-Qtc driver producing a response hump). A properly aligned
 ported box (QB3 or B4 with an appropriate driver) has transient behavior that
 is difficult to distinguish from a moderately damped TL in a real listening
-environment, per Toole's broader conclusion about room dominance [5].
+environment, per Toole's broader conclusion about room dominance [^5].
 
 **Assessment:** The "tighter bass" claim for true TLs has a valid physical
 basis in reduced impulse response ringing and better cone control below
@@ -586,7 +586,7 @@ professional PA for several reasons:
    conditions where predictable performance matters most.
 
 Some high-end PA manufacturers (notably PMC -- Professional Monitor Company
-[16]) use transmission line designs in their studio monitors and some larger
+[^16]) use transmission line designs in their studio monitors and some larger
 systems. Their designs are closer to the lightly-damped (quarter-wave
 resonator) end of the spectrum, optimized for monitoring accuracy rather than
 maximum SPL. However, these are the exception -- the vast majority of PA
@@ -637,7 +637,7 @@ topology gives the crispest transients, and by how much?
 ### 4.3 Thiele-Small parameter guidance
 
 The Thiele-Small parameters are the foundational relationships of
-loudspeaker/enclosure design [6] [7].
+loudspeaker/enclosure design [^6] [^7].
 
 #### Driver Q factor (Qts)
 
@@ -749,14 +749,14 @@ rather than a negligible one.
 ### 5.4 Room-correction rebalancing: corrected vs uncorrected systems
 
 **In an uncorrected system:** Enclosure topology differences probably do not
-matter. Toole's work [5] shows that room reflections and modal behavior
+matter. Toole's work [^5] shows that room reflections and modal behavior
 dominate the sub-bass time response in untreated rooms. Modal ringing at
 50-200 ms swamps the 15-40 ms range of enclosure group delay variation. The
 difference between a sealed and a ported sub is buried under room artifacts.
 This is the context in which Toole, Thiele, and Linkwitz made their
 assessments -- none of them assumed a room-corrected system, because real-time
-FIR correction was either nonexistent (Blauert 1978 [1], Lipshitz 1982 [2])
-or exotic and expensive (Toole 2008 [5]) at the time of their work.
+FIR correction was either nonexistent (Blauert 1978 [^1], Lipshitz 1982 [^2])
+or exotic and expensive (Toole 2008 [^5]) at the time of their work.
 
 **In a room-corrected system (our system):** The balance shifts. Our pipeline
 applies 16,384-tap minimum-phase FIR correction that specifically targets
@@ -829,7 +829,7 @@ Sealed and true transmission line designs, with group delay of 10-20 ms at
 
 Whether that difference matters depends on room correction. In an uncorrected
 room, it does not -- modal ringing at 50-200 ms buries the 15 ms gap between
-sealed and ported. This is why Toole [5], Thiele [4], and Linkwitz [3] all
+sealed and ported. This is why Toole [^5], Thiele [^4], and Linkwitz [^3] all
 concluded that enclosure topology is a second-order effect. They were right,
 for uncorrected rooms.
 
@@ -842,7 +842,7 @@ longer buried under 100+ ms of room ringing; it occupies the same order of
 magnitude as the early reflection pattern.
 
 This should not be overstated. The difference is subtle, operating near the
-edge of audibility even by the generous extrapolated Blauert thresholds [1].
+edge of audibility even by the generous extrapolated Blauert thresholds [^1].
 A well-aligned ported sub in a room-corrected system will sound very good.
 But if the owner is choosing between enclosure types and other factors (size,
 cost, efficiency) are equal, lower group delay is a legitimate tiebreaker in
@@ -874,92 +874,92 @@ response and computes the inverse. The practical differences are limited to:
 Each entry includes an assessed confidence level for the claims attributed to
 that source in this document.
 
-[1] Blauert, J. and Laws, P. (1978). "Group delay distortions in
+[^1]: Blauert, J. and Laws, P. (1978). "Group delay distortions in
     electroacoustical systems." *Journal of the Acoustical Society of
     America*, 63(5), pp. 1478-1483.
     **Confidence: HIGH** for the measured range (500 Hz - 8 kHz); sub-bass
     values commonly attributed to this study are extrapolations, not data.
 
-[2] Lipshitz, S.P., Pocock, M., and Vanderkooy, J. (1982). "On the
+[^2]: Lipshitz, S.P., Pocock, M., and Vanderkooy, J. (1982). "On the
     audibility of midrange phase distortion in audio systems." *Journal of
     the Audio Engineering Society*, 30(9), pp. 580-595.
     **Confidence: MEDIUM** -- cited from memory; claims consistent with known
     findings.
 
-[3] Linkwitz, S. Writings on LR4 crossover phase distortion audibility.
+[^3]: Linkwitz, S. Writings on LR4 crossover phase distortion audibility.
     Specific publication unverified.
     **Confidence: MEDIUM** -- consistent with known positions; specific
     publication should be identified for proper citation.
 
-[4] Thiele, A.N. Transient behavior analysis of sealed and ported
+[^4]: Thiele, A.N. Transient behavior analysis of sealed and ported
     enclosures. Cited by Small; specific paper unverified.
     **Confidence: MEDIUM** -- secondary citation; specific paper should be
     identified and verified.
 
-[5] Toole, F.E. (2008). *Sound Reproduction: The Acoustics and
+[^5]: Toole, F.E. (2008). *Sound Reproduction: The Acoustics and
     Psychoacoustics of Loudspeakers and Rooms*. Focal Press.
     **Confidence: MEDIUM-HIGH** -- widely referenced, consistent with field
     experience.
 
-[6] Small, R.H. (1972). "Direct-radiator loudspeaker system analysis."
+[^6]: Small, R.H. (1972). "Direct-radiator loudspeaker system analysis."
     *Journal of the Audio Engineering Society*, 20(5), pp. 383-395.
     Small, R.H. (1973). "Closed-box loudspeaker systems." *Journal of the
     Audio Engineering Society*, 21(1-2).
     **Confidence: HIGH** -- foundational, widely reproduced.
 
-[7] Thiele, A.N. (1971). "Loudspeakers in vented boxes." *Journal of the
+[^7]: Thiele, A.N. (1971). "Loudspeakers in vented boxes." *Journal of the
     Audio Engineering Society*, 19(5-6). (Originally published 1961 in
     *Proceedings of the IRE Australia*.)
     **Confidence: HIGH** -- foundational, widely reproduced.
 
-[8] Olson, H.F. (1957). *Acoustical Engineering*. Van Nostrand.
+[^8]: Olson, H.F. (1957). *Acoustical Engineering*. Van Nostrand.
     **Confidence: HIGH** -- foundational.
 
-[9] Beranek, L.L. (1954). *Acoustics*. McGraw-Hill.
+[^9]: Beranek, L.L. (1954). *Acoustics*. McGraw-Hill.
     **Confidence: HIGH** -- foundational.
 
-[10] Keele, D.B. (1975). "Low-frequency horn design using Thiele/Small
-     driver parameters." *AES Preprint* No. 1032, presented at the 51st AES
-     Convention.
-     **Confidence: HIGH** -- foundational.
+[^10]: Keele, D.B. (1975). "Low-frequency horn design using Thiele/Small
+    driver parameters." *AES Preprint* No. 1032, presented at the 51st AES
+    Convention.
+    **Confidence: HIGH** -- foundational.
 
-[11] Bailey, A.R. (1965). "A non-resonant loudspeaker enclosure design."
-     *Wireless World*, 71(10), pp. 483-486.
-     **Confidence: MEDIUM-HIGH** -- foundational for TL design, widely
-     referenced, but less mainstream than Thiele-Small.
+[^11]: Bailey, A.R. (1965). "A non-resonant loudspeaker enclosure design."
+    *Wireless World*, 71(10), pp. 483-486.
+    **Confidence: MEDIUM-HIGH** -- foundational for TL design, widely
+    referenced, but less mainstream than Thiele-Small.
 
-[12] Bradbury, L.J.S. (1976). "The use of fibrous materials in loudspeaker
-     enclosures." *Journal of the Audio Engineering Society*, 24(3),
-     pp. 162-170.
-     **Confidence: MEDIUM-HIGH** -- foundational for TL design, widely
-     referenced.
+[^12]: Bradbury, L.J.S. (1976). "The use of fibrous materials in loudspeaker
+    enclosures." *Journal of the Audio Engineering Society*, 24(3),
+    pp. 162-170.
+    **Confidence: MEDIUM-HIGH** -- foundational for TL design, widely
+    referenced.
 
-[13] King, M.J. (1996). Chapter in *Loudspeaker and Headphone Handbook*,
-     ed. J. Borwick. Focal Press.
-     **Confidence: MEDIUM** -- referenced in TL design literature, not
-     independently verified against original.
+[^13]: King, M.J. (1996). Chapter in *Loudspeaker and Headphone Handbook*,
+    ed. J. Borwick. Focal Press.
+    **Confidence: MEDIUM** -- referenced in TL design literature, not
+    independently verified against original.
 
-[14] King, M.J. (2001-2010). Transmission line loudspeaker analysis and
-     simulation. Published on quarter-wave.com and in peer-reviewed journals.
-     **Confidence: HIGH** -- peer-reviewed and independently verifiable.
+[^14]: King, M.J. (2001-2010). Transmission line loudspeaker analysis and
+    simulation. Published on quarter-wave.com and in peer-reviewed journals.
+    **Confidence: HIGH** -- peer-reviewed and independently verifiable.
 
-[15] HOQS (High Order Quarterwave Society). Paraflex subwoofer designs.
-     Community-developed, shared via diyAudio forums.
-     **Confidence: LOW** -- no peer-reviewed measurements published.
+[^15]: HOQS (High Order Quarterwave Society). Paraflex subwoofer designs.
+    Community-developed, shared via diyAudio forums.
+    **Confidence: LOW** -- no peer-reviewed measurements published.
 
-[16] PMC (Professional Monitor Company). Transmission line designs in
-     professional monitoring.
-     **Confidence: HIGH** -- commercially verifiable, well-documented product
-     line.
+[^16]: PMC (Professional Monitor Company). Transmission line designs in
+    professional monitoring.
+    **Confidence: HIGH** -- commercially verifiable, well-documented product
+    line.
 
-[17] Room-correction rebalancing analysis (this document). Enclosure topology
-     significance increases in corrected systems.
-     **Confidence: MEDIUM-HIGH** -- physics reasoning is sound (magnitude
-     correction reduces modal ringing, cannot reduce enclosure minimum-phase
-     delay); degree of rebalancing depends on room-specific factors (reflection
-     density, correction effectiveness) that vary between venues.
+[^17]: Room-correction rebalancing analysis (this document). Enclosure topology
+    significance increases in corrected systems.
+    **Confidence: MEDIUM-HIGH** -- physics reasoning is sound (magnitude
+    correction reduces modal ringing, cannot reduce enclosure minimum-phase
+    delay); degree of rebalancing depends on room-specific factors (reflection
+    density, correction effectiveness) that vary between venues.
 
-[18] D-004, D-008, D-009, D-010 -- project design decisions (per-sub
-     correction, per-venue measurement, cut-only correction, subsonic
-     protection).
-     **Confidence: HIGH** -- project decisions.
+[^18]: D-004, D-008, D-009, D-010 -- project design decisions (per-sub
+    correction, per-venue measurement, cut-only correction, subsonic
+    protection).
+    **Confidence: HIGH** -- project decisions.
