@@ -424,6 +424,227 @@ for structured story intake. The Architect's scope was expanded to include
 real-time performance on constrained hardware, since a Pi 4B under sustained
 DSP load is fundamentally a real-time systems challenge.
 
+
+## Tool Choices and Real-Time Configuration
+
+### Why PipeWire
+
+PipeWire is the audio server -- the software layer that routes audio between
+applications and hardware devices. It replaced both JACK and PulseAudio on
+this system, providing a single server that speaks both protocols.
+
+Mixxx and Reaper connect to PipeWire through its JACK bridge, seeing the same
+JACK API they would on a dedicated JACK server. RustDesk (the remote desktop
+tool) connects through PipeWire's PulseAudio compatibility layer. This dual
+compatibility eliminates the need to run two audio servers simultaneously, as
+earlier Linux audio setups often required.
+
+PipeWire's **quantum** parameter controls the audio buffer size at the server
+level, measured in samples. At 48kHz, a quantum of 256 means PipeWire
+processes audio in chunks of 256 samples (5.3 milliseconds). Lower quantum
+means lower latency but higher CPU overhead from more frequent processing
+cycles. The system uses quantum 256 for live mode and quantum 1024 for DJ
+mode, switched by loading different PipeWire configuration files.
+
+A critical architectural detail: PipeWire is not in the DSP processing path.
+CamillaDSP talks directly to the USBStreamer's ALSA device, bypassing
+PipeWire for the actual audio output. PipeWire's role is routing audio from
+applications (Mixxx, Reaper) into CamillaDSP's capture device. This means
+PipeWire's latency contribution is limited to the input side of the chain;
+the output path is CamillaDSP-to-ALSA with no intermediary.
+
+
+### Why CamillaDSP
+
+CamillaDSP is the real-time DSP engine -- the software that applies the FIR
+convolution, mixing, delay, and gain adjustments to every audio sample before
+it reaches the speakers.
+
+Several alternatives were considered:
+
+**BruteFIR** is an older Linux FIR convolution engine with a solid reputation.
+It handles convolution well but lacks an integrated processing pipeline --
+mixing, delay, and routing require additional tools. It also has no runtime
+API, meaning filter changes require stopping and restarting the process.
+
+**Hardware DSP processors** (miniDSP, dbx, Behringer DCX) are purpose-built
+for crossover and EQ but have fixed filter lengths (typically 1,024 taps or
+fewer) and no automation API. They cannot run the 16,384-tap combined filters
+this project requires, and integrating them into an automated measurement
+pipeline would require external control software that does not exist.
+
+**PipeWire filter chains** can apply FIR convolution within PipeWire itself,
+but their processing is quantum-aligned -- the convolution operates on
+PipeWire's buffer schedule, not its own. They also lack partitioned
+convolution (explained below), making long FIR filters impractical.
+
+CamillaDSP was chosen because it combines several properties that no single
+alternative offers:
+
+**ALSA-native operation.** CamillaDSP opens the audio hardware directly via
+ALSA, with exclusive access to all eight USBStreamer channels. This eliminates
+one layer of buffering and gives CamillaDSP direct control over the hardware
+buffer timing.
+
+**Partitioned overlap-save FFT convolution.** This is the algorithm that makes
+16,384-tap FIR filters feasible on a Raspberry Pi. Instead of multiplying
+each output sample by all 16,384 coefficients (which would require over 3
+billion multiply-accumulate operations per second for four channels at 48kHz),
+CamillaDSP converts the filter to the frequency domain using FFT (Fast
+Fourier Transform) and performs the convolution as element-wise multiplication.
+The "partitioned" part means it splits the long filter into segments that
+match the processing chunk size and overlaps them correctly -- this keeps
+latency low while still convolving against the full filter length. The
+O(N log N) scaling of FFT versus O(N x M) scaling of direct convolution gives
+roughly a 100x reduction in operations for a 16,384-tap filter. The measured
+19% CPU at chunksize 256 represents approximately 750 million floating-point
+operations per second -- well within the Pi 4B's capability, though the
+Pi's ARM Cortex-A72 NEON vector unit is not fully exploited. CamillaDSP uses
+RustFFT, which relies on LLVM auto-vectorization to generate NEON instructions
+where the compiler finds opportunities, rather than hand-tuned NEON intrinsics.
+This means there is untapped performance headroom -- future FFT library
+improvements could reduce CPU consumption further without any changes to
+CamillaDSP itself.
+
+**Multi-channel pipeline in one process.** All eight channels -- four speaker
+channels with FIR processing, two engineer headphone channels as passthrough,
+two singer IEM channels as passthrough -- are processed in a single CamillaDSP
+instance. The mixer, per-channel delay, gain trim, and convolution are all
+defined in one YAML configuration file. No external routing or glue scripts.
+
+**Websocket API.** CamillaDSP exposes a websocket interface for runtime
+monitoring and configuration changes. The Python library `pycamilladsp`
+provides programmatic access to load new configurations, query processing
+statistics (including the CPU usage figures cited throughout this document),
+and hot-swap filter coefficients. This is essential for the automated
+measurement pipeline, which needs to deploy new filters and verify they loaded
+correctly without manual intervention.
+
+
+### Real-Time Configuration: What We Do and What We Skip
+
+"Real-time audio" on Linux means the system must finish processing each audio
+buffer before the next one arrives. If it misses a deadline, the result is an
+audible glitch -- a click, pop, or dropout called an **xrun** (buffer
+underrun or overrun). The challenge is not raw processing speed (the Pi has
+plenty) but ensuring consistent, uninterrupted access to CPU time.
+
+**What we configure:**
+
+**FIFO scheduling at priority 83-88.** Linux's default scheduler treats all
+processes roughly equally, occasionally pausing one to run another. For audio,
+this is unacceptable -- a 5ms pause while the kernel runs a background task
+means a missed audio deadline. FIFO (First In, First Out) scheduling at high
+priority tells the kernel: this process runs until it voluntarily yields, and
+it preempts anything with lower priority. RTKit (the Real-Time Kit daemon)
+grants PipeWire and CamillaDSP these elevated priorities without requiring
+them to run as root. The priority range 83-88 is high enough to preempt all
+normal processes but below the kernel's own real-time threads (priority 99),
+which must not be starved.
+
+**Per-mode quantum and chunksize.** DJ mode runs PipeWire at quantum 1024 and
+CamillaDSP at chunksize 2048 -- large buffers that give the system ample time
+to process each chunk. Live mode drops to quantum 256 and chunksize 256 for
+lower latency, accepting higher CPU overhead from more frequent processing
+cycles. Switching between modes loads a different PipeWire configuration and
+a different CamillaDSP YAML file.
+
+**Memory locking (memlock).** Audio buffers must stay in physical RAM, never
+swapped to the SD card. Swapping introduces milliseconds of latency that
+would cause xruns. The `memlock` ulimit allows audio processes to lock their
+memory pages, and `swappiness` is reduced to discourage the kernel from
+swapping under memory pressure.
+
+**Service trimming.** Unnecessary services (Avahi, ModemManager, CUPS, rpcbind)
+are disabled to eliminate background CPU and I/O activity that could interfere
+with audio processing. The desktop environment is stripped to a minimal labwc
+Wayland compositor running as a user service.
+
+**What we deliberately skip:**
+
+**No PREEMPT_RT kernel.** A real-time patched kernel reduces worst-case
+scheduling latency from around 1ms to under 50 microseconds. We do not need
+this because our shortest processing deadline is 5.33ms (chunksize 256 at
+48kHz), and CamillaDSP's median processing time is 18% of that deadline.
+Even a 1ms scheduling delay consumes less than 20% of the remaining budget.
+The standard PREEMPT kernel (already included in Raspberry Pi OS) is
+sufficient.
+
+**No CPU isolation or IRQ pinning.** On systems with very tight budgets,
+dedicating specific CPU cores to audio and pinning hardware interrupts to
+other cores can reduce jitter. With 80%+ headroom, this level of optimization
+is unnecessary and adds operational complexity.
+
+**No force_turbo.** The Pi 4B's dynamic frequency scaling briefly drops clock
+speed during idle periods. Forcing the CPU to run at maximum frequency
+continuously would eliminate the sub-millisecond ramp-up time when processing
+resumes, but it increases power consumption and heat generation for a benefit
+that is irrelevant with our headroom margins.
+
+**No custom kernel builds.** The stock Raspberry Pi OS kernel includes PREEMPT
+scheduling and all necessary audio drivers. Building a custom kernel with
+additional patches would create a maintenance burden with no measurable
+benefit at our operating point.
+
+The theme is clear: these are optimizations we do not need because the system
+has 80%+ headroom at its most demanding operating point. If future changes
+reduced that headroom (more channels, longer filters, additional processing
+stages), any of these could be revisited.
+
+
+### How Hard Is the Real-Time?
+
+This is a **soft real-time** system, not a hard real-time system.
+
+In hard real-time (think pacemakers, airbag controllers, fly-by-wire avionics),
+a missed deadline is a system failure. In soft real-time, a missed deadline is
+a degraded output -- an audible glitch, not a safety hazard. Professional
+digital mixing consoles (Yamaha CL/QL, Allen & Heath dLive, DiGiCo SD) all
+operate under the same soft real-time model. A rare xrun during a live show is
+undesirable but not catastrophic.
+
+The processing budget at chunksize 256 and 48kHz is 5.33 milliseconds per
+chunk. CamillaDSP must finish processing all eight channels -- four FIR
+convolutions, four passthrough copies, mixing, delay, and gain -- within that
+window. The measured median processing time is 18.38% of the budget, leaving
+81.62% as headroom.
+
+The threats to real-time performance, ranked by likelihood:
+
+1. **Thermal throttling.** The Pi 4B reduces its clock speed from 1.8GHz to
+   1.5GHz (or lower) when the CPU temperature exceeds 80C. In a flight case
+   at a warm venue, sustained processing could push temperatures into the
+   throttling range. This is the most likely threat and is addressed by
+   thermal testing in the flight case (US-003, T4).
+
+2. **USB contention.** The USBStreamer, UMIK-1 measurement microphone, and
+   three MIDI controllers all share the Pi's USB bus. Heavy USB traffic during
+   a measurement cycle (streaming audio while reading the microphone) could
+   cause bus contention that delays audio delivery. During normal performance,
+   only the USBStreamer and one MIDI controller are active.
+
+3. **PipeWire graph renegotiation.** When PipeWire's internal routing graph
+   changes (a new application connects, a device appears or disappears),
+   PipeWire briefly pauses audio processing to reconfigure. This typically
+   takes under 1ms but can cause a single xrun if it coincides with a
+   processing deadline.
+
+4. **Scheduling jitter.** Even with FIFO priority, the kernel may delay
+   scheduling CamillaDSP by up to ~1ms on the standard PREEMPT kernel (on a
+   PREEMPT_RT kernel this would be under 50us). With 4.35ms of headroom per
+   chunk, this is absorbed without issue.
+
+5. **Memory pressure.** If system memory becomes scarce and the kernel needs
+   to reclaim pages, the resulting I/O activity could briefly compete with
+   audio processing. With 3.4GB available after all services are running,
+   this is unlikely under normal operation.
+
+None of these threats are unique to this project. Every Linux audio system
+faces them. The difference is headroom: a system running at 90% CPU has no
+margin for any of these events, while a system at 19% can absorb all of them
+simultaneously without missing a deadline.
+
+
 ---
 
 *This document is maintained alongside the formal decision log at

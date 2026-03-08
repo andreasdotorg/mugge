@@ -53,7 +53,7 @@ ahead.
 | US-000b | 13/13 | done (security specialist + architect signed off) |
 | US-001 | 4/4 | **done** (all 5 tests pass: T1a 5.23%, T1b 10.42%, T1c 20.43%, T1d 5.21%, T1e 10.39%. 16k taps both modes. A1/A2 validated.) |
 | US-002 | 4/4 | **done** (Pass 1 + Pass 2 complete, lab notes written, A3 updated. D-011 confirmed. IEM passthrough = net benefit.) |
-| US-003 | 0/4 | in-progress (stability tests with D-011 parameters: chunksize 256, quantum 256) |
+| US-003 | 2/4 | in-progress (T3b PASS: 0 xruns, 74.5C, 18.38% load. T3c informational: quantum 128 marginal startup, clean after 38s. T3a + T4 remaining.) |
 | US-004 | 0/3 | selected (assumption register — independent, can run in parallel) |
 | US-005 | 0/3 | ready (after Tier 1; Hercules already visible as USB-MIDI — positive signal) |
 | US-006 | 0/3 | ready (unblocked by US-000 + US-005) |
@@ -92,3 +92,4 @@ None.
 - D-009: Zero-gain correction filters — cut only, -0.5dB safety margin (2026-03-08)
 - D-010: Speaker profiles and configurable crossover (2026-03-08)
 - D-011: Live mode chunksize 256 + PipeWire quantum 256 — supersedes D-002 for live mode (2026-03-08)
+- D-012: Flight case thermal management — active cooling on Pi mandatory (2026-03-08)

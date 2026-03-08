@@ -1,0 +1,7 @@
+2026-03-08 19:18:49.329005 INFO [src/bin.rs:781] CamillaDSP version 3.0.1
+2026-03-08 19:18:49.329057 INFO [src/bin.rs:782] Running on linux, aarch64
+2026-03-08 19:18:49.346334 INFO [src/alsadevice.rs:798] Capture device supports rate adjust
+2026-03-08 19:18:49.354721 INFO [src/alsadevice.rs:117] PB: Starting playback from Prepared state
+2026-03-08 19:18:49.575515 [38;5;208mWARN[0m [src/alsadevice.rs:113] PB: Prepare playback after buffer underrun
+2026-03-08 19:19:27.288670 [38;5;208mWARN[0m [src/alsadevice.rs:113] PB: Prepare playback after buffer underrun
+2026-03-08 19:48:57.924488 INFO [src/bin.rs:993] Shutting down

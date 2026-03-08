@@ -229,7 +229,7 @@ c.disconnect()
     echo "  Temp: ${TEMP}C  Throttle: $THROTTLE"
 
     # Xrun count so far
-    XRUN_COUNT=$(grep -c "XRUN\|underrun\|xrun" "$OUTDIR/T3b_xruns.log" 2>/dev/null || echo 0)
+    XRUN_COUNT=$(grep -c "^\[" "$OUTDIR/T3b_xruns.log" 2>/dev/null || echo 0)
     echo "  Xruns detected so far: $XRUN_COUNT"
 done
 

@@ -19,7 +19,7 @@ affected decisions/stories, and current status.
 | A1 | 16k taps @ chunksize 2048 fits in Pi 4 CPU budget alongside Mixxx | VALIDATED | T1a (US-001): 5.23% processing load | D-003, US-001 | validated — well within budget |
 | A2 | 16k taps @ chunksize 512 fits in Pi 4 CPU budget alongside Reaper | VALIDATED | T1b (US-001): 10.42% at chunksize 512; T1c: 19.25% at chunksize 256 (D-011 target). Both within budget. | D-003, D-011, US-001 | validated — chunksize now 256 per D-011, 19.25% processing load |
 | A3 | End-to-end PA latency in live mode < 25ms | INVALIDATED | T2b (US-002): 30.3ms measured at chunksize 512. Bone-to-IEM measured ~22ms. D-011 targets chunksize 256 (~20ms projected PA path, not yet measured). | D-002, D-011, US-002 | invalidated at 512; D-011 supersedes with chunksize 256, re-measurement pending |
-| A4 | Pi 4 thermals stay below 75C in flight case under sustained load | LOW | T4 (US-003) | D-003, flight case design | open |
+| A4 | Pi 4 thermals stay below 75C in flight case under sustained load | HIGH-RISK | T4 (US-003), D-012 | D-003, D-012, flight case design | open — active cooling mandatory per D-012 |
 | A5 | 16k-tap FIR actually provides effective correction at 20Hz | MEDIUM | T5 (US-013) | D-003, US-013 | open |
 | A6 | Hercules DJControl Mix Ultra presents as USB-MIDI on Linux | UNKNOWN | Manual test (US-005) | US-005, US-006 | open |
 | A7 | Mixxx runs adequately on Pi 4 with OpenGL ES via Xvfb/V3D | MEDIUM | Manual test (US-006) | US-006, A16 | open |
@@ -325,7 +325,7 @@ relief in flight case design.
 | US-017 | A11 (8ch CamillaDSP routing) | D-011 resolved the architecture but configs need updating |
 | US-021 | A13 (quantum/chunksize alignment), A16 (gpu_mem), A19 (loopback channels) | Mode switching must be atomic |
 | US-022 | A20 (web server CPU), A21 (Reaper OSC) | CPU budget must account for web server |
-| US-003 | A4 (thermals), A18 (force_turbo), A23 (USB hub) | Stability depends on thermal + power |
+| US-003 | A4 (thermals, HIGH-RISK — D-012 active cooling mandatory), A18 (force_turbo), A23 (USB hub) | T3b: 74.5C open-air. Active cooling required per D-012. T4 validates. |
 
 ---
 

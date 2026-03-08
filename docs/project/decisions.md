@@ -118,3 +118,17 @@ decision. Add a new one that supersedes it (reference the old one).
 **Rationale:** (1) US-001 benchmarks confirmed chunksize 256 with 16k taps at only 19.25% processing load — well within budget. (2) 21ms bone-to-electronic is in the "noticeable separation" range but safe for musical performance. 31ms (chunksize 512) crosses into "distinct delayed return" territory. (3) CamillaDSP's exclusive ALSA access means all channels must transit CamillaDSP regardless — IEM passthrough adds zero latency penalty vs the PA path, collapsing the slapback model to bone-conduction vs electronics only. (4) PipeWire quantum 256 at 48kHz = 5.3ms per hop, appropriate for the live use case.
 
 **Impact:** Supersedes D-002 for live mode parameters. DJ mode unchanged. All CamillaDSP configs must route 8 channels (IEM as passthrough on ch 6-7). PipeWire needs per-mode quantum configuration: 10-audio-settings.conf with quantum 256 for live mode, 1024 for DJ mode. SETUP-MANUAL must be updated with new chunksize values and routing architecture.
+
+## D-012: Flight case thermal management — active cooling on Pi mandatory (2026-03-08)
+
+**Context:** US-003 T3b measured 74.5C peak at ~20C ambient (open-air, CamillaDSP only). The Pi 4B throttles at 80C. At venue temperatures (25-32C) in a closed flight case, the Pi will throttle without active cooling, causing xruns at chunksize 256.
+
+**Decision:**
+1. Active cooling (fan) on the Pi is mandatory. A 40-50mm fan directed at the SoC provides ~15C reduction, bringing the thermal equilibrium to ~70C at 32C ambient.
+2. A heatsink on the Pi 4B SoC is mandatory (if not already present).
+3. T4 must test with the amplifier running at moderate output to measure actual case-internal temperature near the Pi. The amp is Class D (85-90% efficient) with its own active cooling, so waste heat contribution to Pi airspace is expected to be modest (~3-5C) but must be validated.
+4. Amp thermal isolation: evaluate during T4. Class D efficiency and the amp's own fan may make compartmentalization unnecessary. If T4 shows case ambient near the Pi exceeds 35C with the amp running, revisit with compartment divider or directed airflow.
+
+**Rationale:** Open-air thermal equilibrium: 72C at 20C ambient (52C delta). Closed case adds ~3-5C from restricted airflow. Venue ambient: 25-32C. Without Pi fan: 80-87C projected — thermal throttling certain. With Pi fan (~15C delta reduction): 67-73C projected — adequate margin. Class D amp at moderate output (~200W): ~30W waste heat, mostly exhausted by amp's own fan, contributing +3-5C to nearby case ambient.
+
+**Impact:** Flight case design must include a fan for the Pi (USB-powered, always-on). Heatsink required. T4 test protocol includes amp at moderate output. Amp compartmentalization is a contingency, not a baseline requirement.
