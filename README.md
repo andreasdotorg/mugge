@@ -46,6 +46,11 @@ instead of IIR crossovers, why minimum-phase instead of linear-phase, why
 these buffer sizes. The [decision log](docs/project/decisions.md) has the
 formal records.
 
+**How do subwoofer enclosures affect transients?** The [enclosure topologies
+analysis](docs/theory/ported-vs-sealed.md) compares sealed, ported,
+horn-loaded, and transmission line designs -- their group delay, transient
+behavior, and how each interacts with the FIR correction pipeline.
+
 **What comes after the Pi?** The [Zynq platform
 exploration](docs/theory/zynq-exploration.md) looks at what a second-generation
 system could do with dedicated FPGA hardware -- 64 audio channels, sub-microsecond
