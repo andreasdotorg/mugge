@@ -2,33 +2,20 @@
 
 ## Abstract
 
-For decades, the consensus in loudspeaker engineering has been that subwoofer
-enclosure topology barely matters for transient quality. Toole [5], Thiele [4],
-and Linkwitz [3] all reached the same conclusion: room modal behavior dominates
-the sub-bass time response so thoroughly that enclosure group delay differences
-are buried under 50-200 ms of room ringing. That conclusion was correct -- for
-uncorrected rooms.
-
-Affordable, real-time room correction changes the picture. A system running
-16,384-tap minimum-phase FIR correction on a Raspberry Pi can attenuate a 15 dB
-room mode to flat, reducing the associated ringing energy by roughly 97%. Once
-that dominant masking is removed, the enclosure's intrinsic group delay -- 15 ms
-for a sealed sub vs 30 ms for a ported sub at 50 Hz -- is no longer negligible.
-It becomes one of several comparable time-domain artifacts alongside early
-reflections and residual modal energy. The old literature is not wrong; it
-just assumed a world where room correction was either nonexistent or exotic.
-
-This document answers two questions:
-
-1. **What is the best enclosure topology for crisp transients?** Sealed and
-   true transmission line designs have the lowest group delay (10-20 ms at
-   50 Hz). In our room-corrected system, this is a genuine, if modest,
-   advantage over ported and quarter-wave resonator designs (25-40 ms).
-2. **Does our FIR correction pipeline handle all topologies?** Yes. The
-   pipeline measures, corrects, and deploys filters for any enclosure type.
-   The practical differences are limited to subsonic protection requirements
-   (D-010) and time alignment considerations for designs with internal
-   acoustic paths.
+The conventional wisdom -- established by Toole [5], Thiele [4], and
+Linkwitz [3] -- holds that subwoofer enclosure topology barely matters for
+transient quality because room modal ringing (50-200 ms) buries enclosure group
+delay differences (10-40 ms). That consensus was formed when real-time FIR room
+correction was either nonexistent or prohibitively expensive. Affordable FIR
+correction -- running 16,384-tap convolution on a Raspberry Pi -- changes the
+calculus: it removes roughly 97% of modal ringing energy, elevating enclosure
+group delay from negligible to one of several comparable time-domain factors.
+This document asks two questions: (1) which enclosure topology produces the
+crispest transients, and (2) does our FIR pipeline handle all topologies? The
+answers: sealed and true transmission line designs win on transients (10-20 ms
+group delay at 50 Hz vs 25-40 ms for ported), and the pipeline handles any
+topology -- the practical differences reduce to subsonic protection (D-010) and
+time alignment for designs with internal acoustic paths.
 
 ---
 
