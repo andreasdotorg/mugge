@@ -9,12 +9,18 @@ correction pipeline, the cut-only correction constraint (D-009), and the
 per-sub independent correction architecture (D-004).
 
 The analysis concludes that enclosure topology is a second-order effect in
-real venues, where room modal behavior dominates the sub-bass time response.
-The FIR correction pipeline handles any topology effectively above the
-enclosure's rolloff frequency. The practical differences: ported, horn-loaded,
-and transmission line enclosures require subsonic protection (D-010) while
-sealed enclosures do not, and designs with internal acoustic paths add
-physical propagation delay that the measurement pipeline captures
+uncorrected rooms, where room modal behavior dominates the sub-bass time
+response. In a room-corrected system like ours -- where FIR correction
+dramatically reduces modal ringing -- enclosure group delay becomes one of
+several comparable contributors to time-domain quality, alongside early
+reflections and residual modal energy. The difference is subtle but real:
+lower group delay (sealed, true TL) provides a modest advantage over higher
+group delay (ported, quarter-wave resonator) when room modes are no longer
+masking it. The FIR correction pipeline handles any topology effectively
+above the enclosure's rolloff frequency. The practical differences: ported,
+horn-loaded, and transmission line enclosures require subsonic protection
+(D-010) while sealed enclosures do not, and designs with internal acoustic
+paths add physical propagation delay that the measurement pipeline captures
 automatically.
 
 ---
@@ -562,17 +568,64 @@ horn-loaded sub falls in the 20-40 ms range depending on design. A true TL
 is comparable to sealed (~10-20 ms), while a quarter-wave resonator is
 comparable to ported (~25-40 ms).
 
-**Does the difference matter in a real venue?** Probably not. Toole's work
-shows that room reflections and modal behavior dominate the sub-bass time
-response. The difference between 20 ms and 30 ms of group delay at 50 Hz is
-swamped by 50-200 ms of modal ringing in a typical room. The room correction
-pipeline addresses the dominant time-domain issues; the enclosure group delay
-difference is a second-order effect.
+**Does the difference matter in a real venue?** The answer depends on whether
+the system applies room correction.
 
-Where it might matter: in a nearfield or outdoor setup with minimal room
-interaction, on a well-measured flat ground plane, at high SPL, with a
-listener trained to hear group delay. This is an edge case, not the normal
-operating scenario.
+**In an uncorrected system:** Probably not. Toole's work shows that room
+reflections and modal behavior dominate the sub-bass time response in
+untreated rooms. Modal ringing at 50-200 ms swamps the 15-40 ms range of
+enclosure group delay variation. The difference between a sealed and a ported
+sub is buried under room artifacts. This is the context in which Toole,
+Thiele, and Linkwitz made their assessments -- none of them assumed a
+room-corrected system, because real-time FIR correction was either
+nonexistent (Blauert 1978, Lipshitz 1982) or exotic and expensive (Toole
+2008) at the time of their work.
+
+**In a room-corrected system (our system):** The balance shifts. Our pipeline
+applies 16,384-tap minimum-phase FIR correction that specifically targets
+room modes. When the correction attenuates a 15 dB room mode peak to flat,
+the associated ringing energy decreases by roughly 97% (power scales with
+magnitude squared). This is highly effective -- but the correction does not
+eliminate room effects entirely. Early reflections from nearby surfaces
+(5-30 ms) are deliberately uncorrected because they vary with listener
+position. Diffuse reverberation is untouched. And the enclosure's intrinsic
+group delay -- a minimum-phase property of the enclosure itself -- cannot be
+reduced below the minimum-phase limit by magnitude correction.
+
+After room correction, the dominant time-domain artifacts in the sub-bass
+range are, in approximate order: (1) early reflections from nearby boundaries
+(5-30 ms, uncorrected by design), (2) enclosure group delay (10-40 ms
+depending on topology, partially reducible but not below minimum-phase limit),
+(3) residual modal ringing (reduced but not zero), (4) diffuse reverberation
+(broadband, not targeted by correction). Enclosure group delay moves from a
+distant also-ran (in uncorrected rooms) to a peer of early reflections as a
+time-domain factor.
+
+This does not mean enclosure topology becomes the dominant effect. Early
+reflections from the floor, nearest wall, and ceiling are still present and
+produce comb filtering that overlaps the enclosure group delay range. But
+enclosure topology moves from "negligible compared to room effects" to "one
+of several comparable contributors to time-domain behavior." The 10-20 ms
+difference between a sealed sub and a ported sub is no longer buried under
+100+ ms of modal ringing -- it is now in the same order of magnitude as the
+early reflection pattern.
+
+**Practical implication for enclosure choice:** In our room-corrected system,
+a sealed or true-TL subwoofer's lower group delay is a genuine, if modest,
+advantage over a ported or quarter-wave resonator design. The advantage is
+not dramatic -- we are comparing 15 ms vs 30 ms in a context where early
+reflections at 5-30 ms are also present -- but it is real and not masked by
+room modes. For psytrance kick drums, where the sub-bass tail of the kick
+(30-60 Hz, 100-300 ms) passes through the subwoofer, the tighter impulse
+response of a sealed or true-TL design preserves more of the original
+transient envelope.
+
+This should not be overstated. The difference is subtle, operating near the
+edge of audibility even by the generous extrapolated Blauert thresholds. A
+well-aligned ported sub in a room-corrected system will sound very good. But
+if the owner is choosing between enclosure types and other factors (size,
+cost, efficiency) are equal, lower group delay is a legitimate tiebreaker in
+a corrected system -- whereas in an uncorrected system, it would not be.
 
 ---
 
@@ -589,7 +642,41 @@ A minimum-phase FIR correction filter can also reduce group delay near the
 enclosure's rolloff frequency by flattening the magnitude response. Since
 group delay is linked to magnitude response slope via the minimum-phase
 relationship, smoothing out a response peak near the tuning frequency also
-reduces the group delay peak.
+reduces the group delay peak. This is particularly relevant for ported and
+quarter-wave resonator designs, where the magnitude peak near the tuning
+frequency contributes significantly to group delay. Flattening this peak
+through correction can bring the group delay in the tuning region closer to
+-- though not equal to -- sealed-box levels.
+
+### What the pipeline removes from the room
+
+Room modal peaks are the pipeline's primary target in the sub-bass range. A
+room mode produces both a magnitude peak and associated time-domain ringing
+(the two are linked through the minimum-phase relationship). When the
+correction filter attenuates a 15 dB room mode peak to flat, the ringing
+energy decreases proportionally -- roughly 97% energy reduction (magnitude
+squared). This is the pipeline's core value proposition for sub-bass quality.
+
+However, the correction does not eliminate room effects entirely:
+
+- **Modal ringing is reduced, not zeroed.** The correction targets the
+  magnitude peak, which reduces ringing, but residual energy remains. A
+  15 dB mode cut leaves ~3% of the original ringing energy -- small but
+  nonzero. Multiple overlapping modes leave a residual floor of time-domain
+  energy.
+- **Early reflections are deliberately uncorrected.** Floor, wall, and
+  ceiling reflections arriving within 5-30 ms of the direct sound produce
+  comb filtering that varies with listener position. The pipeline's
+  frequency-dependent windowing ignores these -- correcting them at the
+  measurement position would worsen the response everywhere else.
+- **Diffuse reverberation is untouched.** The late-arriving, broadband decay
+  of the room is not targeted by the correction.
+
+The consequence: after room correction, the sub-bass time domain still
+contains early reflections and residual modal energy. But the dominant modal
+artifacts (50-200 ms of ringing) are dramatically reduced, which elevates the
+relative importance of the enclosure's intrinsic group delay. See
+"Application to psytrance kick drums" above for the revised assessment.
 
 ### What the pipeline cannot correct
 
@@ -605,9 +692,10 @@ off naturally. The group delay in that region is irrelevant because no signal
 passes through it.
 
 **Net effect:** FIR correction can bring group delay near and above the
-tuning frequency to levels comparable to a sealed box, but cannot help below
-it. Since the system does not attempt to reproduce content below the
-enclosure's rolloff, this is an acceptable limitation.
+tuning frequency closer to sealed-box levels, but cannot eliminate the
+enclosure's intrinsic minimum-phase delay. In a room-corrected system, this
+residual enclosure delay is one of several comparable time-domain artifacts
+rather than a negligible one.
 
 ### Per-sub independence (D-004)
 
@@ -656,6 +744,8 @@ measure, compute inverse, apply as minimum-phase FIR.
 | PA suitability | Rare | Standard | Common (high SPL) | Rare (low efficiency) | Uncommon |
 | FIR correction compatibility | Full | Full above Fb | Full | Full | Full above tuning |
 | Pipeline handles it | Yes | Yes | Yes | Yes | Yes |
+| Significance in uncorrected rooms | Minimal (room modes dominate) | Minimal (room modes dominate) | Minimal (room modes dominate) | Minimal (room modes dominate) | Minimal (room modes dominate) |
+| Significance in corrected system | Lowest group delay; modest advantage | Higher group delay; modest disadvantage | Variable | Comparable to sealed; modest advantage | Comparable to ported; modest disadvantage |
 
 ---
 
@@ -680,4 +770,5 @@ thresholds and certain citations should be verified against original sources.
 | PMC (Professional Monitor Company) | TL use in professional monitoring | HIGH -- commercially verifiable, well-documented product line |
 | "Tighter bass" claim for TLs | Subjective reputation of TL transient quality | MEDIUM -- physically grounded for true TLs, questionable for lightly-damped designs, likely confounded by comparison methodology |
 | HOQS Paraflex community | Paraflex transient behavior, group delay | LOW -- no peer-reviewed measurements published |
+| Room-correction rebalancing analysis | Enclosure topology significance increases in corrected systems | MEDIUM-HIGH -- physics reasoning is sound (magnitude correction reduces modal ringing, cannot reduce enclosure minimum-phase delay); degree of rebalancing depends on room-specific factors (reflection density, correction effectiveness) that vary between venues |
 | D-004, D-008, D-009, D-010 | Per-sub correction, per-venue measurement, cut-only, subsonic protection | HIGH -- project decisions |
