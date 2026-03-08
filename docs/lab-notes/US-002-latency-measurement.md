@@ -1,5 +1,23 @@
 # US-002: End-to-End Latency Measurement
 
+The CPU benchmarks (US-001) proved the Pi could handle the DSP math. This test
+answered the second critical question: how much delay does the full audio chain
+introduce, and is it low enough for live vocal performance?
+
+Latency was measured using a physical loopback cable on the ADA8200 (analog
+output channel 1 wired back to analog input channel 1), with a Python script
+that played a click through the system and measured the round-trip time by
+cross-correlating the sent and received signals. Two passes of testing revealed
+that CamillaDSP adds exactly two chunks of latency (not three as initially
+modeled), and that PipeWire at quantum 1024 adds approximately 21 milliseconds
+per traversal. A critical architectural discovery emerged: CamillaDSP holds
+exclusive ALSA access to all eight USBStreamer channels, making the original
+assumption that IEM monitors could bypass CamillaDSP physically impossible.
+This led directly to the D-011 decision to target chunksize 256 with PipeWire
+quantum 256 for live mode.
+
+---
+
 ## Task T0: Pre-flight Verification
 
 **Date:** 2026-03-08 16:10 CET

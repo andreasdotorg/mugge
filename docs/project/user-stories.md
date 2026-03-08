@@ -1215,6 +1215,55 @@ over SSH gives efficient incremental transfers.
 
 ---
 
+## US-027: Performance Event Monitoring
+
+**As** the sound engineer,
+**I want** real-time visibility into buffer under/overruns, input clipping,
+DSP overload, thermal throttling, and PipeWire pipeline errors,
+**so that** I can detect and respond to performance degradation before it
+becomes audible or disrupts the show.
+
+**Status:** draft
+**Depends on:** US-022 (web UI platform for real-time display), US-023 (engineer dashboard provides the UI surface)
+**Blocks:** none
+**Cross-references:** US-003 (stability tests validate the same metrics this story monitors in production), US-007 (APCmini mk2 — optional LED feedback surface), D-009 (clipping is impossible in the DSP chain by design — this story monitors upstream/input clipping only)
+**Decisions:** D-009 (cut-only correction — DSP chain cannot clip; monitoring focuses on input stage and upstream sources)
+
+**Note:** The DSP chain is clipping-safe by design (D-009: all filters <= -0.5dB,
+no stage produces net gain). Therefore input clipping detection focuses on the
+UMIK-1/mic preamp stage and any upstream source feeding CamillaDSP. The
+monitoring system does not need to watch for DSP-internal clipping — it
+cannot occur if D-009 is satisfied. CamillaDSP's websocket API provides
+processing load and clipping indicators natively.
+
+**Acceptance criteria:**
+- [ ] **xrun detection:** PipeWire and ALSA xrun events captured in real time (both buffer underruns and overruns)
+- [ ] **Input clipping detection:** peak level monitoring on active input channels (ch 1-2); alert when signal exceeds -1 dBFS for more than 10ms
+- [ ] **CamillaDSP processing overload:** processing load percentage read via websocket API; alert when sustained above 80% for more than 5 seconds
+- [ ] **Thermal throttling detection:** CPU temperature monitored; alert at 75C (warning) and 80C (critical). Clock frequency drop detected as throttling indicator
+- [ ] **PipeWire pipeline errors:** pipeline state changes (error, paused unexpectedly) captured from PipeWire's event stream
+- [ ] **Real-time display:** all monitored events displayed on US-023 engineer dashboard with severity (info/warning/critical), timestamp, and event type
+- [ ] **Event history:** rolling log of last 100 events retained in memory for the current session (not persisted across reboots — ephemeral like venue measurements per D-008)
+- [ ] **Visual alert:** critical events highlighted prominently on dashboard (e.g., red indicator, persistent until acknowledged)
+- [ ] **Optional APCmini mk2 LED feedback:** if US-007 mapping exists and APCmini is connected, map status LEDs to system health (e.g., green=OK, yellow=warning, red=critical). This is a nice-to-have, not required for DoD
+- [ ] **Polling intervals:** xruns and clipping at audio-callback rate (real-time); CamillaDSP load every 1s; temperature every 5s; PipeWire state every 1s
+- [ ] **Zero performance impact:** monitoring must not itself cause xruns or measurable CPU overhead (< 1% additional CPU)
+- [ ] **D-009 cross-check:** monitoring confirms no output channel exceeds 0 dBFS during operation (defense-in-depth validation that cut-only filters are working as designed)
+
+**DoD:**
+- [ ] Monitoring backend module written and syntax-validated (`python -m py_compile`)
+- [ ] Integration with US-023 engineer dashboard: events appear in real time
+- [ ] Unit tests: synthetic xrun/clipping/overload events trigger correct alerts
+- [ ] Unit tests: thermal threshold logic (75C warning, 80C critical, clock frequency drop)
+- [ ] Integration test on Pi 4B: run CamillaDSP under load, verify monitoring captures real events
+- [ ] Performance validation: monitoring active during 30-minute playback, zero additional xruns caused by monitoring itself
+- [ ] Audio engineer review: monitored events cover the failure modes that matter during live performance
+- [ ] UX specialist review: dashboard event display is scannable during a live show (no information overload)
+- [ ] Lab note with screenshots of event display under normal and stress conditions
+- [ ] If APCmini LED feedback implemented: tested with physical APCmini mk2
+
+---
+
 ## Summary — Story Dependency Graph
 
 ```
@@ -1229,7 +1278,7 @@ US-000 (software install) ──> US-000a (security hardening) ──> [venue de
 US-001 ──> US-008 (measurement) ──> US-009 (time alignment) ──┐
                                 └──> US-010 (correction) ──> US-011 (crossover) ──> US-011b (profiles/config gen) ──> US-012 (automation) ──> US-013 (T5 verification)
 
-US-000 + US-000a ──> US-022 (web UI platform) ──> US-023 (engineer dashboard)
+US-000 + US-000a ──> US-022 (web UI platform) ──> US-023 (engineer dashboard) ──> US-027 (performance monitoring)
                                                └──> US-018 (singer IEM self-control)
                                                     ↑ also depends on US-017
 

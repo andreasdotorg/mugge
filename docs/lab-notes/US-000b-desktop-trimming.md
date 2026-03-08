@@ -1,8 +1,15 @@
 # US-000b: Desktop Session Trimming for Performance and Security
 
-Strip unnecessary desktop services, replace lightdm with TTY autologin + labwc user
-service, install RTKit for PipeWire real-time scheduling. Goal: free ~60-75MB RAM and
-~2% CPU for audio processing.
+The Pi 4B has 4GB of RAM and four ARM Cortex-A72 cores -- enough for the DSP
+workload, but not enough to waste on desktop services that nobody will see. The
+system runs headless at gigs, with remote access via RustDesk when needed.
+
+This session stripped the default desktop environment down to the minimum needed
+for headless audio operation. The display manager (lightdm) was replaced with
+TTY autologin and a labwc Wayland compositor running as a user service. RTKit
+was installed to give PipeWire real-time scheduling privileges at FIFO priority
+83-88. The result: RAM usage dropped from 397MB to 302MB (freeing 95MB for
+audio buffers), and the idle CPU overhead from desktop services was eliminated.
 
 ---
 

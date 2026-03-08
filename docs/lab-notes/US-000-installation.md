@@ -3,6 +3,18 @@
 Story: US-000 (Base system installation and configuration)
 Template: [docs/lab-notes/template.md](template.md)
 
+Before any audio processing could be tested, the Pi needed a working software
+stack: CamillaDSP for signal processing, Mixxx for DJ sets, Reaper for live
+vocal performance, PipeWire for audio routing, and the supporting Python
+environment for measurement scripting. This lab session covers the full
+installation sequence from a fresh Raspberry Pi OS Trixie image through to a
+smoke-tested system with all core software operational. It also configures the
+ALSA loopback device used by later latency measurement tests (US-002).
+
+See also: [US-000a](US-000a-security-hardening.md) for the security hardening
+that followed this installation, and [US-000b](US-000b-desktop-trimming.md) for
+the desktop trimming that reclaimed RAM and CPU for audio processing.
+
 ---
 
 ## Task T0: ALSA Loopback Module Configuration

@@ -1,5 +1,25 @@
 # Project Status
 
+The project started with a basic question -- can a Raspberry Pi 4B replace a
+Windows PC as a live sound processor? -- and has spent its first phase proving
+that the answer is yes, with margin to spare.
+
+The Pi now runs a complete audio stack: PipeWire for routing, CamillaDSP for
+real-time signal processing, Mixxx for DJ sets, and Reaper for live vocal
+performance. The system is hardened for venue WiFi networks, trimmed for
+headless operation, and benchmarked under load. CPU consumption for 16,384-tap
+FIR convolution on four channels comes in at 5% in DJ mode and about 19% in
+live mode -- far below the limits that would have forced compromises on filter
+quality. The bone-to-electronic latency for the vocalist targets approximately
+21 milliseconds at D-011 parameters -- within the threshold where a singer can
+perform comfortably.
+
+The next phase is the automated room correction pipeline: the software that
+measures each venue, computes correction filters, and deploys them. Everything
+validated so far -- the filter design, the CPU budget, the latency model --
+feeds into that pipeline. The foundation is solid; the interesting work is
+ahead.
+
 ## Overall Status
 
 **Tier 1 validation complete.** US-001 (CPU) and US-002 (latency) both done. US-003 (stability tests) in progress, US-004 (assumption register) selected. D-011: live mode chunksize 256 + quantum 256. IEM through CamillaDSP passthrough confirmed as net benefit.
@@ -13,7 +33,7 @@
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
-| User stories | active | 30 stories (US-000 through US-026 incl. US-000a, US-000b, US-011b) in `docs/project/user-stories.md` |
+| User stories | active | 31 stories (US-000 through US-027 incl. US-000a, US-000b, US-011b) in `docs/project/user-stories.md` |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | not started | Stories US-008 through US-013 defined |

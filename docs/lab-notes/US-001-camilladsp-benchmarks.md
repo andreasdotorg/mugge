@@ -1,5 +1,21 @@
 # US-001: CamillaDSP CPU Benchmark Suite
 
+The central question before any room correction work could begin: can the Pi
+4B actually handle 16,384-tap FIR convolution on four speaker channels in real
+time? The project's entire filter design (D-001, D-003) assumed the answer was
+yes, but assumptions A1 and A2 made this conditional on measured proof.
+
+This benchmark suite ran CamillaDSP with synthetic Dirac impulse filters
+(maximum computational cost, zero audio content) across five configurations:
+DJ mode at chunksize 2048, live mode at chunksize 512, live mode at chunksize
+256, and the 8,192-tap fallback for each. The results were decisive: 5.23% CPU
+at chunksize 2048, 10.42% at chunksize 512, and 19.25% at chunksize 256 -- all
+with 16,384-tap filters and zero audio dropouts. The fallback to 8,192 taps was
+never needed. These numbers validated assumptions A1 and A2, and gave confidence
+for the aggressive chunksize 256 target that became D-011.
+
+---
+
 ## Task T0: Pre-flight Checks
 
 **Date:** 2026-03-08 15:54 CET

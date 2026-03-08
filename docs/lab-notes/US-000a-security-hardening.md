@@ -3,6 +3,21 @@
 Story: US-000a (Security hardening for base system)
 Template: [docs/lab-notes/template.md](template.md)
 
+The Pi will operate on untrusted venue WiFi networks with SSH and other
+services exposed. This session locked down the attack surface: disabling
+unnecessary network services (rpcbind, Avahi, ModemManager), hardening SSH
+to key-only authentication with a restrictive drop-in configuration, and
+deploying nftables firewall rules that allow only SSH inbound with rate
+limiting.
+
+A notable lesson learned during this work: sshd uses first-match-wins
+semantics for its `Match` blocks, which is the opposite of systemd's
+last-match-wins convention. An initial attempt to override defaults with a
+99-prefix drop-in file failed silently because the default configuration's
+`Match` blocks took precedence. The fix was to use a 40-prefix, ensuring the
+hardening rules match before the defaults. This is recorded as L-001 in the
+project's lessons learned.
+
 ---
 
 ## Task US-000a: Security Hardening
