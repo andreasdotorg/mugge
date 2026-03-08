@@ -52,14 +52,36 @@ development board. It provides:
 - Mali-400 GPU (OpenGL ES 2.0, needed for Mixxx waveform display)
 - 4GB DDR4 shared between ARM and FPGA via AXI interconnect
 
-A second candidate is the Ultra96-V2 (Avnet), based on the smaller ZU3EG: quad
-A53 at 1.5GHz, 2GB DDR4, 360 DSP slices, compact form factor with WiFi/BT.
-The smaller FPGA is still adequate for our workload but leaves less room for
-future expansion.
+Several ZU+ boards are available at different price points. The KV260 is the
+conservative choice (best documentation, AMD-provided Ubuntu image, active
+community). Budget alternatives exist for the 4-channel scope where the full
+ZU5EV capacity is not needed:
 
-The KV260 Starter Kit is approximately $350. Neither platform is
-commodity-priced like the Pi 4B (~$75), but the KV260 replaces both the Pi
-and the USBStreamer (~$200), narrowing the net cost gap.
+| Board | Zynq Part | DSP Slices | RAM | Price (approx.) |
+|-------|-----------|-----------|-----|-----------------|
+| AMD Kria KV260 (recommended) | ZU5EV | 1,248 | 4GB DDR4 | ~$350 |
+| Used Kria KR260 | ZU5EV | 1,248 | 4GB DDR4 | ~$180-250 used |
+| ALINX AXU3EG (budget alternative) | ZU3EG | 360 | 2-4GB DDR4 | ~$200-250 |
+| MYiR MYC-CZU3EG | ZU3EG | 360 | 2-4GB DDR4 | ~$150-200 (SOM + carrier) |
+| Trenz TE0820 | ZU3EG | 360 | 2-4GB DDR4 | ~250 EUR (SOM + carrier) |
+| Ultra96-V2 (Avnet) | ZU3EG | 360 | 2GB DDR4 | ~$250 |
+| ALINX AXU2CGB | ZU2CG | 240 | 2GB DDR4 | ~$140-170 |
+
+All ZU3EG boards provide 360 DSP slices -- adequate for the 4-channel FIR
+workload (11-16 slices needed) with room for dual ADAT and future expansion.
+The ZU5EV's 1,248 slices provide more headroom for scaling to 64 channels.
+The ZU2CG (240 slices) is the minimum viable device.
+
+The ALINX AXU3EG is approximately $150 cheaper than the KV260 with adequate
+specs for the current 4-channel scope. The tradeoff is less community support
+and potentially less accessible documentation compared to AMD's own KV260
+ecosystem. The architect's final board recommendation is pending.
+
+*Prices are from early 2025 and should be verified before purchase.*
+
+Neither platform is commodity-priced like the Pi 4B (~$75), but even the
+cheapest viable board replaces both the Pi and the USBStreamer (~$200),
+narrowing the net cost gap significantly.
 
 ---
 
@@ -352,7 +374,7 @@ costs relative to the proven Pi 4B:
 | Filter hot-swap | CamillaDSP restart/API | Glitch-free DMA swap |
 | ARM performance | Cortex-A72 quad @ 1.8GHz | Cortex-A53 quad @ 1.2-1.5GHz (weaker) |
 | Mixxx viability | Proven | Unknown (GO/NO-GO gate) |
-| Platform cost | ~$75 (Pi 4B 8GB) | ~$400 total (KV260 kit + peripherals) |
+| Platform cost | ~$75 (Pi 4B 8GB) | ~$200-400 total (board + peripherals) |
 | USB audio bridge | Required (USBStreamer) | Eliminated |
 | Community/support | Massive (Raspberry Pi) | Niche (FPGA development) |
 | Setup complexity | apt-get install | FPGA bitstream + PetaLinux |
@@ -376,14 +398,14 @@ breakout board is off-the-shelf.
 
 | Component | Price (approx.) | Notes |
 |-----------|----------------|-------|
-| AMD Kria KV260 Starter Kit | ~$350 | ZU5EV, 1,248 DSP48E2, 4GB DDR4, PMOD headers with PL pins, 4x USB 3.0, HDMI, GbE, USB-C PD power |
+| Zynq UltraScale+ board | ~$150-350 | KV260 (~$350, recommended) or ALINX AXU3EG (~$200-250, budget). See Platform Selection for full comparison. |
 | MicroSD 64GB A2-rated | ~$12 | Boot media for PetaLinux or Ubuntu |
 | USB-C 5V/3A PD power supply | ~$15 | KV260 uses USB-C Power Delivery |
 | TOSLINK TX module | ~$2.50 | Toshiba TOTX173 (through-hole, 3.3V TTL, 15 Mbps). Alternatives: Everlight PLT133/T10 (~$1-2 at LCSC) |
 | TOSLINK RX module | ~$2.50 | Toshiba TORX173 (through-hole, 3.3V TTL output). Alternatives: Everlight PLR135/T10 |
 | TOSLINK optical cables (2x 1m) | ~$10 | Standard Toslink patch cables |
 | Pin headers + wiring | ~$5 | For PMOD breakout assembly |
-| **Total new purchases** | **~$400** | |
+| **Total new purchases** | **~$200-400** | Depending on board choice |
 
 ### Already Owned (from Pi system)
 
@@ -400,8 +422,10 @@ today.
 | miniDSP USBStreamer | ~$200 | Replaced by direct FPGA ADAT |
 | Pi heatsink + fan | ~$15 | KV260 has its own thermal solution |
 
-Net cost delta: approximately +$110 ($400 new purchases minus $290 no longer
-needed). The USBStreamer elimination is the largest single saving.
+Net cost delta: approximately -$90 to +$110 depending on board choice ($200-400
+new purchases minus $290 no longer needed). With the budget ALINX AXU3EG, the
+Zynq platform could cost less than the Pi 4B + USBStreamer it replaces. The
+USBStreamer elimination (~$200) is the largest single saving.
 
 ### The Only Custom Piece: PMOD-to-TOSLINK Breakout
 
