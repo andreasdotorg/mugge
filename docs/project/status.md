@@ -86,4 +86,7 @@ None.
 - D-005: Team composition — Audio Engineer and Technical Writer on core team (2026-03-08)
 - D-006: Expanded team — Security Specialist, UX Specialist, Product Owner; Architect gets real-time performance scope (2026-03-08)
 - D-007: D-001/D-002/D-003 conditional pending hardware validation T1-T5 (2026-03-08)
+- D-008: Per-venue measurement — all corrections regenerated fresh at each location (2026-03-08)
+- D-009: Zero-gain correction filters — cut only, -0.5dB safety margin (2026-03-08)
+- D-010: Speaker profiles and configurable crossover (2026-03-08)
 - D-011: Live mode chunksize 256 + PipeWire quantum 256 — supersedes D-002 for live mode (2026-03-08)

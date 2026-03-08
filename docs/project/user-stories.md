@@ -207,10 +207,10 @@ ADAT -> USB -> PipeWire),
 **so that** I can confirm the live mode latency stays below the singer's
 slapback perception threshold.
 
-**Status:** ready (unblocked by US-000 completion)
+**Status:** done (4/4 DoD, 2026-03-08. ALSA-direct T2a=85.7ms, T2b=30.3ms. CamillaDSP = 2 chunks latency. D-011: chunksize 256 + quantum 256 for live mode. IEM passthrough via CamillaDSP = net benefit. A3 updated.)
 **Depends on:** US-000 (CamillaDSP must be installed; can run in parallel with US-001)
 **Blocks:** US-003 (stability tests assume latency is acceptable)
-**Decisions:** D-002 (dual chunksize)
+**Decisions:** D-002 (dual chunksize), D-011 (live mode chunksize 256 + quantum 256, supersedes D-002 for live mode)
 
 **Note:** Loopback cable already connected (Output 1 -> Input 1 on ADA8200,
 gain ~3/4) — hardware prerequisite is met. Audio engineer is also researching
