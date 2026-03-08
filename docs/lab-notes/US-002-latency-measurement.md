@@ -371,6 +371,11 @@ since it depends on the overlap-save FFT size, not just the chunk size).
 
 ### PA Path Latency (what matters for slapback perception)
 
+> **Superseded:** This section was written during Pass 1, before D-011 established that
+> all 8 channels (including IEM) transit CamillaDSP. The latency model below uses a
+> 3-chunk CamillaDSP estimate later corrected to 2 chunks. See Task T6 (line 1130) for
+> the authoritative latency budget based on measured values.
+
 For the singer slapback scenario, the relevant latency is **from audio entering CamillaDSP to
 sound exiting the speaker**. This excludes the PipeWire input/output adapters used only by the
 measurement script. In production:
@@ -708,9 +713,15 @@ In production, the PA path from Mixxx/Reaper to speakers is:
 | **Total PA path** | **~44.7** | **~108.6** |
 
 For the singer slapback scenario (Live mode, chunksize 512):
-- IEM path: ~5ms (Reaper -> USBStreamer directly)
+
+> **Superseded:** The IEM path estimate below assumed IEM bypasses CamillaDSP. Per D-011,
+> CamillaDSP holds exclusive ALSA access to all 8 USBStreamer channels -- IEM transits
+> CamillaDSP as passthrough. The actual PA-IEM delta is ~9ms (FIR overhead only), not
+> ~40ms. See Task T6 for the corrected budget.
+
+- ~~IEM path: ~5ms (Reaper -> USBStreamer directly)~~ **Corrected:** ~22ms (via CamillaDSP passthrough)
 - PA path: ~45ms
-- PA-IEM delta: ~40ms -- above the 25ms slapback threshold
+- ~~PA-IEM delta: ~40ms -- above the 25ms slapback threshold~~ **Corrected:** ~9ms (FIR overhead only)
 
 To reach <25ms PA path total:
 - Need PipeWire quantum ~256 (5.3ms) + CamillaDSP chunksize 256 (~10.7ms x2 = 21.4ms) + hardware (~2ms) = ~29ms
