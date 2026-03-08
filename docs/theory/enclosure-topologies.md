@@ -301,21 +301,6 @@ physical dimensions. The horn is folded one or more times within the
 enclosure, maintaining the required path length in a more compact form factor.
 Folded horns have path lengths of 2-4 meters depending on tuning frequency.
 
-##### HOQS Paraflex
-
-The HOQS Paraflex designs are community-developed folded quarter-wave
-subwoofers shared through the diyAudio community. Multiple variants exist
-(single-fold, double-fold, different tuning frequencies), designed for high
-efficiency and high SPL in pro audio and DJ applications. The "Paraflex" name
-refers to the specific folding geometry. Given their light damping and
-reliance on quarter-wave resonance, they sit closer to the quarter-wave
-resonator end of the TL spectrum than to a true transmission line.
-
-No peer-reviewed measurements of Paraflex transient behavior or group delay
-have been published [^15]. The diyAudio community has noted the lack of
-published measurement data from HOQS. Individual community members have
-shared measurements, but these are not standardized or independently verified.
-
 #### 3.3.2 Group delay
 
 The horn path introduces its own group delay. Sound must travel the physical
@@ -430,8 +415,7 @@ progressive wave that survives the damping, not from resonance.
 line, or MLTL) uses minimal damping and relies on the pipe's standing-wave
 resonance to boost output at the tuning frequency. This is functionally
 similar to a ported enclosure, with the pipe's air mass playing the role of
-the port's air mass. The HOQS Paraflex designs fall closer to this category
-than to a true TL.
+the port's air mass.
 
 **In practice, most "transmission line" designs are hybrids** -- they use
 enough damping to suppress upper harmonics of the pipe resonance but not
@@ -453,6 +437,21 @@ with simulation and measurement data [^14].
 Quarter-wave resonators exhibit analogous behavior to ported enclosures: the
 open end of the pipe acts as the radiating element (like a port), with similar
 phase inversion below the tuning frequency.
+
+##### HOQS Paraflex
+
+The HOQS Paraflex designs are community-developed folded quarter-wave
+subwoofers shared through the diyAudio community. Multiple variants exist
+(single-fold, double-fold, different tuning frequencies), designed for high
+efficiency and high SPL in pro audio and DJ applications. The "Paraflex" name
+refers to the specific folding geometry. Given their light damping and
+reliance on quarter-wave resonance, they sit at the quarter-wave resonator
+end of the spectrum described above.
+
+No peer-reviewed measurements of Paraflex transient behavior or group delay
+have been published [^15]. The diyAudio community has noted the lack of
+published measurement data from HOQS. Individual community members have
+shared measurements, but these are not standardized or independently verified.
 
 #### 3.4.2 Group delay
 
