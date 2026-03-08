@@ -1151,7 +1151,12 @@ meaningful.
 ### Revised One-Way PA Path Estimate (Production)
 
 **Singer slapback scenario:** Reaper -> PipeWire -> Loopback -> CamillaDSP -> USBStreamer
--> ADAT -> ADA8200 -> speaker. Singer hears PA acoustically + IEM directly.
+-> ADAT -> ADA8200 -> speaker/IEM. All 8 channels transit CamillaDSP (IEM as passthrough).
+
+> **Corrected 2026-03-08:** Original table assumed IEM bypasses CamillaDSP. Per D-011,
+> CamillaDSP holds exclusive ALSA access to all 8 USBStreamer channels -- IEM transits
+> CamillaDSP as passthrough. PA-IEM delta is FIR overhead only (~9ms), not the
+> originally stated ~26ms.
 
 #### Option A: Chunksize 256 + PipeWire Quantum 256 (Recommended)
 
@@ -1161,8 +1166,8 @@ meaningful.
 | CamillaDSP (measured, incl. FIR) | 23.94 | I2 minus hardware |
 | USB + ADAT + converter (one-way) | 2.00 | T5/2 |
 | **Total PA path** | **~31ms** | |
-| IEM path (Reaper -> USBStreamer direct) | ~5ms | Bypass |
-| **PA - IEM delta (slapback)** | **~26ms** | Just over 25ms threshold |
+| IEM path (CamillaDSP passthrough) | ~22ms | PW 5.3 + CamillaDSP passthrough 15.1 + USB/ADAT 2.0 |
+| **PA - IEM delta (slapback)** | **~9ms** | FIR overhead only (I2 measured: 8.81ms) |
 
 #### Option B: Chunksize 256 + PipeWire Quantum 128
 
@@ -1172,7 +1177,7 @@ meaningful.
 | CamillaDSP (measured, incl. FIR) | 23.94 | I2 minus hardware |
 | USB + ADAT + converter (one-way) | 2.00 | T5/2 |
 | **Total PA path** | **~29ms** | |
-| **PA - IEM delta** | **~24ms** | Meets 25ms threshold |
+| **PA - IEM delta** | **~9ms** | FIR overhead only (same delta as Option A) |
 
 #### Option C: Chunksize 512 + PipeWire Quantum 256 (Fallback)
 
@@ -1182,7 +1187,7 @@ meaningful.
 | CamillaDSP (measured, incl. FIR) | 26.21 | I2 minus hardware |
 | USB + ADAT + converter (one-way) | 2.00 | T5/2 |
 | **Total PA path** | **~34ms** | |
-| **PA - IEM delta** | **~29ms** | Exceeds 25ms threshold |
+| **PA - IEM delta** | **~9ms** | FIR overhead only (same delta as Option A) |
 
 ### D-011 Parameter Recommendations
 
@@ -1194,12 +1199,12 @@ Based on measured data:
 | PipeWire quantum | 1024 | **256** | 256 |
 | CamillaDSP queuelimit | default | **default (or 4)** | default |
 | Estimated PA latency | ~109ms | **~31ms** | ~34ms |
-| PA-IEM delta | N/A | **~26ms** | ~29ms |
+| PA-IEM delta | N/A | **~9ms** | ~9ms |
 
 **Key recommendation:** Use chunksize 256 + PipeWire quantum 256 for live mode.
-The measured PA-IEM delta of ~26ms is borderline at the 25ms slapback threshold.
-If further reduction is needed, PipeWire quantum 128 would bring it to ~24ms, but
-this needs stability testing for xruns.
+The PA-IEM delta is ~9ms (FIR overhead only, per D-011 correction above) --
+well within perceptual fusion range. The bone-to-electronic delay (~21ms) is
+the more relevant metric for vocalist comfort.
 
 **Do NOT reduce queuelimit below 4.** Measured data shows ql1 and ql2 actually
 increase latency (33-35ms vs 26ms) due to pipeline synchronization stalls.
