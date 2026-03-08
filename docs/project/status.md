@@ -2,7 +2,7 @@
 
 ## Overall Status
 
-**US-002 DONE.** Tier 1 validation complete (US-001 + US-002). 16k taps confirmed (US-001). CamillaDSP = exactly 2 chunks latency (US-002). D-011: live mode chunksize 256 + quantum 256 (~21ms PA path). IEM routing through CamillaDSP passthrough is a net benefit (PA-IEM delta ~9ms, within Haas fusion). US-003 (stability tests) next.
+**Tier 1 validation complete.** US-001 (CPU) and US-002 (latency) both done. US-003 (stability tests) in progress, US-004 (assumption register) selected. D-011: live mode chunksize 256 + quantum 256. IEM through CamillaDSP passthrough confirmed as net benefit.
 
 ## Component Status
 
@@ -33,36 +33,18 @@
 | US-000b | 13/13 | done (security specialist + architect signed off) |
 | US-001 | 4/4 | **done** (all 5 tests pass: T1a 5.23%, T1b 10.42%, T1c 20.43%, T1d 5.21%, T1e 10.39%. 16k taps both modes. A1/A2 validated.) |
 | US-002 | 4/4 | **done** (Pass 1 + Pass 2 complete, lab notes written, A3 updated. D-011 confirmed. IEM passthrough = net benefit.) |
-| US-004 | 0/3 | ready (independent) |
+| US-003 | 0/4 | in-progress (stability tests with D-011 parameters: chunksize 256, quantum 256) |
+| US-004 | 0/3 | selected (assumption register — independent, can run in parallel) |
 | US-005 | 0/3 | ready (after Tier 1; Hercules already visible as USB-MIDI — positive signal) |
 | US-006 | 0/3 | ready (unblocked by US-000 + US-005) |
 
 ## In Progress
 
-- **US-001** (done): CamillaDSP CPU benchmarks complete. All 5 tests PASS. 16k taps confirmed for both modes.
-  - T1a: 16k @ 2048 = 5.23% CPU (threshold <30%) — massive headroom
-  - T1b: 16k @ 512 = 10.42% CPU (threshold <45%) — plenty of room
-  - Zero xruns across all tests, temperature 64-71°C
-  - Decision tree outcome: 16,384 taps for both DJ and Live modes (ideal path)
-  - Deviation: USBStreamer requires 8 playback channels in CamillaDSP config
-  - Note: PipeWire still TS scheduling during benchmarks (RTKit issue to investigate)
-  - Assumptions A1 (16k @ 2048 fits CPU) and A2 (16k @ 512 fits CPU) VALIDATED
-- **US-000b** (done): Desktop trimming complete, security + architect signed off
+- **US-003** (in-progress): Stability and thermal tests with D-011 parameters (chunksize 256, quantum 256). Audio engineer proposed T3c stretch goal: quantum 128 stability test (30 min, zero xruns).
+- **US-004** (selected): Assumption register — independent, can run in parallel with US-003.
 - **US-000a** (in-review): 4/4 DoD — F-002 and F-011 both resolved, verified across reboot
-- **US-002** (done): Latency measurement complete. 4/4 DoD. Lab notes written (738 lines).
-  - Pass 1 (PipeWire/sounddevice): T2a=139ms, T2b=80.8ms
-  - Pass 2 (ALSA-direct): T2a=85.7ms, T2b=30.3ms (hardware reference: ~4ms)
-  - CamillaDSP confirmed at exactly 2 chunks latency
-  - PipeWire overhead: ~21ms per traversal at quantum 1024
-  - D-011 confirmed: chunksize 256 + quantum 256 for live mode (~21ms target). Supersedes D-002 for live mode.
-  - IEM routing through CamillaDSP passthrough (Approach D) is a net benefit: PA-IEM delta ~9ms (within Haas fusion), vs ~26ms with old direct-bypass model
-  - A3 assumption updated in CLAUDE.md. Lab notes T6 latency budget minor correction pending (uses old IEM bypass assumption).
-- **Audio engineer proposal for US-003**: Add T3c stretch goal — quantum 128 stability test (30 min, zero xruns)
-- **Next:**
-  - Commit batch (lab notes + D-011 + status + CLAUDE.md + PO story updates)
-  - Technical writer: SETUP-MANUAL 17-location channel update + D-011 chunksize changes
-  - US-003 (stability tests): unblocked
-- **Remaining TODOs**: cloud-init ~3.3s boot overhead (US-024 candidate), CamillaDSP needs `active.yml` before service enable, PipeWire TS scheduling issue
+- **Completed this session:** US-000, US-000b, US-001 (16k taps both modes), US-002 (CamillaDSP = 2 chunks latency, D-011 confirmed)
+- **Remaining TODOs**: cloud-init ~3.3s boot overhead (US-024 candidate), CamillaDSP needs `active.yml` before service enable, PipeWire TS scheduling issue, lab notes T6 latency budget minor correction (old IEM bypass assumption)
 
 ## Blockers
 

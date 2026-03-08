@@ -242,24 +242,29 @@ configurations, monitoring for xruns, CPU usage, and thermal throttling,
 **so that** I can confirm the system is reliable enough for a full live
 performance without audio dropouts or thermal shutdown.
 
-**Status:** draft
-**Depends on:** US-001 (need to know which filter length/chunksize config to test)
+**Status:** in-progress
+**Depends on:** US-001 (done — 16,384 taps confirmed for both modes), US-002 (done — D-011 chunksize/quantum values confirmed)
 **Blocks:** US-008 through US-011 (pipeline work should not proceed if platform is unstable)
-**Decisions:** D-002 (dual chunksize), D-003 (16,384-tap FIR)
+**Decisions:** D-002 (dual chunksize — DJ mode), D-003 (16,384-tap FIR), D-011 (live mode chunksize 256 + quantum 256)
 
 **Acceptance criteria:**
-- [ ] T3a executed: CamillaDSP + Mixxx (2 decks, continuous playback) for 30 minutes — PASS if 0 xruns and peak CPU < 85%
-- [ ] T3b executed: CamillaDSP + Reaper (8-track backing + FX) for 30 minutes — PASS if 0 xruns and peak CPU < 85%
+- [ ] T3a executed: DJ mode — CamillaDSP chunksize 2048 + PipeWire quantum 1024 + Mixxx (2 decks, continuous playback) for 30 minutes — PASS if 0 xruns and peak CPU < 85%
+- [ ] T3b executed: Live mode — CamillaDSP chunksize 256 + PipeWire quantum 256 + Reaper (8-track backing + FX) for 30 minutes — PASS if 0 xruns and peak CPU < 85% (D-011)
+- [ ] T3c (stretch): Live mode with quantum 128 — CamillaDSP chunksize 256 + PipeWire quantum 128 + Reaper for 30 minutes — document xrun count and CPU; informs D-011 stretch goal feasibility
 - [ ] T4 executed: thermal test in actual flight case — PASS if CPU temp stays below 75C and clock frequency remains at maximum
+- [ ] PipeWire quantum configured per mode: `10-audio-settings.conf` with quantum 1024 (DJ) or 256/128 (Live) per D-011
+- [ ] All 8 CamillaDSP channels active during tests (IEM ch 7-8 as passthrough per D-011)
 - [ ] Temperature logged every 10 seconds throughout T3/T4 runs
 - [ ] CamillaDSP processing load logged via websocket API every 10 seconds
 - [ ] If any test fails: failure mode documented, mitigation proposed (heatsink, fan, reduced load, config change)
+- [ ] If T3b fails at quantum 256: fall back to chunksize 512 + quantum 256 and retest (D-011 fallback path)
 
 **DoD:**
 - [ ] Monitoring scripts written and syntax-validated
-- [ ] All test runs completed on Pi 4B hardware
-- [ ] Lab note written with thermal curves, CPU timelines, xrun count
+- [ ] All test runs completed on Pi 4B hardware (T3a, T3b mandatory; T3c, T4 if hardware available)
+- [ ] Lab note written with thermal curves, CPU timelines, xrun count per test
 - [ ] CLAUDE.md assumption A4 updated with validation result
+- [ ] D-011 fallback outcome documented if T3b or T3c triggers fallback path
 
 ---
 
@@ -271,7 +276,7 @@ project relies on, tracked in a structured format,
 **so that** hidden risks are surfaced early and can be validated before they
 cause problems during implementation or live performance.
 
-**Status:** ready
+**Status:** selected
 **Depends on:** none
 **Blocks:** none directly, but informs prioritization of all other stories
 
