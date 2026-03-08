@@ -2,7 +2,7 @@
 
 ## Overall Status
 
-**US-000 DONE** — all advisors signed off. Follow-up worker completed (USBStreamer 8ch PASS, CamillaDSP systemd service PASS, reboot test PASS). Quick-fix worker running (snd-aloop `channels=4` removal, nfs-blkmap disable). RTKit not installed — awaiting advisor recommendations. US-000b (Desktop Trimming) next, then Tier 1.
+**US-000 DONE.** US-000b (Desktop Trimming) done — all success criteria passed. RTKit installed, PipeWire RT scheduling active (FIFO rtprio 83-88), -95Mi RAM freed. Pending security + architect review sign-off on US-000b. Tier 1 (US-001 CPU benchmarks) launches after sign-off.
 
 ## Component Status
 
@@ -19,15 +19,17 @@
 | Documentation suite | not started | Stories US-014 through US-016 defined |
 | Web UI platform | not started | Stories US-022, US-023, US-018 defined (deferred per owner: validation first) |
 | Core software (CamillaDSP, Mixxx, Reaper) | installed | CamillaDSP 3.0.1, Mixxx 2.5.0, Reaper 7.31, RustDesk 1.3.9, Python venv. 7.5G/117G disk. |
-| Platform security | partial | US-000a: firewall active, SSH hardened, services disabled. CamillaDSP systemd service installed with `-a 127.0.0.1` (F-002 resolved). |
+| Platform security | partial | US-000a: firewall active, SSH hardened, services disabled. CamillaDSP systemd service with `-a 127.0.0.1` (F-002 resolved). nfs-blkmap masked (F-011). |
+| Desktop trimming (US-000b) | done (pending review) | lightdm disabled, labwc user service, RTKit installed, PipeWire FIFO rtprio 83-88. RAM: 397→302Mi. USBStreamer path fixed (hw:USBStreamer,0). |
 
 ## DoD Tracking
 
 | Story | Score | Status |
 |-------|-------|--------|
 | US-000 | 3/3 | **done** (all advisors signed off: audio engineer, security specialist, technical writer) |
-| US-000a | 3/4 | in-progress (F-002 resolved: CamillaDSP systemd service with `-a 127.0.0.1` installed; remaining: nfs-blkmap F-011) |
-| US-001 | 0/4 | ready (unblocked — follow-up complete, after US-000b) |
+| US-000a | 4/4 | in-review (F-002 resolved: CamillaDSP systemd service; F-011 resolved: nfs-blkmap masked; verified across reboot in US-000b T7) |
+| US-000b | 13/13 | in-review (all success criteria passed; pending security specialist + architect sign-off) |
+| US-001 | 0/4 | ready (launches after US-000b sign-off) |
 | US-002 | 0/4 | ready (unblocked — after US-001) |
 | US-004 | 0/3 | ready (independent) |
 | US-005 | 0/3 | ready (after Tier 1; Hercules already visible as USB-MIDI — positive signal) |
@@ -35,13 +37,17 @@
 
 ## In Progress
 
-- **US-000 follow-up worker** (done): USBStreamer 8ch PASS, CamillaDSP systemd service PASS, reboot test PASS
-- **Quick-fix worker** (running): remove `channels=4` from snd-aloop config, disable nfs-blkmap (F-011)
-- **US-000a:** 3/4 DoD — F-002 resolved (CamillaDSP systemd service with `-a 127.0.0.1`); F-011 (nfs-blkmap) in quick-fix worker
-- **RTKit TODO**: PipeWire running without RTKit (non-realtime fallback). Awaiting architect/audio engineer recommendations on whether to bundle with US-000b or fix separately before benchmarks.
-- **Boot time baseline**: 23.3s (relevant to US-024)
-- **Other TODOs from follow-up**: cloud-init ~3.3s boot overhead (US-024 candidate), CamillaDSP needs `active.yml` before service enable
-- **Next:** US-000b (Desktop Trimming) then Tier 1: US-001 (CPU benchmarks) → US-002 (latency) — sequential, both need Pi lock
+- **US-000b** (in-review): Desktop trimming complete. 13/13 success criteria PASS. Key results:
+  - RTKit installed, PipeWire FIFO rtprio 83-88 on data-loop threads
+  - RAM: 397→302Mi (-95Mi), services: 19→16
+  - lightdm disabled, labwc via user service, TTY autologin
+  - USBStreamer ALSA path fixed: `hw:3,0` → `hw:USBStreamer,0` (validates AD finding A9)
+  - Boot time: 23.4s (stable vs 23.3s baseline)
+  - Deviations: PipeWire failed on first boot (USB device renumbering), RTKit alone insufficient (rlimits needed), RustDesk appindicator warnings (cosmetic)
+  - Awaiting security specialist + architect review
+- **US-000a** (in-review): 4/4 DoD — F-002 and F-011 both resolved, verified across US-000b reboot
+- **Remaining TODOs**: cloud-init ~3.3s boot overhead (US-024 candidate), CamillaDSP needs `active.yml` before service enable
+- **Next:** US-001 (CPU benchmarks) launches after US-000b sign-off, then US-002 (latency) — sequential, both need Pi lock
 
 ## Blockers
 
