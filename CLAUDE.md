@@ -308,7 +308,7 @@ automatically. The script should:
 - [ ] Verify REW runs on Pi 4 ARM (Java-based, should work but needs testing)
 - [ ] Decide if measurement pipeline should use REW or pure Python
 - [ ] Determine if `gpu_mem=128` is needed for Mixxx or if Xvfb works with `gpu_mem=16`
-- [ ] Check if Raspberry Pi OS Trixie ships a PREEMPT_RT kernel package
+- [x] ~~Check if Raspberry Pi OS Trixie ships a PREEMPT_RT kernel package~~ YES: `linux-image-6.12.47+rpt-rpi-v8-rt` available. D-013: PREEMPT_RT mandatory for production. Install via US-003 T3e
 - [ ] Test whether PipeWire or native JACK gives better latency/stability on Pi 4
 - [ ] Investigate CamillaDSP's websocket API for runtime filter hot-swapping
   (can we update coefficients without restarting the service?)

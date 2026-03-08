@@ -132,3 +132,25 @@ decision. Add a new one that supersedes it (reference the old one).
 **Rationale:** Open-air thermal equilibrium: 72C at 20C ambient (52C delta). Closed case adds ~3-5C from restricted airflow. Venue ambient: 25-32C. Without Pi fan: 80-87C projected — thermal throttling certain. With Pi fan (~15C delta reduction): 67-73C projected — adequate margin. Class D amp at moderate output (~200W): ~30W waste heat, mostly exhausted by amp's own fan, contributing +3-5C to nearby case ambient.
 
 **Impact:** Flight case design must include a fan for the Pi (USB-powered, always-on). Heatsink required. T4 test protocol includes amp at moderate output. Amp compartmentalization is a contingency, not a baseline requirement.
+
+## D-013: PREEMPT_RT kernel mandatory for production use (2026-03-08)
+
+**Context:** The system drives a PA capable of dangerous SPL levels through amplifiers with 4x450W output. A scheduling delay on stock PREEMPT (which has no formal worst-case bound) could cause a buffer underrun, producing a full-scale transient through the amplifier chain. US-003 T3c confirmed a steady-state underrun at quantum 128 on stock PREEMPT — the kernel cannot guarantee the 5.33ms processing deadline under all conditions. The PREEMPT_RT kernel (`linux-image-6.12.47+rpt-rpi-v8-rt`) is available as a matching package in Trixie repos, making the switch a zero-risk package install with the stock kernel retained as fallback.
+
+**Classification:** Hard real-time with human safety implications. The system drives amplifiers capable of dangerous SPL at audience position. An uncontrolled transient is a hearing damage risk.
+
+**Decision:** PREEMPT_RT kernel is mandatory for any PA-connected operation. Stock PREEMPT is retained for development and benchmarking only. The RT kernel must be installed and validated (US-003 T3e) before the system is connected to amplifiers at any venue.
+
+**Rationale:** (1) The system drives amplifiers capable of dangerous SPL — an uncontrolled transient from a buffer underrun is a hearing damage risk, making this a hard real-time system with human safety implications. (2) Zero xruns is a mandatory operational target, not a stretch goal. (3) Stock PREEMPT has no formal scheduling latency bound — empirically adequate in 30-minute tests but with no guarantee for multi-hour production use. (4) PREEMPT_RT provides bounded worst-case scheduling latency, converting the system from "probably fine" to "provably adequate." (5) The RT kernel is available as a matching package install — same kernel version 6.12.47, zero-risk to deploy with stock kernel as fallback. (6) D-013 addresses the scheduling failure mode; the gain structure procedure during measurement setup (D-009 cut-only filters, calibrated analog gain) addresses other failure modes.
+
+**Impact:** Supersedes any prior "no PREEMPT_RT needed" assumptions. RT kernel must be installed before any PA-connected operation. US-003 T3e procedure changes from "compare and decide" to "install, validate, deploy." Stock PREEMPT retained on the SD card for development/benchmarking. Enables future buffer size revisit (quantum 128) with formal scheduling guarantees. CLAUDE.md Pi Hardware State must be updated to reflect RT kernel after T3e validation.
+
+## D-014: Hardware limiter — deferred (2026-03-08)
+
+**Context:** The architect recommended a hardware limiter between the Pi's audio output and the amplifiers as a last-resort safety device against full-scale transients from software failure (buffer underruns, DSP crashes, configuration errors).
+
+**Decision:** Deferred. The current system uses a calibrated gain structure procedure during measurement setup (D-009 cut-only correction, analog gain calibration) which addresses the risk for the current speaker/amplifier configuration. D-013 (PREEMPT_RT) eliminates the scheduling failure mode. A hardware limiter becomes required when the system drives PAs capable of >110dB SPL at audience position.
+
+**Rationale:** (1) Owner assessment: hardware limiter makes sense for high-power PAs but is not needed for current setup. (2) Calibrated gain structure procedure sets analog gain conservatively during measurement, limiting maximum SPL even in a full-scale digital transient scenario. (3) D-013 (PREEMPT_RT) provides bounded scheduling, eliminating the most likely transient source. (4) Cost and complexity of a hardware limiter is disproportionate for the current power level.
+
+**Impact:** No immediate action required. Revisit when system scales to higher-power PAs (>110dB SPL capability at audience position). The gain structure procedure is the primary safety mechanism until then.

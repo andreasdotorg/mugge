@@ -245,21 +245,19 @@ performance without audio dropouts or thermal shutdown.
 **Status:** in-progress
 **Depends on:** US-001 (done — 16,384 taps confirmed for both modes), US-002 (done — D-011 chunksize/quantum values confirmed)
 **Blocks:** US-008 through US-011 (pipeline work should not proceed if platform is unstable)
-**Decisions:** D-002 (dual chunksize — DJ mode), D-003 (16,384-tap FIR), D-011 (live mode chunksize 256 + quantum 256)
+**Decisions:** D-002 (dual chunksize — DJ mode), D-003 (16,384-tap FIR), D-011 (live mode chunksize 256 + quantum 256), D-013 (PREEMPT_RT mandatory for production)
 
 **Acceptance criteria:**
 - [ ] T3a executed: DJ mode — CamillaDSP chunksize 2048 + PipeWire quantum 1024 + Mixxx (2 decks, continuous playback) for 30 minutes — PASS if 0 xruns and peak CPU < 85%
 - [ ] T3b executed: Live mode — CamillaDSP chunksize 256 + PipeWire quantum 256 + Reaper (8-track backing + FX) for 30 minutes — PASS if 0 xruns and peak CPU < 85% (D-011)
 - [ ] T3c (stretch): Live mode with quantum 128 — CamillaDSP chunksize 256 + PipeWire quantum 128 + Reaper for 30 minutes — document xrun count and CPU; informs D-011 stretch goal feasibility
 - [ ] T3d: Production-config stability retest — CamillaDSP with live.yml (8-channel capture, full mixer routing, ~33.8% processing load) + Reaper for 30 minutes at quantum 256. Log P99 and max processing load. Previous T3b used benchmark config (2ch, 19.25%) — this validates the actual production config under sustained load
-- [ ] T3e: Kernel comparison test — 4-phase PREEMPT vs PREEMPT_RT comparison. Validates A27 (stock PREEMPT kernel adequate for 5.33ms processing deadline). PREEMPT_RT is available as `linux-image-6.12.47+rpt-rpi-v8-rt` in Trixie repos (same kernel version — zero-risk comparison, stock kernel stays installed as fallback):
-  - **Phase 1 — Stock PREEMPT baseline:** `cyclictest -m -p 89 -t 1 -D 30m` concurrently with CamillaDSP live.yml config + continuous audio. Record worst-case scheduling latency, histogram, P99
+- [ ] T3e: PREEMPT_RT kernel install and validation — 5-phase procedure per D-013 (PREEMPT_RT mandatory for production use). PREEMPT_RT is available as `linux-image-6.12.47+rpt-rpi-v8-rt` in Trixie repos (same kernel version, stock kernel retained as fallback for dev/benchmarking):
+  - **Phase 1 — Stock PREEMPT baseline:** `cyclictest -m -p 89 -t 1 -D 30m` concurrently with CamillaDSP live.yml config + continuous audio. Record worst-case scheduling latency, histogram, P99. This establishes the baseline that D-013 supersedes
   - **Phase 2 — Install PREEMPT_RT:** `apt install linux-image-6.12.47+rpt-rpi-v8-rt`, reboot into RT kernel. Verify boot, check `uname -v` confirms PREEMPT_RT
-  - **Phase 3 — PREEMPT_RT full regression:** config validation (all services start, USB devices enumerate, PipeWire + CamillaDSP functional), routing test (8ch loopback + USBStreamer), 30-minute stability test (same as T3d: live.yml, quantum 256, log xruns/CPU/processing load), cyclictest (same params as Phase 1)
-  - **Phase 4 — Compare and decide:** side-by-side metrics comparison. Decision criteria:
-    - PREEMPT_RT processing load within ~5% of stock AND zero xruns AND no USB/driver issues → **switch permanently** (record as D-013)
-    - PREEMPT_RT processing load >10% higher than stock → **stay on stock PREEMPT**
-    - PREEMPT_RT causes xruns, USB enumeration issues, or driver regressions → **stay on stock PREEMPT**
+  - **Phase 3 — Full regression:** config validation (all services start, USB devices enumerate, PipeWire + CamillaDSP functional), routing test (8ch loopback + USBStreamer), 30-minute stability test (same as T3d: live.yml, quantum 256, log xruns/CPU/processing load), cyclictest (same params as Phase 1)
+  - **Phase 4 — Validate:** confirm PREEMPT_RT processing load is within acceptable range (target: <5% overhead vs stock), zero xruns, no USB/driver regressions. If validation fails: document failure mode, fall back to stock PREEMPT, and escalate (D-013 requires resolution before any PA-connected operation)
+  - **Phase 5 — Deploy:** set PREEMPT_RT as default boot kernel. Update CLAUDE.md Pi Hardware State (kernel line). Stock PREEMPT remains installed for development/benchmarking use only
 - [ ] T4 executed: thermal test in actual flight case — PASS if CPU temp stays below 75C and clock frequency remains at maximum
 - [ ] PipeWire quantum configured per mode: `10-audio-settings.conf` with quantum 1024 (DJ) or 256/128 (Live) per D-011
 - [ ] All 8 CamillaDSP channels active during tests (IEM ch 7-8 as passthrough per D-011)
@@ -273,8 +271,8 @@ performance without audio dropouts or thermal shutdown.
 - [ ] All test runs completed on Pi 4B hardware (T3a, T3b mandatory; T3c, T3d, T3e, T4 as available)
 - [ ] Lab note written with thermal curves, CPU timelines, xrun count per test
 - [ ] T3d lab note includes P99 and max CamillaDSP processing load at production config
-- [ ] T3e lab note includes: Phase 1 cyclictest histogram + worst-case latency (stock PREEMPT), Phase 3 regression results + cyclictest (PREEMPT_RT), Phase 4 side-by-side comparison table, kernel decision with rationale
-- [ ] If PREEMPT_RT selected: D-013 decision recorded in decisions.md; CLAUDE.md Pi Hardware State updated to reflect RT kernel
+- [ ] T3e lab note includes: Phase 1 cyclictest baseline (stock PREEMPT), Phase 3 regression results + cyclictest (PREEMPT_RT), Phase 4 validation outcome, Phase 5 deployment confirmation
+- [ ] D-013 recorded in decisions.md (done); CLAUDE.md Pi Hardware State updated to reflect RT kernel after Phase 5 deployment
 - [ ] CLAUDE.md assumptions A4 and A27 updated with validation results
 - [ ] D-011 fallback outcome documented if T3b or T3c triggers fallback path
 
@@ -523,7 +521,7 @@ and computes the impulse response via deconvolution,
 **Acceptance criteria:**
 - [ ] Log sweep generation: 20Hz-20kHz, configurable duration (default 5s), 48kHz sample rate
 - [ ] UMIK-1 calibration file parsing: reads frequency/dB pairs from `/home/ela/7161942.txt`, applies magnitude correction to recorded response
-- [ ] Per-channel measurement: plays sweep through each output channel defined in the speaker profile (D-010), records on UMIK-1 input. Channel list comes from the profile's topology, not hardcoded (supports 2-way with 4 channels, 3-way with 6+ channels)
+- [ ] Per-channel measurement: plays sweep through each output channel defined in the speaker profile (D-010), records on UMIK-1 input. Channel list comes from the profile's topology, not hardcoded (supports 2-way with 4 channels, 3-way with 6+ channels). Sweep level uses the gain-calibrated output level from US-012's gain structure calibration phase (-18dBFS digital, 75dB SPL per speaker at measurement position)
 - [ ] Deconvolution: computes impulse response from recorded sweep using inverse filter method
 - [ ] Multiple measurement positions: supports taking 3-5 measurements at different mic positions, stores each separately
 - [ ] Spatial averaging: averages multiple impulse responses (complex average in frequency domain) to reduce position sensitivity
@@ -710,7 +708,7 @@ minimal manual intervention.
 **Status:** draft
 **Depends on:** US-008 (measurement engine), US-009 (time alignment), US-010 (correction filters), US-011 (crossover integration), US-011b (speaker profile schema and config generator)
 **Blocks:** none
-**Decisions:** D-001, D-002, D-003, D-004, D-008 (per-venue measurement), D-009 (cut-only), D-010 (speaker profiles)
+**Decisions:** D-001, D-002, D-003, D-004, D-008 (per-venue measurement), D-009 (cut-only), D-010 (speaker profiles), D-013 (PREEMPT_RT mandatory), D-014 (hardware limiter deferred — gain structure procedure is the primary safety mechanism)
 
 **Note:** Per D-008 and design principle #7 ("fresh measurements per venue"),
 this script is an operational tool run at every venue setup, not a one-time
@@ -722,8 +720,16 @@ target curves, and crossover settings are the version-controlled source.
 
 **Acceptance criteria:**
 - [ ] Platform self-diagnostic: loopback self-test runs before measurement to detect system-level drift (USB timing, driver changes) per D-008
+- [ ] **Gain structure calibration phase** (runs before any measurement, primary safety mechanism per D-014):
+  - Plays -18dBFS pink noise per speaker channel individually
+  - Engineer adjusts analog amp gain to achieve 75dB SPL per speaker at measurement position (measured via UMIK-1)
+  - Combined system max: 99dB SPL (all speakers at 75dB each) — safe operating level
+  - IEM max: 100dB SPL (engineer sets IEM amp gain during this phase)
+  - Auto-mute safety: if UMIK-1 measures >100dB during calibration, script mutes all outputs immediately and alerts engineer
+  - Gain settings documented per venue (part of the archived calibration data per D-008)
+  - This procedure ensures that even a full-scale digital transient (0dBFS) produces a bounded SPL through the calibrated analog gain — D-009 cut-only filters provide an additional 0.5dB digital margin
 - [ ] Interactive guided workflow: prompts user for mic placement, confirms before proceeding to each phase
-- [ ] Runs measurement phase: per-channel sweeps, multiple positions per the user's choice
+- [ ] Runs measurement phase: per-channel sweeps at the calibrated gain level, multiple positions per the user's choice
 - [ ] Computes time alignment and displays results for user confirmation
 - [ ] Speaker profile selection: user selects a named speaker profile (YAML) or provides custom parameters. Profile specifies crossover freq, slope, speaker type, target SPL (D-010)
 - [ ] Generates combined FIR filters with user-selected target curve and speaker profile parameters

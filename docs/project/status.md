@@ -93,3 +93,5 @@ None.
 - D-010: Speaker profiles and configurable crossover (2026-03-08)
 - D-011: Live mode chunksize 256 + PipeWire quantum 256 — supersedes D-002 for live mode (2026-03-08)
 - D-012: Flight case thermal management — active cooling on Pi mandatory (2026-03-08)
+- D-013: PREEMPT_RT kernel mandatory for production use — hard real-time with human safety implications (2026-03-08)
+- D-014: Hardware limiter — deferred; required when system drives PAs capable of >110dB SPL (2026-03-08)

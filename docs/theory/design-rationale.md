@@ -572,35 +572,31 @@ are disabled to eliminate background CPU and I/O activity that could interfere
 with audio processing. The desktop environment is stripped to a minimal labwc
 Wayland compositor running as a user service.
 
-**What we deliberately skip:**
+**PREEMPT_RT kernel (D-013).** The system drives amplifiers capable of
+producing SPL levels that can cause permanent hearing damage. This makes
+scheduling determinism a safety requirement, not a performance optimization.
+The PREEMPT_RT patch transforms the Linux kernel into a hard real-time system
+with guaranteed worst-case scheduling latency -- typically under 50
+microseconds. It achieves this by converting kernel spinlocks to sleeping
+mutexes and making hardware interrupt handlers run as schedulable threads, so
+that a high-priority audio process is never blocked by kernel-internal work.
+Every processing deadline is met, always.
 
-**No PREEMPT_RT kernel.** The PREEMPT_RT patch transforms the Linux kernel
-into a hard real-time system with guaranteed worst-case scheduling latency --
-typically under 50 microseconds. It achieves this by converting kernel
-spinlocks to sleeping mutexes and making hardware interrupt handlers run as
-schedulable threads, so that a high-priority audio process is never blocked
-by kernel-internal work. Every deadline is met, always. The standard PREEMPT
-kernel (which Raspberry Pi OS ships) provides good average scheduling
-performance with FIFO priority, but it does not guarantee worst-case behavior.
-A PREEMPT kernel may occasionally delay a real-time thread by a millisecond
-or more during heavy kernel activity -- it is statistically unlikely at our
-load levels, but it is not formally excluded.
+The stock PREEMPT kernel (which Raspberry Pi OS also ships) provides good
+average scheduling performance with FIFO priority, but it does not guarantee
+worst-case behavior. US-003 T3c confirmed a steady-state underrun at quantum
+128 on stock PREEMPT -- the kernel cannot guarantee the 5.33ms processing
+deadline under all conditions. On a system connected to high-power amplifiers,
+"probably fine" is not acceptable.
 
-We chose not to use PREEMPT_RT for two reasons. First, the empirical evidence
-supports the standard kernel at our operating point: zero xruns across all
-stability tests so far, with approximately 66% headroom per processing cycle
-at production load. Our shortest deadline is 5.33ms (chunksize 256 at 48kHz),
-and CamillaDSP's processing time at production load is approximately 34% of
-that deadline -- leaving roughly 3.5ms of slack that can absorb occasional
-scheduling jitter. Second, Raspberry Pi OS Trixie does not
-ship a PREEMPT_RT kernel package. Using PREEMPT_RT would require building a
-custom kernel, which creates a maintenance burden: every upstream kernel
-update would need to be manually patched and rebuilt, breaking the
-reproducibility and update simplicity that the stock distribution provides.
+Raspberry Pi OS Trixie provides the RT kernel as a matching package
+(`linux-image-6.12.47+rpt-rpi-v8-rt`) -- the same kernel version as the stock
+kernel, installable via `apt` with the stock kernel retained as a fallback for
+development and benchmarking. No custom kernel build is required. The RT
+kernel must be installed and validated (US-003 T3e) before the system is
+connected to amplifiers at any venue.
 
-This is a pragmatic bet on statistical safety, not a kernel-level guarantee.
-If future changes eroded the headroom margin, PREEMPT_RT would be the first
-lever to pull -- but it would come at the cost of maintaining a custom kernel.
+**What we do not configure:**
 
 **No CPU isolation or IRQ pinning.** On systems with very tight budgets,
 dedicating specific CPU cores to audio and pinning hardware interrupts to
@@ -614,28 +610,37 @@ continuously would eliminate the sub-millisecond ramp-up time when processing
 resumes, but it increases power consumption and heat generation for a benefit
 that is irrelevant with our headroom margins.
 
-**No custom kernel builds.** The stock Raspberry Pi OS kernel includes PREEMPT
-scheduling and all necessary audio drivers. Building a custom kernel with
-additional patches would create a maintenance burden with no measurable
-benefit at our operating point.
+**No custom kernel builds.** The PREEMPT_RT kernel is installed as a standard
+Raspberry Pi OS package, not a custom build. All necessary audio drivers are
+included. Building a custom kernel with additional patches would create a
+maintenance burden with no measurable benefit at our operating point.
 
-The theme is clear: these are optimizations we do not need because the system
-has approximately 66% headroom at its most demanding operating point (live mode
-with production 8-channel configuration). If future changes reduced that
-headroom (more channels, longer filters, additional processing stages), any of
-these could be revisited.
+The theme is clear: these remaining items are optimizations we do not need
+because the system has approximately 66% headroom at its most demanding
+operating point (live mode with production 8-channel configuration). The
+critical safety item -- PREEMPT_RT -- is configured above. If future changes
+reduced the remaining headroom (more channels, longer filters, additional
+processing stages), CPU isolation or force_turbo could be revisited.
 
 
 ### How Hard Is the Real-Time?
 
-This is a **soft real-time** system, not a hard real-time system.
+This is a **hard real-time** system with **human safety implications**.
 
-In hard real-time (think pacemakers, airbag controllers, fly-by-wire avionics),
-a missed deadline is a system failure. In soft real-time, a missed deadline is
-a degraded output -- an audible glitch, not a safety hazard. Professional
-digital mixing consoles (Yamaha CL/QL, Allen & Heath dLive, DiGiCo SD) all
-operate under the same soft real-time model. A rare xrun during a live show is
-undesirable but not catastrophic.
+The system drives amplifiers capable of producing SPL levels that can cause
+permanent hearing damage. While a single buffer underrun produces only a brief
+discontinuity (CamillaDSP outputs silence during underruns), the broader
+failure analysis encompasses software crashes, malformed filters, gain
+structure errors, and driver bugs -- any of which can produce sustained
+dangerous acoustic output. The system addresses this through a PREEMPT_RT
+kernel (D-013) that guarantees scheduling determinism, combined with a
+calibrated gain structure procedure that limits the maximum acoustic output
+to safe levels (D-014 defers a hardware limiter until the system scales to
+higher-power PAs).
+
+Professional digital mixing consoles (Yamaha CL/QL, Allen & Heath dLive,
+DiGiCo SD) all operate under the same hard real-time model -- zero missed
+deadlines is the operational target, not a stretch goal.
 
 The processing budget at chunksize 256 and 48kHz is 5.33 milliseconds per
 chunk. CamillaDSP must finish processing all eight channels -- four FIR
@@ -669,13 +674,12 @@ The threats to real-time performance, ranked by likelihood:
    takes under 1ms but can cause a single xrun if it coincides with a
    processing deadline.
 
-4. **Scheduling jitter.** Even with FIFO priority, the standard PREEMPT
-   kernel does not guarantee worst-case scheduling latency. A PREEMPT_RT
-   kernel would bound this to under 50 microseconds; without it, occasional
-   delays of a millisecond or more are possible during heavy kernel activity.
-   With approximately 3.5ms of headroom per chunk at production load, typical
-   scheduling jitter is absorbed without issue -- but this is empirical, not
-   guaranteed.
+4. **Scheduling jitter.** With the PREEMPT_RT kernel (D-013), worst-case
+   scheduling latency is bounded to under 50 microseconds -- negligible
+   relative to the 5.33ms processing deadline. On a stock PREEMPT kernel,
+   occasional delays of a millisecond or more would be possible during heavy
+   kernel activity. PREEMPT_RT eliminates this threat by converting kernel
+   spinlocks to sleeping mutexes and threading hardware interrupt handlers.
 
 5. **Memory pressure.** If system memory becomes scarce and the kernel needs
    to reclaim pages, the resulting I/O activity could briefly compete with
