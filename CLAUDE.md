@@ -1,5 +1,30 @@
 # Pi 4B Portable Audio Workstation — Project Context
 
+## CRITICAL: Orchestrator Rules After Context Compaction
+
+**READ THIS FIRST. EVERY TIME. ESPECIALLY AFTER COMPACTION.**
+
+1. **The team is STILL ALIVE after compaction.** Do NOT shut them down. Do NOT
+   recreate the team. Ping each core member to verify they are alive. Only
+   respawn dead agents.
+2. **You are the ORCHESTRATOR. You NEVER write code, edit files, or run
+   implementation commands.** ALL work is done by workers via the Task tool or
+   by messaging existing team members. The ONLY exception is editing this file
+   and team configuration files (Rule 11 meta-process).
+3. **Re-read the orchestration protocol** at `.claude/team/protocol/orchestration.md`
+   before doing ANYTHING after compaction.
+4. **Re-read this file, config.md, status.md, decisions.md, user-stories.md**
+   before doing anything.
+5. **Maximize context by minimizing your own work.** Delegate everything. Your
+   job is to coordinate, not to do. Every command you run, every file you read,
+   every tool call you make costs context. Message team members instead.
+6. **The change-manager coordinates BOTH git operations AND SSH access to the Pi.**
+   Workers message change-manager to run Pi commands. Do not run Pi commands yourself.
+7. **Team name:** `pi4-audio`. 10 core members (see Team section below).
+8. See `~/mobile/gabriela-bogk/team-protocol/lessons-learned.md` — L-001, L-007,
+   L-008, L-021, L-023 are ALL about the orchestrator doing work directly after
+   compaction. This has happened FIVE TIMES before. Do not be the sixth.
+
 ## Project Summary
 
 Building a portable flight-case audio workstation based on a Raspberry Pi 4B, replacing
@@ -19,7 +44,40 @@ See `docs/project/status.md` for current state. Decisions in `docs/project/decis
 
 Team configuration: `.claude/team/config.md`
 Consultation matrix: `.claude/team/consultation-matrix.md`
-Custom roles: `.claude/team/roles/` (audio-engineer.md, technical-writer.md)
+All role prompts: `.claude/team/roles/`
+Orchestration protocol: `.claude/team/protocol/` (self-contained copy)
+
+### Core Team (10 members)
+- **Coordination:** Product Owner, Project Manager, Change Manager
+- **Advisory:** Architect (+ RT performance), Audio Engineer, Security Specialist, UX Specialist, Technical Writer
+- **Quality:** Quality Engineer
+- **Challenge:** Advocatus Diaboli
+
+### Hardware Access Protocol
+All SSH to Pi goes through the Change Manager to prevent conflicts.
+Pi: `ela@192.168.178.185` (hostname: mugge), key-based auth, passwordless sudo.
+
+## Pi Hardware State (verified 2026-03-08)
+
+- **OS:** Debian 13 Trixie, kernel 6.12.47 with PREEMPT
+- **USB devices:** UMIK-1, USBStreamer, Hercules DJControl Mix Ultra, APCmini mk2, Nektar SE25
+- **UMIK-1 calibration:** `/home/ela/7161942.txt` (magnitude-only, serial 7161942, -1.378dB sensitivity)
+- **Audio:** PipeWire running (pipewire, pipewire-pulse, wireplumber)
+- **Desktop:** labwc (Wayland), lightdm — full desktop session active
+- **Firewall:** NONE (nftables empty, iptables not installed)
+- **SSH:** Password auth likely enabled (default), key-based working
+- **Listening ports:** SSH (22), rpcbind (111), CUPS (631/localhost only)
+- **Not installed yet:** CamillaDSP, Mixxx, Reaper, RustDesk
+
+## Owner Preferences (from session 2026-03-08)
+
+- **Remote desktop:** RustDesk (not VNC)
+- **Reproducibility:** NixOS with flake long-term. Trixie + lab notes for now.
+- **DJ mode:** Hercules-primary, APCmini optional enhancement
+- **Mode switching:** Whole-gig for starters, quick switch future nice-to-have
+- **Singer IEM:** Engineer controls for MVP, singer self-control future bonus
+- **Singer needs:** Extra track for vocal cues (Reaper provides)
+- **IEM signal path:** Reaper → USBStreamer ch 7/8 directly, bypasses CamillaDSP
 
 ## Key Documents
 
