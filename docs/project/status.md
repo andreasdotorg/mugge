@@ -2,7 +2,7 @@
 
 ## Overall Status
 
-22 user stories defined (US-000 through US-021) across 7 tiers. All stories in draft status. Team expanded to 10 core members (D-006). Orchestration protocol and role prompts committed for self-containment. Awaiting owner selection of first stories for implementation.
+Owner greenlight received. 25 stories defined (US-000 through US-023 including US-000a). US-000 selected for implementation. US-000a and US-004 can run in parallel. Validation-first approach: Tier 0/1 before UI work.
 
 ## Component Status
 
@@ -12,21 +12,27 @@
 | CLAUDE.md | current | Compaction survival rules, team listing, Pi state, owner preferences added |
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
-| Role prompts | current | 13 role files in `.claude/team/roles/` (5 custom, 8 standard) |
-| User stories | draft | 22 stories (US-000 through US-021) in `docs/project/user-stories.md` |
+| Role prompts | current | All role files in `.claude/team/roles/` |
+| User stories | active | 25 stories (US-000 through US-023 incl. US-000a) in `docs/project/user-stories.md` |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware |
 | Room correction pipeline | not started | Stories US-008 through US-013 defined |
 | Documentation suite | not started | Stories US-014 through US-016 defined |
-| Core software (CamillaDSP, Mixxx, Reaper) | not installed | US-000 gates all implementation work |
+| Web UI platform | not started | Stories US-022, US-023, US-018 defined (deferred per owner: validation first) |
+| Core software (CamillaDSP, Mixxx, Reaper) | not installed | US-000 selected for implementation |
+| Platform security | not started | US-000a defined, can overlap with US-000 |
 
 ## DoD Tracking
 
-No stories selected yet — all 22 are in draft status.
+| Story | Score | Status |
+|-------|-------|--------|
+| US-000 | 0/3 | selected |
+| US-000a | 0/4 | ready (can overlap with US-000 for items not dependent on CamillaDSP) |
+| US-004 | 0/3 | ready (independent, can run in parallel) |
 
 ## In Progress
 
-- Awaiting owner review and selection of stories for implementation
-- Recommended first selections: US-000 (core software installation) and US-004 (expanded assumption discovery) — both have no dependencies
+- US-000: Core Audio Software Installation — awaiting worker assignment and Architect decomposition
+- Work sequence: US-000 -> US-000a (overlap) -> US-001/US-002 (parallel) -> US-003
 
 ## Blockers
 
@@ -37,7 +43,7 @@ None.
 | Dependency | Status | Notes |
 |------------|--------|-------|
 | Pi 4B hardware available for testing | available | SSH access verified, PipeWire running, all USB devices connected |
-| Core software installation | waiting | CamillaDSP, Mixxx, Reaper, RustDesk not yet installed (US-000) |
+| Core software installation | in progress | US-000 selected, CamillaDSP/Mixxx/Reaper/RustDesk to be installed |
 | Hercules DJControl Mix Ultra USB-MIDI verification | waiting | USB enumeration confirmed, functional MIDI test pending (US-005) |
 | APCmini mk2 Mixxx mapping | waiting | Needs research / community check (US-007) |
 
