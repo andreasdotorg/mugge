@@ -1,0 +1,187 @@
+=== t=0s (elapsed=0s) ===
+State: ProcessingState.RUNNING
+Buffer: 563
+Clipped: 0
+Load: 17.241995
+Temp: 73036
+=== t=60s (elapsed=60s) ===
+State: ProcessingState.RUNNING
+Buffer: 662
+Clipped: 0
+Load: 17.658657
+Temp: 72062
+=== t=120s (elapsed=120s) ===
+State: ProcessingState.RUNNING
+Buffer: 751
+Clipped: 0
+Load: 17.11907
+Temp: 73036
+=== t=180s (elapsed=180s) ===
+State: ProcessingState.RUNNING
+Buffer: 844
+Clipped: 0
+Load: 16.955175
+Temp: 72549
+=== t=240s (elapsed=240s) ===
+State: ProcessingState.RUNNING
+Buffer: 930
+Clipped: 0
+Load: 53.653748
+Temp: 73523
+=== t=300s (elapsed=300s) ===
+State: ProcessingState.RUNNING
+Buffer: 981
+Clipped: 0
+Load: 41.19855
+Temp: 74010
+=== t=360s (elapsed=360s) ===
+State: ProcessingState.RUNNING
+Buffer: 1004
+Clipped: 0
+Load: 38.875275
+Temp: 73036
+=== t=420s (elapsed=420s) ===
+State: ProcessingState.RUNNING
+Buffer: 1015
+Clipped: 0
+Load: 14.241301
+Temp: 73523
+=== t=480s (elapsed=480s) ===
+State: ProcessingState.RUNNING
+Buffer: 1019
+Clipped: 0
+Load: 17.37915
+Temp: 72549
+=== t=540s (elapsed=540s) ===
+State: ProcessingState.RUNNING
+Buffer: 1020
+Clipped: 0
+Load: 18.383307
+Temp: 72549
+=== t=600s (elapsed=600s) ===
+State: ProcessingState.RUNNING
+Buffer: 1020
+Clipped: 0
+Load: 16.335394
+Temp: 73036
+=== t=660s (elapsed=660s) ===
+State: ProcessingState.RUNNING
+Buffer: 1020
+Clipped: 0
+Load: 19.11977
+Temp: 74497
+=== t=720s (elapsed=720s) ===
+State: ProcessingState.RUNNING
+Buffer: 1017
+Clipped: 0
+Load: 16.623976
+Temp: 72062
+=== t=780s (elapsed=780s) ===
+State: ProcessingState.RUNNING
+Buffer: 986
+Clipped: 0
+Load: 29.33462
+Temp: 74010
+=== t=840s (elapsed=840s) ===
+State: ProcessingState.RUNNING
+Buffer: 920
+Clipped: 0
+Load: 17.783981
+Temp: 74010
+=== t=900s (elapsed=900s) ===
+State: ProcessingState.RUNNING
+Buffer: 869
+Clipped: 0
+Load: 15.549262
+Temp: 74497
+=== t=960s (elapsed=960s) ===
+State: ProcessingState.RUNNING
+Buffer: 848
+Clipped: 0
+Load: 21.266926
+Temp: 73523
+=== t=1020s (elapsed=1020s) ===
+State: ProcessingState.RUNNING
+Buffer: 839
+Clipped: 0
+Load: 17.111607
+Temp: 73523
+=== t=1080s (elapsed=1080s) ===
+State: ProcessingState.RUNNING
+Buffer: 846
+Clipped: 0
+Load: 16.00303
+Temp: 74497
+=== t=1140s (elapsed=1140s) ===
+State: ProcessingState.RUNNING
+Buffer: 881
+Clipped: 0
+Load: 24.959436
+Temp: 73036
+=== t=1200s (elapsed=1200s) ===
+State: ProcessingState.RUNNING
+Buffer: 887
+Clipped: 0
+Load: 18.521437
+Temp: 73523
+=== t=1260s (elapsed=1260s) ===
+State: ProcessingState.RUNNING
+Buffer: 910
+Clipped: 0
+Load: 17.233276
+Temp: 73523
+=== t=1320s (elapsed=1320s) ===
+State: ProcessingState.RUNNING
+Buffer: 938
+Clipped: 0
+Load: 14.583694
+Temp: 73523
+=== t=1380s (elapsed=1380s) ===
+State: ProcessingState.RUNNING
+Buffer: 953
+Clipped: 0
+Load: 16.18125
+Temp: 73036
+=== t=1440s (elapsed=1440s) ===
+State: ProcessingState.RUNNING
+Buffer: 981
+Clipped: 0
+Load: 25.77525
+Temp: 74010
+=== t=1500s (elapsed=1500s) ===
+State: ProcessingState.RUNNING
+Buffer: 1019
+Clipped: 0
+Load: 42.43202
+Temp: 72549
+=== t=1560s (elapsed=1560s) ===
+State: ProcessingState.RUNNING
+Buffer: 1020
+Clipped: 0
+Load: 16.385944
+Temp: 73523
+=== t=1620s (elapsed=1620s) ===
+State: ProcessingState.RUNNING
+Buffer: 1020
+Clipped: 0
+Load: 17.382694
+Temp: 72549
+=== t=1680s (elapsed=1680s) ===
+State: ProcessingState.RUNNING
+Buffer: 1020
+Clipped: 0
+Load: 21.381882
+Temp: 73523
+=== t=1740s (elapsed=1740s) ===
+State: ProcessingState.RUNNING
+Buffer: 1020
+Clipped: 0
+Load: 17.436674
+Temp: 73036
+=== t=1800s (elapsed=1800s) ===
+State: ProcessingState.RUNNING
+Buffer: 1020
+Clipped: 0
+Load: 16.443937
+Temp: 74984
+=== MONITORING COMPLETE ===
