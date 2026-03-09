@@ -80,32 +80,30 @@ identical lockup pattern. F-017 confirmed as same root cause class.
 - Crash 9 (2026-03-09 ~21:37 CET, Mixxx): `LIBGL_ALWAYS_SOFTWARE=1` + audio stack
   (PipeWire + CamillaDSP restarted). Lockup ~30-60s after audio stack restart.
   Temp ~53C. Software rendering alone insufficient when combined with RT audio.
+- Crash 10 / Test 3 (2026-03-09, Mixxx): `LIBGL_ALWAYS_SOFTWARE=1` + audio at
+  SCHED_OTHER (no RT priority). Hard lockup during song selection. **Eliminates
+  priority inversion** -- V3D deadlocks regardless of audio thread priority.
 - PASS (stock PREEMPT): Both Reaper and Mixxx run without issue on stock kernel.
 
-**Root cause (confirmed by Test 1):** V3D GPU driver deadlock under PREEMPT_RT.
-Spinlocks become sleeping mutexes with priority inheritance on RT. V3D driver
-deadlocks internally -- does NOT require interaction with userspace RT-priority
-threads (Test 1: lockup reproduced with CamillaDSP and PipeWire stopped, no
-userspace RT processes, only `irq/41-v3d` kernel thread at SCHED_FIFO 50).
-Only OpenGL clients trigger it; DRM/KMS-only (labwc) is stable.
+**Root cause (confirmed by Tests 1+3):** V3D internal lock ordering deadlock
+under PREEMPT_RT rt_mutex conversion. NOT priority inversion (Test 3: lockup
+with audio at SCHED_OTHER, no FIFO threads above V3D IRQ handler). The bug is
+in V3D's lock ordering itself -- spinlocks converted to sleeping rt_mutexes
+create a deadlock path that does not exist on stock PREEMPT. labwc compositor
+uses V3D hardware GL for compositing (confirmed via /proc maps), so any GUI
+app that generates frames triggers V3D activity through the compositor.
 
-**Workaround (PARTIALLY VALIDATED):** `LIBGL_ALWAYS_SOFTWARE=1` forces Mesa
-software rendering (llvmpipe), bypassing the V3D GPU driver in the client app.
-Test 2 confirmed: stable 5+ min on PREEMPT_RT with software rendering and NO
-audio stack. However, Event #9 FAILED: Mixxx with `LIBGL_ALWAYS_SOFTWARE=1`
-locked up ~30-60s after PipeWire + CamillaDSP were restarted. The workaround
-is insufficient when combined with RT-priority audio threads (PipeWire FIFO 88,
-CamillaDSP FIFO 80). Hypothesis: labwc compositor still uses V3D hardware for
-compositing; RT audio threads trigger the V3D deadlock through the compositor
-path even when the client app uses software rendering.
+**`LIBGL_ALWAYS_SOFTWARE=1`: INSUFFICIENT.** Only affects client app rendering.
+labwc compositor still uses V3D hardware for compositing. Test 2 stability was
+probabilistic (low V3D load), not reliable. Event #9 and Test 3 both locked up.
 
-**Active workaround:** D-015 -- all OpenGL apps on stock PREEMPT kernel only.
+**Active workaround:** D-015 -- all GUI apps on stock PREEMPT kernel only.
 This remains the only confirmed-stable configuration for GUI apps + audio stack.
 
-**Fix (production):** TBD. `LIBGL_ALWAYS_SOFTWARE=1` alone is not sufficient.
-Options under investigation: (a) force labwc compositor to software rendering,
-(b) blacklist V3D kernel module entirely, (c) headless compositor (Xvfb/cage),
-(d) stock PREEMPT for all modes with GUI apps. See lab note for details.
+**Fix (production):** Blacklist V3D kernel module (Option B) -- the only path
+confirmed by elimination. `LIBGL_ALWAYS_SOFTWARE=1` on client is insufficient,
+priority reduction is insufficient. V3D must not load. Needs testing to verify
+labwc survives without V3D (fallback to software compositing). See lab note.
 
 **Upstream fix:** V3D driver needs PREEMPT_RT-safe locking. Report to kernel
 maintainers with reproduction steps (Test 1 from lab note). Serial console
