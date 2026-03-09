@@ -70,3 +70,30 @@ output, MIDI response) must NOT be closed until the owner confirms via VNC
 or direct observation. Worker testing is necessary but not sufficient.
 Workers must leave applications running for owner inspection after applying
 fixes. This is now a permanent process rule in tasks.md.
+
+---
+
+## L-004: Change Manager is not a worker — do not direct CM to execute Pi commands
+
+**Date:** 2026-03-09
+**Context:** Entire session — PM repeatedly directed CM to run SSH commands on Pi
+
+The CM's role is coordination: git operations, access lock tracking, conflict
+prevention between workers. All SSH commands on the Pi must be executed by
+workers. The PM repeatedly directed the CM to run Pi commands (`fuser`,
+`systemctl`, `dpkg --get-selections`, `sudo reboot`, etc.), conflating
+"coordinates SSH access" with "executes SSH commands."
+
+**Root cause:** The deploy-verify protocol in config.md says "change-manager
+copies files to the Pi" and "worker runs these checks," but the PM treated
+the CM as both coordinator and executor.
+
+**Fix:** The CM should:
+1. Handle git operations (commit, push, branch management)
+2. Track the Pi access lock (who currently has SSH access)
+3. Prevent conflicts between workers accessing the Pi simultaneously
+4. **Refuse** Pi command execution requests and redirect to a worker
+
+All SSH commands on the Pi — including reboot, service management, package
+operations, verification checks — must be executed by workers. The CM grants
+the access lock to the worker and tracks it, but does not execute.
