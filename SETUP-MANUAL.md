@@ -243,9 +243,11 @@ sudo systemctl enable cpufrequtils
 
 ### 3.4 Real-Time Kernel (PREEMPT_RT)
 
-The standard Raspberry Pi OS kernel uses `PREEMPT_DYNAMIC` (voluntary preemption).
-For audio work, a fully preemptible kernel (`PREEMPT_RT`) dramatically reduces worst-case
-latency (from ~10ms spikes to <0.5ms).
+The standard Raspberry Pi OS Trixie kernel (`6.12.47+rpt-rpi-v8`) is compiled with
+`CONFIG_PREEMPT=y` (full preemption). For audio work, a fully preemptible kernel
+(`PREEMPT_RT`) provides bounded worst-case scheduling latency. US-003 T3e measured a
+maximum of 209 us under sustained DSP load on the RT kernel — well within the 5.33 ms
+processing deadline at chunksize 256.
 
 **Check if an RT kernel is available:**
 
