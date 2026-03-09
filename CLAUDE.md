@@ -306,11 +306,11 @@ automatically. The script should:
 - [ ] Verify Hercules DJControl Mix Ultra USB-MIDI on Linux (plug it in and check)
 - [ ] Check if APCmini mk2 has a Mixxx mapping (forums, GitHub)
 - [ ] Verify REW runs on Pi 4 ARM (Java-based, should work but needs testing)
-- [ ] Decide if measurement pipeline should use REW or pure Python
+- [x] ~~Decide if measurement pipeline should use REW or pure Python~~ D-016: both. REW for exploratory work, Python for automation pipeline.
 - [ ] Determine if `gpu_mem=128` is needed for Mixxx or if Xvfb works with `gpu_mem=16`
 - [x] ~~Check if Raspberry Pi OS Trixie ships a PREEMPT_RT kernel package~~ YES: `linux-image-6.12.47+rpt-rpi-v8-rt` available. Installed in T3e (PASS). D-013: PREEMPT_RT mandatory for production — but **D-015 defers to stock PREEMPT** due to F-012 (Reaper hard lockup on RT kernel). Fix before shipping.
 - [ ] Test whether PipeWire or native JACK gives better latency/stability on Pi 4
-- [ ] Investigate CamillaDSP's websocket API for runtime filter hot-swapping
+- [ ] Investigate CamillaDSP's websocket API for runtime filter hot-swapping — `set_active()` supports reload with brief audio gap (architect analysis). Pending 5-min Pi validation (TK-005).
   (can we update coefficients without restarting the service?)
 - [ ] Consider: should the live mode config use a separate set of shorter FIR filters
   optimized for chunksize 512, or the same 16k-tap filters as DJ mode?
