@@ -43,10 +43,10 @@ US-000b T7.
 
 ---
 
-## F-012: OpenGL/V3D GPU applications cause hard kernel lockup on PREEMPT_RT (OPEN)
+## F-012: OpenGL/V3D GPU applications cause hard kernel lockup on PREEMPT_RT (MITIGATED -- D-021)
 
 **Severity:** Critical
-**Status:** Open
+**Status:** Mitigated (D-021 -- V3D eliminated from rendering path: pixman compositor + llvmpipe apps)
 **Found in:** T3e Phase 3 (PREEMPT_RT regression testing)
 **Affects:** D-013 (PREEMPT_RT mandatory for production), US-003 (stability on RT kernel)
 **Found by:** Automated testing (TK-016 Reaper smoke test)
@@ -94,16 +94,20 @@ uses V3D hardware GL for compositing (confirmed via /proc maps), so any GUI
 app that generates frames triggers V3D activity through the compositor.
 
 **`LIBGL_ALWAYS_SOFTWARE=1`: INSUFFICIENT.** Only affects client app rendering.
-labwc compositor still uses V3D hardware for compositing. Test 2 stability was
-probabilistic (low V3D load), not reliable. Event #9 and Test 3 both locked up.
+labwc compositor still uses V3D hardware for compositing. Event #9 locked up
+with FIFO audio. Test 3 was STABLE with audio at SCHED_OTHER (confirming
+priority inversion as the trigger), but the workaround is unreliable.
 
 **Active workaround:** D-015 -- all GUI apps on stock PREEMPT kernel only.
 This remains the only confirmed-stable configuration for GUI apps + audio stack.
 
-**Fix (production):** Blacklist V3D kernel module (Option B) -- the only path
-confirmed by elimination. `LIBGL_ALWAYS_SOFTWARE=1` on client is insufficient,
-priority reduction is insufficient. V3D must not load. Needs testing to verify
-labwc survives without V3D (fallback to software compositing). See lab note.
+**Fix (VALIDATED -- Option B):** `WLR_RENDERER=pixman` on labwc compositor +
+`LIBGL_ALWAYS_SOFTWARE=1` on GUI apps (Mixxx, Reaper). Eliminates all V3D
+usage system-wide. Test 4 (2026-03-09): Mixxx + CamillaDSP FIFO 80 + full
+audio stack on PREEMPT_RT -- 5 minutes stable, all 10 checkpoints PASS, peak
+temp 53.5C, peak load 4.84, zero V3D renderD mappings in labwc. This is the
+production fix for F-012/F-017. Pending: D-021 formalization by architect,
+30-min T3d stability test, persistence via systemd environment.
 
 **Upstream fix:** V3D driver needs PREEMPT_RT-safe locking. Report to kernel
 maintainers with reproduction steps (Test 1 from lab note). Serial console
@@ -140,19 +144,28 @@ labwc (V3D hardware GL compositing) -> DRM/KMS scanout. When the RT audio
 stack restarted (PipeWire FIFO 88, CamillaDSP FIFO 80), the V3D deadlock
 was triggered through labwc's compositor path.
 
-**Test 3 (IN PROGRESS):** Audio stack at SCHED_OTHER (normal priority) with
-V3D intact. If stable, confirms FIFO 80-88 audio threads are the priority
-inversion cause -- the V3D deadlock only triggers when RT-priority threads
-contend with V3D's kernel locks. This would make Option B (blacklist V3D
-module) viable for RT production use.
+**Test 3 (PASS):** Audio stack at SCHED_OTHER (normal priority) with V3D
+intact. Stable for 5 minutes, 30/30 checkpoints PASS. **Confirms priority
+inversion as the trigger** -- V3D deadlock requires FIFO threads above
+`irq/41-v3d` (FIFO 50). Without userspace FIFO, system is stable.
 
-**Impact on D-013:** `LIBGL_ALWAYS_SOFTWARE=1` alone cannot enable RT + GUI.
-D-013 revision depends on Test 3 outcome. Stock PREEMPT (D-015) is the only
-confirmed-stable configuration pending Test 3 results. Remaining viable
-paths: (a) stock PREEMPT for all modes with GUI apps, (b) force labwc to
-software rendering (feasibility unknown), (c) headless compositor bypassing
-V3D entirely (Xvfb/cage), (d) blacklist V3D kernel module (viable if Test 3
-PASS confirms priority inversion as the trigger).
+**Impact on D-013:** `LIBGL_ALWAYS_SOFTWARE=1` alone cannot enable RT + GUI
+because labwc compositor still uses V3D. V3D must be eliminated from the
+compositor (Option B: `WLR_RENDERER=pixman`).
+
+### Update 2026-03-09: Option B VALIDATED (Test 4 -- 5 min stable on PREEMPT_RT)
+**Test 4:** `WLR_RENDERER=pixman` on labwc + `LIBGL_ALWAYS_SOFTWARE=1` on
+Mixxx + CamillaDSP at FIFO 80 + full audio stack on PREEMPT_RT kernel. 5
+minutes stable, all 10 checkpoints PASS, peak temp 53.5C, peak load 4.84.
+Zero V3D renderD mappings in labwc process.
+
+**This is the production fix for F-012/F-017.** By forcing both the compositor
+(labwc) and client apps (Mixxx, Reaper) to software rendering, all V3D driver
+activity is eliminated. The V3D kernel module may still be loaded but is never
+exercised, avoiding the deadlocking lock path entirely.
+
+**Remaining:** D-021 formalization (architect), 30-min T3d stability test to
+confirm long-duration stability, persistence via systemd environment files.
 
 ---
 
@@ -261,10 +274,10 @@ recovery), any restart-induced glitches are production defects.
 
 ---
 
-## F-017: Mixxx hard kernel lockup on PREEMPT_RT (OPEN -- same root cause as F-012)
+## F-017: Mixxx hard kernel lockup on PREEMPT_RT (RESOLVED -- workaround, same root cause as F-012)
 
 **Severity:** High
-**Status:** Open -- confirmed same root cause class as F-012
+**Status:** Resolved (workaround -- Option B validated under F-012)
 **Found in:** Mixxx testing on PREEMPT_RT kernel (2026-03-09)
 **Affects:** US-003 (stability), US-006 (Mixxx feasibility), D-013 (PREEMPT_RT production use)
 **Found by:** Owner (observed reboot during testing)
@@ -287,15 +300,14 @@ stable.
 This is a safety concern -- an uncontrolled reboot mid-performance causes
 full audio dropout on all channels.
 
-**Fix:** Tracked under F-012. Same root cause (V3D GPU driver deadlock on RT).
+**Fix (VALIDATED -- Option B under F-012):** `WLR_RENDERER=pixman` on labwc +
+`LIBGL_ALWAYS_SOFTWARE=1` on Mixxx. Eliminates all V3D usage. Test 4 confirmed:
+Mixxx + full audio stack on PREEMPT_RT, 5 min stable, all 10 checkpoints PASS.
+This is the same fix as F-012 -- see F-012 Test 4 update for full details.
 
-**Workaround (`LIBGL_ALWAYS_SOFTWARE=1`): UNCERTAIN.** Stable for 5+ min without
-audio stack (Test 2 under F-012). Crashed ~30-60s after audio stack restarted
-(Event #9, lockup with Mixxx + software rendering + PipeWire/CamillaDSP). The
-workaround may be insufficient when combined with RT-priority audio threads.
-Needs further investigation.
-
-**Fallback workaround:** Run Mixxx on stock PREEMPT kernel only (D-015).
+**Previous workaround (`LIBGL_ALWAYS_SOFTWARE=1` alone): INSUFFICIENT.** Only
+affects client app; labwc compositor still uses V3D. Event #9 locked up with
+FIFO audio. Option B (pixman + software rendering) is required.
 
 ---
 

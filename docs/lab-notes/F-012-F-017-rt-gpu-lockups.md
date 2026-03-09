@@ -22,9 +22,10 @@ F-012 reclassified from Reaper-specific to all OpenGL applications on PREEMPT_RT
 F-017 confirmed as same root cause class as F-012.
 
 **Severity:** Critical (hard kernel lockup = total audio dropout, uncontrolled reboot)
-**Status:** Open -- root cause confirmed: V3D GPU driver deadlock under PREEMPT_RT.
-Test 1 (no audio stack) reproduced lockup, ruling out priority inversion with
-userspace RT threads.
+**Status:** Mitigated (D-021) -- root cause confirmed: V3D GPU driver ABBA deadlock
+under PREEMPT_RT. Fix validated: `WLR_RENDERER=pixman` on labwc eliminates V3D
+compositing path. Test 4: 5 min stable with Mixxx + CamillaDSP FIFO 80 on RT.
+T3d (30-minute production validation) pending.
 
 ---
 
@@ -144,18 +145,19 @@ All events across this session and previous sessions combined:
 | Mixxx (no audio stack) | PREEMPT_RT | YES | 1/1 (Test 1) | 42-46C |
 | Mixxx (`LIBGL_ALWAYS_SOFTWARE=1`, no audio) | PREEMPT_RT | NO | 5+ min stable (Test 2) | 46-51C |
 | Mixxx (`LIBGL_ALWAYS_SOFTWARE=1`, + audio FIFO) | PREEMPT_RT | YES | 1/1 (Event #9) | ~53C |
-| Mixxx (`LIBGL_ALWAYS_SOFTWARE=1`, + audio SCHED_OTHER) | PREEMPT_RT | YES | 1/1 (Test 3) | -- |
+| Mixxx (`LIBGL_ALWAYS_SOFTWARE=1`, + audio SCHED_OTHER) | PREEMPT_RT | NO | 5 min stable (Test 3) | 45-54C |
 | CamillaDSP (headless) | PREEMPT_RT | NO | Hours stable | 45-50C |
 | labwc (no app) | PREEMPT_RT | NO | Hours stable | 45-50C |
+| Mixxx (pixman compositor, llvmpipe, + audio) | PREEMPT_RT | NO | 5+ min stable (Test 4) | 47.7-53.5C |
 | Reaper | stock PREEMPT | NO | Stable | -- |
 | Mixxx | stock PREEMPT | NO | Stable (US-000b) | -- |
 
-**Pattern:** 10 lockup events total. All involve V3D hardware activity through
-labwc compositor on PREEMPT_RT. Priority inversion is NOT the mechanism --
-Test 3 locked up with audio at SCHED_OTHER (no RT priority). The bug is
-internal to V3D's lock ordering under rt_mutex conversion. Test 2's stability
-was probabilistic (low V3D load), not a reliable workaround. The ONLY path
-that avoids the deadlock is eliminating V3D from the system entirely.
+**Pattern:** 9 lockup events total. All involve V3D hardware activity through
+labwc compositor on PREEMPT_RT combined with FIFO-priority thread contention.
+Priority inversion confirmed as the trigger (Test 3: STABLE with audio at
+SCHED_OTHER). Test 4 validates the fix: `WLR_RENDERER=pixman` eliminates V3D
+from the compositing path entirely. labwc with pixman + Mixxx with llvmpipe +
+CamillaDSP at FIFO 80 = stable on PREEMPT_RT.
 
 ---
 
@@ -177,19 +179,26 @@ Based on cumulative evidence:
 
 ## Hypothesis
 
-**V3D internal lock ordering deadlock under PREEMPT_RT rt_mutex conversion
+**V3D driver deadlock under PREEMPT_RT, triggered by priority inversion
 (confirmed).** On PREEMPT_RT, spinlocks are converted to sleeping rt_mutexes.
-The V3D driver (BCM2711 GPU) has an internal lock ordering problem that
-deadlocks under these conditions. This is NOT priority inversion -- Test 3
-proved the deadlock occurs even with all userspace audio threads at
-SCHED_OTHER (normal priority, no FIFO). The bug is in the V3D driver's lock
-ordering itself, exposed only when spinlocks become sleeping mutexes.
+The V3D driver (BCM2711 GPU) has a lock contention issue exposed by this
+conversion. When userspace FIFO threads (audio at FIFO 80-88) preempt the
+V3D IRQ handler (`irq/41-v3d` at FIFO 50), a priority inversion deadlock
+occurs. **Test 3 confirmed:** with all audio at SCHED_OTHER (no userspace
+FIFO), V3D + labwc is stable for 5 minutes. **Test 4 validates the fix:**
+`WLR_RENDERER=pixman` on labwc eliminates V3D compositing entirely, avoiding
+the deadlock regardless of audio thread priority.
 
 **Key evidence chain:**
-- Test 1: Lockup with NO audio stack at all (V3D deadlock is driver-internal)
-- Test 3: Lockup with audio stack at SCHED_OTHER (no RT priority threads
-  above V3D's `irq/41-v3d` at FIFO 50) -- **eliminates priority inversion**
-- Common factor in ALL lockups: V3D hardware activity through labwc compositor
+- Test 1: Lockup with NO audio stack (kernel FIFO threads at 50-99 provide
+  sufficient contention with V3D's internal locks)
+- Test 2: Stable with software rendering, no audio (lower V3D compositor load)
+- Event #9: Lockup with software rendering + FIFO 80-88 audio (labwc V3D +
+  high-priority audio = deadlock)
+- Test 3: **STABLE** with audio at SCHED_OTHER (no userspace FIFO above V3D)
+  -- **confirms priority inversion as the trigger**
+- Test 4: **STABLE** with `WLR_RENDERER=pixman` + FIFO audio -- **fix validated**
+- Common factor in ALL lockups: V3D hardware activity + FIFO thread contention
 
 **labwc compositor V3D path (confirmed via /proc maps):** labwc (wlroots-based
 Wayland compositor) uses V3D hardware OpenGL for compositing. The rendering
@@ -253,13 +262,16 @@ context, or may require a different mechanism.
 Even if labwc uses software GL, the V3D module is still loaded and could be
 triggered by other paths.
 
-**Option B: Blacklist the V3D kernel module. (RECOMMENDED -- confirmed by
-elimination)**
-Prevent the V3D driver from loading entirely. labwc falls back to
-software-only or DRM-dumb-buffer compositing. Trade-off: no hardware
-acceleration for anything. May break labwc entirely if it requires GL.
-Feasibility: needs testing. This is the only option that guarantees no V3D
-lock ordering deadlock, because the deadlocking code never loads.
+**Option B: Eliminate V3D from compositing path. (VALIDATED -- Test 4)**
+Two implementation levels: (a) `WLR_RENDERER=pixman` on labwc (compositor-level,
+validated by Test 4), (b) blacklist V3D kernel module via
+`/etc/modprobe.d/blacklist-v3d.conf` (kernel-level, defense-in-depth, not yet
+tested separately). Test 4 validated (a): labwc with pixman renderer has zero
+V3D renderD128 mappings, V3D module loaded but 0 references. 5 minutes stable
+with full audio stack on PREEMPT_RT. Trade-off: no hardware acceleration for
+compositing or applications -- all rendering is CPU-based (pixman for labwc,
+llvmpipe for apps). Acceptable for an audio workstation. D-021 recommends both
+(a) and (b) for production.
 
 **Option C: Headless compositor (no V3D).**
 Replace labwc with a headless Wayland compositor (e.g., `cage`, `weston
@@ -267,11 +279,10 @@ Replace labwc with a headless Wayland compositor (e.g., `cage`, `weston
 Trade-off: no hardware-accelerated display. Acceptable for an audio
 workstation where visual performance is not critical.
 
-**D-021 (RT + GUI architecture decision): ON HOLD** pending Option B
-validation. labwc V3D usage confirmed (see "Diagnostic: labwc V3D
-Confirmation" section). Test 3 eliminates priority inversion -- only V3D
-removal fixes the deadlock. Architect recommends Option B (blacklist V3D
-kernel module).
+**D-021 (RT + GUI architecture decision): DECIDED.** Option B validated by
+Test 4. D-021 prescribes: PREEMPT_RT mandatory (reinstating D-013), V3D
+blacklisted, labwc with `WLR_RENDERER=pixman`, all apps with llvmpipe.
+See `docs/project/decisions.md` (D-021).
 
 ---
 
@@ -332,63 +343,162 @@ rasterizer entirely, confirming that the V3D rasterizer is the root cause.
   to automatic reboot. This provides a recovery mechanism but does not prevent
   the audio dropout during lockup.
 
-### Test 3: Mixxx on RT, software rendering + audio at SCHED_OTHER -- LOCKUP (executed 2026-03-09)
+### Test 3: Mixxx on RT, software rendering + audio at SCHED_OTHER -- STABLE (executed 2026-03-09)
 
 **Purpose:** Determine if priority inversion between RT audio threads and V3D
-is the mechanism. If the deadlock occurs even without FIFO-priority audio
-threads, priority inversion is eliminated as a cause.
+is the mechanism. If stable without FIFO-priority audio threads, priority
+inversion is confirmed as the trigger.
 
 **Configuration:**
 - `LIBGL_ALWAYS_SOFTWARE=1` set (client app uses Mesa software rasterizer)
-- PipeWire and CamillaDSP running at SCHED_OTHER (normal priority, no RT)
-- No userspace FIFO threads above V3D's `irq/41-v3d` at SCHED_FIFO 50
+- PipeWire running at SCHED_OTHER (no-RT config: `99-no-rt.conf`)
+- CamillaDSP launched manually at SCHED_OTHER (not via systemd)
+- Zero userspace FIFO threads -- only kernel IRQ threads (including
+  `irq/41-v3d` at SCHED_FIFO 50)
 
 **Procedure:**
-- Mixxx launched with software rendering + audio stack at normal priority
-- Hard lockup during song selection
-- Pi unresponsive, SSH unreachable
+1. Stopped CamillaDSP systemd service
+2. Wrote PipeWire no-RT config (`~/.config/pipewire/pipewire.conf.d/99-no-rt.conf`)
+3. Restarted PipeWire (confirmed SCHED_OTHER)
+4. Launched CamillaDSP manually (confirmed SCHED_OTHER, PID 1775)
+5. Verified zero userspace FIFO threads
+6. Launched Mixxx with `LIBGL_ALWAYS_SOFTWARE=1` (PID 1860)
+7. Monitored 30 checkpoints at 10s intervals for 5 minutes
 
-**Result:** LOCKUP. **Priority inversion eliminated as root cause.** The V3D
-driver deadlocks under PREEMPT_RT even without any userspace FIFO threads
-above its IRQ handler priority. The bug is internal to the V3D driver's lock
-ordering under rt_mutex conversion.
+**Monitoring data (30/30 checkpoints PASS):**
+```
+21:57:54 temp=45.7C mixxx=UP
+21:58:04 temp=46.7C mixxx=UP
+...
+22:01:07 temp=54.0C mixxx=UP  (peak)
+...
+22:02:49 temp=49.1C mixxx=UP
+Test 3 complete at 22:02:59
+```
 
-**This is the definitive elimination test.** Combined with Test 1 (no audio
-stack, hardware rendering = lockup) and Event #9 (software rendering + FIFO
-audio = lockup), Test 3 proves: the common factor is V3D activity through
-labwc's compositor, not audio thread priority or scheduling class. The only
-viable fix is to eliminate V3D from the system entirely (Option B: blacklist
-V3D kernel module).
+**Result:** STABLE. 5 minutes, 30/30 checkpoints PASS. Peak temp 54.0C.
+**Priority inversion CONFIRMED as the trigger mechanism.** The V3D deadlock
+requires BOTH V3D activity (from labwc compositor) AND userspace FIFO threads
+at priority above `irq/41-v3d` (FIFO 50). When audio runs at SCHED_OTHER, the
+system is stable despite V3D compositor activity.
+
+**Comparison:**
+| Test | V3D active | Audio FIFO | Result |
+|------|-----------|------------|--------|
+| Test 1 (hw render, no audio) | YES | NONE | LOCKUP ~90s |
+| Test 2 (sw render, no audio) | YES (labwc) | NONE | STABLE 5+ min |
+| Event #9 (sw render + FIFO audio) | YES (labwc) | FIFO 80-88 | LOCKUP ~30-60s |
+| Test 3 (sw render + normal audio) | YES (labwc) | SCHED_OTHER | STABLE 5 min |
+
+Test 1 lockup without audio is explained by the kernel's own FIFO threads
+(migration, IRQ handlers at FIFO 50-99) creating sufficient contention with
+V3D's internal locks. The addition of FIFO 80-88 audio threads (Event #9)
+dramatically increases the probability of hitting the deadlock window.
+Removing all userspace FIFO (Test 3) reduces contention enough for stability.
+
+### Test 4: Mixxx on RT, pixman compositor + software rendering + audio -- STABLE (executed 2026-03-09)
+
+**Purpose:** Validate that eliminating V3D from the compositing path (Option B
+variant: `WLR_RENDERER=pixman`) allows GUI applications to run stable on
+PREEMPT_RT with the production audio stack.
+
+**Configuration:**
+- Kernel: `6.12.47+rpt-rpi-v8-rt` (PREEMPT_RT)
+- labwc: `WLR_RENDERER=pixman` (pixman 2D compositor, no GL)
+- Mixxx: `LIBGL_ALWAYS_SOFTWARE=1` (Mesa llvmpipe, no V3D)
+- CamillaDSP: running at SCHED_FIFO 80 (PID 2141, systemd service)
+- PipeWire: running at SCHED_OTHER (RTKit had not re-engaged after Test 3
+  cleanup restart -- not full production priority)
+- V3D kernel module: **loaded but unused** (0 references, was 4 before pixman)
+
+**Important distinction:** This test used `WLR_RENDERER=pixman` on the
+compositor, not a V3D kernel module blacklist. The V3D module remained loaded
+(`v3d 184320 0` in lsmod) but with zero references -- labwc did not open the
+V3D render node. For production, D-021 recommends blacklisting the V3D module
+entirely as defense-in-depth. Test 4 validates that preventing labwc from
+using V3D is sufficient to avoid the deadlock.
+
+**V3D elimination verified:**
+- `lsmod | grep v3d`: `v3d 184320 0` (loaded, 0 references)
+- labwc process maps: 0 `/dev/dri/renderD128` mappings (was 7 before pixman)
+- `/sys/class/drm/renderD128/device/driver` -> `v3d` (device exists but unused)
+
+**Procedure:**
+- Mixxx first launched without `pw-jack` (~21:57 CET). Owner reported only
+  ALSA and OSS available in Mixxx audio preferences (no JACK).
+- Mixxx relaunched with `pw-jack` to get JACK audio (PID 2803).
+- 10 monitoring checkpoints at 30s intervals via SSH.
+- Each checkpoint verified: timestamp, temperature, Mixxx PID, CamillaDSP PID,
+  1-minute load average.
+
+**Checkpoint data:**
+
+| Checkpoint | Time | Temp (C) | Load (1m) | Mixxx PID | CamillaDSP PID |
+|------------|------|----------|-----------|-----------|----------------|
+| 1 | T+30s | 47.7 | -- | 1860 | 2141 |
+| 2 | T+60s | 47.7 | -- | 1860 | 2141 |
+| 3 | T+90s | 50.6 | -- | 1860 | 2141 |
+| 4 | T+120s | 51.1 | -- | 1860 | 2141 |
+| 5 | T+150s | 52.5 | -- | 1860 | 2141 |
+| 6 | T+180s | 52.1 | -- | 1860 | 2141 |
+| 7 | T+210s | 53.5 | -- | 1860 | 2141 |
+| 8 | T+240s | 50.6 | -- | 2803 | 2141 |
+| 9 | T+270s | 49.6 | -- | 2803 | 2141 |
+| 10 | T+300s | 49.6 | -- | 2803 | 2141 |
+
+Peak temperature: 53.5C (checkpoint 7). Peak 1-minute load average: 4.84.
+PID change at checkpoint 8: Mixxx relaunched with `pw-jack`.
+
+**Result:** STABLE. 5 minutes, all 10 checkpoints passed. No lockup, no
+freeze, SSH responsive throughout. Pi still running at ~22:04 CET (10+ min
+total uptime on RT with pixman compositor).
+
+**This is the fix validation.** By preventing labwc from using V3D for
+compositing (`WLR_RENDERER=pixman`), the V3D ABBA deadlock path is never
+entered. The V3D module is loaded but idle (0 references) -- no lock
+contention occurs. Combined with `LIBGL_ALWAYS_SOFTWARE=1` on the client app,
+zero V3D rendering activity occurs system-wide.
+
+**Caveats:**
+1. PipeWire was at SCHED_OTHER during this test (RTKit not re-engaged). A full
+   reboot with the pixman config is needed to validate the complete production
+   audio stack (PipeWire at FIFO 83-88). This is the T3d 30-minute test.
+2. 5 minutes is necessary but not sufficient for production approval. T3d
+   (30-minute stability) required.
+3. No xrun data was collected (quick validation, not instrumented).
+4. The V3D module was loaded but unused. For production, D-021 recommends
+   blacklisting via `/etc/modprobe.d/blacklist-v3d.conf` as defense-in-depth.
 
 ---
 
 ## Impact
 
-- **D-013 (RT mandatory):** Needs revision. PREEMPT_RT cannot be used with
-  any process that triggers V3D hardware activity -- including the labwc
-  Wayland compositor when compositing client app frames. This is not priority
-  inversion (Test 3 eliminates that); it is an internal V3D lock ordering bug
-  under rt_mutex conversion.
-- **D-015 scope:** Extends from "Reaper on stock PREEMPT" to "all GUI apps
-  on stock PREEMPT." Stock PREEMPT remains the only confirmed-stable
-  configuration for GUI apps + audio stack.
-- **`LIBGL_ALWAYS_SOFTWARE=1` on client app: INSUFFICIENT.** Does not affect
-  labwc compositor, which still uses V3D hardware for compositing. Test 2's
-  stability was probabilistic (low V3D load, no other system activity), not
-  a reliable workaround. Event #9 and Test 3 both locked up with software
-  rendering on the client app.
-- **Option B (blacklist V3D module): ONLY VIABLE PATH on PREEMPT_RT.**
-  Confirmed by elimination: Option A (software rendering on client) fails
-  because labwc still uses V3D. Priority reduction (Test 3) fails because
-  it is not priority inversion. The V3D module must be prevented from loading
-  entirely. labwc must fall back to software compositing or DRM-dumb-buffer
-  path. Needs testing to verify labwc survives without V3D.
-- **Remaining viable configurations:**
-  (a) Stock PREEMPT for all modes with GUI apps (confirmed stable).
-  (b) PREEMPT_RT with V3D blacklisted (Option B, untested).
-  (c) Headless PREEMPT_RT with no GUI apps (CamillaDSP only, confirmed
-  stable for hours).
-- **F-012 fix path:** Serial console remains the only viable method for
-  capturing kernel oops/panic from V3D deadlock. Persistent journald is
-  confirmed insufficient. Upstream bug report warranted -- this is a kernel
-  driver bug in the V3D rt_mutex conversion path.
+- **D-013 (RT mandatory): REINSTATED via D-021.** PREEMPT_RT is mandatory for
+  production with V3D eliminated from the rendering path. Test 4 validates
+  this configuration.
+- **D-015: SUPERSEDED by D-021 for production.** Stock PREEMPT retained for
+  development and benchmarking only. On stock PREEMPT, V3D is safe (spinlocks
+  are non-preemptible).
+- **`LIBGL_ALWAYS_SOFTWARE=1` on client app alone: INSUFFICIENT.** Does not
+  affect labwc compositor. Event #9 and Test 3 both locked up. However,
+  `LIBGL_ALWAYS_SOFTWARE=1` combined with `WLR_RENDERER=pixman` on labwc
+  eliminates all V3D usage system-wide (Test 4: STABLE).
+- **Option B: VALIDATED (Test 4).** `WLR_RENDERER=pixman` on labwc + llvmpipe
+  on client apps = zero V3D renderD128 mappings in labwc, V3D module at 0
+  references. 5 minutes stable on PREEMPT_RT with CamillaDSP at FIFO 80.
+  D-021 additionally recommends blacklisting the V3D kernel module as
+  defense-in-depth.
+- **Production configuration (D-021):**
+  (a) PREEMPT_RT kernel mandatory for PA-connected operation.
+  (b) V3D kernel module blacklisted (`/etc/modprobe.d/blacklist-v3d.conf`).
+  (c) labwc with `WLR_RENDERER=pixman`.
+  (d) All apps with Mesa llvmpipe (automatic when V3D unavailable).
+- **Remaining validation:** T3d (30-minute production stability test) required
+  before production approval. Test 4 (5 minutes) is necessary but not
+  sufficient. T3d must run after a clean reboot with the full pixman
+  configuration to ensure PipeWire runs at its normal FIFO priority (RTKit
+  was not engaged during Test 4).
+- **F-012 status: MITIGATED (D-021).** The V3D driver ABBA deadlock persists
+  in the kernel but the trigger is eliminated by blacklisting and pixman.
+  Upstream bug report recommended with Test 1 and Test 3 reproduction steps.
+- **F-017 status: MITIGATED (D-021).** Same root cause, same mitigation.

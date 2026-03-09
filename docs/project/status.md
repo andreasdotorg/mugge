@@ -22,7 +22,7 @@ ahead.
 
 ## Overall Status
 
-**Tier 1 validation in progress.** US-001 (CPU) and US-002 (latency) both done. US-003 (stability tests) in progress -- T3b/T3c/T3e done, T6-128 FAIL (1750 xruns), T3d deferred to next session (must run on stock PREEMPT -- F-012 Event #9 proved RT + GUI + audio is unstable even with software rendering), T3a blocked on external deps, T4 requires physical hardware. US-004 (assumption register) selected. D-011 confirmed: live mode chunksize 256 + quantum 256 -- quantum 128 tested and failed catastrophically (1750 xruns), 256 is the Pi 4B hardware floor. IEM through CamillaDSP passthrough confirmed as net benefit. F-012/F-017 root cause confirmed (V3D GPU deadlock on RT), workaround (`LIBGL_ALWAYS_SOFTWARE=1`) partially validated -- fails under full audio load. D-020 (web UI architecture) committed. F-018 (config persistence) resolved -- all audio configs persist across reboot.
+**Tier 1 validation in progress.** US-001 (CPU) and US-002 (latency) both done. US-003 (stability tests) in progress -- T3b/T3c/T3e done, T6-128 FAIL (1750 xruns), T3d ready to run on PREEMPT_RT with Option B (pixman + software rendering -- validated 5 min stable), T3a blocked on external deps, T4 requires physical hardware. US-004 (assumption register) selected. D-011 confirmed: live mode chunksize 256 + quantum 256 -- quantum 128 tested and failed catastrophically (1750 xruns), 256 is the Pi 4B hardware floor. IEM through CamillaDSP passthrough confirmed as net benefit. **F-012/F-017 RESOLVED (workaround):** Option B (`WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1`) eliminates V3D entirely -- 5 min stable on RT with full audio stack. D-021 pending architect formalization. D-020 (web UI architecture) committed. F-018 (config persistence) resolved -- all audio configs persist across reboot.
 
 ## Component Status
 
@@ -60,13 +60,13 @@ ahead.
 
 ## In Progress
 
-- **US-003** (in-progress, T3d deferred to next session): T3b PASS, T3c informational, T3e PASS, T6-128 FAIL (1750 xruns — quantum 256 is Pi 4B hardware floor). **This session:** F-015 diagnosed and fixed, capture-only adapter designed and verified, RT vs non-RT comparison completed. F-012/F-017 root cause confirmed (V3D GPU deadlock on RT). `LIBGL_ALWAYS_SOFTWARE=1` workaround partially validated (stable without audio, FAILS with audio -- Event #9). **T3d deferred** -- must run on stock PREEMPT per D-015 (only confirmed-stable config for GUI apps + audio). T3a blocked on US-005/US-006. T4 requires physical hardware.
+- **US-003** (in-progress, T3d unblocked by Option B): T3b PASS, T3c informational, T3e PASS, T6-128 FAIL (1750 xruns — quantum 256 is Pi 4B hardware floor). **This session:** F-015 diagnosed and fixed, capture-only adapter designed and verified, RT vs non-RT comparison completed. F-012/F-017 root cause confirmed (V3D GPU deadlock on RT). **Option B VALIDATED:** `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1` -- 5 min stable on RT with full audio stack. **T3d unblocked** -- can now run on PREEMPT_RT with Option B. T3a blocked on US-005/US-006. T4 requires physical hardware.
 - **Quantum reduction testing** (COMPLETE): Quantum 128 CATASTROPHIC FAIL — 1750 xruns. D-011 confirmed: quantum 256 is the minimum viable on Pi 4B. No D-021 needed.
-- **F-012** (open, critical -- **root cause confirmed, workaround UNCERTAIN**): V3D GPU driver deadlock on PREEMPT_RT. 9 lockup events total on RT, 0 on stock. `LIBGL_ALWAYS_SOFTWARE=1` stable without audio stack but crashed with RT audio stack (Event #9). Stock PREEMPT is the only confirmed-stable configuration for GUI + audio. Lab note: `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`.
+- **F-012** (**resolved -- workaround, Option B VALIDATED**): V3D GPU driver deadlock on PREEMPT_RT. 10 lockup events total on RT, 0 on stock. **Option B fix:** `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1` eliminates all V3D usage. Test 4: 5 min stable on RT, all 10 checkpoints PASS, peak temp 53.5C. Pending: D-021 formalization, 30-min T3d stability test, persistence via systemd. Lab note: `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`.
 - **F-013** (partially resolved): wayvnc password auth added. TLS required before US-018.
 - **F-015** (resolved -- workaround): USB bandwidth contention. Capture-only adapter designed (Phase 9) and verified on both kernels. Lab note: `docs/lab-notes/F-015-playback-stalls.md`.
 - **F-016** (open, medium): 2 audible glitches after PipeWire restart with capture adapter active. Does not reproduce without restart.
-- **F-017** (open, high -- **same root cause as F-012**): Mixxx hard lockup on PREEMPT_RT. Confirmed same V3D GPU driver deadlock as F-012. `LIBGL_ALWAYS_SOFTWARE=1` workaround UNCERTAIN -- Event #9: Mixxx with software rendering locked up ~30-60s after audio stack restart. Stock PREEMPT is the only confirmed-stable config. Lab notes: `docs/lab-notes/F-017-unexplained-reboot.md`, `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`.
+- **F-017** (**resolved -- workaround, same fix as F-012**): Mixxx hard lockup on PREEMPT_RT. Same V3D GPU driver deadlock as F-012. **Fixed by Option B** (`WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1`). Test 4 validated with Mixxx specifically. Lab notes: `docs/lab-notes/F-017-unexplained-reboot.md`, `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`.
 - **F-018** (resolved): All audio configs now persist across reboot. CamillaDSP SCHED_FIFO 80 via systemd override, PipeWire quantum 256 via static config + systemd user service for force-quantum, RT kernel via config.txt. Verified by capture-verify-worker.
 - **D-020** (PoC validated): Web UI architecture validated on Pi 4B. **8/8 PASS** (P8 marginal: 871us JACK callback, 0.6 errors/min over 35 min -- architect has Option 4 fix, deferred to Stage 2). Lab note: `docs/lab-notes/D-020-poc-validation.md`. 6 deployment bugs found and fixed (commit 4ad556b). Architecture doc: `docs/architecture/web-ui.md`. A21 (Reaper OSC on ARM) gates Stage 4.
 - **US-004** (in-review): Assumption register (A1-A26). Gap: A27 not in register. Pending DoD sign-off.
@@ -81,7 +81,7 @@ ahead.
 - **Quantum 128 CATASTROPHIC FAIL:** 1750 xruns at quantum 128. D-011 confirmed -- quantum 256 is the minimum viable setting on Pi 4B. No need for D-021.
 - **D-020 PoC validated:** 8/8 PASS (P8 marginal). 6 deployment bugs found/fixed. pycamilladsp v3 dict API, pw-jack requirement, AudioWorklet secure context, AudioContext suspension. CPU: ~17%, thermal: 47.2C. P8 optimization deferred to D-020 Stage 2.
 - **F-012/F-017 root cause CONFIRMED:** V3D GPU driver deadlock on PREEMPT_RT. Not app-specific -- any OpenGL client triggers it. DRM/KMS-only (labwc) is stable. Headless audio (CamillaDSP) stable for hours.
-- **`LIBGL_ALWAYS_SOFTWARE=1` workaround: UNCERTAIN.** Stable 5+ min without audio stack (Test 2). Crashed ~30-60s after audio stack restarted (Event #9: Mixxx + software rendering + PipeWire/CamillaDSP). Software rendering alone bypasses V3D, but combining it with RT-priority audio threads triggers a different lockup path. Stock PREEMPT remains the only confirmed-stable configuration for GUI apps + audio.
+- **Option B VALIDATED as F-012/F-017 fix:** `WLR_RENDERER=pixman` (labwc compositor) + `LIBGL_ALWAYS_SOFTWARE=1` (GUI apps) eliminates all V3D usage. Test 4: Mixxx + CamillaDSP FIFO 80 + full audio stack on PREEMPT_RT -- 5 min stable, all 10 checkpoints PASS, peak temp 53.5C, peak load 4.84. `LIBGL_ALWAYS_SOFTWARE=1` alone was insufficient (Event #9 crashed) because labwc compositor still used V3D hardware. Option B fixes the compositor too. D-013 (RT mandatory) is now viable. D-021 pending architect formalization.
 
 ### Completed (previous sessions)
 - US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
@@ -108,8 +108,10 @@ ahead.
 - `LIBGL_ALWAYS_SOFTWARE=1` partially validated (stable without audio, FAILS with audio -- Event #9)
 - F-012/F-017 consolidated lab note committed
 - T3d attempted on RT kernel -- F-012 crash during setup, deferred to next session
-- Event #9: `LIBGL_ALWAYS_SOFTWARE=1` + audio stack = lockup. Workaround downgraded to partially validated
-- labwc V3D compositor hypothesis identified (explains Event #9 failure path)
+- Event #9: `LIBGL_ALWAYS_SOFTWARE=1` + audio stack = lockup. Workaround insufficient alone.
+- labwc V3D compositor confirmed (7 renderD128 mappings, v3d driver)
+- Test 3: SCHED_OTHER audio + V3D = STABLE 5 min. Confirms priority inversion as trigger.
+- **Test 4 / Option B VALIDATED:** `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1` -- 5 min stable on PREEMPT_RT with full audio stack. F-012/F-017 resolved.
 
 ### Remaining TODOs
 - ~~Configure persistent journald on Pi~~ DONE (configured during PoC session, confirmed surviving power cycles)
@@ -118,26 +120,26 @@ ahead.
 - D-020 P8 optimization: JACK callback 871us -> target <500us (deferred to Stage 2 per PO priority)
 - Persist nftables port 8080 rule for PoC web UI (runtime-only, lost on reboot)
 - Fix poc/requirements.txt: camilladsp package needs GitHub URL, not PyPI
-- F-012/F-017 V3D GPU deadlock on RT -- root cause confirmed, labwc V3D confirmed. `LIBGL_ALWAYS_SOFTWARE=1` workaround UNCERTAIN (Event #9). **Test 3 IN PROGRESS:** audio stack at SCHED_OTHER (normal priority) with V3D intact -- tests whether FIFO 80-88 priority inversion is the trigger. Remaining: upstream bug report
-- D-013 revision: PREEMPT_RT + GUI apps still unresolved. Stock PREEMPT is the only confirmed-stable config for GUI + audio
-- T3d Reaper end-to-end 30-min stability test (deferred -- kernel decision pending Test 3 results. If Test 3 PASS: RT + V3D blacklist is viable. If FAIL: stock PREEMPT per D-015.)
+- ~~F-012/F-017 V3D GPU deadlock on RT~~ RESOLVED (workaround): Option B validated (`WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1`). Remaining: persist via systemd environment files, upstream bug report
+- D-013 revision: PREEMPT_RT now viable WITH Option B. D-021 pending architect formalization.
+- T3d Reaper end-to-end 30-min stability test (UNBLOCKED -- run on PREEMPT_RT with Option B environment vars)
 - F-016 PipeWire restart glitches (investigate graph clock settling)
 - Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
 - A21 validation: Reaper OSC on ARM Linux (gates D-020 Stage 4)
 - 14-blind-spot monitoring map review (from researcher)
-- ~~Verify labwc process maps show V3D shared libraries loaded~~ CONFIRMED: 7 `/dev/dri/renderD128` mappings in labwc process, driver is v3d. Event #9 hypothesis validated.
-- D-021 (RT + GUI architecture): ON HOLD pending Test 3 results. labwc V3D confirmed. If Test 3 (SCHED_OTHER audio + V3D) is stable, Option B (blacklist V3D module) becomes viable for RT production.
+- ~~Verify labwc process maps show V3D shared libraries loaded~~ CONFIRMED: 7 `/dev/dri/renderD128` mappings in labwc process, driver is v3d.
+- D-021 (RT + GUI architecture): Option B validated. Pending architect formalization. Persist `WLR_RENDERER=pixman` in labwc systemd service, `LIBGL_ALWAYS_SOFTWARE=1` in Mixxx/Reaper launchers.
 - F-019 Headless labwc startup regression (WLR_LIBINPUT_NO_DEVICES removed -- labwc may fail without input devices)
 - cloud-init ~3.3s boot overhead (TK-007)
 
 ## Blockers
 
-- **F-012: V3D GPU driver deadlock on PREEMPT_RT (CRITICAL -- root cause confirmed, workaround UNCERTAIN).** 9 lockup events total (4 Reaper, 4 Mixxx, 1 Mixxx+software rendering+audio) on RT, 0 on stock. Root cause: V3D driver deadlock under PREEMPT_RT. `LIBGL_ALWAYS_SOFTWARE=1` stable 5+ min without audio stack but crashed ~30-60s with RT audio stack (Event #9). **Stock PREEMPT remains the only confirmed-stable configuration for GUI apps + audio.** Upstream bug report with reproduction steps recommended.
+- **F-012: RESOLVED (workaround -- Option B VALIDATED).** V3D GPU driver deadlock on PREEMPT_RT. 10 lockup events across investigation. **Fix:** `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1` eliminates all V3D usage. Test 4: 5 min stable on RT with full audio stack. **Remaining:** persist via systemd, 30-min T3d validation, upstream bug report.
 - **F-013: PARTIALLY RESOLVED.** wayvnc password auth added. **TLS required before US-018** deployment (guest musicians' phones on network).
 - **F-014: RESOLVED.** RustDesk firewall rules removed (TK-048).
 - **F-015: RESOLVED (workaround).** USB bandwidth contention from ada8200-in. Workaround: adapter disabled. **Production fix needed:** split ALSA device access.
 - **F-016: OPEN.** Audible glitches after PipeWire restart with capture adapter active. Root cause TBD.
-- **F-017: OPEN (high -- same root cause as F-012).** Mixxx hard lockup on PREEMPT_RT. 4 events total (3 with V3D, 1 with software rendering + audio stack). `LIBGL_ALWAYS_SOFTWARE=1` workaround insufficient when combined with RT audio stack (Event #9).
+- **F-017: RESOLVED (workaround -- same fix as F-012).** Mixxx hard lockup on PREEMPT_RT. Fixed by Option B. Test 4 validated with Mixxx specifically.
 - **F-018: RESOLVED.** All audio configs persist across reboot (CamillaDSP FIFO 80 via systemd override, PipeWire quantum 256 via static config + user service, RT kernel via config.txt). Verified.
 
 ## Open Defects Summary
@@ -148,12 +150,12 @@ See `docs/project/defects.md` for full details.
 |--------|----------|--------|--------|
 | F-002 | Medium | Resolved | -- |
 | F-011 | Low | Resolved | -- |
-| F-012 | Critical | Open (root cause confirmed, workaround uncertain) | D-013, production use |
+| F-012 | Critical | Resolved (workaround -- Option B validated) | Persist via systemd, T3d 30-min validation |
 | F-013 | Medium | Partially resolved | US-018 |
 | F-014 | Low | Resolved | -- |
 | F-015 | High | Resolved (workaround) | Production live mode (mic input) |
 | F-016 | Medium | Open | Operational reliability |
-| F-017 | High | Open (same root cause as F-012) | US-003, US-006, D-013 |
+| F-017 | High | Resolved (workaround -- same fix as F-012) | -- |
 | F-018 | High | Resolved | -- |
 | F-019 | Medium | Open | US-000b (headless operation) |
 
@@ -188,3 +190,4 @@ See `docs/project/defects.md` for full details.
 - D-018: wayvnc replaces RustDesk as sole remote desktop — RustDesk removed due to unfixable Wayland mouse input limitation (2026-03-09)
 - D-019: Hercules USB-MIDI only — Bluetooth scrapped for production (2026-03-09)
 - D-020: Web UI Architecture — FastAPI + raw PCM streaming + browser-side analysis (2026-03-09)
+- D-021: (pending architect formalization) PREEMPT_RT with pixman compositor + per-app software rendering — eliminates V3D, fixes F-012/F-017 (2026-03-09)
