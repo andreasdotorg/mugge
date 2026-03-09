@@ -290,3 +290,37 @@ injected via `wlr-virtual-keyboard-v1` / `wlr-virtual-pointer-v1`.
 **RustDesk connection path (view-only):** client connects to
 `192.168.178.185:21118` (TCP) -- RustDesk captures `NOOP-fallback` output via
 xdg-desktop-portal-wlr (auto-approved) -- input injection broken.
+
+---
+
+## Validation: Mixxx GUI Smoke Test via VNC
+
+**Date:** 2026-03-09
+**Operator:** owner (visual confirmation via Remmina VNC client)
+
+First real use of the wayvnc remote desktop to visually verify a GUI
+application on the headless Pi.
+
+**Command:**
+
+```bash
+WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000 DISPLAY=:0 mixxx &
+```
+
+**Rendering path:** Mixxx 2.5.0 launched via XWayland (`qt6-wayland` not
+installed, labwc auto-started Xwayland on `:0`). The application rendered on
+the `NOOP-fallback` virtual display and was captured by wayvnc.
+
+**Result:** PASS. Owner visually confirmed GUI rendering and interacted with
+the music library dialog via VNC (Remmina on macOS). This completes TK-015
+visual confirmation -- previously "partial pass (GUI rendering not visually
+confirmed)", now full PASS.
+
+**Non-fatal warnings (expected):**
+- ALSA PCM configuration noise (harmless under PipeWire)
+- "JACK server not running" (PipeWire JACK bridge not connected to Mixxx --
+  expected, Mixxx was launched standalone for GUI smoke test only)
+
+**Note:** Installing `qt6-wayland` (6.8.2-4 available in repos) would enable
+native Wayland rendering, eliminating XWayland overhead. Not required for
+functionality but worth considering for production.
