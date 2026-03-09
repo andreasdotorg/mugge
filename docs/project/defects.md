@@ -55,7 +55,8 @@ US-000b T7.
 
 **Description:** GUI applications using OpenGL (Reaper, Mixxx) cause
 reproducible hard kernel lockups on `6.12.47+rpt-rpi-v8-rt` within 1-2
-minutes of launch. 7 events total across both apps (Reaper 4/4, Mixxx 3/3).
+minutes of launch. 9 events total across both apps (Reaper 4, Mixxx 3,
+Test 1 isolated GPU 1, Event #9 software rendering + audio 1).
 CamillaDSP (headless, no GPU) is stable for hours on the same kernel. Not
 OOM, not thermal (lockups at 45-47C), not a userspace issue (systemd watchdog
 stops being fed, confirming kernel-level lockup). BCM2835 hardware watchdog
@@ -72,6 +73,13 @@ identical lockup pattern. F-017 confirmed as same root cause class.
 - Crash 5 (2026-03-09 ~21:23 CET, Mixxx): lockup within ~1 min. Temp 46.7C.
 - Crash 6 (2026-03-09 ~21:27 CET, Mixxx): lockup within ~1-2 min after
   power cycle. Conditions not fully controlled.
+- Crash 7 / Test 1 (2026-03-09 ~21:27 CET, Mixxx): lockup with NO audio stack
+  (PipeWire + CamillaDSP stopped). Confirms V3D deadlock is internal to kernel.
+- PASS / Test 2 (2026-03-09 ~21:31 CET, Mixxx): stable 5+ min with
+  `LIBGL_ALWAYS_SOFTWARE=1` and NO audio stack. Software rendering bypasses V3D.
+- Crash 9 (2026-03-09 ~21:37 CET, Mixxx): `LIBGL_ALWAYS_SOFTWARE=1` + audio stack
+  (PipeWire + CamillaDSP restarted). Lockup ~30-60s after audio stack restart.
+  Temp ~53C. Software rendering alone insufficient when combined with RT audio.
 - PASS (stock PREEMPT): Both Reaper and Mixxx run without issue on stock kernel.
 
 **Root cause (confirmed by Test 1):** V3D GPU driver deadlock under PREEMPT_RT.
@@ -81,20 +89,23 @@ threads (Test 1: lockup reproduced with CamillaDSP and PipeWire stopped, no
 userspace RT processes, only `irq/41-v3d` kernel thread at SCHED_FIFO 50).
 Only OpenGL clients trigger it; DRM/KMS-only (labwc) is stable.
 
-**Workaround (VALIDATED):** `LIBGL_ALWAYS_SOFTWARE=1` forces Mesa software
-rendering (llvmpipe), bypassing the V3D GPU driver entirely. Test 2 confirmed:
-Reaper stable for 5+ minutes on PREEMPT_RT with software rendering, where
-hardware rendering locks up within 1-2 minutes. This enables D-013 (RT kernel
-mandatory) WITH GUI applications -- previously thought impossible.
+**Workaround (PARTIALLY VALIDATED):** `LIBGL_ALWAYS_SOFTWARE=1` forces Mesa
+software rendering (llvmpipe), bypassing the V3D GPU driver in the client app.
+Test 2 confirmed: stable 5+ min on PREEMPT_RT with software rendering and NO
+audio stack. However, Event #9 FAILED: Mixxx with `LIBGL_ALWAYS_SOFTWARE=1`
+locked up ~30-60s after PipeWire + CamillaDSP were restarted. The workaround
+is insufficient when combined with RT-priority audio threads (PipeWire FIFO 88,
+CamillaDSP FIFO 80). Hypothesis: labwc compositor still uses V3D hardware for
+compositing; RT audio threads trigger the V3D deadlock through the compositor
+path even when the client app uses software rendering.
 
-**Previous workaround:** D-015 -- all OpenGL apps on stock PREEMPT kernel only.
-Superseded by `LIBGL_ALWAYS_SOFTWARE=1` if performance is acceptable.
+**Active workaround:** D-015 -- all OpenGL apps on stock PREEMPT kernel only.
+This remains the only confirmed-stable configuration for GUI apps + audio stack.
 
-**Fix (production):** Set `LIBGL_ALWAYS_SOFTWARE=1` in the environment for
-Reaper and Mixxx systemd units or launcher scripts. Performance impact needs
-validation: software rendering uses CPU instead of GPU, which may affect DSP
-headroom. Needs a stability test (T3d) with software rendering to confirm
-CPU impact is acceptable.
+**Fix (production):** TBD. `LIBGL_ALWAYS_SOFTWARE=1` alone is not sufficient.
+Options under investigation: (a) force labwc compositor to software rendering,
+(b) blacklist V3D kernel module entirely, (c) headless compositor (Xvfb/cage),
+(d) stock PREEMPT for all modes with GUI apps. See lab note for details.
 
 **Upstream fix:** V3D driver needs PREEMPT_RT-safe locking. Report to kernel
 maintainers with reproduction steps (Test 1 from lab note). Serial console
@@ -249,11 +260,15 @@ stable.
 This is a safety concern -- an uncontrolled reboot mid-performance causes
 full audio dropout on all channels.
 
-**Fix:** Tracked under F-012. Serial console required for kernel oops capture.
-Planned V3D isolation tests documented in lab note.
+**Fix:** Tracked under F-012. Same root cause (V3D GPU driver deadlock on RT).
 
-**Workaround:** Run Mixxx on stock PREEMPT kernel only (extends D-015 scope
-beyond Reaper to include Mixxx).
+**Workaround (`LIBGL_ALWAYS_SOFTWARE=1`): UNCERTAIN.** Stable for 5+ min without
+audio stack (Test 2 under F-012). Crashed ~30-60s after audio stack restarted
+(Event #9, lockup with Mixxx + software rendering + PipeWire/CamillaDSP). The
+workaround may be insufficient when combined with RT-priority audio threads.
+Needs further investigation.
+
+**Fallback workaround:** Run Mixxx on stock PREEMPT kernel only (D-015).
 
 ---
 

@@ -65,6 +65,32 @@ minutes.
 
 - Conditions not fully controlled -- test may need repeating with clean state
 
+### Event 4: Crash #9 (~21:37-38 CET) -- software rendering + audio stack
+
+Mixxx was running with `LIBGL_ALWAYS_SOFTWARE=1` (software rendering) and had
+been stable for 5+ minutes WITHOUT the audio stack (Test 2 conditions). PipeWire
+and CamillaDSP were then restarted. ~30-60 seconds after the audio stack came
+back, the Pi suddenly rebooted.
+
+- Temperature: rising toward ~53C (software rendering CPU load + audio stack)
+- Mixxx had been stable 5+ minutes with software rendering alone
+- Crash occurred shortly after audio stack (PipeWire + CamillaDSP) restarted
+
+**Significance:** `LIBGL_ALWAYS_SOFTWARE=1` only affects the client app (Mixxx).
+labwc (the Wayland compositor) still uses V3D hardware OpenGL for compositing.
+The rendering pipeline is: Mixxx (llvmpipe) -> SHM buffer -> labwc (V3D
+hardware GL compositing) -> DRM/KMS scanout. When the RT audio stack restarted
+(PipeWire FIFO 88, CamillaDSP FIFO 80), the V3D deadlock was triggered through
+labwc's compositor path -- the same V3D lock contention, just reached through
+the compositor instead of the client app.
+
+This explains why Test 2 passed (no audio stack = no RT thread contention with
+V3D compositor) and Event #9 failed (audio stack RT threads + V3D compositor =
+priority inversion triggering the deadlock).
+
+**Diagnostic data:** Pending -- awaiting change-manager's confirmation that
+labwc process maps show V3D shared libraries loaded.
+
 ---
 
 ## Persistent Journald Results
@@ -89,17 +115,20 @@ All events across this session and previous sessions combined:
 | Reaper | PREEMPT_RT | YES | 4/4 | 45-69C |
 | Mixxx | PREEMPT_RT | YES | 3/3 | 45-69C |
 | Mixxx (no audio stack) | PREEMPT_RT | YES | 1/1 (Test 1) | 42-46C |
-| Mixxx (`LIBGL_ALWAYS_SOFTWARE=1`) | PREEMPT_RT | NO | 2+ min stable (Test 2) | 46-51C |
+| Mixxx (`LIBGL_ALWAYS_SOFTWARE=1`, no audio) | PREEMPT_RT | NO | 5+ min stable (Test 2) | 46-51C |
+| Mixxx (`LIBGL_ALWAYS_SOFTWARE=1`, + audio) | PREEMPT_RT | YES | 1/1 (Event #9) | ~53C |
 | CamillaDSP (headless) | PREEMPT_RT | NO | Hours stable | 45-50C |
 | labwc (no app) | PREEMPT_RT | NO | Hours stable | 45-50C |
 | Reaper | stock PREEMPT | NO | Stable | -- |
 | Mixxx | stock PREEMPT | NO | Stable (US-000b) | -- |
 
-**Pattern:** 8/8 lockups involve OpenGL rendering through the V3D hardware
-driver on PREEMPT_RT. Software rendering (`LIBGL_ALWAYS_SOFTWARE=1`) is
-stable. Headless processes (CamillaDSP) and DRM/KMS-only compositors (labwc)
-are stable. Both applications are stable on stock PREEMPT. The V3D hardware
-driver is the confirmed root cause.
+**Pattern:** 9 lockup events total. All involve OpenGL on PREEMPT_RT. Software
+rendering (`LIBGL_ALWAYS_SOFTWARE=1`) is stable WITHOUT the audio stack (Test 2)
+but crashed when the audio stack was restarted (Event #9). This complicates the
+workaround -- `LIBGL_ALWAYS_SOFTWARE=1` alone may be insufficient when combined
+with RT-priority audio threads. The V3D hardware rasterizer remains the confirmed
+primary root cause, but the interaction between software rendering, labwc
+compositing, and the RT audio stack needs further investigation.
 
 ---
 
@@ -123,36 +152,83 @@ Based on cumulative evidence:
 
 **V3D hardware rasterizer deadlock under PREEMPT_RT (confirmed).** On
 PREEMPT_RT, spinlocks are converted to sleeping mutexes with priority
-inheritance. The V3D 3D rasterizer path (BCM2711 GPU) holds a lock that
-deadlocks under these conditions. The deadlock is internal to the V3D
-rasterizer -- it does NOT require interaction with userspace RT-priority
-threads (confirmed by Test 1), and it does NOT affect the DRM/KMS/GEM display
-path (labwc compositing is stable). The `irq/41-v3d` kernel thread
-(SCHED_FIFO 50) is present regardless of userspace audio processes. Any
-OpenGL client triggers V3D hardware rasterization, which hits the deadlocking
-lock path. Software rasterization (`LIBGL_ALWAYS_SOFTWARE=1`) avoids the V3D
-hardware path entirely and is stable (confirmed by Test 2).
+inheritance. The V3D 3D rasterizer (BCM2711 GPU) holds a lock that deadlocks
+under these conditions. The `irq/41-v3d` kernel thread (SCHED_FIFO 50) is
+present regardless of userspace audio processes. Any process that triggers V3D
+hardware rasterization -- whether a client app or the Wayland compositor --
+hits the deadlocking lock path.
+
+**Critical correction (Event #9 analysis):** labwc (wlroots-based Wayland
+compositor) uses V3D hardware OpenGL for compositing. The earlier assertion
+that "labwc uses DRM/KMS-only" was incorrect. The actual rendering pipeline is:
+
+```
+Client app (Mixxx/Reaper)
+    |
+    | SHM buffer (if LIBGL_ALWAYS_SOFTWARE=1) or DMA-BUF (if V3D)
+    v
+labwc compositor (V3D hardware GL compositing)
+    |
+    | texture upload → composite → scanout
+    v
+DRM/KMS display output
+```
+
+`LIBGL_ALWAYS_SOFTWARE=1` only affects the client application's rendering.
+labwc still uses V3D hardware for compositing (texture uploads, blending,
+scanout). When RT-priority audio threads (PipeWire FIFO 88, CamillaDSP FIFO
+80) are running, the V3D deadlock can be triggered through labwc's compositor
+path even if the client app uses software rendering.
+
+This explains all observations:
+- **labwc alone (no client app):** Stable -- minimal V3D compositor activity
+  (no client buffers to composite). V3D is loaded but idle.
+- **labwc + GUI app (no audio stack):** Lockup -- GUI app generates frames,
+  labwc composites via V3D, V3D deadlock triggered by `irq/41-v3d` alone.
+- **labwc + GUI app software rendering (no audio stack):** Stable (Test 2) --
+  lower V3D compositor load (SHM texture upload only, no V3D client rendering),
+  no RT audio thread contention. V3D activity below deadlock threshold.
+- **labwc + GUI app software rendering + audio stack:** Lockup (Event #9) --
+  V3D compositor still active for compositing; RT audio threads at FIFO 80-88
+  create priority inversion with V3D kernel thread at FIFO 50, triggering the
+  deadlock.
+- **Stock PREEMPT kernel:** Immune -- spinlocks remain spinlocks, no sleeping
+  mutex conversion, no priority inversion possible.
 
 Evidence:
-- Only OpenGL clients using V3D hardware rasterization trigger the lockup
-- `LIBGL_ALWAYS_SOFTWARE=1` avoids V3D rasterizer and is stable (Test 2)
-- CamillaDSP (no GPU) never triggers it (no V3D activity)
-- labwc alone is stable (DRM/KMS/GEM path does not use V3D 3D rasterizer)
-- Stock PREEMPT kernel is immune (spinlocks remain spinlocks, no sleeping mutex conversion)
-- Temperature is not a factor (lockups at 42-47C, well below throttle threshold)
-- **Test 1 (isolation):** Lockup with NO userspace RT processes -- CamillaDSP
-  stopped, PipeWire stopped, only kernel RT threads running. Rules out priority
-  inversion with audio stack entirely.
-- **Test 2 (confirmation):** STABLE with `LIBGL_ALWAYS_SOFTWARE=1` -- bypasses
-  V3D rasterizer, no lockup after 2+ minutes past all previous lockup thresholds.
+- Test 1: Lockup with NO userspace RT processes (V3D deadlock is internal)
+- Test 2: STABLE with software rendering and NO audio stack (V3D compositor
+  load below deadlock threshold without RT contention)
+- Event #9: LOCKUP with software rendering + audio stack (V3D compositor +
+  RT audio = deadlock through compositor path)
+- labwc alone: Stable (no client frames to composite, minimal V3D activity)
+- CamillaDSP headless: Stable (no V3D activity)
+- Stock PREEMPT: Always stable (no sleeping mutex conversion)
 
-**Note on earlier F-012 `LIBGL_ALWAYS_SOFTWARE=1` tests (crashes 1-3):** Those
-tests still locked up despite software rendering. The likely explanation:
-labwc's compositor was still using V3D hardware for compositing, triggering
-the deadlock independently of the application's rendering path. Test 2
-succeeded because the audio stack was stopped and the system load was lower,
-reducing V3D compositor activity. Production workaround must ensure all GL
-paths use software rendering.
+### Proposed Fix Options (from architect)
+
+**Option A: `LIBGL_ALWAYS_SOFTWARE=1` on labwc compositor itself.**
+Force the compositor to use llvmpipe for compositing instead of V3D hardware.
+Would eliminate all V3D rasterization from the system. Trade-off: compositor
+performance degraded (CPU-based compositing), higher CPU and thermal load.
+Feasibility: uncertain -- wlroots may not honor the env var for its own GL
+context, or may require a different mechanism.
+
+**Option B: Blacklist the V3D kernel module.**
+Prevent the V3D driver from loading entirely. labwc falls back to
+software-only or DRM-dumb-buffer compositing. Trade-off: no hardware
+acceleration for anything. May break labwc entirely if it requires GL.
+Feasibility: needs testing.
+
+**Option C: Headless compositor (no V3D).**
+Replace labwc with a headless Wayland compositor (e.g., `cage`, `weston
+--no-compositor`) or run GUI apps under Xvfb. No V3D involvement at all.
+Trade-off: no hardware-accelerated display. Acceptable for an audio
+workstation where visual performance is not critical.
+
+**D-021 (RT + GUI architecture decision): ON HOLD** pending resolution of
+the labwc V3D question. Confirmation needed: change-manager to verify labwc
+process maps show V3D shared libraries loaded.
 
 ---
 
@@ -179,8 +255,11 @@ driver deadlocks under PREEMPT_RT independently of any userspace RT-priority
 threads. The `irq/41-v3d` kernel thread at SCHED_FIFO 50 is present
 regardless of the audio stack.
 
-**This is the definitive finding.** The root cause is in the V3D kernel
-driver, not in the interaction between V3D and userspace audio scheduling.
+**This is the definitive finding for direct V3D deadlock.** The V3D kernel
+driver can deadlock on its own without userspace RT threads. However, Event #9
+later showed that RT audio threads can also trigger the deadlock indirectly
+through labwc's V3D compositor path (see Event #9 analysis and updated
+hypothesis).
 
 ### Test 2: Mixxx on RT, software rendering -- STABLE (executed 2026-03-09)
 
@@ -210,23 +289,39 @@ rasterizer entirely, confirming that the V3D rasterizer is the root cause.
   to automatic reboot. This provides a recovery mechanism but does not prevent
   the audio dropout during lockup.
 
-### Test 3: Mixxx on RT, Xvfb -- UNNECESSARY
+### Test 3: Mixxx on RT, Xvfb -- NOT YET EXECUTED (now relevant)
 
 **Purpose:** Bypass GPU entirely (pure CPU rendering, no V3D involvement).
-**Status:** Not executed. Test 2 is sufficient to confirm the V3D hardware
-driver as root cause. Xvfb test would provide the same information (no V3D
-involvement = stable).
+**Status:** Not executed. Originally deemed unnecessary after Test 2, but
+Event #9 (software rendering crashed with audio stack) makes this test
+relevant again. Xvfb bypasses both V3D rasterization AND labwc's DRM/KMS
+compositing path -- if labwc compositor is the source of residual V3D
+activity in Event #9, Xvfb would eliminate it entirely.
 
 ---
 
 ## Impact
 
 - **D-013 (RT mandatory):** Needs revision. PREEMPT_RT cannot be used with
-  any GUI application that performs OpenGL rendering. Either GUI apps run
-  headless (Xvfb) on RT, or the system runs stock PREEMPT for modes
-  requiring GUI apps (Reaper, Mixxx).
+  any GUI application performing V3D hardware rasterization. Software rendering
+  workaround (`LIBGL_ALWAYS_SOFTWARE=1`) is stable without the audio stack but
+  crashed when the audio stack was restarted (Event #9). Status: UNCERTAIN.
 - **D-015 scope:** Extends from "Reaper on stock PREEMPT" to "all OpenGL
-  apps on stock PREEMPT."
-- **F-012 fix path:** Serial console remains the only viable diagnostic
-  capture method. Persistent journald is confirmed insufficient for hard
-  lockups.
+  apps on stock PREEMPT." Stock PREEMPT remains the only confirmed-stable
+  configuration for GUI apps + audio stack.
+- **Production workaround (`LIBGL_ALWAYS_SOFTWARE=1`):** **UNCERTAIN.**
+  Stable for 5+ minutes without audio stack (Test 2). Crashed ~30-60s after
+  audio stack restarted (Event #9). This may indicate: (a) labwc compositor
+  uses V3D hardware for compositing even when client apps use software
+  rendering, and RT audio threads trigger the V3D deadlock through that path;
+  (b) CPU contention between llvmpipe software rendering and SCHED_FIFO 80-88
+  audio threads on 4 cores; (c) thermal or unrelated crash. Needs further
+  investigation before this workaround can be recommended for production.
+- **F-012 fix path:** Serial console remains the only viable method for
+  capturing kernel oops/panic from V3D deadlock. Persistent journald is
+  confirmed insufficient for hard lockups. Upstream bug report may be
+  warranted once serial capture provides a stack trace.
+- **Remaining viable paths:** (a) Stock PREEMPT for all modes with GUI apps
+  (confirmed stable). (b) Xvfb on PREEMPT_RT (untested -- Test 3 not yet
+  executed, may now be worth running). (c) Headless PREEMPT_RT (CamillaDSP
+  only, no GUI apps -- confirmed stable for hours).

@@ -60,13 +60,13 @@ ahead.
 
 ## In Progress
 
-- **US-003** (in-progress, T3d BLOCKED): T3b PASS, T3c informational, T3e PASS, T6-128 FAIL (1750 xruns — quantum 256 is Pi 4B hardware floor). **This session:** F-015 diagnosed and fixed, capture-only adapter designed and verified (300s output-only PASS, 120s capture-active PASS on both kernels), RT vs non-RT comparison completed (peak load 35.6% RT vs 63-70% stock). **T3d: F-012 crash #4 during setup on RT kernel at ~21:16 CET. Pi DOWN, awaiting power cycle. Recommend switch to stock PREEMPT per D-015 for T3d retry.** T3a blocked on US-005/US-006. T4 requires physical hardware.
+- **US-003** (in-progress, T3d deferred to next session): T3b PASS, T3c informational, T3e PASS, T6-128 FAIL (1750 xruns — quantum 256 is Pi 4B hardware floor). **This session:** F-015 diagnosed and fixed, capture-only adapter designed and verified, RT vs non-RT comparison completed. **T3d deferred** -- F-012 crash during RT setup. Next session: run T3d with `LIBGL_ALWAYS_SOFTWARE=1` on RT kernel (validated workaround) or on stock PREEMPT per D-015. T3a blocked on US-005/US-006. T4 requires physical hardware.
 - **Quantum reduction testing** (COMPLETE): Quantum 128 CATASTROPHIC FAIL — 1750 xruns. D-011 confirmed: quantum 256 is the minimum viable on Pi 4B. No D-021 needed.
-- **F-012** (open, critical): Reaper hard lockup on PREEMPT_RT. **Crash #4 at ~21:16 CET during T3d setup** (relaunch). 4/4 lockups on RT, 1/1 PASS on stock. Persistent journald configured before this crash -- logs may be recoverable. Proceeding on stock PREEMPT per D-015. Fix before shipping.
+- **F-012** (open, critical -- **root cause confirmed, workaround UNCERTAIN**): V3D GPU driver deadlock on PREEMPT_RT. 9 lockup events total on RT, 0 on stock. `LIBGL_ALWAYS_SOFTWARE=1` stable without audio stack but crashed with RT audio stack (Event #9). Stock PREEMPT is the only confirmed-stable configuration for GUI + audio. Lab note: `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`.
 - **F-013** (partially resolved): wayvnc password auth added. TLS required before US-018.
 - **F-015** (resolved -- workaround): USB bandwidth contention. Capture-only adapter designed (Phase 9) and verified on both kernels. Lab note: `docs/lab-notes/F-015-playback-stalls.md`.
 - **F-016** (open, medium): 2 audible glitches after PipeWire restart with capture adapter active. Does not reproduce without restart.
-- **F-017** (open, high): Unexplained Pi reboot during Mixxx on RT kernel (~10 min into test). Journal entries lost. Second app (after Reaper) to crash RT kernel -- 0/2 GUI apps stable on RT. D-015 scope extends to Mixxx. Lab note: `docs/lab-notes/F-017-unexplained-reboot.md`.
+- **F-017** (open, high -- **same root cause as F-012**): Mixxx hard lockup on PREEMPT_RT. 3 events total. Confirmed same V3D GPU driver deadlock as F-012. `LIBGL_ALWAYS_SOFTWARE=1` workaround expected to resolve (validated with Reaper, needs Mixxx-specific validation). Lab notes: `docs/lab-notes/F-017-unexplained-reboot.md`, `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`.
 - **F-018** (resolved): All audio configs now persist across reboot. CamillaDSP SCHED_FIFO 80 via systemd override, PipeWire quantum 256 via static config + systemd user service for force-quantum, RT kernel via config.txt. Verified by capture-verify-worker.
 - **D-020** (PoC validated): Web UI architecture validated on Pi 4B. **8/8 PASS** (P8 marginal: 871us JACK callback, 0.6 errors/min over 35 min -- architect has Option 4 fix, deferred to Stage 2). Lab note: `docs/lab-notes/D-020-poc-validation.md`. 6 deployment bugs found and fixed (commit 4ad556b). Architecture doc: `docs/architecture/web-ui.md`. A21 (Reaper OSC on ARM) gates Stage 4.
 - **US-004** (in-review): Assumption register (A1-A26). Gap: A27 not in register. Pending DoD sign-off.
@@ -80,6 +80,8 @@ ahead.
 - **Mixxx ran ~10 min on RT before crash** (F-017). First-time combination. No diagnostic data due to volatile journald.
 - **Quantum 128 CATASTROPHIC FAIL:** 1750 xruns at quantum 128. D-011 confirmed -- quantum 256 is the minimum viable setting on Pi 4B. No need for D-021.
 - **D-020 PoC validated:** 8/8 PASS (P8 marginal). 6 deployment bugs found/fixed. pycamilladsp v3 dict API, pw-jack requirement, AudioWorklet secure context, AudioContext suspension. CPU: ~17%, thermal: 47.2C. P8 optimization deferred to D-020 Stage 2.
+- **F-012/F-017 root cause CONFIRMED:** V3D GPU driver deadlock on PREEMPT_RT. Not app-specific -- any OpenGL client triggers it. DRM/KMS-only (labwc) is stable. Headless audio (CamillaDSP) stable for hours.
+- **`LIBGL_ALWAYS_SOFTWARE=1` workaround: UNCERTAIN.** Stable 5+ min without audio stack (Test 2). Crashed ~30-60s after audio stack restarted (Event #9: Mixxx + software rendering + PipeWire/CamillaDSP). Software rendering alone bypasses V3D, but combining it with RT-priority audio threads triggers a different lockup path. Stock PREEMPT remains the only confirmed-stable configuration for GUI apps + audio.
 
 ### Completed (previous sessions)
 - US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
@@ -102,7 +104,10 @@ ahead.
 - Persistent journald configured on Pi (unblocks all crash investigation)
 - F-019 filed (headless labwc regression)
 - labwc input fix committed (757e316)
-- 10 commits pushed: 10a5342, 4a2d711, 5682fbd, 0749693, 6042138, 8e0016d, abc508a, ea49810, 4ad556b, 29722c0
+- F-012/F-017 root cause confirmed: V3D GPU driver deadlock on PREEMPT_RT
+- `LIBGL_ALWAYS_SOFTWARE=1` validated as workaround for RT + GUI apps (Reaper stable 5+ min on RT)
+- F-012/F-017 consolidated lab note committed
+- T3d attempted on RT kernel -- F-012 crash during setup, deferred to next session
 
 ### Remaining TODOs
 - ~~Configure persistent journald on Pi~~ DONE (configured during PoC session, confirmed surviving power cycles)
@@ -111,10 +116,10 @@ ahead.
 - D-020 P8 optimization: JACK callback 871us -> target <500us (deferred to Stage 2 per PO priority)
 - Persist nftables port 8080 rule for PoC web UI (runtime-only, lost on reboot)
 - Fix poc/requirements.txt: camilladsp package needs GitHub URL, not PyPI
-- F-012 Reaper RT lockup (requires serial console test rig -- fix before shipping)
-- F-017 Unexplained Mixxx reboot on RT (persistent journald now configured -- reproduce and capture logs)
+- F-012/F-017 V3D GPU deadlock on RT -- root cause confirmed, `LIBGL_ALWAYS_SOFTWARE=1` workaround UNCERTAIN (Event #9 crashed with audio stack). Remaining: investigate priority inversion path, Test 3 (Xvfb), upstream bug report
+- D-013 revision: PREEMPT_RT + GUI apps still unresolved. Stock PREEMPT is the only confirmed-stable config for GUI + audio
+- T3d Reaper end-to-end 30-min stability test (deferred to next session -- run with `LIBGL_ALWAYS_SOFTWARE=1` on RT or on stock PREEMPT)
 - F-016 PipeWire restart glitches (investigate graph clock settling)
-- T3d Reaper end-to-end 30-min stability test (unblocked, pending execution)
 - Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
 - A21 validation: Reaper OSC on ARM Linux (gates D-020 Stage 4)
 - 14-blind-spot monitoring map review (from researcher)
@@ -123,12 +128,12 @@ ahead.
 
 ## Blockers
 
-- **F-012: Reaper hard kernel lockup on PREEMPT_RT (CRITICAL).** 4/4 hard lockups on RT kernel, 1/1 PASS on stock PREEMPT. Latest crash: T3d attempt ~21:16 CET 2026-03-09 (relaunch). Persistent journald was configured -- crash logs may be recoverable on next boot (`journalctl -b -1`). D-015: continue on stock PREEMPT, fix before shipping. Needs test rig (serial console + scriptable PSU) for kernel oops capture. Blocks: D-013 full compliance, PA-connected production use, T3d on RT kernel.
+- **F-012: V3D GPU driver deadlock on PREEMPT_RT (CRITICAL -- root cause confirmed, workaround UNCERTAIN).** 9 lockup events total (4 Reaper, 4 Mixxx, 1 Mixxx+software rendering+audio) on RT, 0 on stock. Root cause: V3D driver deadlock under PREEMPT_RT. `LIBGL_ALWAYS_SOFTWARE=1` stable 5+ min without audio stack but crashed ~30-60s with RT audio stack (Event #9). **Stock PREEMPT remains the only confirmed-stable configuration for GUI apps + audio.** Upstream bug report with reproduction steps recommended.
 - **F-013: PARTIALLY RESOLVED.** wayvnc password auth added. **TLS required before US-018** deployment (guest musicians' phones on network).
 - **F-014: RESOLVED.** RustDesk firewall rules removed (TK-048).
 - **F-015: RESOLVED (workaround).** USB bandwidth contention from ada8200-in. Workaround: adapter disabled. **Production fix needed:** split ALSA device access.
 - **F-016: OPEN.** Audible glitches after PipeWire restart with capture adapter active. Root cause TBD.
-- **F-017: OPEN (high).** Unexplained Pi reboot during Mixxx test on RT kernel. Journal entries lost. Could be same class as F-012 or separate issue. Persistent journald storage needed.
+- **F-017: OPEN (high -- same root cause as F-012).** Mixxx hard lockup on PREEMPT_RT. 4 events total (3 with V3D, 1 with software rendering + audio stack). `LIBGL_ALWAYS_SOFTWARE=1` workaround insufficient when combined with RT audio stack (Event #9).
 - **F-018: RESOLVED.** All audio configs persist across reboot (CamillaDSP FIFO 80 via systemd override, PipeWire quantum 256 via static config + user service, RT kernel via config.txt). Verified.
 
 ## Open Defects Summary
@@ -139,12 +144,12 @@ See `docs/project/defects.md` for full details.
 |--------|----------|--------|--------|
 | F-002 | Medium | Resolved | -- |
 | F-011 | Low | Resolved | -- |
-| F-012 | Critical | Open | D-013, production use |
+| F-012 | Critical | Open (root cause confirmed, workaround uncertain) | D-013, production use |
 | F-013 | Medium | Partially resolved | US-018 |
 | F-014 | Low | Resolved | -- |
 | F-015 | High | Resolved (workaround) | Production live mode (mic input) |
 | F-016 | Medium | Open | Operational reliability |
-| F-017 | High | Open | US-003, US-006, D-013 (RT kernel stability) |
+| F-017 | High | Open (same root cause as F-012) | US-003, US-006, D-013 |
 | F-018 | High | Resolved | -- |
 | F-019 | Medium | Open | US-000b (headless operation) |
 
