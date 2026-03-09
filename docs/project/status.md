@@ -38,7 +38,7 @@ ahead.
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | not started | Stories US-008 through US-013 defined |
 | Documentation suite | not started | Stories US-014 through US-016 defined |
-| Web UI platform | architecture done | D-020 committed (`docs/architecture/web-ui.md`). Stories US-022, US-023, US-018 defined. FastAPI + raw PCM streaming + browser-side analysis. 4-stage implementation plan. |
+| Web UI platform | PoC validated | D-020 PoC: 8/8 PASS (P8 marginal). FastAPI + binary WS PCM + browser FFT + pycamilladsp meters. CPU ~17%, 47.2C. P8 optimization deferred to Stage 2. Lab note: `docs/lab-notes/D-020-poc-validation.md`. |
 | Core software (CamillaDSP, Mixxx, Reaper) | installed | CamillaDSP 3.0.1, Mixxx 2.5.0, Reaper 7.31, wayvnc, Python venv. 7.5G/117G disk. RustDesk removed per D-018. |
 | Platform security | partial | US-000a: firewall active, SSH hardened, services disabled. CamillaDSP systemd service with `-a 127.0.0.1` (F-002 resolved). nfs-blkmap masked (F-011). wayvnc password auth (F-013 partially resolved — TLS needed before US-018 guest devices). RustDesk purged, firewall cleaned (F-014 resolved). |
 | Desktop trimming (US-000b) | done | lightdm disabled, labwc user service, RTKit installed, PipeWire FIFO rtprio 83-88. RAM: 397→302Mi. USBStreamer path fixed (hw:USBStreamer,0). |
@@ -68,12 +68,10 @@ ahead.
 - **F-016** (open, medium): 2 audible glitches after PipeWire restart with capture adapter active. Does not reproduce without restart.
 - **F-017** (open, high): Unexplained Pi reboot during Mixxx on RT kernel (~10 min into test). Journal entries lost. Second app (after Reaper) to crash RT kernel -- 0/2 GUI apps stable on RT. D-015 scope extends to Mixxx. Lab note: `docs/lab-notes/F-017-unexplained-reboot.md`.
 - **F-018** (resolved): All audio configs now persist across reboot. CamillaDSP SCHED_FIFO 80 via systemd override, PipeWire quantum 256 via static config + systemd user service for force-quantum, RT kernel via config.txt. Verified by capture-verify-worker.
-- **D-020** (committed): Web UI architecture -- FastAPI + raw PCM streaming + browser-side FFT. Architecture doc: `docs/architecture/web-ui.md`. A21 (Reaper OSC on ARM) gates Stage 4.
+- **D-020** (PoC validated): Web UI architecture validated on Pi 4B. **8/8 PASS** (P8 marginal: 871us JACK callback, 0.6 errors/min over 35 min -- architect has Option 4 fix, deferred to Stage 2). Lab note: `docs/lab-notes/D-020-poc-validation.md`. 6 deployment bugs found and fixed (commit 4ad556b). Architecture doc: `docs/architecture/web-ui.md`. A21 (Reaper OSC on ARM) gates Stage 4.
 - **US-004** (in-review): Assumption register (A1-A26). Gap: A27 not in register. Pending DoD sign-off.
 - **US-000a** (in-review): 4/4 DoD -- F-002 and F-011 both resolved, verified across reboot
-- **D-020 PoC deployment** (pending): poc/ code committed (ea49810). Needs deployment to Pi: pip install, uvicorn start, pass/fail tests P1-P8. Blocked on Pi stability after latest crash.
-- **Persistent journald** (not done, prerequisite): Required for all crash investigations (F-012, F-017, latest crash). Still volatile -- every crash loses diagnostic data.
-- **Pi crash (latest)** (investigating): Another unexplained crash after power cycle. labwc-fix-worker checking diagnostics. No display output before crash. Thermal suspected. May become F-020.
+- **Persistent journald** (DONE): Configured during PoC deployment session. `mkdir -p /var/log/journal`, reboot required for systemd 257. Confirmed surviving power cycles. F-012/F-017 crash investigations now unblocked.
 
 ### Key Findings from Brain Dump (2026-03-09)
 - **CamillaDSP levels API correction:** pycamilladsp `client.levels.levels_since_last()` provides per-channel peak+RMS for both capture and playback (8+8 channels). This informs D-020 metering design.
@@ -81,6 +79,7 @@ ahead.
 - **Monitoring blind spots:** Researcher identified 14 blind spots in current monitoring. Report pending review.
 - **Mixxx ran ~10 min on RT before crash** (F-017). First-time combination. No diagnostic data due to volatile journald.
 - **Quantum 128 CATASTROPHIC FAIL:** 1750 xruns at quantum 128. D-011 confirmed -- quantum 256 is the minimum viable setting on Pi 4B. No need for D-021.
+- **D-020 PoC validated:** 8/8 PASS (P8 marginal). 6 deployment bugs found/fixed. pycamilladsp v3 dict API, pw-jack requirement, AudioWorklet secure context, AudioContext suspension. CPU: ~17%, thermal: 47.2C. P8 optimization deferred to D-020 Stage 2.
 
 ### Completed (previous sessions)
 - US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
@@ -98,13 +97,20 @@ ahead.
 - D-020 web UI architecture (`docs/architecture/web-ui.md`)
 - US-035 story (Feedback Suppression for Live Vocal Performance)
 - F-015 lab note (9 phases), F-017 lab note
-- Defects log populated (F-002 through F-018)
-- 5 commits pushed: 10a5342, 4a2d711, 5682fbd, 0749693, 6042138
+- Defects log populated (F-002 through F-019)
+- D-020 PoC deployed and validated on Pi (8/8 PASS, P8 marginal). 6 bugs found/fixed. Lab note committed (29722c0).
+- Persistent journald configured on Pi (unblocks all crash investigation)
+- F-019 filed (headless labwc regression)
+- labwc input fix committed (757e316)
+- 10 commits pushed: 10a5342, 4a2d711, 5682fbd, 0749693, 6042138, 8e0016d, abc508a, ea49810, 4ad556b, 29722c0
 
 ### Remaining TODOs
-- **Configure persistent journald on Pi** (URGENT prerequisite -- blocks all crash investigation: F-012, F-017, latest crash)
+- ~~Configure persistent journald on Pi~~ DONE (configured during PoC session, confirmed surviving power cycles)
 - ~~Quantum reduction testing on RT~~ COMPLETE: quantum 128 CATASTROPHIC FAIL (1750 xruns), D-011 confirmed
-- Deploy and test D-020 PoC on Pi (poc/ committed ea49810, needs pip install + uvicorn + P1-P8 pass/fail)
+- ~~Deploy and test D-020 PoC on Pi~~ DONE (6 PASS, 2 WARN. Lab note: `docs/lab-notes/D-020-poc-validation.md`)
+- D-020 P8 optimization: JACK callback 871us -> target <500us (architect Option 4: per-channel ring buffers, projected ~315us)
+- Persist nftables port 8080 rule for PoC web UI (runtime-only, lost on reboot)
+- Fix poc/requirements.txt: camilladsp package needs GitHub URL, not PyPI
 - F-012 Reaper RT lockup (requires serial console test rig -- fix before shipping)
 - F-017 Unexplained Mixxx reboot on RT (configure persistent journald first, then reproduce)
 - F-016 PipeWire restart glitches (investigate graph clock settling)

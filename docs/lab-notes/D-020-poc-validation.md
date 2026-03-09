@@ -54,7 +54,8 @@ $ pip install git+https://github.com/HEnquist/pycamilladsp.git
 
 **Note:** The `camilladsp` package listed in `requirements.txt` does not exist
 on PyPI. Must install from GitHub. This is a known issue to fix in
-requirements.txt.
+requirements.txt. pycamilladsp installed from GitHub HEAD -- no tagged release
+or pinned version used. Version-sensitive: Bug 3 (dict API) is v3-specific.
 
 ### Step 3: Start server
 

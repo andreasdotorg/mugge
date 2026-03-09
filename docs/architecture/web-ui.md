@@ -128,7 +128,7 @@ Once the spectrograph PCM stream is active (Stage 2), the browser has a second, 
 
 ## 5. Stream 3: Spectrograph (Raw PCM Streaming)
 
-**Source:** JACK client registered via PipeWire's JACK bridge. Captures from the Loopback sink monitor ports (same audio that CamillaDSP processes).
+**Source:** JACK client registered via PipeWire's JACK bridge. Captures from CamillaDSP's PipeWire monitor taps (`CamillaDSP 8ch Input:monitor_AUX0`, `monitor_AUX1`, `monitor_AUX2`). These are pre-DSP signals -- the same audio entering CamillaDSP from the Loopback.
 
 **Channels:** 3 channels only (not 8). Per audio engineer:
 - Ch 1: Left main (post-mix)
