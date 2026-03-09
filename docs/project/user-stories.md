@@ -126,7 +126,7 @@ Estimated savings: ~60-75MB RAM, ~2% CPU.
 - D-Bus (required by PipeWire, systemd, many services)
 - PipeWire (audio stack)
 - avahi (mDNS — useful for `.local` hostname resolution on LAN)
-- bluetooth (needed until US-005 confirms Hercules works via USB-MIDI)
+- ~~bluetooth~~ — removed per D-019 (Bluetooth scrapped for production, Hercules USB-MIDI only)
 
 **Display manager replacement:**
 - Replace lightdm with either greetd (recommended — minimal, Wayland-native)
@@ -402,26 +402,24 @@ functional USB-MIDI controller on the Pi 4B (beyond just USB enumeration),
 **Note:** Owner has already confirmed USB enumeration via `lsusb`. This story
 covers functional MIDI verification: does it send/receive MIDI messages?
 
-**CRITICAL (AD finding A14):** The Hercules DJControl Mix Ultra is
-Bluetooth-primary. SETUP-MANUAL.md disables Bluetooth via `dtoverlay=disable-bt`
-in config.txt. This story MUST complete USB-MIDI verification BEFORE Bluetooth
-is disabled during hardening/setup. If USB-MIDI fails, Bluetooth MIDI is the
-fallback and must remain available.
+**Note (D-019):** Bluetooth is scrapped for production. The Hercules will be
+used via USB-MIDI only. If USB-MIDI does not work, the Hercules is not viable
+and must be replaced — there is no Bluetooth fallback. A14 (sequencing
+concern) is superseded.
 
 **Acceptance criteria:**
 - [ ] Controller connected via USB, confirmed visible in `aconnect -l` as a MIDI device
 - [ ] MIDI messages verified: pressing buttons/moving faders produces MIDI events visible in `aseqdump` or `amidi`
 - [ ] All control types tested: faders, knobs, buttons, jog wheels (if applicable)
 - [ ] Any non-functional controls documented
-- [ ] USB-MIDI verification completed BEFORE Bluetooth is disabled in config.txt (A14)
-- [ ] If USB-MIDI works: document as confirmed, Bluetooth can be safely disabled
-- [ ] If USB-MIDI does not work: document the failure mode, DO NOT disable Bluetooth, research Bluetooth MIDI via bluez as primary path
+- [ ] If USB-MIDI works: document as confirmed, A6 validated
+- [ ] If USB-MIDI does not work: document the failure mode, Hercules is not viable for this project (no Bluetooth fallback per D-019), research alternative USB-MIDI controllers
 
 **DoD:**
 - [ ] Test completed on Pi 4B hardware
 - [ ] Lab note written with MIDI message log excerpts and control mapping summary
 - [ ] CLAUDE.md assumption A6 updated with full validation result
-- [ ] Decision documented: is it safe to disable Bluetooth? (only if USB-MIDI confirmed working)
+- [ ] A6 assumption updated with validation result
 
 ---
 
