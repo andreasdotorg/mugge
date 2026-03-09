@@ -214,3 +214,15 @@ decision. Add a new one that supersedes it (reference the old one).
 **Impact:** A14 (Bluetooth sequencing concern) superseded — the sequencing constraint no longer applies because Bluetooth is unconditionally disabled. A6 (USB-MIDI verification) remains open but the failure mode changes: if USB-MIDI fails, the Hercules is dropped from the stack entirely rather than falling back to Bluetooth. US-005 AC updated to remove Bluetooth fallback path. US-000b services-to-keep updated (bluetooth removed).
 
 **Contingency (AD review):** If US-005 confirms the Hercules does not present functional USB-MIDI (A6 invalidated), the fallback is a known-Linux-compatible USB-MIDI DJ controller. The Hercules DJControl Inpulse series (200/300/500) has well-tested Mixxx mappings and confirmed USB-MIDI class compliance on Linux. This contingency does not require a separate decision — the owner selects a replacement controller and US-005/US-006 ACs are re-evaluated against the new hardware.
+
+---
+
+## D-020: Web UI Architecture — FastAPI + Raw PCM Streaming + Browser-Side Analysis (2026-03-09)
+
+**Context:** US-022, US-023, US-018 require web-based monitoring and control. Pi 4B CPU is constrained. Owner requires 30fps spectrograph with browser GPU rendering.
+
+**Decision:** Single-process FastAPI server. Raw float32 PCM streamed to browser via binary WebSocket for spectrograph. Pi-side RMS for level meters. Browser performs FFT via WebAudio AnalyserNode and GPU rendering. CamillaDSP websocket never exposed. IEM control via Reaper OSC. Role-based access.
+
+**Rationale:** Browser GPU for visualization, Pi just pipes data, bandwidth cheaper than CPU. Raw PCM costs ~0.07% CPU vs ~1.5% for Pi-side FFT. AnalyserNode is native C++ in browser. New visualizations are browser-only changes. All four advisors reviewed (security: 8 hard requirements, audio: channel/FFT params, UX: wireframes, AD: 7/8 findings adopted).
+
+**Impact:** New systemd service. New Python deps (fastapi, uvicorn, python-osc, pycamilladsp). HTTPS required before untrusted networks. A21 (Reaper OSC) gates Stage 4. Total web UI CPU: ~0.3%.

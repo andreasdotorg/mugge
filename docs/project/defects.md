@@ -175,3 +175,104 @@ recovery), any restart-induced glitches are production defects.
 2. CamillaDSP should be started after PipeWire graph is stable (sequenced startup)
 3. The capture-only adapter can be brought up after the playback path is established
 4. A "soft restart" (graph reconfiguration without full service restart) avoids the issue
+
+---
+
+## F-017: Unexplained Pi reboot during Mixxx test on RT kernel (OPEN)
+
+**Severity:** High
+**Status:** Open
+**Found in:** Mixxx testing on PREEMPT_RT kernel (2026-03-09)
+**Affects:** US-003 (stability), US-006 (Mixxx feasibility), D-013 (PREEMPT_RT production use)
+**Found by:** Owner (observed reboot during testing)
+**Lab note:** `docs/lab-notes/F-017-unexplained-reboot.md`
+
+**Description:** The Pi rebooted unexpectedly during a Mixxx test session on
+the PREEMPT_RT kernel. This is the first time Mixxx was run on the RT kernel.
+Journal entries from the crash were lost -- the reboot occurred before logs
+could be flushed to persistent storage.
+
+**Root cause:** Unknown. Possible causes:
+1. Mixxx + PREEMPT_RT kernel interaction (same class as F-012 Reaper lockup)
+2. OOM kill triggering kernel panic (Mixxx + CamillaDSP + PipeWire memory pressure)
+3. Thermal shutdown (Mixxx GUI rendering + DSP load in closed environment)
+4. BCM2835 hardware watchdog timeout (systemd stopped being fed, same symptom as F-012)
+5. USB subsystem crash (VL805 controller under load from multiple USB audio devices)
+
+**Evidence:** None -- journal entries lost. This is itself a problem: persistent
+journald storage should be configured to survive unclean reboots.
+
+**Relationship to F-012:** F-012 is Reaper-specific hard lockup on RT kernel.
+F-017 may be the same underlying kernel bug triggered by Mixxx instead of
+Reaper, or it may be a completely different issue. Without crash logs, we
+cannot determine the relationship.
+
+**Impact:** Unexplained reboots during live performance are unacceptable.
+This is a safety concern -- an uncontrolled reboot mid-performance causes
+full audio dropout on all channels. Combined with F-012, this is the second
+application that has crashed the RT kernel.
+
+**Fix:** TBD. Requires:
+1. Configure persistent journald storage (`Storage=persistent` in journald.conf)
+   so crash logs survive reboots
+2. Reproduce the crash with persistent logging enabled
+3. If reproducible: capture kernel oops/panic via serial console (same test rig as F-012)
+4. Determine if this is the same root cause as F-012 or a separate issue
+
+**Workaround:** Run Mixxx on stock PREEMPT kernel only (extends D-015 scope
+beyond Reaper to include Mixxx).
+
+---
+
+## F-018: Ephemeral audio configuration not persisted across reboot (OPEN)
+
+**Severity:** High
+**Status:** Open
+**Found in:** Post-F-015 fix verification (2026-03-09)
+**Affects:** US-003 (stability), operational reliability, D-008 (one-button venue setup)
+**Found by:** Audio engineer + owner (flagged during reboot recovery)
+
+**Description:** Two critical audio configuration parameters are set at
+runtime and lost on every reboot, requiring manual restoration:
+
+1. **CamillaDSP SCHED_FIFO 80** -- currently set via `chrt -f -p 80 <pid>`
+   after CamillaDSP starts. Lost on every CamillaDSP or system restart.
+   Without this, CamillaDSP runs at SCHED_OTHER nice -10 (the priority
+   inversion that contributed to F-015).
+
+2. **PipeWire quantum 256** -- currently set via `pw-metadata -n settings 0
+   clock.force-quantum 256` at runtime. Lost on every PipeWire or system
+   restart. Without this, PipeWire reverts to default quantum (typically 1024),
+   which changes the latency characteristics and may cause buffer mismatches
+   with CamillaDSP at chunksize 256.
+
+**Impact:** Every reboot requires manual intervention to restore the audio
+stack to its tested configuration. This directly violates the one-button venue
+setup goal (D-008 design principle #6: "power on -> audio stack auto-starts").
+In a live performance context, a reboot (whether planned or from F-012/F-017)
+would leave the system in an untested, potentially unstable configuration
+until an operator manually restores the settings.
+
+**Fix (known, not yet implemented):**
+
+1. **CamillaDSP SCHED_FIFO 80:** Add to systemd service override:
+   ```
+   [Service]
+   CPUSchedulingPolicy=fifo
+   CPUSchedulingPriority=80
+   ```
+   File: `configs/systemd/camilladsp.service.d/override.conf` (extend existing override)
+
+2. **PipeWire quantum 256:** Add to PipeWire config drop-in:
+   ```
+   context.properties = {
+       default.clock.quantum = 256
+       default.clock.min-quantum = 256
+       default.clock.force-quantum = 256
+   }
+   ```
+   File: `configs/pipewire/10-audio-settings.conf` (may already exist but needs
+   the force-quantum line)
+
+Both fixes are straightforward config file changes. The configs directory
+already has the correct structure for these files.

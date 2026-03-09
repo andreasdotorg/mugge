@@ -80,12 +80,13 @@ ahead.
 - WirePlumber loopback ACP disable (`configs/wireplumber/51-loopback-disable-acp.conf`)
 - UMIK-1 low priority config (`configs/wireplumber/52-umik1-low-priority.conf`)
 - F-015 lab note (`docs/lab-notes/F-015-playback-stalls.md`)
-- Defects log populated (F-002 through F-016)
+- Defects log populated (F-002 through F-018)
 
 ### Remaining TODOs
 - F-012 Reaper RT lockup (requires test rig -- fix before shipping)
 - F-016 PipeWire restart glitches (investigate graph clock settling)
-- CamillaDSP SCHED_FIFO 80 persistence via systemd (runtime-only currently)
+- F-017 Unexplained Pi reboot during Mixxx on RT kernel (configure persistent journald, reproduce)
+- F-018 Persist audio config across reboot (CamillaDSP systemd override + PipeWire 10-audio-settings.conf)
 - cloud-init ~3.3s boot overhead (TK-007)
 - T3d Reaper end-to-end stability test (unblocked, pending execution)
 - Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
@@ -97,6 +98,8 @@ ahead.
 - **F-014: RESOLVED.** RustDesk firewall rules removed (TK-048).
 - **F-015: RESOLVED (workaround).** USB bandwidth contention from ada8200-in. Workaround: adapter disabled. **Production fix needed:** split ALSA device access.
 - **F-016: OPEN.** Audible glitches after PipeWire restart with capture adapter active. Root cause TBD.
+- **F-017: OPEN (high).** Unexplained Pi reboot during Mixxx test on RT kernel. Journal entries lost. Could be same class as F-012 or separate issue. Persistent journald storage needed.
+- **F-018: OPEN (high).** CamillaDSP SCHED_FIFO 80 and PipeWire quantum 256 are runtime-only, lost on every reboot. Violates one-button venue setup goal. Fix: systemd override + PipeWire config drop-in.
 
 ## Open Defects Summary
 
@@ -111,6 +114,8 @@ See `docs/project/defects.md` for full details.
 | F-014 | Low | Resolved | -- |
 | F-015 | High | Resolved (workaround) | Production live mode (mic input) |
 | F-016 | Medium | Open | Operational reliability |
+| F-017 | High | Open | US-003, US-006, D-013 (RT kernel stability) |
+| F-018 | High | Open | Operational reliability, D-008 (one-button setup) |
 
 ## External Dependencies
 
