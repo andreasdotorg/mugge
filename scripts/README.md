@@ -70,6 +70,40 @@ python3 scripts/test/measure_latency_v2.py        # multi-iteration, JSON output
 | `ref_measure.py` | Reference measurement utility. | venv |
 | `test_capture.py` | Test audio capture functionality. | venv |
 
+### Audio path testing
+
+Scripts for verifying the end-to-end audio path (JACK -> Loopback -> CamillaDSP
+-> USBStreamer) without Reaper. Created for F-015 diagnosis and ongoing regression
+testing.
+
+| Script | Purpose | Requirements |
+|--------|---------|--------------|
+| `jack-tone-generator.py` | JACK callback-based sine tone generator. Registers 8 output ports, outputs tone on ch 1+2 (L/R mains), silence on ch 3-8. Detects JACK xruns and callback gaps. Auto-connects to `loopback-8ch-sink`. | venv with `numpy`, `jack` (JACK client library) |
+| `monitor-camilladsp.py` | CamillaDSP websocket state monitor. Polls state, processing load, buffer level, clipping, and rate adjust. Detects anomalies: frozen buffer (stalls), load > 85%, state changes, clipping. Outputs JSON summary. | venv with `pycamilladsp` |
+
+**Usage:**
+
+```bash
+# On the Pi:
+python3 scripts/test/jack-tone-generator.py --duration 30 --frequency 1000
+python3 scripts/test/monitor-camilladsp.py --duration 30 --output-json results.json
+```
+
+`jack-tone-generator.py` options:
+- `--duration` — test duration in seconds (default: 30)
+- `--frequency` — tone frequency in Hz (default: 1000)
+- `--amplitude` — amplitude, 0.0-1.0 (default: 0.063 = -24dBFS)
+- `--connect-to` — JACK sink name to auto-connect (default: `CamillaDSP 8ch Input`)
+
+`monitor-camilladsp.py` options:
+- `--duration` — monitoring duration in seconds (default: 30)
+- `--host` — CamillaDSP websocket host (default: 127.0.0.1)
+- `--port` — CamillaDSP websocket port (default: 1234)
+- `--interval` — poll interval in seconds (default: 0.5)
+- `--output-json` — write JSON summary to file (optional)
+
+Both scripts exit with code 0 on PASS, non-zero on FAIL.
+
 ### Legacy / exploratory (kept for reference)
 
 | Script | Purpose |
@@ -95,13 +129,21 @@ Stability and monitoring scripts for US-003 long-duration tests.
 |--------|------|---------|--------------|
 | `run-stability-t3b.sh` | T3b | 30-minute stability test in live mode. Monitors CPU, temperature, xruns, and CamillaDSP state. | CamillaDSP + PipeWire running |
 | `run-stability-t3c.sh` | T3c | Informational stability test. Contains an inline monitor (~70 lines, duplicated from `stability-monitor.sh`). | CamillaDSP + PipeWire running |
+| `run-audio-test.sh` | F-015 | Orchestrates `jack-tone-generator.py` + `monitor-camilladsp.py` in parallel. Tests the JACK -> Loopback -> CamillaDSP -> USBStreamer path without Reaper. Forces PipeWire quantum to 256. Reports combined PASS/FAIL. | CamillaDSP + PipeWire running, venv with `numpy`, `jack`, `pycamilladsp` |
 
 **Usage:**
 
 ```bash
 ./scripts/stability/run-stability-t3b.sh    # 30-min live-mode stability test
 ./scripts/stability/run-stability-t3c.sh    # informational stability test
+./scripts/stability/run-audio-test.sh       # F-015 audio path test (default 30s)
+./scripts/stability/run-audio-test.sh 300   # 5-minute audio path test
 ```
+
+`run-audio-test.sh` output goes to `/tmp/audio-test-YYYYMMDD-HHMMSS/`:
+- `tone-generator.log` — JACK tone generator stdout/stderr
+- `monitor-camilladsp.log` — CamillaDSP monitor stdout/stderr
+- `monitor-camilladsp.json` — structured JSON summary for automated parsing
 
 ### Monitoring daemons
 
@@ -137,3 +179,4 @@ Stability and monitoring scripts for US-003 long-duration tests.
 | T2b | US-002 | End-to-end latency (through speakers) |
 | T3b | US-003 | 30-min stability, live mode |
 | T3c | US-003 | Informational stability (extended monitoring) |
+| F-015 | F-015 | JACK audio path test (xruns + CamillaDSP stall detection) |

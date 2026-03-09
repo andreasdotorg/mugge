@@ -65,19 +65,19 @@ Used for benchmarking and latency tests. **Not deployed to the Pi.**
 
 ## PipeWire (`pipewire/`)
 
-Deployed to the Pi at `/etc/pipewire/pipewire.conf.d/`.
+Deployed to the Pi at `~/.config/pipewire/pipewire.conf.d/` (user-level).
 
 | File | Description |
 |------|-------------|
 | `10-audio-settings.conf` | PipeWire quantum settings (256 for live, 1024 for DJ). |
-| `20-usbstreamer.conf` | USBStreamer profile: forces 8-channel capture/playback. Node name is `ada8200-in` (named for the audio interface, not the USB transport). |
-| `25-loopback-8ch.conf` | snd-aloop PipeWire node configuration for 8-channel loopback. |
+| `20-usbstreamer.conf` | PipeWire adapter for ADA8200 inputs via USBStreamer (`hw:USBStreamer,0`, 8ch S32LE capture). Node name: `ada8200-in`. **Currently disabled on Pi** (renamed to `.disabled`) due to F-015: causes isochronous USB bandwidth contention with CamillaDSP's playback on the same device. Required for production mic input -- pending split-access fix. |
+| `25-loopback-8ch.conf` | PipeWire adapter for 8-channel ALSA Loopback sink (`hw:Loopback,0,0`). Node name: `loopback-8ch-sink`, description: "CamillaDSP 8ch Input". Hardened against suspension: `node.pause-on-idle=false`, `node.always-process=true`, `session.suspend-timeout-seconds=0`, `priority.driver=2000`. |
 
 ---
 
 ## WirePlumber (`wireplumber/`)
 
-Deployed to the Pi at `/etc/wireplumber/wireplumber.conf.d/`.
+Deployed to the Pi at `~/.config/wireplumber/wireplumber.conf.d/` (user-level).
 
 | File | Description |
 |------|-------------|
