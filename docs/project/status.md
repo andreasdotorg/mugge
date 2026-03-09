@@ -125,6 +125,8 @@ ahead.
 - Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
 - A21 validation: Reaper OSC on ARM Linux (gates D-020 Stage 4)
 - 14-blind-spot monitoring map review (from researcher)
+- Verify labwc process maps show V3D shared libraries loaded (confirms Event #9 hypothesis -- labwc compositor uses V3D hardware for compositing)
+- D-021 (RT + GUI architecture): ON HOLD pending labwc V3D investigation. Architect's proposal (per-app software rendering) undermined by Event #9.
 - F-019 Headless labwc startup regression (WLR_LIBINPUT_NO_DEVICES removed -- labwc may fail without input devices)
 - cloud-init ~3.3s boot overhead (TK-007)
 
