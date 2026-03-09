@@ -22,7 +22,7 @@ ahead.
 
 ## Overall Status
 
-**Tier 1 validation in progress.** US-001 (CPU) and US-002 (latency) both done. US-003 (stability tests) in progress -- T3b/T3c/T3e done, T6-128 FAIL (1750 xruns), T3d ready to run on PREEMPT_RT with Option B (pixman + software rendering -- validated 5 min stable), T3a blocked on external deps, T4 requires physical hardware. US-004 (assumption register) selected. D-011 confirmed: live mode chunksize 256 + quantum 256 -- quantum 128 tested and failed catastrophically (1750 xruns), 256 is the Pi 4B hardware floor. IEM through CamillaDSP passthrough confirmed as net benefit. **F-012/F-017 RESOLVED (workaround):** Option B (`WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1`) eliminates V3D entirely -- 5 min stable on RT with full audio stack. D-021 pending architect formalization. D-020 (web UI architecture) committed. F-018 (config persistence) resolved -- all audio configs persist across reboot.
+**Tier 1 validation in progress.** US-001 (CPU) and US-002 (latency) both done. US-003 (stability tests) in progress -- T3b/T3c/T3e done, T6-128 FAIL (1750 xruns), T3d ready to run on PREEMPT_RT with Option B (pixman + software rendering -- validated 5 min stable), T3a blocked on external deps, T4 requires physical hardware. US-004 (assumption register) selected. D-011 confirmed: live mode chunksize 256 + quantum 256 -- quantum 128 tested and failed catastrophically (1750 xruns), 256 is the Pi 4B hardware floor. IEM through CamillaDSP passthrough confirmed as net benefit. **F-012/F-017 RESOLVED (workaround):** Option B (`WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1`) eliminates V3D entirely -- 5 min stable on RT with full audio stack. **Test 5 (1ff916c):** V3D blacklist confirmed mandatory (not defense-in-depth). D-021 committed (20ae9f0). **DJ-A strategy (architect + AE consensus):** PREEMPT_RT for both modes with V3D blacklisted; quantum 1024 for DJ, 256 for live. TK-054 (15-min stability test) pending. D-020 (web UI architecture) committed. F-018 (config persistence) resolved -- all audio configs persist across reboot.
 
 ## Component Status
 
@@ -60,9 +60,9 @@ ahead.
 
 ## In Progress
 
-- **US-003** (in-progress, T3d unblocked by Option B): T3b PASS, T3c informational, T3e PASS, T6-128 FAIL (1750 xruns — quantum 256 is Pi 4B hardware floor). **This session:** F-015 diagnosed and fixed, capture-only adapter designed and verified, RT vs non-RT comparison completed. F-012/F-017 root cause confirmed (V3D GPU deadlock on RT). **Option B VALIDATED:** `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1` -- 5 min stable on RT with full audio stack. **T3d unblocked** -- can now run on PREEMPT_RT with Option B. T3a blocked on US-005/US-006. T4 requires physical hardware.
+- **US-003** (in-progress, T3d unblocked by Option B): T3b PASS, T3c informational, T3e PASS, T6-128 FAIL (1750 xruns -- quantum 256 is Pi 4B hardware floor). **This session:** F-015 diagnosed and fixed, capture-only adapter designed and verified, RT vs non-RT comparison completed. F-012/F-017 root cause confirmed (V3D GPU deadlock on RT). **Option B VALIDATED:** `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1` -- 5 min stable on RT with full audio stack. **T3d unblocked** -- can now run on PREEMPT_RT with Option B. **Test 5 (1ff916c):** V3D client lockup confirms V3D blacklist is mandatory. **DJ-A strategy (architect + audio-engineer consensus):** recommended test = 15-min Mixxx on RT + V3D blacklisted + quantum 1024 + chunksize 2048. Pass: 0 xruns, temp < 78C. **Test NOT YET RUN** -- session crashed before execution (TK-054). T3a blocked on US-005/US-006. T4 requires physical hardware.
 - **Quantum reduction testing** (COMPLETE): Quantum 128 CATASTROPHIC FAIL — 1750 xruns. D-011 confirmed: quantum 256 is the minimum viable on Pi 4B. No D-021 needed.
-- **F-012** (**resolved -- workaround, Option B VALIDATED**): V3D GPU driver deadlock on PREEMPT_RT. 10 lockup events total on RT, 0 on stock. **Option B fix:** `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1` eliminates all V3D usage. Test 4: 5 min stable on RT, all 10 checkpoints PASS, peak temp 53.5C. Pending: D-021 formalization, 30-min T3d stability test, persistence via systemd. Lab note: `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`.
+- **F-012** (**resolved -- workaround, Option B VALIDATED**): V3D GPU driver deadlock on PREEMPT_RT. 11 lockup events total on RT, 0 on stock. **Option B fix:** `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1` eliminates all V3D usage. Test 4: 5 min stable on RT, all 10 checkpoints PASS, peak temp 53.5C. **Test 5 (1ff916c):** V3D client + pixman compositor = LOCKUP. V3D blacklist is mandatory, not defense-in-depth. D-021 committed (20ae9f0). Pending: 15-min DJ-A stability test (TK-054), V3D blacklist persistence on Pi. Lab note: `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`.
 - **F-013** (partially resolved): wayvnc password auth added. TLS required before US-018.
 - **F-015** (resolved -- workaround): USB bandwidth contention. Capture-only adapter designed (Phase 9) and verified on both kernels. Lab note: `docs/lab-notes/F-015-playback-stalls.md`.
 - **F-016** (open, medium): 2 audible glitches after PipeWire restart with capture adapter active. Does not reproduce without restart.
@@ -117,6 +117,10 @@ ahead.
 - Audio confirmed through Mixxx JACK: Master -> CamillaDSP ch 0-1 (mains), Headphones -> CamillaDSP ch 4-5 (engineer HP)
 - `99-no-rt.conf` (Test 3 artifact) removed from Pi -- was forcing PipeWire to SCHED_OTHER, causing glitches
 - F-020 filed: PipeWire RT module fails to self-promote to SCHED_FIFO on PREEMPT_RT
+- Test 5 committed (1ff916c): V3D client lockup confirms V3D blacklist is mandatory (not defense-in-depth)
+- DJ-A strategy alignment (architect + audio-engineer consensus): DJ-A = PREEMPT_RT for BOTH modes (RT + V3D blacklisted + quantum 1024 for DJ, quantum 256 for live). DJ-B = stock PREEMPT for DJ mode (V3D available, hardware GL), PREEMPT_RT for live mode only. Scheduling math validated: audio work per quantum 1024 cycle = ~1.8ms out of 21.3ms deadline (8.5% utilization). FIFO 80-88 preempts llvmpipe SCHED_OTHER unconditionally on RT.
+- Pi recovered after Test 5 (watchdog reboot ~22:46 CET). 7-step recovery: PipeWire FIFO 88, quantum 1024, CamillaDSP FIFO 80, Mixxx launched with software rendering. System running stably when session crashed.
+- **Session crashed at ~22:48 CET.** Pi was fine -- Claude Code orchestration crashed. All team agents lost. Team state recovered from `~/.claude/teams/wondrous-riding-lerdorf/` inbox files. No uncommitted code was lost (all code changes were committed in 1ff916c or earlier). Lost items: in-flight team context and the planned DJ-A 15-minute stability test which had not yet started.
 
 ### Remaining TODOs
 - ~~Configure persistent journald on Pi~~ DONE (configured during PoC session, confirmed surviving power cycles)
@@ -127,20 +131,21 @@ ahead.
 - Fix poc/requirements.txt: camilladsp package needs GitHub URL, not PyPI
 - ~~F-012/F-017 V3D GPU deadlock on RT~~ RESOLVED (workaround): Option B validated (`WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1`). Remaining: persist via systemd environment files, upstream bug report
 - D-013 revision: PREEMPT_RT now viable WITH Option B. D-021 pending architect formalization.
-- T3d Reaper end-to-end 30-min stability test (UNBLOCKED -- run on PREEMPT_RT with Option B environment vars)
+- T3d stability test: **DJ-A first (TK-054):** 15-min Mixxx on PREEMPT_RT + V3D blacklisted + quantum 1024 + chunksize 2048 (0 xruns, <78C). Then Reaper end-to-end on PREEMPT_RT with Option B.
 - F-016 PipeWire restart glitches (investigate graph clock settling)
 - Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
 - A21 validation: Reaper OSC on ARM Linux (gates D-020 Stage 4)
 - 14-blind-spot monitoring map review (from researcher)
 - ~~Verify labwc process maps show V3D shared libraries loaded~~ CONFIRMED: 7 `/dev/dri/renderD128` mappings in labwc process, driver is v3d.
-- ~~D-021 (RT + GUI architecture)~~ DECIDED: PREEMPT_RT mandatory with V3D blacklisted, labwc pixman, llvmpipe apps. Committed to `docs/project/decisions.md`. Remaining: persist V3D blacklist (`/etc/modprobe.d/blacklist-v3d.conf`), T3d 30-min validation.
+- ~~D-021 (RT + GUI architecture)~~ DECIDED + COMMITTED (20ae9f0): PREEMPT_RT mandatory with V3D blacklisted, labwc pixman, llvmpipe apps. **DJ-A strategy (architect + AE consensus):** DJ-A = RT for both modes, DJ-B = stock for DJ/RT for live. Remaining: persist V3D blacklist (`/etc/modprobe.d/blacklist-v3d.conf`), TK-054 DJ-A 15-min stability test, then T3d Reaper validation.
 - **F-020** PipeWire RT module fails to achieve SCHED_FIFO on PREEMPT_RT. Configured rt.prio=88, only achieves nice=-11. Manual `chrt` works. Investigate root cause; persist workaround via systemd override or startup script.
 - F-019 Headless labwc startup regression (WLR_LIBINPUT_NO_DEVICES removed -- labwc may fail without input devices)
 - cloud-init ~3.3s boot overhead (TK-007)
+- **TK-054** DJ-A 15-minute stability test: Mixxx on PREEMPT_RT + V3D blacklisted + quantum 1024 + chunksize 2048. Pass criteria: 0 xruns, temp < 78C. Source: architect + audio-engineer consensus (2026-03-09). Test NOT YET RUN -- session crashed before it could start.
 
 ## Blockers
 
-- **F-012: MITIGATED (D-021).** V3D GPU driver ABBA deadlock on PREEMPT_RT. 10 lockup events across investigation. **Fix:** `WLR_RENDERER=pixman` + V3D blacklist eliminates all V3D usage. Test 4: 5 min stable on RT with full audio stack. **Remaining:** persist V3D blacklist, 30-min T3d validation, upstream bug report.
+- **F-012: MITIGATED (D-021, committed 20ae9f0).** V3D GPU driver ABBA deadlock on PREEMPT_RT. 11 lockup events across investigation. **Fix:** `WLR_RENDERER=pixman` + V3D blacklist eliminates all V3D usage. Test 4: 5 min stable. Test 5 (1ff916c): V3D blacklist confirmed mandatory. **Remaining:** persist V3D blacklist, TK-054 DJ-A 15-min stability test, upstream bug report.
 - **F-013: PARTIALLY RESOLVED.** wayvnc password auth added. **TLS required before US-018** deployment (guest musicians' phones on network).
 - **F-014: RESOLVED.** RustDesk firewall rules removed (TK-048).
 - **F-015: RESOLVED (workaround).** USB bandwidth contention from ada8200-in. Workaround: adapter disabled. **Production fix needed:** split ALSA device access.

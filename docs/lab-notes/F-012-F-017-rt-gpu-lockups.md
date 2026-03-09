@@ -528,6 +528,110 @@ pending (Pi down from Test 5 lockup, awaiting reboot).
 
 ---
 
+## Pi Recovery After Test 5 Lockup (~22:46 CET)
+
+Test 5 caused another hard kernel lockup. The Pi was unresponsive and recovered
+via the BCM2835 hardware watchdog at approximately 22:46 CET (automatic reboot).
+
+**Recovery procedure (7 steps):**
+1. Pi rebooted via watchdog
+2. PipeWire promoted to SCHED_FIFO 88 (manual `chrt` -- F-020 workaround)
+3. PipeWire quantum set to 1024 (DJ mode: `pw-metadata -n settings 0 clock.force-quantum 1024`)
+4. CamillaDSP confirmed running at SCHED_FIFO 80 (PID 794, via systemd service)
+5. Mixxx launched with `LIBGL_ALWAYS_SOFTWARE=1` + `pw-jack` (Option B environment)
+6. Audio stack components running but no playback started
+7. System ready for DJ-A 15-minute validation test
+
+**System state at recovery:** The Pi had rebooted and the audio stack components
+were launched, but no audio playback had been started and the system had not been
+validated as stable for playback. The Claude Code orchestration session crashed at
+~22:48 CET (tooling crash, not an audio system or Pi failure) before the DJ-A
+15-minute test could begin.
+
+---
+
+## DJ-A Strategy Alignment (consensus ~22:40 CET)
+
+After Test 5 confirmed that V3D must be eliminated system-wide (not just from the
+compositor), the Architect and Audio Engineer reached consensus on the DJ-A
+viability question: whether PREEMPT_RT + software rendering can sustain DJ mode
+without audio dropouts despite llvmpipe's high CPU consumption.
+
+### Scheduling Math Analysis
+
+The key insight is that RT scheduling provides unconditional preemption guarantees:
+
+- **Audio work per quantum 1024 cycle:** ~1.8ms computation out of a 21.3ms
+  deadline = **8.5% CPU utilization** for the audio path
+- **RT thread priorities:** PipeWire at FIFO 88, CamillaDSP at FIFO 80 -- these
+  preempt llvmpipe's SCHED_OTHER rendering threads unconditionally
+- **llvmpipe CPU consumption (42% at reduced settings):** Cannot starve audio
+  threads because FIFO 80-88 threads always run first on PREEMPT_RT. The
+  remaining ~58% idle CPU plus any CPU yielded by llvmpipe between frames is
+  more than enough for audio's 8.5% requirement.
+- **Conclusion:** The scheduling math supports DJ-A. llvmpipe is heavy but
+  cooperative -- it runs at normal priority and yields to RT audio immediately.
+
+### Recommended Test Protocol: DJ-A 15-Minute Validation
+
+**Configuration:**
+- Kernel: PREEMPT_RT (`6.12.47+rpt-rpi-v8-rt`)
+- V3D: blacklisted (or at minimum, unused -- `WLR_RENDERER=pixman` + `LIBGL_ALWAYS_SOFTWARE=1`)
+- PipeWire: SCHED_FIFO 88, quantum 1024
+- CamillaDSP: SCHED_FIFO 80, chunksize 2048
+- Mixxx: `LIBGL_ALWAYS_SOFTWARE=1 pw-jack mixxx`, waveforms disabled, framerate 5 FPS
+- Audio: continuous playback through Mixxx for 15 minutes
+
+**Pass criteria:**
+- 0 xruns over the 15-minute duration
+- SoC temperature remains below 78C throughout
+
+**Monitoring:** xrun counter, temperature at regular intervals (30s or 60s).
+
+### DJ-A vs DJ-B Decision Path
+
+| Strategy | Kernel | V3D | GL rendering | Quantum | Use case |
+|----------|--------|-----|-------------|---------|----------|
+| **DJ-A** | PREEMPT_RT | Blacklisted | llvmpipe (software) | 1024 | DJ + Live (single kernel for both modes) |
+| **DJ-B** | Stock PREEMPT | Available | V3D hardware GL | -- | DJ mode only; switch to PREEMPT_RT for live mode |
+
+- **DJ-A** is the preferred path: one kernel (PREEMPT_RT) for both DJ and live
+  modes. Simpler operationally -- no kernel switching between modes. Requires
+  software rendering but scheduling math indicates this is viable.
+- **DJ-B** is the fallback: use stock PREEMPT for DJ mode (V3D hardware GL is
+  safe on stock PREEMPT -- no rt_mutex conversion). Switch to PREEMPT_RT only
+  for live mode. More complex operationally but avoids llvmpipe CPU load in DJ.
+- **Decision path:** Test DJ-A first. Only fall back to DJ-B if DJ-A fails
+  (thermal runaway above 78C or xruns during the 15-minute validation).
+
+### Status
+
+The DJ-A 15-minute test was ready to execute after Pi recovery (see section
+above). The Claude Code session crashed at ~22:48 CET before the test could
+begin. No audio playback had been started after recovery, so the system was
+not yet validated as stable. The test is the next action item for the following
+session.
+
+---
+
+## Session End (~22:48 CET)
+
+The Claude Code orchestration session crashed at approximately 22:48 CET on
+2026-03-09. This was a tooling failure (the Claude Code process on the
+operator's machine), NOT a Pi or audio system failure. The Pi had been
+recovered from the Test 5 lockup and the audio stack components were launched,
+but no playback had been started and stability was not yet confirmed.
+
+**State at session end:**
+- Pi: rebooted after Test 5 lockup, PREEMPT_RT booted, audio stack components launched
+- PipeWire: SCHED_FIFO 88, quantum 1024
+- CamillaDSP: SCHED_FIFO 80, PID 794
+- Mixxx: launched with `LIBGL_ALWAYS_SOFTWARE=1` + `pw-jack` (no playback started)
+- labwc: `WLR_RENDERER=pixman`
+- DJ-A 15-minute validation test: not started
+
+---
+
 ## Impact
 
 - **D-013 (RT mandatory): REINSTATED via D-021.** PREEMPT_RT is mandatory for
