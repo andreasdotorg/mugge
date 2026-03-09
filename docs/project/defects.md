@@ -136,17 +136,25 @@ audio stack).
 
 **Analysis:** `LIBGL_ALWAYS_SOFTWARE=1` only affects the client app (Mixxx).
 labwc (the Wayland compositor) still uses V3D hardware GL for compositing.
-The rendering pipeline is: Mixxx (llvmpipe) -> SHM buffer -> labwc (V3D
-hardware GL compositing) -> DRM/KMS scanout. When the RT audio stack
-restarted (PipeWire FIFO 88, CamillaDSP FIFO 80), the V3D deadlock was
-triggered through labwc's compositor path.
+**CONFIRMED:** 7 `/dev/dri/renderD128` mappings in labwc process space,
+driver is v3d. The rendering pipeline is: Mixxx (llvmpipe) -> SHM buffer ->
+labwc (V3D hardware GL compositing) -> DRM/KMS scanout. When the RT audio
+stack restarted (PipeWire FIFO 88, CamillaDSP FIFO 80), the V3D deadlock
+was triggered through labwc's compositor path.
+
+**Test 3 (IN PROGRESS):** Audio stack at SCHED_OTHER (normal priority) with
+V3D intact. If stable, confirms FIFO 80-88 audio threads are the priority
+inversion cause -- the V3D deadlock only triggers when RT-priority threads
+contend with V3D's kernel locks. This would make Option B (blacklist V3D
+module) viable for RT production use.
 
 **Impact on D-013:** `LIBGL_ALWAYS_SOFTWARE=1` alone cannot enable RT + GUI.
-D-013 revision is more complex than previously thought. Stock PREEMPT (D-015)
-remains the only confirmed-stable configuration for GUI apps + full audio
-stack. Remaining viable paths: (a) stock PREEMPT for all modes with GUI apps,
-(b) force labwc to software rendering (feasibility unknown), (c) headless
-compositor bypassing V3D entirely (Xvfb/cage), (d) blacklist V3D kernel module.
+D-013 revision depends on Test 3 outcome. Stock PREEMPT (D-015) is the only
+confirmed-stable configuration pending Test 3 results. Remaining viable
+paths: (a) stock PREEMPT for all modes with GUI apps, (b) force labwc to
+software rendering (feasibility unknown), (c) headless compositor bypassing
+V3D entirely (Xvfb/cage), (d) blacklist V3D kernel module (viable if Test 3
+PASS confirms priority inversion as the trigger).
 
 ---
 

@@ -118,15 +118,15 @@ ahead.
 - D-020 P8 optimization: JACK callback 871us -> target <500us (deferred to Stage 2 per PO priority)
 - Persist nftables port 8080 rule for PoC web UI (runtime-only, lost on reboot)
 - Fix poc/requirements.txt: camilladsp package needs GitHub URL, not PyPI
-- F-012/F-017 V3D GPU deadlock on RT -- root cause confirmed, `LIBGL_ALWAYS_SOFTWARE=1` workaround UNCERTAIN (Event #9 crashed with audio stack). Remaining: investigate priority inversion path, Test 3 (Xvfb), upstream bug report
+- F-012/F-017 V3D GPU deadlock on RT -- root cause confirmed, labwc V3D confirmed. `LIBGL_ALWAYS_SOFTWARE=1` workaround UNCERTAIN (Event #9). **Test 3 IN PROGRESS:** audio stack at SCHED_OTHER (normal priority) with V3D intact -- tests whether FIFO 80-88 priority inversion is the trigger. Remaining: upstream bug report
 - D-013 revision: PREEMPT_RT + GUI apps still unresolved. Stock PREEMPT is the only confirmed-stable config for GUI + audio
-- T3d Reaper end-to-end 30-min stability test (deferred to next session -- run on stock PREEMPT per D-015, only confirmed-stable config for GUI + audio)
+- T3d Reaper end-to-end 30-min stability test (deferred -- kernel decision pending Test 3 results. If Test 3 PASS: RT + V3D blacklist is viable. If FAIL: stock PREEMPT per D-015.)
 - F-016 PipeWire restart glitches (investigate graph clock settling)
 - Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
 - A21 validation: Reaper OSC on ARM Linux (gates D-020 Stage 4)
 - 14-blind-spot monitoring map review (from researcher)
-- Verify labwc process maps show V3D shared libraries loaded (confirms Event #9 hypothesis -- labwc compositor uses V3D hardware for compositing)
-- D-021 (RT + GUI architecture): ON HOLD pending labwc V3D investigation. Architect's proposal (per-app software rendering) undermined by Event #9.
+- ~~Verify labwc process maps show V3D shared libraries loaded~~ CONFIRMED: 7 `/dev/dri/renderD128` mappings in labwc process, driver is v3d. Event #9 hypothesis validated.
+- D-021 (RT + GUI architecture): ON HOLD pending Test 3 results. labwc V3D confirmed. If Test 3 (SCHED_OTHER audio + V3D) is stable, Option B (blacklist V3D module) becomes viable for RT production.
 - F-019 Headless labwc startup regression (WLR_LIBINPUT_NO_DEVICES removed -- labwc may fail without input devices)
 - cloud-init ~3.3s boot overhead (TK-007)
 
