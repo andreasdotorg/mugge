@@ -4,12 +4,12 @@ The Pi runs headless at gigs -- no HDMI display connected. Remote access for
 GUI operations (Mixxx, Reaper, CamillaDSP web UI) requires a working remote
 desktop solution. The owner chose RustDesk over VNC.
 
-This session configured RustDesk for headless Wayland operation on the Pi,
-resolving a chain of five failures: no screen capture output (headless has no
-wl_output), interactive screen share dialog (no one at the Pi to click
-"Allow"), TCP connection denied (no direct IP listener), mouse input injection
-blocked (uinput permissions), and RustDesk lacking Wayland display access.
-Each fix is a separate configuration change, documented below.
+This session configured remote desktop for headless Wayland operation on the
+Pi. RustDesk required five fixes to achieve screen capture, but mouse input
+remained broken due to a confirmed RustDesk Wayland limitation. wayvnc (already
+installed) worked immediately for both screen and input using native wlroots
+protocols, and is now the primary venue remote desktop solution. RustDesk
+remains useful for view-only remote monitoring.
 
 ---
 
@@ -27,7 +27,7 @@ Each fix is a separate configuration change, documented below.
 | PipeWire | 1.4.2 |
 | labwc | 0.9.2 (wlroots 0.19.1) |
 | xdg-desktop-portal-wlr | 0.7.1-2 |
-| wayvnc | 0.9.1 (installed, not used) |
+| wayvnc | 0.9.1 (primary venue remote desktop) |
 
 ### Connection details
 
@@ -55,8 +55,13 @@ failure:
    sufficient)
 5. **Mouse still does not move** -- RustDesk systemd service lacks
    `WAYLAND_DISPLAY`, cannot connect to labwc for input injection. Logs:
-   "Can't open display: (null)" -- fixed by systemd drop-in (Fix 5, pending
-   owner verification)
+   "Can't open display: (null)" -- fixed by systemd drop-in (Fix 5).
+   **Mouse still broken after fix** -- confirmed as RustDesk Wayland
+   limitation: RustDesk creates uinput virtual devices but labwc does not
+   route them to the virtual display.
+6. **Resolution: wayvnc** -- uses native wlroots protocols
+   (`wlr-virtual-keyboard-v1`, `wlr-virtual-pointer-v1`) for input injection,
+   bypassing the uinput path entirely. Screen + input both work. (Fix 6)
 
 ---
 
@@ -174,14 +179,15 @@ KERNEL=="uinput", GROUP="input", MODE="0660"
 **Effect:** Allows the RustDesk server (running as `ela`, member of `input`
 group) to inject mouse and keyboard events on Wayland via `/dev/uinput`.
 
-**Status:** Applied. Necessary for input injection but not sufficient on its
-own -- Fix 5 (WAYLAND_DISPLAY) is also required. The udev rule survives
-reboot; the manual chmod/chown applied the same permissions for the current
-session without requiring reboot.
+**Status:** Applied. Necessary but not sufficient -- RustDesk creates virtual
+input devices via uinput, but labwc does not route them to the virtual
+display. This is a confirmed RustDesk Wayland limitation, not a permissions
+issue. The udev rule survives reboot and remains useful for other uinput
+consumers.
 
 ---
 
-## Fix 5: RustDesk WAYLAND_DISPLAY Environment -- Applied, Pending Owner Verification
+## Fix 5: RustDesk WAYLAND_DISPLAY Environment -- Applied, Insufficient
 
 **Problem:** The RustDesk `--server` process runs as a systemd service. The
 service environment does not include `WAYLAND_DISPLAY`, so RustDesk cannot
@@ -209,22 +215,78 @@ the input injection path.
 sudo systemctl daemon-reload && sudo systemctl restart rustdesk
 ```
 
-**Status:** Applied. Pending owner verification of mouse input via an active
-RustDesk session.
+**Status:** Applied. The WAYLAND_DISPLAY fix resolved the "Can't open display"
+error, but RustDesk mouse input remains broken. This is a confirmed RustDesk
+Wayland limitation: RustDesk uses uinput for input injection, but labwc does
+not route uinput virtual devices to the virtual display. RustDesk screen
+capture works; RustDesk is usable for view-only remote monitoring.
+
+---
+
+## Fix 6: wayvnc as Primary Venue Remote Desktop
+
+**Background:** RustDesk screen capture works (Fixes 1-3), but mouse/keyboard
+input is broken on Wayland due to RustDesk's reliance on uinput virtual
+devices that labwc does not route to the virtual display. This is a confirmed
+RustDesk limitation, not a configuration issue.
+
+wayvnc 0.9.1 was already installed on the Pi. Unlike RustDesk, wayvnc uses
+native wlroots protocols (`wlr-virtual-keyboard-v1`, `wlr-virtual-pointer-v1`)
+for input injection. These protocols are first-class citizens in labwc -- no
+uinput, no portal, no permission workarounds needed.
+
+**Command:**
+
+```bash
+wayvnc --output=NOOP-fallback 0.0.0.0 5900
+```
+
+**Firewall rule added** (persisted to `/etc/nftables.conf`):
+
+```
+tcp dport 5900 accept           # wayvnc VNC
+```
+
+Placed before the default drop rule.
+
+**Test results:**
+
+| Client | Platform | Result |
+|--------|----------|--------|
+| Remmina (`nix-shell -p remmina`) | macOS | PASS -- screen + input both work |
+| Screen Sharing (native) | macOS | FAIL -- protocol/auth negotiation issue (future story) |
+
+**Effect:** Full remote desktop with screen capture and mouse/keyboard input.
+Uses the same `NOOP-fallback` virtual output from Fix 1.
 
 ---
 
 ## Summary
 
+### Role assignment
+
+| Tool | Role | Screen | Input |
+|------|------|--------|-------|
+| **wayvnc** | Primary venue remote desktop | Working | Working (native wlroots) |
+| **RustDesk** | View-only remote monitoring | Working (Fixes 1-3) | Broken (Wayland limitation) |
+
+### Fix status
+
 | Fix | File | Status |
 |-----|------|--------|
 | 1. Virtual display | `~/.config/labwc/environment` | Applied, working |
-| 2. Portal auto-approve | `~/.config/xdg-desktop-portal-wlr/config` | Applied, working |
-| 3. Direct IP server | `RustDesk2.toml` (ela + root) + `/etc/nftables.conf` | Applied, working |
-| 4. uinput injection | `/etc/udev/rules.d/99-uinput.rules` | Applied, necessary but not sufficient |
-| 5. WAYLAND_DISPLAY | `/etc/systemd/system/rustdesk.service.d/wayland.conf` | Applied, pending verification |
+| 2. Portal auto-approve | `~/.config/xdg-desktop-portal-wlr/config` | Applied, working (RustDesk only) |
+| 3. Direct IP server | `RustDesk2.toml` (ela + root) + `/etc/nftables.conf` | Applied, working (RustDesk only) |
+| 4. uinput injection | `/etc/udev/rules.d/99-uinput.rules` | Applied, necessary but not sufficient for RustDesk |
+| 5. WAYLAND_DISPLAY | `/etc/systemd/system/rustdesk.service.d/wayland.conf` | Applied, insufficient -- RustDesk Wayland limitation |
+| 6. wayvnc | `/etc/nftables.conf` (TCP 5900) | Applied, working -- primary venue solution |
 
-All changes persist across reboot. The RustDesk direct IP connection path is:
-client connects to `192.168.178.185:21118` (TCP) -- RustDesk captures
-`NOOP-fallback` output via portal (auto-approved) -- input events injected via
-`/dev/uinput` with `WAYLAND_DISPLAY=wayland-0`.
+All changes persist across reboot.
+
+**wayvnc connection path:** client connects to `192.168.178.185:5900` (TCP) --
+wayvnc captures `NOOP-fallback` output via native wlroots protocol -- input
+injected via `wlr-virtual-keyboard-v1` / `wlr-virtual-pointer-v1`.
+
+**RustDesk connection path (view-only):** client connects to
+`192.168.178.185:21118` (TCP) -- RustDesk captures `NOOP-fallback` output via
+xdg-desktop-portal-wlr (auto-approved) -- input injection broken.

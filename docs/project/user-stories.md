@@ -1415,6 +1415,57 @@ the detection; this story does the display.
 
 ---
 
+## US-032: macOS Native Screen Sharing Compatibility with wayvnc
+
+**As** the system operator using a MacBook,
+**I want** to connect to the Pi's wayvnc server using macOS's built-in Screen
+Sharing app (Finder -> Go -> Connect to Server -> `vnc://mugge.local:5900`),
+**so that** I can remotely view and control the Pi without installing
+third-party VNC clients on macOS.
+
+**Status:** draft
+**Priority:** low (Remmina via nix-shell works as a workaround)
+**Depends on:** US-000b (labwc/wayvnc running as user session)
+**Blocks:** none
+**Cross-references:** A24 (VNC documented but RustDesk preferred — this story improves the VNC fallback path)
+
+**Note:** wayvnc on the Pi currently works with Remmina (Linux VNC client,
+available via nix-shell) but macOS's built-in Screen Sharing app fails to
+connect. The `nc` test confirms port 5900 is reachable from macOS, so the
+issue is protocol or authentication negotiation, not network connectivity.
+RustDesk remains the primary remote access method per owner preference; this
+story improves the VNC fallback for macOS users who do not want to install
+additional software.
+
+**Acceptance criteria:**
+
+*Investigation:*
+- [ ] wayvnc TLS/auth settings audited: determine current security mode (none, VeNCrypt, Apple VNC auth) and RFB protocol version advertised
+- [ ] Apple Screen Sharing RFB requirements documented: which RFB versions, authentication methods, and encryption modes macOS supports
+- [ ] Root cause identified: specific incompatibility between wayvnc's default settings and macOS Screen Sharing's expectations
+
+*Resolution:*
+- [ ] macOS Screen Sharing successfully connects to wayvnc on the Pi via `vnc://mugge.local:5900` (or alternate port if 5900 conflicts)
+- [ ] No third-party VNC client required on macOS — built-in Screen Sharing only
+- [ ] Desktop visible and interactive: can see labwc desktop, launch applications, interact with Mixxx/Reaper GUI
+
+*Security:*
+- [ ] VNC authentication enabled: password or certificate-based auth (no unauthenticated access)
+- [ ] Security specialist review: VNC exposure does not weaken the security posture established by US-000a
+- [ ] VNC bound to LAN only (consistent with US-000a firewall rules)
+
+*Compatibility:*
+- [ ] Remmina (Linux) still works after any wayvnc configuration changes
+- [ ] RustDesk unaffected: remains the primary remote access method
+
+**DoD:**
+- [ ] macOS Screen Sharing tested from a real MacBook to the Pi on the same LAN
+- [ ] Configuration changes documented (wayvnc flags, auth setup, any firewall adjustments)
+- [ ] Lab note documenting: root cause, fix applied, tested client versions (macOS version, Remmina version)
+- [ ] Security specialist review passed
+
+---
+
 ## Tier 8 — User Acceptance Testing
 
 Real-content validation with actual music, real controllers, and real
@@ -1584,6 +1635,8 @@ US-014 (doc structure) ──> US-015 (theory doc)
                       └──> US-016 (how-to guides)
 
 US-019 (reproducibility) ──> US-020 (redundancy)
+
+US-000b ──> US-032 (macOS VNC compatibility) — low priority, independent
 
 US-005 + US-006 + US-028 ──> US-029 (DJ/PA UAT) ──┐
 US-017 + US-028 ──> US-030 (Live Vocal UAT) ───────┤
