@@ -168,3 +168,15 @@ decision. Add a new one that supersedes it (reference the old one).
 **Fix-before-shipping:** F-012 must be resolved before the system is used at a live event with PA-connected amplifiers. Resolution path: (a) build test rig with serial console + scriptable PSU, (b) capture kernel oops/panic from Reaper crash, (c) report upstream or find workaround (PAM rtprio cap, cgroup constraints, Reaper configuration — note: `chrt -o 0` already ruled out), (d) validate Reaper + PREEMPT_RT stability for 30 minutes, (e) reinstate D-013 as fully operational.
 
 **Impact:** Supersedes D-013 for the development phase. All current testing proceeds on stock PREEMPT. TK-016, TK-020, TK-021 are unblocked on the stock kernel. The system is NOT approved for PA-connected production use until F-012 is resolved and D-013 is reinstated.
+
+---
+
+## D-016: Measurement pipeline uses both REW and Python (2026-03-09)
+
+**Context:** TK-004 asked whether the room correction measurement pipeline (US-008 through US-013) should use REW (Room EQ Wizard) or a pure Python implementation. REW is a proven, mature measurement tool with Java dependency. Pure Python gives full control and avoids the JVM but requires implementing sweep generation, recording, deconvolution, and analysis from scratch.
+
+**Decision:** Both. REW for exploratory and ad-hoc measurement work. Python (scipy/numpy/soundfile) for the automated room correction pipeline.
+
+**Rationale:** (1) REW is the industry standard for room measurement -- using it for exploratory work leverages existing documentation, community knowledge, and proven algorithms. (2) The automated pipeline must be scriptable, headless, and integrated with CamillaDSP's websocket API -- REW's GUI-centric workflow is not suitable for one-button automation (D-008). (3) Python gives full control over the minimum-phase FIR generation chain (D-001), psychoacoustic smoothing, and regularization (D-009). (4) REW serves as an independent verification tool for the Python pipeline's output. (5) TK-011 (install REW on Pi ARM) remains relevant as a quick setup task.
+
+**Impact:** US-008 (measurement script) through US-013 (verification) will be implemented in Python. REW is a recommended but optional tool for ad-hoc verification and exploratory measurements. TK-011 (REW on Pi ARM) is still useful but no longer on the critical path.

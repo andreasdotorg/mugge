@@ -54,18 +54,18 @@ ahead.
 | US-001 | 4/4 | **done** (all 5 tests pass: T1a 5.23%, T1b 10.42%, T1c 19.25%, T1d 6.35%, T1e 6.61%. 16k taps both modes. A1/A2 validated.) |
 | US-002 | 4/4 | **done** (Pass 1 + Pass 2 complete, lab notes written, A3 updated. D-011 confirmed. IEM passthrough = net benefit.) |
 | US-003 | 3/4 | in-progress (T3b PASS, T3c informational, T3e PASS: PREEMPT_RT 30min 0 xruns, 75.0C peak, cyclictest max 209us. T3a + T4 remaining — blocked on Mixxx/Reaper smoke tests.) |
-| US-004 | 0/3 | selected (assumption register — independent, can run in parallel) |
+| US-004 | 3/4 | in-review (assumption register written with A1-A26, cross-references documented, CLAUDE.md updated. Accuracy corrections committed `0720f94`. **Gap:** AC mentions A27 but register only has A1-A26.) |
 | US-005 | 0/3 | ready (after Tier 1; Hercules already visible as USB-MIDI — positive signal) |
 | US-006 | 0/3 | ready (unblocked by US-000 + US-005) |
 
 ## In Progress
 
-- **US-003** (in-progress): T3b PASS, T3c informational, T3e PASS (PREEMPT_RT 30min stability). T3a (DJ stability with Mixxx) and T4 (thermal in flight case) remaining — T3a blocked on Mixxx smoke test (TK-015).
+- **US-003** (in-progress): T3b PASS, T3c informational, T3e PASS (PREEMPT_RT 30min stability). T3a (DJ stability with Mixxx) and T4 (thermal in flight case) remaining — T3a blocked on US-005 (Hercules MIDI) and US-006 (Mixxx feasibility). TK-015 done (Mixxx launches). T3b-real (TK-020) blocked on Reaper project setup.
 - **F-012** (open): Reaper hard kernel lockup on PREEMPT_RT. `chrt -o 0` workaround failed (TK-023 FAIL). Proceeding on stock PREEMPT per D-015. Fix before shipping.
-- **US-004** (selected): Assumption register — independent, can run in parallel with US-003.
+- **US-004** (in-review): Assumption register written (A1-A26), accuracy corrections committed (`0720f94`). Gap: A27 in AC not yet in register. Pending: DoD sign-off.
 - **US-000a** (in-review): 4/4 DoD — F-002 and F-011 both resolved, verified across reboot
 - **Completed this session:** US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
-- **Remaining TODOs**: cloud-init ~3.3s boot overhead (TK-007), lab notes T6 latency budget minor correction (TK-013), F-012 Reaper RT lockup (TK-022)
+- **Remaining TODOs**: cloud-init ~3.3s boot overhead (TK-007), F-012 Reaper RT lockup (TK-022)
 
 ## Blockers
 
@@ -97,3 +97,4 @@ ahead.
 - D-013: PREEMPT_RT kernel mandatory for production use — hard real-time with human safety implications (2026-03-08)
 - D-014: Hardware limiter — deferred; required when system drives PAs capable of >110dB SPL (2026-03-08)
 - D-015: Stock PREEMPT for development — PREEMPT_RT deferred pending Reaper bug F-012 fix (2026-03-08)
+- D-016: Measurement pipeline uses both REW (exploratory) and Python (automation) (2026-03-09)
