@@ -60,9 +60,9 @@ ahead.
 
 ## In Progress
 
-- **US-003** (in-progress): T3b PASS, T3c informational, T3e PASS, T6-128 FAIL (1750 xruns — quantum 256 is Pi 4B hardware floor). **This session:** F-015 diagnosed and fixed, capture-only adapter designed and verified (300s output-only PASS, 120s capture-active PASS on both kernels), RT vs non-RT comparison completed (peak load 35.6% RT vs 63-70% stock). T3d unblocked -- pending Reaper end-to-end. T3a blocked on US-005/US-006. T4 requires physical hardware.
+- **US-003** (in-progress, T3d BLOCKED): T3b PASS, T3c informational, T3e PASS, T6-128 FAIL (1750 xruns — quantum 256 is Pi 4B hardware floor). **This session:** F-015 diagnosed and fixed, capture-only adapter designed and verified (300s output-only PASS, 120s capture-active PASS on both kernels), RT vs non-RT comparison completed (peak load 35.6% RT vs 63-70% stock). **T3d: F-012 crash #4 during setup on RT kernel at ~21:16 CET. Pi DOWN, awaiting power cycle. Recommend switch to stock PREEMPT per D-015 for T3d retry.** T3a blocked on US-005/US-006. T4 requires physical hardware.
 - **Quantum reduction testing** (COMPLETE): Quantum 128 CATASTROPHIC FAIL — 1750 xruns. D-011 confirmed: quantum 256 is the minimum viable on Pi 4B. No D-021 needed.
-- **F-012** (open, critical): Reaper hard lockup on PREEMPT_RT. Proceeding on stock PREEMPT per D-015. Fix before shipping.
+- **F-012** (open, critical): Reaper hard lockup on PREEMPT_RT. **Crash #4 at ~21:16 CET during T3d setup** (relaunch). 4/4 lockups on RT, 1/1 PASS on stock. Persistent journald configured before this crash -- logs may be recoverable. Proceeding on stock PREEMPT per D-015. Fix before shipping.
 - **F-013** (partially resolved): wayvnc password auth added. TLS required before US-018.
 - **F-015** (resolved -- workaround): USB bandwidth contention. Capture-only adapter designed (Phase 9) and verified on both kernels. Lab note: `docs/lab-notes/F-015-playback-stalls.md`.
 - **F-016** (open, medium): 2 audible glitches after PipeWire restart with capture adapter active. Does not reproduce without restart.
@@ -107,12 +107,12 @@ ahead.
 ### Remaining TODOs
 - ~~Configure persistent journald on Pi~~ DONE (configured during PoC session, confirmed surviving power cycles)
 - ~~Quantum reduction testing on RT~~ COMPLETE: quantum 128 CATASTROPHIC FAIL (1750 xruns), D-011 confirmed
-- ~~Deploy and test D-020 PoC on Pi~~ DONE (6 PASS, 2 WARN. Lab note: `docs/lab-notes/D-020-poc-validation.md`)
-- D-020 P8 optimization: JACK callback 871us -> target <500us (architect Option 4: per-channel ring buffers, projected ~315us)
+- ~~Deploy and test D-020 PoC on Pi~~ DONE (8/8 PASS, P8 marginal. Lab note: `docs/lab-notes/D-020-poc-validation.md`)
+- D-020 P8 optimization: JACK callback 871us -> target <500us (deferred to Stage 2 per PO priority)
 - Persist nftables port 8080 rule for PoC web UI (runtime-only, lost on reboot)
 - Fix poc/requirements.txt: camilladsp package needs GitHub URL, not PyPI
 - F-012 Reaper RT lockup (requires serial console test rig -- fix before shipping)
-- F-017 Unexplained Mixxx reboot on RT (configure persistent journald first, then reproduce)
+- F-017 Unexplained Mixxx reboot on RT (persistent journald now configured -- reproduce and capture logs)
 - F-016 PipeWire restart glitches (investigate graph clock settling)
 - T3d Reaper end-to-end 30-min stability test (unblocked, pending execution)
 - Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
@@ -123,7 +123,7 @@ ahead.
 
 ## Blockers
 
-- **F-012: Reaper hard kernel lockup on PREEMPT_RT (CRITICAL).** Reaper causes a reproducible hard kernel lockup on `6.12.47+rpt-rpi-v8-rt` within ~1 minute of launch (4 crashes total: 3 on RT incl. `chrt -o 0`, 1 PASS on stock PREEMPT). D-015: continue on stock PREEMPT, fix before shipping. Needs test rig (serial console + scriptable PSU) for kernel oops capture. Blocks: D-013 full compliance, PA-connected production use.
+- **F-012: Reaper hard kernel lockup on PREEMPT_RT (CRITICAL).** 4/4 hard lockups on RT kernel, 1/1 PASS on stock PREEMPT. Latest crash: T3d attempt ~21:16 CET 2026-03-09 (relaunch). Persistent journald was configured -- crash logs may be recoverable on next boot (`journalctl -b -1`). D-015: continue on stock PREEMPT, fix before shipping. Needs test rig (serial console + scriptable PSU) for kernel oops capture. Blocks: D-013 full compliance, PA-connected production use, T3d on RT kernel.
 - **F-013: PARTIALLY RESOLVED.** wayvnc password auth added. **TLS required before US-018** deployment (guest musicians' phones on network).
 - **F-014: RESOLVED.** RustDesk firewall rules removed (TK-048).
 - **F-015: RESOLVED (workaround).** USB bandwidth contention from ada8200-in. Workaround: adapter disabled. **Production fix needed:** split ALSA device access.

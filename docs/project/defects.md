@@ -43,7 +43,7 @@ US-000b T7.
 
 ---
 
-## F-012: Reaper hard kernel lockup on PREEMPT_RT (OPEN)
+## F-012: OpenGL/V3D GPU applications cause hard kernel lockup on PREEMPT_RT (OPEN)
 
 **Severity:** Critical
 **Status:** Open
@@ -51,25 +51,50 @@ US-000b T7.
 **Affects:** D-013 (PREEMPT_RT mandatory for production), US-003 (stability on RT kernel)
 **Found by:** Automated testing (TK-016 Reaper smoke test)
 **Blocks:** D-013 full compliance, PA-connected production use
+**Lab note:** `docs/lab-notes/F-012-F-017-rt-gpu-lockups.md`
 
-**Description:** Reaper causes a reproducible hard kernel lockup on
-`6.12.47+rpt-rpi-v8-rt` within ~1 minute of launch. 4 crashes total: 3 on RT
-kernel (including with `chrt -o 0` and `LIBGL_ALWAYS_SOFTWARE=1`), 1 PASS on
-stock PREEMPT. Not OOM (3.4 GB free), not GPU-specific (software rendering
-doesn't help), not a userspace issue (systemd watchdog stops being fed,
-confirming kernel-level lockup). BCM2835 hardware watchdog (1-minute timeout)
+**Description:** GUI applications using OpenGL (Reaper, Mixxx) cause
+reproducible hard kernel lockups on `6.12.47+rpt-rpi-v8-rt` within 1-2
+minutes of launch. 7 events total across both apps (Reaper 4/4, Mixxx 3/3).
+CamillaDSP (headless, no GPU) is stable for hours on the same kernel. Not
+OOM, not thermal (lockups at 45-47C), not a userspace issue (systemd watchdog
+stops being fed, confirming kernel-level lockup). BCM2835 hardware watchdog
 triggers eventual reboot.
 
-**Suspected cause:** Reaper's real-time thread scheduling (SCHED_FIFO at high
-priority) interacts with PREEMPT_RT's fully preemptible locking to produce a
-kernel deadlock.
+**Reclassification (2026-03-09):** Originally filed as Reaper-specific.
+Reclassified to all OpenGL/V3D applications after Mixxx reproduced the
+identical lockup pattern. F-017 confirmed as same root cause class.
 
-**Workaround:** D-015 -- continue on stock PREEMPT kernel for development.
+**Crash history:**
+- Crashes 1-3 (T3e Phase 3, Reaper): within ~1 min of first launch. Tested
+  with `chrt -o 0` and `LIBGL_ALWAYS_SOFTWARE=1` -- no change.
+- Crash 4 (T3d attempt, 2026-03-09 ~21:16 CET, Reaper): lockup on relaunch.
+- Crash 5 (2026-03-09 ~21:23 CET, Mixxx): lockup within ~1 min. Temp 46.7C.
+- Crash 6 (2026-03-09 ~21:27 CET, Mixxx): lockup within ~1-2 min after
+  power cycle. Conditions not fully controlled.
+- PASS (stock PREEMPT): Both Reaper and Mixxx run without issue on stock kernel.
 
-**Fix:** Requires test rig (serial console + scriptable PSU) for kernel oops
-capture. Resolution path: (a) build test rig, (b) capture kernel oops/panic,
-(c) report upstream or find workaround, (d) validate Reaper + PREEMPT_RT for
-30 minutes, (e) reinstate D-013. **Must be fixed before shipping.**
+**Root cause (confirmed by Test 1):** V3D GPU driver deadlock under PREEMPT_RT.
+Spinlocks become sleeping mutexes with priority inheritance on RT. V3D driver
+deadlocks internally -- does NOT require interaction with userspace RT-priority
+threads (Test 1: lockup reproduced with CamillaDSP and PipeWire stopped, no
+userspace RT processes, only `irq/41-v3d` kernel thread at SCHED_FIFO 50).
+Only OpenGL clients trigger it; DRM/KMS-only (labwc) is stable.
+
+**Workaround:** D-015 -- all OpenGL apps on stock PREEMPT kernel only.
+
+**Fix:** Serial console is the only viable diagnostic method -- persistent
+journald captured nothing (hard lockup freezes kernel before flush).
+Resolution path: (a) build test rig (serial console + scriptable PSU),
+(b) capture kernel oops/panic, (c) run planned V3D isolation tests (see lab
+note), (d) report upstream or find workaround, (e) validate 30 minutes,
+(f) reinstate D-013. **Must be fixed before shipping.**
+
+### Update 2026-03-09: Reclassified from Reaper-specific to all OpenGL apps
+Three additional crashes (1 Reaper, 2 Mixxx) confirmed the lockup is not
+application-specific. Common factor: V3D GPU rendering on PREEMPT_RT.
+Persistent journald was configured before all three events but captured no
+data -- hard lockup freezes kernel before journald flushes.
 
 ---
 
@@ -178,46 +203,34 @@ recovery), any restart-induced glitches are production defects.
 
 ---
 
-## F-017: Unexplained Pi reboot during Mixxx test on RT kernel (OPEN)
+## F-017: Mixxx hard kernel lockup on PREEMPT_RT (OPEN -- same root cause as F-012)
 
 **Severity:** High
-**Status:** Open
+**Status:** Open -- confirmed same root cause class as F-012
 **Found in:** Mixxx testing on PREEMPT_RT kernel (2026-03-09)
 **Affects:** US-003 (stability), US-006 (Mixxx feasibility), D-013 (PREEMPT_RT production use)
 **Found by:** Owner (observed reboot during testing)
-**Lab note:** `docs/lab-notes/F-017-unexplained-reboot.md`
+**Lab notes:** `docs/lab-notes/F-017-unexplained-reboot.md` (original event),
+`docs/lab-notes/F-012-F-017-rt-gpu-lockups.md` (consolidated investigation)
 
-**Description:** The Pi rebooted unexpectedly during a Mixxx test session on
-the PREEMPT_RT kernel. This is the first time Mixxx was run on the RT kernel.
-Journal entries from the crash were lost -- the reboot occurred before logs
-could be flushed to persistent storage.
+**Description:** The Pi locked up during Mixxx sessions on the PREEMPT_RT
+kernel. 3 events total (original + 2 reproductions on 2026-03-09). Identical
+symptoms to F-012: hard freeze, SSH down, BCM2835 watchdog reboot.
 
-**Root cause:** Unknown. Possible causes:
-1. Mixxx + PREEMPT_RT kernel interaction (same class as F-012 Reaper lockup)
-2. OOM kill triggering kernel panic (Mixxx + CamillaDSP + PipeWire memory pressure)
-3. Thermal shutdown (Mixxx GUI rendering + DSP load in closed environment)
-4. BCM2835 hardware watchdog timeout (systemd stopped being fed, same symptom as F-012)
-5. USB subsystem crash (VL805 controller under load from multiple USB audio devices)
-
-**Evidence:** None -- journal entries lost. This is itself a problem: persistent
-journald storage should be configured to survive unclean reboots.
-
-**Relationship to F-012:** F-012 is Reaper-specific hard lockup on RT kernel.
-F-017 may be the same underlying kernel bug triggered by Mixxx instead of
-Reaper, or it may be a completely different issue. Without crash logs, we
-cannot determine the relationship.
+**Root cause:** Same as F-012 -- V3D GPU driver deadlock under PREEMPT_RT.
+Mixxx uses OpenGL for its GUI, triggering the same V3D lock contention that
+causes Reaper lockups. This was originally filed as "unexplained" because the
+first event had no diagnostic data and the relationship to F-012 was uncertain.
+Two additional reproductions on 2026-03-09 (at 45-47C with active cooling)
+confirmed the pattern: all OpenGL apps lock up on RT, all headless apps are
+stable.
 
 **Impact:** Unexplained reboots during live performance are unacceptable.
 This is a safety concern -- an uncontrolled reboot mid-performance causes
-full audio dropout on all channels. Combined with F-012, this is the second
-application that has crashed the RT kernel.
+full audio dropout on all channels.
 
-**Fix:** TBD. Requires:
-1. Configure persistent journald storage (`Storage=persistent` in journald.conf)
-   so crash logs survive reboots
-2. Reproduce the crash with persistent logging enabled
-3. If reproducible: capture kernel oops/panic via serial console (same test rig as F-012)
-4. Determine if this is the same root cause as F-012 or a separate issue
+**Fix:** Tracked under F-012. Serial console required for kernel oops capture.
+Planned V3D isolation tests documented in lab note.
 
 **Workaround:** Run Mixxx on stock PREEMPT kernel only (extends D-015 scope
 beyond Reaper to include Mixxx).
