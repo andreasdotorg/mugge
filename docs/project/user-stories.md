@@ -1273,6 +1273,65 @@ when running as a systemd service (D-013).
 
 ---
 
+## US-033: USBStreamer Auto-Recovery via udev
+
+**As** the live sound engineer,
+**I want** the audio stack to automatically recover when the USBStreamer is
+momentarily disconnected and reconnected (e.g., loose USB cable, accidental
+bump during a gig),
+**so that** audio resumes within seconds without manual intervention, providing
+a safety net alongside secured cable routing.
+
+**Status:** draft
+**Priority:** medium (layered defense: secured cables + auto-recovery)
+**Depends on:** US-000 (CamillaDSP and PipeWire must be installed and configured)
+**Blocks:** none
+**Cross-references:** US-027a (health monitoring backend detects USB disconnect/reconnect events via udev), A26 (ADAT clock sync recovery — related but distinct: A26 is about the ADA8200's ADAT optical recovery, this story is about the USB transport layer), D-012 (flight case design — cable strain relief is the primary defense)
+
+**Note:** The architect confirmed feasibility: udev can detect USBStreamer
+add events and trigger a debounced restart of CamillaDSP + PipeWire. The
+expected recovery time is 2-5 seconds with an audible gap during restart.
+This is a second line of defense — the primary mitigation is proper cable
+securing in the flight case (D-012). The owner wants both: physical
+prevention and automatic recovery.
+
+**Acceptance criteria:**
+
+*Detection:*
+- [ ] udev rule triggers on USBStreamer USB add event (vendor/product ID match or ALSA card name match)
+- [ ] Debounce logic prevents rapid-fire restarts from unstable USB connection (e.g., 2-second cooldown after last event before triggering recovery)
+- [ ] Recovery script distinguishes USBStreamer reconnect from other USB events (MIDI controllers, measurement mic) — only USBStreamer triggers audio stack restart
+
+*Recovery:*
+- [ ] CamillaDSP restarted with correct configuration (active config reloaded, not default)
+- [ ] PipeWire user session restarted or reconnected to the new ALSA device
+- [ ] Reaper (live mode) reconnects to PipeWire JACK bridge within 5 seconds of recovery
+- [ ] Mixxx (DJ mode) reconnects to PipeWire JACK bridge within 5 seconds of recovery
+- [ ] Audio output resumes on all channels without manual intervention
+- [ ] Recovery completes within 5 seconds from USBStreamer re-enumeration to audio output
+
+*Safety:*
+- [ ] Recovery script runs with minimal privileges (no root required beyond udev trigger)
+- [ ] Failed recovery does not leave the system in a worse state than a clean restart would
+- [ ] If USBStreamer does not re-enumerate within 10 seconds, recovery is aborted and an alert is logged (US-027a integration)
+- [ ] No audio artifacts on other USB devices (MIDI controllers) during recovery
+
+*Testing:*
+- [ ] Tested with deliberate USB disconnect/reconnect under load in DJ mode (Mixxx playing)
+- [ ] Tested with deliberate USB disconnect/reconnect under load in live mode (Reaper playing with backing tracks)
+- [ ] Recovery time measured and documented (target: < 5 seconds)
+- [ ] Multiple rapid disconnects tested: system recovers cleanly, no cascading failures
+
+**DoD:**
+- [ ] udev rule and recovery script installed on Pi 4B
+- [ ] Both modes tested under load with deliberate disconnect/reconnect
+- [ ] Recovery time documented in lab notes
+- [ ] Audio engineer review: recovery behavior is acceptable for live performance (brief gap vs. total failure)
+- [ ] Architect review: udev rule and script are robust, debounce logic is correct
+- [ ] Lab note documenting: udev rule, recovery script, test results, failure modes
+
+---
+
 ## Tier 7 — Operational Convenience
 
 Quality-of-life features for venue setup and DJ workflow. Independent of
@@ -1633,6 +1692,8 @@ US-014 (doc structure) ──> US-015 (theory doc)
                       └──> US-016 (how-to guides)
 
 US-019 (reproducibility) ──> US-020 (redundancy)
+
+US-000 ──> US-033 (USBStreamer auto-recovery via udev)
 
 US-000b ──> US-032 (macOS VNC compatibility) — low priority, independent
 

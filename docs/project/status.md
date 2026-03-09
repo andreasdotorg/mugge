@@ -33,7 +33,7 @@ ahead.
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
-| User stories | active | 37 stories (US-000 through US-032 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md` |
+| User stories | active | 38 stories (US-000 through US-033 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md` |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | not started | Stories US-008 through US-013 defined |
@@ -62,6 +62,7 @@ ahead.
 
 - **US-003** (in-progress): T3b PASS, T3c informational, T3e PASS (PREEMPT_RT 30min stability). T3a (DJ stability with Mixxx) and T4 (thermal in flight case) remaining — T3a blocked on US-005 (Hercules MIDI) and US-006 (Mixxx feasibility). TK-015 done (Mixxx launches). T3b-real (TK-020) blocked on Reaper project setup.
 - **F-012** (open): Reaper hard kernel lockup on PREEMPT_RT. `chrt -o 0` workaround failed (TK-023 FAIL). Proceeding on stock PREEMPT per D-015. Fix before shipping.
+- **F-013** (open): wayvnc has zero authentication — anyone on the network gets full desktop control. Mitigated by D-017 (Pi runs own WiFi AP) but defense-in-depth requires auth. TK-047 filed, must fix before TK-039.
 - **US-004** (in-review): Assumption register written (A1-A26), accuracy corrections committed (`0720f94`). Gap: A27 in AC not yet in register. Pending: DoD sign-off.
 - **US-000a** (in-review): 4/4 DoD — F-002 and F-011 both resolved, verified across reboot
 - **Completed this session:** US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
@@ -70,6 +71,7 @@ ahead.
 ## Blockers
 
 - **F-012: Reaper hard kernel lockup on PREEMPT_RT.** Reaper causes a reproducible hard kernel lockup on `6.12.47+rpt-rpi-v8-rt` within ~1 minute of launch (4 crashes total: 3 on RT incl. `chrt -o 0`, 1 PASS on stock PREEMPT). Not OOM, not GPU, not RT priority (`chrt -o 0` also crashes). D-015: continue on stock PREEMPT, fix before shipping. Needs test rig (serial console + scriptable PSU) for kernel oops capture. Blocks: D-013 full compliance, TK-020/TK-021 on RT kernel.
+- **F-013: wayvnc zero authentication.** wayvnc bound to `0.0.0.0:5900` with no password. Full desktop control (mouse + keyboard) for anyone on the network. Higher breach impact than RustDesk (which had broken input). Fix: configure wayvnc password auth (~2 min, TK-047). Mitigated by D-017 (Pi runs own WiFi AP). Blocks: TK-039 (end-to-end audio validation requires VNC -- must be secured first).
 
 ## External Dependencies
 
