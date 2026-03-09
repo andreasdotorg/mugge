@@ -7,7 +7,7 @@ missing icon themes, Reaper audio device access, and fullscreen window
 configuration.
 
 All fixes stem from the owner's VNC testing session on 2026-03-09, documented
-as TK-035 through TK-038 in the task register.
+as TK-035 through TK-041 in the task register.
 
 ---
 
@@ -133,23 +133,188 @@ render correctly.
 
 ---
 
-## TK-037: Fix Reaper Audio Device Access
+## TK-037: Fix Reaper Audio Device Access -- DONE
 
-**Problem:** Reaper cannot open audio device when launched via VNC. Likely
-needs PipeWire JACK bridge (`pipewire-jack`) and Reaper audio settings pointed
-to JACK rather than ALSA directly.
+**Problem:** Reaper cannot open audio device when launched via VNC. The
+PipeWire JACK bridge package was not installed, so Reaper had no JACK backend
+to connect to.
 
-**Status:** Awaiting execution details from change-manager.
+**Fix:**
+
+```bash
+sudo apt install -y pipewire-jack
+# Installed: pipewire-jack:arm64 1.4.2-1+rpt3
+```
+
+Reaper is launched via the `pw-jack` wrapper rather than changing Reaper's
+internal audio backend:
+
+```bash
+pw-jack /home/ela/opt/REAPER/REAPER/reaper
+```
+
+**Reaper audio config** (`~/.config/REAPER/reaper.ini`):
+
+```ini
+alsa_indev=
+alsa_outdev=
+linux_audio_bits=32
+linux_audio_bsize=512
+linux_audio_bufs=3
+linux_audio_nch_in=8
+linux_audio_nch_out=8
+linux_audio_srate=44100
+```
+
+`alsa_indev` and `alsa_outdev` are empty -- Reaper uses the JACK backend when
+launched via `pw-jack`.
+
+> **Potential issue:** `linux_audio_srate=44100` does not match PipeWire and
+> CamillaDSP (both at 48000 Hz). May need correction to avoid sample rate
+> mismatch.
+
+**Before:** Reaper had no JACK backend available. Audio device access failed.
+**After:** `pipewire-jack` installed, Reaper sees JACK ports when launched via
+`pw-jack`. Pending owner verification of 8ch in GUI.
+
+**Side effects:** The `pipewire-jack` package may add ALSA plugin
+configuration that intercepts `hw:` device paths. TK-042 was created to verify
+CamillaDSP's direct ALSA path (`hw:USBStreamer,0`) is not broken by this
+install. If CamillaDSP routes through PipeWire instead of direct ALSA, the
+US-001/US-002 benchmarks are invalidated and must be rerun.
+
+**Status:** DONE. TK-042 (ALSA path verification) is a follow-up.
 
 ---
 
-## TK-038: Configure Fullscreen Launch for Mixxx and Reaper
+## TK-038: Configure Fullscreen Launch for Mixxx and Reaper -- DONE
 
 **Problem:** Apps launch in windowed mode on the virtual display. Owner wants
-fullscreen by default. Options: labwc window rules in `rc.xml`, or launch
-scripts with fullscreen flags.
+fullscreen by default.
 
-**Status:** Awaiting execution details from change-manager.
+**Fix:** labwc window rules in `~/.config/labwc/rc.xml` using
+`ToggleFullscreen` action. Five rules cover Wayland app IDs and XWayland
+WM_CLASS variants for both applications:
+
+```xml
+<!-- Mixxx native Wayland app_id -->
+<windowRule identifier="org.mixxx.Mixxx">
+  <action name="ToggleFullscreen"/>
+</windowRule>
+<!-- Mixxx lowercase variant -->
+<windowRule identifier="org.mixxx.mixxx">
+  <action name="ToggleFullscreen"/>
+</windowRule>
+<!-- Mixxx XWayland WM_CLASS -->
+<windowRule identifier="mixxx">
+  <action name="ToggleFullscreen"/>
+</windowRule>
+<!-- Reaper XWayland WM_CLASS -->
+<windowRule identifier="REAPER">
+  <action name="ToggleFullscreen"/>
+</windowRule>
+<!-- Reaper lowercase fallback -->
+<windowRule identifier="reaper">
+  <action name="ToggleFullscreen"/>
+</windowRule>
+```
+
+**Before:** Apps launched in windowed mode with title bar visible.
+**After:** `ToggleFullscreen` removes title bar and fills the virtual display.
+labwc reconfigured to apply rules.
+
+**Status:** DONE. Pending owner visual verification via VNC.
+
+---
+
+## TK-040: Reaper JACK Input -- USBStreamer 8ch Not Visible
+
+**Problem:** After TK-037 (Reaper set to JACK), the owner could not see the
+USBStreamer 8-channel input ports in Reaper's audio device list. Only the
+UMIK-1 was visible.
+
+**Root cause:** The `20-usbstreamer.conf` PipeWire config included a playback
+sink node for the USBStreamer. CamillaDSP holds exclusive ALSA playback access
+to `hw:USBStreamer,0`, so PipeWire's playback node conflicted. Only the
+capture source should be exposed via PipeWire.
+
+**Fix:** Removed the playback sink section from
+`~/.config/pipewire/pipewire.conf.d/20-usbstreamer.conf` (capture source
+only). Restarted PipeWire.
+
+**Verification:** `pw-jack jack_lsp` output after fix:
+
+```
+# Capture sources
+Umik-1  Gain  18dB Analog Stereo:capture_FL
+Umik-1  Gain  18dB Analog Stereo:capture_FR
+USBStreamer 8ch Input:capture_AUX0
+USBStreamer 8ch Input:capture_AUX1
+USBStreamer 8ch Input:capture_AUX2
+USBStreamer 8ch Input:capture_AUX3
+USBStreamer 8ch Input:capture_AUX4
+USBStreamer 8ch Input:capture_AUX5
+USBStreamer 8ch Input:capture_AUX6
+USBStreamer 8ch Input:capture_AUX7
+
+# Reaper JACK ports
+REAPER:out1 through REAPER:out8
+REAPER:in1 through REAPER:in8
+
+# CamillaDSP playback sink
+CamillaDSP 8ch Input:playback_AUX0 through AUX7
+CamillaDSP 8ch Input:monitor_AUX0 through AUX7
+
+# Built-in audio
+Built-in Audio Stereo:playback_FL/FR + monitor_FL/FR
+
+# MIDI (via Midi-Bridge)
+DJControl Mix Ultra, SE25, APC mini mk2, Midi Through
+```
+
+All USBStreamer 8-channel capture ports visible. UMIK-1 visible as stereo
+capture. Reaper has 8 in + 8 out JACK ports. All 3 USB-MIDI controllers
+visible via Midi-Bridge (Hercules, Nektar SE25, APC mini mk2).
+
+**Before:** USBStreamer capture not visible in Reaper; PipeWire playback node
+conflicted with CamillaDSP's exclusive ALSA access.
+**After:** USBStreamer 8ch capture visible at system level. Reaper running
+(PID 3565188).
+
+**Status:** Fix applied. Pending owner verification that all 8 channels appear
+in Reaper's GUI via VNC. Blocks TK-039 (end-to-end audio validation).
+
+---
+
+## TK-041: 64 Phantom MIDI Devices in Reaper + Unwanted BLE MIDI
+
+**Problem:** Reaper shows 64 phantom MIDI input/output ports and an unwanted
+BLE MIDI device. The owner expected to see only the physical USB-MIDI
+controllers (Hercules, APCmini, Nektar SE25).
+
+**Analysis (audio engineer):**
+- **64 ports:** Likely from `snd-virmidi` kernel module or PipeWire ALSA MIDI
+  bridge over-enumeration. NOT caused by `snd-aloop`.
+- **BLE MIDI:** A BlueALSA/bluez artifact (despite `disable-bt` in config),
+  NOT the Hercules controller. Owner confirmed USB-MIDI works; Bluetooth
+  scrapped (PO decision recorded).
+
+**Key diagnostic:** `cat /proc/asound/seq/clients` to identify source of
+phantom ports.
+
+**Fix options:** Unload `snd-virmidi` module, or add PipeWire/WirePlumber
+filter rule to suppress phantom enumeration.
+
+**Observation from TK-040:** The `pw-jack jack_lsp` MIDI section shows only
+the 3 physical USB-MIDI controllers plus Midi Through -- clean, no phantom 64
+ports visible via the JACK MIDI bridge. The 64 phantoms likely appear only in
+Reaper's ALSA MIDI view, not the JACK MIDI bridge. This narrows the root cause
+to the ALSA sequencer layer (`/proc/asound/seq/clients`).
+
+> **Evidence gap:** `cat /proc/asound/seq/clients` output not yet captured.
+> CM to provide when diagnostics are run.
+
+**Status:** Open. Should be cleaned up before US-030 Live UAT.
 
 ---
 
@@ -159,5 +324,7 @@ scripts with fullscreen flags.
 |----|-------------|--------|
 | TK-035 | qt6-wayland install | DONE -- native Wayland rendering confirmed |
 | TK-036 | Mixxx missing icons | Applied -- pending owner visual verification |
-| TK-037 | Reaper audio device | Not started |
-| TK-038 | Fullscreen config | Not started |
+| TK-037 | Reaper audio device | DONE -- pipewire-jack, pw-jack wrapper. Sample rate mismatch (44100 vs 48000) flagged |
+| TK-038 | Fullscreen config | DONE -- ToggleFullscreen rules in rc.xml, pending owner visual verification |
+| TK-040 | USBStreamer 8ch in Reaper | Fix applied -- playback sink removed from 20-usbstreamer.conf, pending owner 8ch verification |
+| TK-041 | Phantom MIDI devices | Open -- JACK MIDI clean, phantoms likely ALSA-only, pending diagnostics |
