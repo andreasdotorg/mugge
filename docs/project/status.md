@@ -22,7 +22,7 @@ ahead.
 
 ## Overall Status
 
-**Tier 1 validation complete.** US-001 (CPU) and US-002 (latency) both done. US-003 (stability tests) in progress, US-004 (assumption register) selected. D-011: live mode chunksize 256 + quantum 256. IEM through CamillaDSP passthrough confirmed as net benefit.
+**Tier 1 validation in progress.** US-001 (CPU) and US-002 (latency) both done. US-003 (stability tests) in progress -- T3b/T3c/T3e done, T3d unblocked by F-015 fix, T3a blocked on external deps, T4 requires physical hardware. US-004 (assumption register) selected. D-011: live mode chunksize 256 + quantum 256. IEM through CamillaDSP passthrough confirmed as net benefit. First end-to-end Reaper test exposed F-015 (USB bandwidth contention) -- fixed with workaround, production fix pending.
 
 ## Component Status
 
@@ -53,26 +53,64 @@ ahead.
 | US-000b | 13/13 | done (security specialist + architect signed off) |
 | US-001 | 4/4 | **done** (all 5 tests pass: T1a 5.23%, T1b 10.42%, T1c 19.25%, T1d 6.35%, T1e 6.61%. 16k taps both modes. A1/A2 validated.) |
 | US-002 | 4/4 | **done** (Pass 1 + Pass 2 complete, lab notes written, A3 updated. D-011 confirmed. IEM passthrough = net benefit.) |
-| US-003 | 3/4 | in-progress (T3b PASS, T3c informational, T3e PASS: PREEMPT_RT 30min 0 xruns, 75.0C peak, cyclictest max 209us. T3a + T4 remaining — blocked on Mixxx/Reaper smoke tests.) |
+| US-003 | 3/4 | in-progress (T3b PASS, T3c informational, T3e PASS: PREEMPT_RT 30min 0 xruns, 75.0C peak, cyclictest max 209us. T3d unblocked by F-015 fix -- pending Reaper end-to-end verification. T3a blocked on US-005/US-006. T4 requires physical hardware.) |
 | US-004 | 3/4 | in-review (assumption register written with A1-A26, cross-references documented, CLAUDE.md updated. Accuracy corrections committed `0720f94`. **Gap:** AC mentions A27 but register only has A1-A26.) |
 | US-005 | 0/3 | ready (after Tier 1; Hercules already visible as USB-MIDI — positive signal) |
 | US-006 | 0/3 | ready (unblocked by US-000 + US-005) |
 
 ## In Progress
 
-- **US-003** (in-progress): T3b PASS, T3c informational, T3e PASS (PREEMPT_RT 30min stability). T3a (DJ stability with Mixxx) and T4 (thermal in flight case) remaining — T3a blocked on US-005 (Hercules MIDI) and US-006 (Mixxx feasibility). TK-015 done (Mixxx launches). T3b-real (TK-020) blocked on Reaper project setup.
-- **F-012** (open): Reaper hard kernel lockup on PREEMPT_RT. `chrt -o 0` workaround failed (TK-023 FAIL). Proceeding on stock PREEMPT per D-015. Fix before shipping.
-- **F-013** (partially resolved): wayvnc password auth added (TK-047 done), but VNC session is unencrypted. TLS required before US-018 (guest musicians' phones on network). RFB password auth (56-bit DES challenge-response) is sufficient for current testing phase (owner devices only). RustDesk removed (TK-048 done). F-014 also resolved.
+- **US-003** (in-progress): T3b PASS, T3c informational, T3e PASS (PREEMPT_RT 30min stability). **This session:** F-015 diagnosed and fixed (workaround), JACK test script PASS (60s, 0 xruns). T3d unblocked -- pending Reaper end-to-end verification. T3a blocked on US-005/US-006 (external deps). T4 requires physical hardware.
+- **F-012** (open, critical): Reaper hard kernel lockup on PREEMPT_RT. `chrt -o 0` workaround failed (TK-023 FAIL). Proceeding on stock PREEMPT per D-015. Fix before shipping.
+- **F-013** (partially resolved): wayvnc password auth added (TK-047 done), but VNC session is unencrypted. TLS required before US-018 (guest musicians' phones on network). Sufficient for current testing phase.
+- **F-015** (resolved -- workaround): CamillaDSP playback stalls caused by USB bandwidth contention from ada8200-in adapter. Fixed by disabling adapter + loopback hardening + CamillaDSP RT priority. JACK test PASS. **Production fix needed:** split ALSA device access for capture vs playback. Lab note: `docs/lab-notes/F-015-playback-stalls.md`.
+- **F-016** (open, medium): 2 audible glitches after PipeWire restart with capture-only adapter active. Does not reproduce without restart. Root cause TBD (PipeWire graph clock settling suspected).
 - **US-004** (in-review): Assumption register written (A1-A26), accuracy corrections committed (`0720f94`). Gap: A27 in AC not yet in register. Pending: DoD sign-off.
-- **US-000a** (in-review): 4/4 DoD — F-002 and F-011 both resolved, verified across reboot
-- **Completed this session:** US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
-- **Remaining TODOs**: cloud-init ~3.3s boot overhead (TK-007), F-012 Reaper RT lockup (TK-022)
+- **US-000a** (in-review): 4/4 DoD -- F-002 and F-011 both resolved, verified across reboot
+
+### Completed (previous sessions)
+- US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
+
+### Completed (this session, 2026-03-09)
+- F-015 diagnosis and workaround (ada8200-in disabled, loopback hardened, CamillaDSP RT priority)
+- JACK tone generator test script (`scripts/test/jack-tone-generator.py`)
+- CamillaDSP monitor script (`scripts/test/monitor-camilladsp.py`)
+- Audio path test runner (`scripts/stability/run-audio-test.sh`)
+- PipeWire 8ch loopback config (`configs/pipewire/25-loopback-8ch.conf` hardened)
+- WirePlumber loopback ACP disable (`configs/wireplumber/51-loopback-disable-acp.conf`)
+- UMIK-1 low priority config (`configs/wireplumber/52-umik1-low-priority.conf`)
+- F-015 lab note (`docs/lab-notes/F-015-playback-stalls.md`)
+- Defects log populated (F-002 through F-016)
+
+### Remaining TODOs
+- F-012 Reaper RT lockup (requires test rig -- fix before shipping)
+- F-016 PipeWire restart glitches (investigate graph clock settling)
+- CamillaDSP SCHED_FIFO 80 persistence via systemd (runtime-only currently)
+- cloud-init ~3.3s boot overhead (TK-007)
+- T3d Reaper end-to-end stability test (unblocked, pending execution)
+- Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
 
 ## Blockers
 
-- **F-012: Reaper hard kernel lockup on PREEMPT_RT.** Reaper causes a reproducible hard kernel lockup on `6.12.47+rpt-rpi-v8-rt` within ~1 minute of launch (4 crashes total: 3 on RT incl. `chrt -o 0`, 1 PASS on stock PREEMPT). Not OOM, not GPU, not RT priority (`chrt -o 0` also crashes). D-015: continue on stock PREEMPT, fix before shipping. Needs test rig (serial console + scriptable PSU) for kernel oops capture. Blocks: D-013 full compliance, TK-020/TK-021 on RT kernel.
-- **F-013: PARTIALLY RESOLVED.** wayvnc password auth added (TK-047), RustDesk purged (TK-048), firewall rules cleaned. Password auth sufficient for current testing (owner devices only). **TLS required before US-018** deployment (guest musicians' phones on network — unencrypted VNC session exposes screen content and input to any device on the local network). Does not block TK-039 (no guest devices during testing).
-- **F-014: RESOLVED.** RustDesk UDP 21116-21119 firewall rules removed as part of TK-048.
+- **F-012: Reaper hard kernel lockup on PREEMPT_RT (CRITICAL).** Reaper causes a reproducible hard kernel lockup on `6.12.47+rpt-rpi-v8-rt` within ~1 minute of launch (4 crashes total: 3 on RT incl. `chrt -o 0`, 1 PASS on stock PREEMPT). D-015: continue on stock PREEMPT, fix before shipping. Needs test rig (serial console + scriptable PSU) for kernel oops capture. Blocks: D-013 full compliance, PA-connected production use.
+- **F-013: PARTIALLY RESOLVED.** wayvnc password auth added. **TLS required before US-018** deployment (guest musicians' phones on network).
+- **F-014: RESOLVED.** RustDesk firewall rules removed (TK-048).
+- **F-015: RESOLVED (workaround).** USB bandwidth contention from ada8200-in. Workaround: adapter disabled. **Production fix needed:** split ALSA device access.
+- **F-016: OPEN.** Audible glitches after PipeWire restart with capture adapter active. Root cause TBD.
+
+## Open Defects Summary
+
+See `docs/project/defects.md` for full details.
+
+| Defect | Severity | Status | Blocks |
+|--------|----------|--------|--------|
+| F-002 | Medium | Resolved | -- |
+| F-011 | Low | Resolved | -- |
+| F-012 | Critical | Open | D-013, production use |
+| F-013 | Medium | Partially resolved | US-018 |
+| F-014 | Low | Resolved | -- |
+| F-015 | High | Resolved (workaround) | Production live mode (mic input) |
+| F-016 | Medium | Open | Operational reliability |
 
 ## External Dependencies
 

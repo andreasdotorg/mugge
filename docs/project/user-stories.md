@@ -985,6 +985,75 @@ controls must NOT touch CamillaDSP / PA path).
 
 ---
 
+## US-035: Feedback Suppression for Live Vocal Performance
+
+**As** the live sound engineer,
+**I want** automatic feedback suppression on the vocal mic channel before it
+reaches Reaper and the PA,
+**so that** the condenser mic can be used in the same room as the PA speakers
+without risking feedback howl during performance.
+
+**Status:** draft
+**Depends on:** US-003 (stability confirmed), US-028 (8-channel Loopback configured), US-017 (IEM mix routing established — this story changes the input signal path that feeds Reaper)
+**Blocks:** none
+**Decisions:** none yet (architecture confirmed by owner, architect, and audio engineer — two-instance CamillaDSP)
+
+**Note:** Feedback suppression is a venue-specific concern for live vocal mode.
+The singer uses a condenser mic through the ADA8200 (ch 1), and the PA
+speakers in the same room create a feedback risk. Per the confirmed
+architecture decision, feedback suppression runs at infrastructure level in
+CamillaDSP (not in Reaper) — consistent with the project's design principle
+that safety-critical DSP belongs in the signal chain infrastructure, not in
+the application layer. A Reaper crash or misconfiguration must not remove
+feedback protection.
+
+**Architecture:** Two-instance CamillaDSP:
+- **Instance 1 (existing):** Output path — captures from Loopback, applies
+  crossover + room correction FIR filters, outputs to USBStreamer ch 1-8.
+  Unchanged from current architecture.
+- **Instance 2 (new):** Input path — captures from USBStreamer (mic channels),
+  applies IIR notch filter bank for feedback suppression, outputs to a second
+  Loopback subdevice. PipeWire exposes this processed input to Reaper via the
+  JACK bridge. This instance runs at low chunksize for minimal latency.
+
+IIR notch filters are configured per-venue during soundcheck via a ring-out
+procedure: gradually raise mic gain until each feedback frequency is
+identified, then place a narrow notch filter at that frequency. Typical
+venues need 3-8 notch filters.
+
+**Latency impact:** Instance 2 adds one capture-process-playback cycle to the
+mic-to-PA path. At chunksize 256 (5.33ms per chunk, 2 chunks = 10.66ms),
+total mic-to-PA latency increases from ~21ms to ~31.6ms. This is within
+the manageable range but close to the singer comfort threshold. Chunksize
+tuning (e.g., chunksize 128 for Instance 2 if CPU permits) can reduce the
+added latency to ~5.3ms.
+
+**Acceptance criteria:**
+- [ ] CamillaDSP Instance 2 installed and configured: captures from USBStreamer mic channels, outputs to a second ALSA Loopback subdevice (e.g., `hw:Loopback,0,1`)
+- [ ] Instance 2 runs concurrently with Instance 1 without ALSA device conflicts — Instance 1 owns Loopback subdevice 0 playback + USBStreamer playback, Instance 2 owns USBStreamer capture + Loopback subdevice 1 playback
+- [ ] IIR notch filter bank configured in Instance 2: minimum 8 parametric notch filters on mic channel(s), each with configurable center frequency, Q factor, and gain
+- [ ] Notch filters are narrow (Q >= 10) to minimize coloration of the vocal signal
+- [ ] Filter parameters are stored in a per-venue config file (consistent with D-008 per-venue measurement approach)
+- [ ] PipeWire exposes Instance 2's processed output (Loopback subdevice 1) as a JACK source that Reaper can capture
+- [ ] Reaper receives processed mic input (feedback-suppressed) via PipeWire JACK bridge — no change to Reaper's configuration beyond selecting the correct input source
+- [ ] No regression on output path: Instance 1 performance (processing load, xrun count, latency) is unaffected by Instance 2 running concurrently. F-015 fix (if applicable) remains intact
+- [ ] End-to-end mic-to-PA latency measured and documented: target < 35ms with Instance 2 at chunksize 256, or < 27ms if chunksize 128 is viable
+- [ ] Singer comfort assessment: vocalist confirms the added latency is acceptable for live performance (compare with and without Instance 2)
+- [ ] Ring-out soundcheck procedure documented: step-by-step instructions for identifying feedback frequencies and configuring notch filters at a venue
+- [ ] CPU budget validated: both CamillaDSP instances + Reaper + PipeWire combined CPU < 85% sustained
+- [ ] Instance 2 systemd service unit created with appropriate dependencies (starts after Instance 1, requires Loopback and USBStreamer)
+- [ ] Audio engineer review: signal chain integrity confirmed, no unintended coloration beyond the notch filters
+
+**DoD:**
+- [ ] Both CamillaDSP instances running concurrently on Pi 4B, validated for 30-minute stability (0 xruns on both instances)
+- [ ] Ring-out procedure tested at a real or simulated venue setup with PA speakers and condenser mic
+- [ ] Per-venue notch filter config file format defined and documented
+- [ ] Lab note documenting: dual-instance architecture, ALSA device allocation, latency measurements, CPU budget, ring-out procedure results
+- [ ] Audio engineer and architect reviews passed
+- [ ] CLAUDE.md updated with dual-instance CamillaDSP architecture note
+
+---
+
 ## Tier 5a — Web UI Platform
 
 The owner wants a web-based control and monitoring interface where the Pi
@@ -1759,6 +1828,8 @@ US-000 ──> US-033 (USBStreamer auto-recovery via udev)
 US-000 + US-000a ──> US-034 (offline venue operation)
 
 US-000b ──> US-032 (macOS VNC compatibility) — low priority, independent
+
+US-003 + US-028 + US-017 ──> US-035 (feedback suppression) ──> US-030 (optional: enhances live vocal safety)
 
 US-005 + US-006 + US-028 ──> US-029 (DJ/PA UAT) ──┐
 US-017 + US-028 ──> US-030 (Live Vocal UAT) ───────┤
