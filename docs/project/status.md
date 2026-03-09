@@ -67,7 +67,7 @@ ahead.
 - **F-015** (resolved -- workaround): USB bandwidth contention. Capture-only adapter designed (Phase 9) and verified on both kernels. Lab note: `docs/lab-notes/F-015-playback-stalls.md`.
 - **F-016** (open, medium): 2 audible glitches after PipeWire restart with capture adapter active. Does not reproduce without restart.
 - **F-017** (open, high): Unexplained Pi reboot during Mixxx on RT kernel (~10 min into test). Journal entries lost. Second app (after Reaper) to crash RT kernel -- 0/2 GUI apps stable on RT. D-015 scope extends to Mixxx. Lab note: `docs/lab-notes/F-017-unexplained-reboot.md`.
-- **F-018** (partially resolved): CamillaDSP SCHED_FIFO 80 now persisted via systemd override (deployed to Pi, survives reboot). PipeWire quantum 256 partially persisted (default.clock.quantum + min-quantum in config, but force-quantum needs systemd user service to run `pw-metadata` after PipeWire starts).
+- **F-018** (resolved): All audio configs now persist across reboot. CamillaDSP SCHED_FIFO 80 via systemd override, PipeWire quantum 256 via static config + systemd user service for force-quantum, RT kernel via config.txt. Verified by capture-verify-worker.
 - **D-020** (committed): Web UI architecture -- FastAPI + raw PCM streaming + browser-side FFT. Architecture doc: `docs/architecture/web-ui.md`. A21 (Reaper OSC on ARM) gates Stage 4.
 - **US-004** (in-review): Assumption register (A1-A26). Gap: A27 not in register. Pending DoD sign-off.
 - **US-000a** (in-review): 4/4 DoD -- F-002 and F-011 both resolved, verified across reboot
@@ -100,7 +100,6 @@ ahead.
 - Quantum reduction testing on RT (owner-requested -- needs story/task)
 - F-012 Reaper RT lockup (requires serial console test rig -- fix before shipping)
 - F-017 Unexplained Mixxx reboot on RT (configure persistent journald first, then reproduce)
-- F-018 remaining: PipeWire force-quantum persistence via systemd user service
 - F-016 PipeWire restart glitches (investigate graph clock settling)
 - T3d Reaper end-to-end 30-min stability test (unblocked, pending execution)
 - Split ALSA device access for USBStreamer capture vs playback (production fix for F-015)
@@ -116,7 +115,7 @@ ahead.
 - **F-015: RESOLVED (workaround).** USB bandwidth contention from ada8200-in. Workaround: adapter disabled. **Production fix needed:** split ALSA device access.
 - **F-016: OPEN.** Audible glitches after PipeWire restart with capture adapter active. Root cause TBD.
 - **F-017: OPEN (high).** Unexplained Pi reboot during Mixxx test on RT kernel. Journal entries lost. Could be same class as F-012 or separate issue. Persistent journald storage needed.
-- **F-018: PARTIALLY RESOLVED.** CamillaDSP SCHED_FIFO 80 persisted via systemd override (deployed). PipeWire quantum 256 partially persisted (default.clock.quantum + min-quantum in config). **Remaining:** force-quantum needs systemd user service to run `pw-metadata` after PipeWire starts.
+- **F-018: RESOLVED.** All audio configs persist across reboot (CamillaDSP FIFO 80 via systemd override, PipeWire quantum 256 via static config + user service, RT kernel via config.txt). Verified.
 
 ## Open Defects Summary
 
@@ -132,7 +131,7 @@ See `docs/project/defects.md` for full details.
 | F-015 | High | Resolved (workaround) | Production live mode (mic input) |
 | F-016 | Medium | Open | Operational reliability |
 | F-017 | High | Open | US-003, US-006, D-013 (RT kernel stability) |
-| F-018 | High | Partially resolved | Operational reliability, D-008 (one-button setup) |
+| F-018 | High | Resolved | -- |
 
 ## External Dependencies
 

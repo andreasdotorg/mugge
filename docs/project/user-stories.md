@@ -971,7 +971,7 @@ controls must NOT touch CamillaDSP / PA path).
 - [ ] Singer view is restricted: no access to PA mix, engineer mix, DSP settings, or system controls
 - [ ] IEM level changes sent via Reaper OSC (NOT CamillaDSP) — singer controls cannot affect PA routing
 - [ ] Changes do not affect PA or engineer mixes
-- [ ] Latency of control changes is imperceptible (< 100ms from slider move to level change in IEM)
+- [ ] Latency of control changes is imperceptible (< 100ms end-to-end from slider move to level change in IEM). Measured as OSC round-trip: browser WebSocket -> FastAPI -> python-osc UDP -> Reaper -> OSC feedback -> FastAPI -> WebSocket -> browser. This is a D-020 Stage 4 gate criterion
 - [ ] Authentication: singer role password, exchanged for session token (per US-022 auth model)
 - [ ] Security specialist review: role isolation verified (singer cannot escalate to engineer controls)
 - [ ] UX specialist review: performer usability confirmed
@@ -1142,7 +1142,7 @@ needing SSH or VNC.
 - [ ] Real-time audio level meters for all 8 channels (input and output)
 - [ ] CamillaDSP status: processing load, state, active config, current filter files
 - [ ] System status: CPU temperature, CPU usage, memory usage, xrun count
-- [ ] FFT / spectrum visualization rendered in browser (WebGPU or Web Audio API) — Pi sends audio data, browser renders
+- [ ] FFT / spectrum visualization rendered in browser via Web Audio AnalyserNode — 2048-point FFT, Blackman window, 30fps update rate (per D-020 section 5). Pi streams raw float32 PCM for 3 channels (L main, R main, mono sub sum) via binary WebSocket; browser performs all FFT and rendering
 - [ ] Controls: channel gain adjustment, mute/unmute per channel
 - [ ] Configuration display: current mode (DJ/PA vs Live), active CamillaDSP config
 - [ ] Engineer role required for access (via US-022 auth model)

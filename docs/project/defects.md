@@ -224,55 +224,58 @@ beyond Reaper to include Mixxx).
 
 ---
 
-## F-018: Ephemeral audio configuration not persisted across reboot (OPEN)
+## F-018: Ephemeral audio configuration not persisted across reboot (RESOLVED)
 
 **Severity:** High
-**Status:** Open
+**Status:** Resolved
 **Found in:** Post-F-015 fix verification (2026-03-09)
 **Affects:** US-003 (stability), operational reliability, D-008 (one-button venue setup)
 **Found by:** Audio engineer + owner (flagged during reboot recovery)
 
-**Description:** Two critical audio configuration parameters are set at
+**Description:** Two critical audio configuration parameters were set at
 runtime and lost on every reboot, requiring manual restoration:
 
-1. **CamillaDSP SCHED_FIFO 80** -- currently set via `chrt -f -p 80 <pid>`
-   after CamillaDSP starts. Lost on every CamillaDSP or system restart.
-   Without this, CamillaDSP runs at SCHED_OTHER nice -10 (the priority
-   inversion that contributed to F-015).
+1. **CamillaDSP SCHED_FIFO 80** -- was set via `chrt -f -p 80 <pid>`
+   after CamillaDSP starts. Without this, CamillaDSP runs at SCHED_OTHER
+   nice -10 (the priority inversion that contributed to F-015).
 
-2. **PipeWire quantum 256** -- currently set via `pw-metadata -n settings 0
-   clock.force-quantum 256` at runtime. Lost on every PipeWire or system
-   restart. Without this, PipeWire reverts to default quantum (typically 1024),
-   which changes the latency characteristics and may cause buffer mismatches
-   with CamillaDSP at chunksize 256.
+2. **PipeWire quantum 256** -- was set via `pw-metadata -n settings 0
+   clock.force-quantum 256` at runtime. Without this, PipeWire reverts to
+   default quantum, which changes latency characteristics and may cause
+   buffer mismatches with CamillaDSP at chunksize 256.
 
-**Impact:** Every reboot requires manual intervention to restore the audio
-stack to its tested configuration. This directly violates the one-button venue
-setup goal (D-008 design principle #6: "power on -> audio stack auto-starts").
-In a live performance context, a reboot (whether planned or from F-012/F-017)
-would leave the system in an untested, potentially unstable configuration
-until an operator manually restores the settings.
+**Impact:** Every reboot required manual intervention to restore the audio
+stack to its tested configuration. This violated the one-button venue setup
+goal (D-008 design principle #6: "power on -> audio stack auto-starts").
 
-**Fix (known, not yet implemented):**
+### Resolution (2026-03-09)
 
-1. **CamillaDSP SCHED_FIFO 80:** Add to systemd service override:
-   ```
-   [Service]
-   CPUSchedulingPolicy=fifo
-   CPUSchedulingPriority=80
-   ```
-   File: `configs/systemd/camilladsp.service.d/override.conf` (extend existing override)
+All items verified to survive reboot by capture-verify-worker.
 
-2. **PipeWire quantum 256:** Add to PipeWire config drop-in:
-   ```
-   context.properties = {
-       default.clock.quantum = 256
-       default.clock.min-quantum = 256
-       default.clock.force-quantum = 256
-   }
-   ```
-   File: `configs/pipewire/10-audio-settings.conf` (may already exist but needs
-   the force-quantum line)
+**Item 1: CamillaDSP SCHED_FIFO 80.** Persisted via systemd service override
+(commit 6042138).
+```
+[Service]
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=80
+```
+File: `configs/systemd/camilladsp.service.d/override.conf`
 
-Both fixes are straightforward config file changes. The configs directory
-already has the correct structure for these files.
+**Item 2: PipeWire quantum 256.** Persisted via two mechanisms:
+- Static config (`configs/pipewire/10-audio-settings.conf`):
+  ```
+  context.properties = {
+      default.clock.quantum = 256
+      default.clock.min-quantum = 256
+      default.clock.force-quantum = 256
+  }
+  ```
+- Systemd user service running `pw-metadata -n settings 0 clock.force-quantum 256`
+  after PipeWire starts, guaranteeing the quantum stays locked at 256 even if
+  runtime negotiation would override the static config.
+
+**Item 3: RT kernel.** `kernel=kernel8_rt.img` in `/boot/firmware/config.txt`
+persists the PREEMPT_RT kernel selection across reboot.
+
+All four config items (CamillaDSP FIFO 80, PipeWire quantum 256, PipeWire
+force-quantum 256, RT kernel) confirmed surviving reboot.
