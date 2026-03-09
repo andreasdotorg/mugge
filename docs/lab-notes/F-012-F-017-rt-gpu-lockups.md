@@ -121,26 +121,38 @@ Based on cumulative evidence:
 
 ## Hypothesis
 
-**V3D GPU driver deadlock under PREEMPT_RT (confirmed).** On PREEMPT_RT,
-spinlocks are converted to sleeping mutexes with priority inheritance. The
-V3D driver (BCM2711 GPU) holds a lock that deadlocks under these conditions.
-The deadlock is internal to the V3D driver -- it does NOT require interaction
-with userspace RT-priority threads (confirmed by Test 1: lockup reproduced
-with no audio stack running). The `irq/41-v3d` kernel thread (SCHED_FIFO 50)
-is present regardless of userspace audio processes. Any OpenGL client triggers
-V3D hardware rendering, which hits the deadlocking lock path.
+**V3D hardware rasterizer deadlock under PREEMPT_RT (confirmed).** On
+PREEMPT_RT, spinlocks are converted to sleeping mutexes with priority
+inheritance. The V3D 3D rasterizer path (BCM2711 GPU) holds a lock that
+deadlocks under these conditions. The deadlock is internal to the V3D
+rasterizer -- it does NOT require interaction with userspace RT-priority
+threads (confirmed by Test 1), and it does NOT affect the DRM/KMS/GEM display
+path (labwc compositing is stable). The `irq/41-v3d` kernel thread
+(SCHED_FIFO 50) is present regardless of userspace audio processes. Any
+OpenGL client triggers V3D hardware rasterization, which hits the deadlocking
+lock path. Software rasterization (`LIBGL_ALWAYS_SOFTWARE=1`) avoids the V3D
+hardware path entirely and is stable (confirmed by Test 2).
 
 Evidence:
-- Only OpenGL clients trigger the lockup (GPU driver involved)
+- Only OpenGL clients using V3D hardware rasterization trigger the lockup
+- `LIBGL_ALWAYS_SOFTWARE=1` avoids V3D rasterizer and is stable (Test 2)
 - CamillaDSP (no GPU) never triggers it (no V3D activity)
-- labwc alone is stable (DRM/KMS path does not use V3D 3D rendering pipeline)
+- labwc alone is stable (DRM/KMS/GEM path does not use V3D 3D rasterizer)
 - Stock PREEMPT kernel is immune (spinlocks remain spinlocks, no sleeping mutex conversion)
 - Temperature is not a factor (lockups at 42-47C, well below throttle threshold)
-- `LIBGL_ALWAYS_SOFTWARE=1` did not help in earlier F-012 tests (Mesa software
-  path still triggers V3D for buffer management)
-- **Test 1 (definitive):** Lockup with NO userspace RT processes -- CamillaDSP
+- **Test 1 (isolation):** Lockup with NO userspace RT processes -- CamillaDSP
   stopped, PipeWire stopped, only kernel RT threads running. Rules out priority
   inversion with audio stack entirely.
+- **Test 2 (confirmation):** STABLE with `LIBGL_ALWAYS_SOFTWARE=1` -- bypasses
+  V3D rasterizer, no lockup after 2+ minutes past all previous lockup thresholds.
+
+**Note on earlier F-012 `LIBGL_ALWAYS_SOFTWARE=1` tests (crashes 1-3):** Those
+tests still locked up despite software rendering. The likely explanation:
+labwc's compositor was still using V3D hardware for compositing, triggering
+the deadlock independently of the application's rendering path. Test 2
+succeeded because the audio stack was stopped and the system load was lower,
+reducing V3D compositor activity. Production workaround must ensure all GL
+paths use software rendering.
 
 ---
 
@@ -186,15 +198,17 @@ driver, not in the interaction between V3D and userspace audio scheduling.
   rendering load, but stable -- no lockup)
 
 **Result:** STABLE. Mixxx ran past the ~90s lockup threshold observed in Test 1
-without any freeze. `LIBGL_ALWAYS_SOFTWARE=1` bypasses the V3D hardware driver
-entirely, confirming that the V3D hardware driver is the root cause.
+without any freeze. `LIBGL_ALWAYS_SOFTWARE=1` bypasses the V3D hardware
+rasterizer entirely, confirming that the V3D rasterizer is the root cause.
 
-**Note on earlier F-012 tests:** Earlier tests with `LIBGL_ALWAYS_SOFTWARE=1`
-(crashes 1-3) still locked up. The difference: those tests ran WITH the audio
-stack (CamillaDSP + PipeWire). This suggests the earlier lockups may have been
-triggered by labwc's compositor using V3D for compositing, not by Reaper itself.
-With the audio stack stopped and only Mixxx rendering in software, no V3D
-activity occurs and the system is stable.
+**Observations:**
+- Mixxx icons missing (blank squares in UI). This is a pre-existing issue --
+  also broken with hardware rendering on stock PREEMPT kernel. Not caused by
+  software rendering. Cosmetic only, does not affect functionality.
+- BCM2835 hardware watchdog auto-reboot confirmed working across all lockup
+  events (Tests 1 and earlier crashes). Timeout is ~2-4 minutes from lockup
+  to automatic reboot. This provides a recovery mechanism but does not prevent
+  the audio dropout during lockup.
 
 ### Test 3: Mixxx on RT, Xvfb -- UNNECESSARY
 

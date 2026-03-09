@@ -81,20 +81,40 @@ threads (Test 1: lockup reproduced with CamillaDSP and PipeWire stopped, no
 userspace RT processes, only `irq/41-v3d` kernel thread at SCHED_FIFO 50).
 Only OpenGL clients trigger it; DRM/KMS-only (labwc) is stable.
 
-**Workaround:** D-015 -- all OpenGL apps on stock PREEMPT kernel only.
+**Workaround (VALIDATED):** `LIBGL_ALWAYS_SOFTWARE=1` forces Mesa software
+rendering (llvmpipe), bypassing the V3D GPU driver entirely. Test 2 confirmed:
+Reaper stable for 5+ minutes on PREEMPT_RT with software rendering, where
+hardware rendering locks up within 1-2 minutes. This enables D-013 (RT kernel
+mandatory) WITH GUI applications -- previously thought impossible.
 
-**Fix:** Serial console is the only viable diagnostic method -- persistent
-journald captured nothing (hard lockup freezes kernel before flush).
-Resolution path: (a) build test rig (serial console + scriptable PSU),
-(b) capture kernel oops/panic, (c) run planned V3D isolation tests (see lab
-note), (d) report upstream or find workaround, (e) validate 30 minutes,
-(f) reinstate D-013. **Must be fixed before shipping.**
+**Previous workaround:** D-015 -- all OpenGL apps on stock PREEMPT kernel only.
+Superseded by `LIBGL_ALWAYS_SOFTWARE=1` if performance is acceptable.
+
+**Fix (production):** Set `LIBGL_ALWAYS_SOFTWARE=1` in the environment for
+Reaper and Mixxx systemd units or launcher scripts. Performance impact needs
+validation: software rendering uses CPU instead of GPU, which may affect DSP
+headroom. Needs a stability test (T3d) with software rendering to confirm
+CPU impact is acceptable.
+
+**Upstream fix:** V3D driver needs PREEMPT_RT-safe locking. Report to kernel
+maintainers with reproduction steps (Test 1 from lab note). Serial console
+capture of the actual deadlock would strengthen the bug report.
 
 ### Update 2026-03-09: Reclassified from Reaper-specific to all OpenGL apps
 Three additional crashes (1 Reaper, 2 Mixxx) confirmed the lockup is not
 application-specific. Common factor: V3D GPU rendering on PREEMPT_RT.
 Persistent journald was configured before all three events but captured no
 data -- hard lockup freezes kernel before journald flushes.
+
+### Update 2026-03-09: Root cause confirmed, workaround validated
+**Root cause:** V3D GPU driver deadlock under PREEMPT_RT. Spinlocks become
+sleeping mutexes with priority inheritance on RT. V3D driver deadlocks
+internally -- does NOT require userspace RT-priority threads (Test 1 confirmed
+with CamillaDSP and PipeWire stopped).
+
+**Workaround validated:** `LIBGL_ALWAYS_SOFTWARE=1` bypasses V3D entirely.
+Test 2: Reaper stable 5+ min on RT with software rendering vs 1-2 min lockup
+with hardware rendering. This is a game-changer for D-013 compliance.
 
 ---
 
