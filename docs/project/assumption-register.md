@@ -1,7 +1,7 @@
 # Assumption Register
 
 Comprehensive register of all assumptions the project relies on. Includes the
-original A1-A8 from CLAUDE.md plus expanded assumptions A9-A26 discovered
+original A1-A8 from CLAUDE.md plus expanded assumptions A9-A27 discovered
 through the Advocatus Diaboli audit (US-004).
 
 Each assumption has: ID, description, confidence level, validation method,
@@ -27,7 +27,7 @@ affected decisions/stories, and current status.
 
 ---
 
-## Expanded Assumptions (A9-A26) — from US-004 Audit
+## Expanded Assumptions (A9-A27) — from US-004 Audit
 
 ### A9 [HIGH]: Hardcoded ALSA device paths assume stable card numbering
 
@@ -315,6 +315,29 @@ relief in flight case design.
 
 ---
 
+### A27 [MEDIUM]: Stock PREEMPT kernel provides adequate scheduling latency for production use
+
+**Description:** The system currently runs the stock PREEMPT kernel (D-015)
+as an interim measure due to F-012 (Reaper lockup on PREEMPT_RT). D-013
+mandates PREEMPT_RT for production use, but until F-012 is resolved, the
+stock kernel must provide adequate scheduling latency for the 5.33ms
+processing deadline at chunksize 256. T3e showed PREEMPT_RT achieves max
+209us scheduling latency, but no cyclictest baseline exists for stock
+PREEMPT — the actual worst-case scheduling latency on stock PREEMPT is
+unknown.
+
+**Confidence:** MEDIUM — stock PREEMPT works in practice (US-003 T3b/T3c
+passed with zero xruns in 30-minute tests), but no formal worst-case bound
+exists. PREEMPT_RT provides bounded 209us worst-case; stock PREEMPT
+scheduling latency is empirically adequate but theoretically unbounded.
+**Validation:** Needs stock PREEMPT cyclictest baseline under audio load
+(not yet run). Compare worst-case latency to 5.33ms deadline. If stock
+worst-case exceeds ~2ms, production use on stock PREEMPT is risky.
+**Affects:** D-013 (PREEMPT_RT mandatory), D-015 (stock PREEMPT interim), US-003, F-012
+**Status:** open
+
+---
+
 ## Cross-Reference: Blocking Findings by Story
 
 | Story | Blocking Assumptions | Notes |
@@ -325,7 +348,7 @@ relief in flight case design.
 | US-017 | A11 (8ch CamillaDSP routing) | D-011 resolved the architecture but configs need updating |
 | US-021 | A13 (quantum/chunksize alignment), A16 (gpu_mem), A19 (loopback channels) | Mode switching must be atomic |
 | US-022 | A20 (web server CPU), A21 (Reaper OSC) | CPU budget must account for web server |
-| US-003 | A4 (thermals, HIGH-RISK — D-012 active cooling mandatory), A18 (force_turbo), A23 (USB hub) | T3b: 74.5C open-air. Active cooling required per D-012. T4 validates. |
+| US-003 | A4 (thermals, HIGH-RISK — D-012 active cooling mandatory), A18 (force_turbo), A23 (USB hub), A27 (stock PREEMPT scheduling latency) | T3b: 74.5C open-air. Active cooling required per D-012. T4 validates. A27: stock kernel interim per D-015/F-012. |
 
 ---
 
@@ -344,19 +367,19 @@ relief in flight case design.
 
 ## Summary
 
-This register contains 26 formal assumptions (A1-A26). The original AD audit
+This register contains 27 formal assumptions (A1-A27). The original AD audit
 identified 30 findings total; the additional 4 were meta-findings (C1, H1, M4, L2)
 that were resolved by decisions D-007 through D-010 and are tracked in the
 "Assumptions Resolved by Recent Decisions" table above rather than as numbered
-assumptions.
+assumptions. A27 was added post-audit based on D-015/F-012 findings.
 
-| Severity | Entries (A1-A26) | Open | Resolved/Validated |
+| Severity | Entries (A1-A27) | Open | Resolved/Validated |
 |----------|-----------------|------|--------------------|
 | HIGH (A1-A3, A9-A13) | 9 | 3 (A4-equivalent: A12, A13 partially; A9 partially) | 6 (A1, A2 validated; A3 invalidated/superseded; A9, A10 resolved; A11 partially-resolved) |
-| MEDIUM (A14-A22) | 9 | 9 | 0 |
+| MEDIUM (A14-A22, A27) | 10 | 10 | 0 |
 | LOW (A23-A26) | 4 | 4 | 0 |
 | UNKNOWN (A6, A8) | 2 | 2 | 0 |
-| **Total** | **26** | **18** | **8** |
+| **Total** | **27** | **19** | **8** |
 
 Note: A4 (LOW), A5 (MEDIUM), A6 (UNKNOWN), A7 (MEDIUM), A8 (UNKNOWN) from the
 original set remain open pending hardware validation.

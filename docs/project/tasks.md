@@ -28,7 +28,7 @@ Status: `open` | `in-progress` | `blocked` | `done` | `wont-do`
 | TK-009 | PipeWire vs native JACK latency/stability comparison | unassigned | open | standalone | CLAUDE.md line 312 | Low priority -- PipeWire works. JACK alternative is speculative. |
 | TK-010 | Live mode: evaluate whether shorter FIR filters would benefit chunksize 256 | unassigned | open | standalone | CLAUDE.md line 315-316 | Likely wont-do: US-001 proved 16k taps viable at chunksize 256 (19.25% CPU). |
 | TK-011 | Install and test REW on Pi 4 ARM | unassigned | open | US-008 | CLAUDE.md line 308 | Java-based, should run on ARM. Useful for ad-hoc verification even if pipeline is pure Python. ~10 min task. |
-| TK-012 | Verify CUPS/rpcbind port status | security-specialist | open | US-000a | US-000 installation TODO #5 | Listed as listening in pre-conditions but not checked post-hardening. May already be resolved. |
+| TK-012 | Verify CUPS/rpcbind port status | security-specialist | done | US-000a | US-000 installation TODO #5 | **DONE.** rpcbind and CUPS both disabled, not listening. Only SSH (22) exposed. F-011 confirmed resolved. |
 | TK-013 | Lab notes T6: correct latency budget (old IEM bypass assumption) | technical-writer | done | US-002 | status.md line 67 | **DONE** (commit `5d46674`). Latency budget corrected for D-011 IEM passthrough. |
 | TK-014 | Verify Reaper installation path convention (/home/ela/opt vs /opt) | unassigned | open | standalone | PM observation during US-000b review | Minor -- confirm whether ~/opt is intentional (Pi-Apps default) or should be /opt. |
 | TK-015 | Mixxx smoke test: connect via RustDesk, launch Mixxx, verify it renders and plays audio | change-manager | done | US-029 | team-lead directive (UAT gap) | PARTIAL PASS. Launches on stock PREEMPT, 194 MB memory, clean kill. GUI rendering not visually confirmed (no RustDesk session). |
@@ -72,7 +72,7 @@ Items moved here when resolved. Preserves audit trail.
 
 ## Notes
 
-- Tasks TK-001 through TK-034 are active (done in place: TK-001, TK-002, TK-004, TK-013, TK-015, TK-016, TK-023 (FAIL), TK-024, TK-025, TK-026, TK-027, TK-028, TK-029, TK-030, TK-031, TK-033, TK-034). TK-005 in-progress (pending Pi validation). TK-100+ are completed (numbering gap is intentional for clarity).
+- Tasks TK-001 through TK-034 are active (done in place: TK-001, TK-002, TK-004, TK-012, TK-013, TK-015, TK-016, TK-023 (FAIL), TK-024, TK-025, TK-026, TK-027, TK-028, TK-029, TK-030, TK-031, TK-033, TK-034). TK-005 in-progress (pending Pi validation). TK-100+ are completed (numbering gap is intentional for clarity).
 - TK-024 through TK-034 are the reproducibility/repo-structure audit (owner request). All done except **TK-032** (T3e reproducibility script). TK-024 (QE audit), TK-025 (dead code), TK-026-029 (READMEs), TK-030 (lab notes cross-refs), TK-031 (repo layout), TK-033 (T3e raw data), TK-034 (number fix) -- all complete.
 - US-003 T3e complete (PREEMPT_RT installed + validated, 30-min 0 xruns, cyclictest max 209us). F-012 blocks Reaper on RT kernel -- proceeding on stock PREEMPT per D-015.
 - UAT stories created by product owner: US-029 (DJ UAT), US-030 (Live UAT), US-031 (Full Rehearsal). TK-015/016/017 are prerequisite smoke tests.
