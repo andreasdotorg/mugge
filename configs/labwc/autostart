@@ -1,0 +1,11 @@
+# Trimmed autostart for audio workstation (US-000b)
+# Removed: pcmanfm-pi, wf-panel-pi, lxsession-xdg-autostart
+# Kept: kanshi (display output management)
+
+/usr/bin/kanshi &
+
+# Propagate Wayland env to systemd user session
+systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
+
+# wayvnc for remote access (password in ~/.config/wayvnc/config)
+wayvnc --output=NOOP-fallback 0.0.0.0 5900 &

@@ -1,0 +1,6 @@
+# wayvnc configuration for headless remote desktop
+# Deployed to ~/.config/wayvnc/config on the Pi
+#
+# NOTE: Set the actual password on the Pi only.
+# Do not commit the real password to the repository.
+password=CHANGE_ME_BEFORE_DEPLOYMENT

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<labwc_config>
+
+  <theme>
+    <name></name>
+    <cornerRadius>8</cornerRadius>
+    <font name="sans" size="10" />
+  </theme>
+
+  <keyboard>
+    <default />
+  </keyboard>
+
+  <mouse>
+    <default />
+  </mouse>
+
+  <windowRules>
+    <windowRule identifier="org.mixxx.Mixxx">
+      <action name="ToggleFullscreen"/>
+    </windowRule>
+    <windowRule identifier="org.mixxx.mixxx">
+      <action name="ToggleFullscreen"/>
+    </windowRule>
+    <windowRule identifier="mixxx">
+      <action name="ToggleFullscreen"/>
+    </windowRule>
+    <windowRule identifier="REAPER">
+      <action name="ToggleFullscreen"/>
+    </windowRule>
+    <windowRule identifier="reaper">
+      <action name="ToggleFullscreen"/>
+    </windowRule>
+  </windowRules>
+
+</labwc_config>
