@@ -295,3 +295,56 @@ decision. Add a new one that supersedes it (reference the old one).
 - **Minimum kernel version requirement:** `6.12.62+rpt-rpi-v8-rt`. Systems on older RT kernels must upgrade before production use.
 - **Config changes:** Remove `/etc/modprobe.d/blacklist-v3d.conf`, remove `WLR_RENDERER=pixman` from labwc service, remove `LIBGL_ALWAYS_SOFTWARE=1` from Mixxx launch scripts.
 - **D-021 clauses that remain:** Clause 1 (PREEMPT_RT mandatory, D-013) and clause 5 (stock PREEMPT for development) are not affected.
+
+---
+
+## D-023: Reproducible Test Protocol — version-controlled state, scripted tests, deploy-and-reboot (2026-03-10)
+
+**Context:** TK-039 Phase 1 revealed that Mixxx had silently reverted to ALSA backend (F-021) because the start-mixxx script and soundconfig.xml were not version-controlled. The audio engineer referenced SETUP-MANUAL.md (now obsolete) as source of truth, leading to incorrect assumptions about the deployed state. The owner mandates that all future significant tests must run on a well-defined, reconstructible system state.
+
+**Decision:** Every significant test MUST happen on a well-defined and reconstructible state. This requires:
+
+1. **Complete configuration under version control.** ALL Pi configuration files that affect audio behavior must be in the repo's `configs/` directory. This includes application configs (Mixxx soundconfig.xml, Reaper reaper.ini/project templates), launch scripts, systemd overrides, and any file that affects the signal path or test conditions. The repo is the single source of truth for "what should be deployed."
+
+2. **Executable test scripts.** Test procedures must be executable scripts in `scripts/test/` or `scripts/stability/`, not prose documents. The script defines the exact steps, monitoring, and pass/fail criteria. Ad-hoc testing is acceptable for exploration but results cannot be cited as validation evidence.
+
+3. **Deploy-and-reboot before test.** Tests start from a clean deploy: sync configs from repo to Pi, reboot, verify expected state. This eliminates "it worked because of a runtime tweak that was never persisted" failures. The deploy mechanism (script or manual rsync with checklist) must be documented and version-controlled.
+
+4. **Lab notes include git commit hash.** Every lab note and test result must record the exact git commit hash that was deployed. This enables anyone to reconstruct the exact system state for reproduction or bisection.
+
+5. **Ground truth hierarchy.** For current Pi state:
+   - (a) CLAUDE.md "Pi Hardware State" — authoritative summary
+   - (b) The Pi itself — actual running state
+   - (c) `configs/` directory — version-controlled deployed configs
+   - (d) `docs/project/` tracking files — decisions, status, defects
+   - (e) SETUP-MANUAL.md — **OBSOLETE**, not kept in sync, do NOT treat as authoritative
+
+**Rationale:** (1) F-021 (Mixxx ALSA fallback) was caused by a config file that was never version-controlled, so the "correct" state could not be verified or restored. (2) SETUP-MANUAL.md diverged from actual Pi state across multiple sessions, leading the audio engineer to cite a stale start-mixxx script as fact. (3) The owner's requirement for reproducibility is fundamental to a system with safety implications (D-013). A test result is only meaningful if the exact conditions can be reconstructed. (4) Deploy-and-reboot eliminates the class of bugs where runtime state diverges from persisted configuration (F-018, F-020, F-021 are all examples).
+
+**Impact:**
+- TK-039 is BLOCKED until the deploy prerequisites are met (missing configs version-controlled, deploy procedure documented).
+- New tasks: TK-057 (SETUP-MANUAL.md deprecation notice), TK-058 (version-control missing Mixxx/Reaper configs), TK-059 (deploy script or documented procedure), TK-060 (convert TK-039 test procedure to executable script).
+- All future test lab notes must include the deployed git commit hash.
+- SETUP-MANUAL.md must carry a prominent deprecation notice directing readers to the ground truth hierarchy.
+
+---
+
+## D-024: Testing DoD requires QE approval of both test protocol and execution record (2026-03-10)
+
+**Context:** TK-039 Phase 1 revealed configuration drift (F-021) that would have been caught by a structured test protocol review. D-023 established reproducible test infrastructure. The owner mandates that Definition of Done for any testing task is not reached until QA has approved both the test design and the test results.
+
+**Decision:** Every significant test requires two QE-approved documents:
+
+1. **Test Protocol (approved before execution):** Must state whether the test validates a hypothesis or a feature. Must include test setup justification, prerequisites (git commit, configs, Pi state), procedure (executable script per D-023), quantitative pass/fail criteria, and evidence requirements. QE signs off before execution begins.
+
+2. **Test Execution Record (approved after completion):** Must include who executed, what was executed (script path, deployed git commit), when, any deviations from protocol, outcome (PASS/FAIL with justification), and raw evidence (logs, metrics). QE signs off on the record and the outcome judgement.
+
+DoD for any testing task or story is NOT reached until QE has approved both documents. This applies to all current and future testing tasks including TK-039, T3d, and any validation work.
+
+**Rationale:** (1) F-021 was a test setup error that a protocol review would have caught -- the Mixxx backend config was never verified as part of test prerequisites. (2) Separating protocol approval from execution approval ensures the test design is reviewed independently of the results. (3) Requiring explicit hypothesis vs feature classification prevents conflation of exploratory testing with validation evidence. (4) QE sign-off provides an independent check that test methodology is sound and results are valid.
+
+**Impact:**
+- `docs/project/user-stories.md` updated with cross-cutting Testing DoD section.
+- TK-039 cannot complete without QE approval of both protocol and execution record.
+- All future test tasks inherit this requirement.
+- Complements D-023 (reproducible test protocol) -- D-023 establishes the infrastructure, D-024 establishes the approval process.

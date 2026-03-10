@@ -2,6 +2,45 @@
 
 Stories with acceptance criteria and Definition of Done.
 
+## Testing Definition of Done (D-024, owner mandate 2026-03-10)
+
+**All tasks and stories involving significant testing** must satisfy both phases
+below. DoD is NOT reached until QE approves both. This applies retroactively to
+all in-progress testing tasks (TK-039, T3d, any validation task).
+
+### Phase 1: Test Protocol (approved BEFORE execution)
+
+A test protocol document must be written and QE-approved before the test runs.
+The document must include:
+
+- **Test type:** Hypothesis test or feature validation (explicitly stated)
+- **Test setup justification:** Why this setup, these parameters, this configuration
+- **Prerequisites:** Git commit to deploy, configs required, Pi state expected
+- **Procedure:** Executable script reference (per D-023) or step-by-step commands
+- **Pass/fail criteria:** Quantitative where possible (xrun count, CPU %, latency ms)
+- **Evidence requirements:** What data must be captured (logs, metrics, screenshots)
+- **QE sign-off:** Quality Engineer approves the protocol before execution begins
+
+### Phase 2: Test Execution Record (approved AFTER completion)
+
+A test execution record must be written and QE-approved after the test completes.
+The record must include:
+
+- **Who:** Who executed the test (worker name or human)
+- **What:** Exact test executed (script path, git commit deployed)
+- **When:** Date/time of execution
+- **How:** Any deviations from protocol, environmental conditions
+- **Outcome:** PASS/FAIL with justification for the judgement
+- **Raw evidence:** Log files, metric captures, screenshots as applicable
+- **QE sign-off:** Quality Engineer approves the execution record and outcome
+
+### Process
+
+1. Test author writes protocol -> QE reviews and approves
+2. Worker executes test per approved protocol -> captures evidence
+3. Test author writes execution record -> QE reviews and approves
+4. Only after both QE approvals: task/story DoD criteria for that test are met
+
 ---
 
 ## Tier 0 — Core Software Installation
@@ -267,7 +306,9 @@ performance without audio dropouts or thermal shutdown.
 
 **DoD:**
 - [ ] Monitoring scripts written and syntax-validated
+- [ ] Quality Engineer approves test protocol document before test execution begins
 - [ ] All test runs completed on Pi 4B hardware (T3a, T3b mandatory; T3c, T3d, T3e, T4 as available)
+- [ ] Quality Engineer approves test execution record after test completion
 - [ ] Lab note written with thermal curves, CPU timelines, xrun count per test
 - [ ] T3d lab note includes P99 and max CamillaDSP processing load at production config
 - [ ] T3e lab note includes: Phase 1 cyclictest baseline (stock PREEMPT), Phase 3 regression results + cyclictest (PREEMPT_RT), Phase 4 validation outcome, Phase 5 deployment confirmation
@@ -1695,9 +1736,11 @@ artifacts, transition glitches, controller feel, workflow friction.
 - [ ] Owner subjective assessment: "I would use this at a gig" — yes/no with notes on any issues
 
 **DoD:**
+- [ ] Quality Engineer approves test protocol document before test execution begins
 - [ ] Test performed by owner on Pi 4B with real speakers and controller
 - [ ] At least 30 minutes of continuous mixing
 - [ ] Lab note with subjective assessment, any issues found, controller mapping gaps
+- [ ] Quality Engineer approves test execution record after test completion
 - [ ] Audio engineer review: signal chain sounds correct
 - [ ] Any blocking issues logged as defects with severity
 
@@ -1737,9 +1780,11 @@ measure acceptably on a scope.
 - [ ] Owner subjective assessment: "I would perform with this system" — yes/no with notes
 
 **DoD:**
+- [ ] Quality Engineer approves test protocol document before test execution begins
 - [ ] Test performed by owner (vocalist) on Pi 4B with real mic, IEM, and speakers
 - [ ] At least one full song performed end-to-end
 - [ ] Lab note with subjective assessment: IEM comfort, latency perception, mix quality
+- [ ] Quality Engineer approves test execution record after test completion
 - [ ] Audio engineer review: signal routing and mix balance are production-ready
 - [ ] Any blocking issues logged as defects with severity
 
