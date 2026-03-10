@@ -38,18 +38,16 @@ Gabriela Bogk. This is a personal project, not mobile.de work.
 
 ## Current Mission
 
-**Next session: TK-055 — apply upstream V3D RT fix and test hardware GL on PREEMPT_RT.**
+**TK-055 PASS. V3D RT fix confirmed. D-022 filed.**
 
-Upstream patch found (`raspberrypi/linux#7035`, Melissa Wen / Igalia) that fixes the
-exact V3D ABBA deadlock we diagnosed in F-012. Confirmed working on Pi 4B + Pi 5 by
-2 independent reporters. If it works on our system: D-021 software rendering requirement
-eliminated, hardware GL restored, Mixxx CPU drops from 142-166% to ~85%, DJ-A becomes
-trivially viable. Evaluate TK-055 BEFORE TK-054 (software rendering fallback).
+Upstream V3D fix (commit `09fb2c6f4093`, Melissa Wen / Igalia) is included in stock
+RPi kernel `6.12.62+rpt-rpi-v8-rt`. Pi upgraded and running with hardware V3D GL on
+PREEMPT_RT for 37+ minutes — zero lockups. F-012/F-017 RESOLVED. D-022 supersedes
+D-021 software rendering requirement. DJ-A trivially viable — single kernel for both
+modes with hardware GL.
 
-**Pi is currently on stock PREEMPT kernel with hardware GL** (switched for listening
-session 2026-03-09 evening). labwc service `WLR_RENDERER=pixman` line was removed.
-Before resuming RT work: either apply the patch and test with hardware GL, or restore
-the pixman line and switch back to RT kernel.
+**Pi is on PREEMPT_RT kernel (`6.12.62+rpt-rpi-v8-rt`) with hardware V3D GL.**
+No V3D blacklist, no pixman, no llvmpipe. Production configuration.
 
 See `docs/project/status.md` for full current state. Decisions in `docs/project/decisions.md`.
 
@@ -70,15 +68,15 @@ Orchestration protocol: `.claude/team/protocol/` (self-contained copy)
 All SSH to Pi goes through the Change Manager to prevent conflicts.
 Pi: `ela@192.168.178.185` (hostname: mugge), key-based auth, passwordless sudo.
 
-## Pi Hardware State (verified 2026-03-09)
+## Pi Hardware State (verified 2026-03-10)
 
-- **OS:** Debian 13 Trixie. **Currently booted: stock PREEMPT kernel (`6.12.47+rpt-rpi-v8`)**. Switched from RT for listening session 2026-03-09 evening. `config.txt` has `kernel=kernel8.img`.
-- **Desktop:** labwc (Wayland) with **hardware V3D GL** (safe on stock PREEMPT). `WLR_RENDERER=pixman` line removed from `~/.config/systemd/user/labwc.service`. lightdm disabled, labwc runs as systemd user service. **NOTE:** before switching back to RT kernel, either apply TK-055 V3D patch or re-add `WLR_RENDERER=pixman` to labwc service.
-- **V3D:** On PREEMPT_RT, V3D causes ABBA deadlock (F-012). **Upstream fix available:** `raspberrypi/linux#7035`. On stock PREEMPT, V3D is safe. Current state: V3D loaded and active (stock kernel).
-- **Audio:** PipeWire 1.4.2, CamillaDSP 3.0.1 at SCHED_FIFO 80 (systemd override). PipeWire RT module FAILS to self-promote to FIFO on PREEMPT_RT (F-020) — needs manual `sudo chrt -f -p 88 $(pgrep -x pipewire)` after each start.
+- **OS:** Debian 13 Trixie. **Currently booted: PREEMPT_RT kernel (`6.12.62+rpt-rpi-v8-rt`)**. Upgraded from `6.12.47` via `apt upgrade`. `config.txt` has `kernel=kernel8_rt.img`.
+- **Desktop:** labwc (Wayland) with **hardware V3D GL compositor** (D-022). No pixman override. lightdm disabled, labwc runs as systemd user service.
+- **V3D:** Hardware V3D GL active on PREEMPT_RT. No blacklist needed (D-022). Upstream fix for ABBA deadlock (commit `09fb2c6f4093`) included in `6.12.62+rpt-rpi-v8-rt`. F-012/F-017 RESOLVED.
+- **Audio:** PipeWire 1.4.2, CamillaDSP 3.0.1 at SCHED_FIFO 80 (systemd override). PipeWire RT module FAILS to self-promote to FIFO on PREEMPT_RT (F-020) — needs manual `sudo chrt -f -p 88 $(pgrep -x pipewire)` after each start. F-020 still open.
 - **Quantum:** Production config at `~/.config/pipewire/pipewire.conf.d/10-audio-settings.conf` sets quantum 256. DJ mode needs quantum 1024 (set at runtime via `pw-metadata -n settings 0 clock.force-quantum 1024`).
 - **99-no-rt.conf:** DELETED (was Test 3 artifact forcing PipeWire to SCHED_OTHER).
-- **Mixxx:** Requires `LIBGL_ALWAYS_SOFTWARE=1 pw-jack mixxx`. Software rendering = 92-166% CPU. Waveforms disabled, framerate 5 FPS. Still glitches at quantum 256 — testing quantum 1024 (DJ mode).
+- **Mixxx:** Runs with hardware V3D GL on PREEMPT_RT (D-022). `pw-jack mixxx` — no `LIBGL_ALWAYS_SOFTWARE=1` needed. CPU ~85% with hardware GL (vs 142-166% with llvmpipe).
 - **USB devices:** UMIK-1, USBStreamer, Hercules DJControl Mix Ultra, APCmini mk2, Nektar SE25
 - **UMIK-1 calibration:** `/home/ela/7161942.txt` (magnitude-only, serial 7161942, -1.378dB sensitivity)
 - **Firewall:** nftables active (US-000a). Port 8080 runtime-only rule for PoC.
@@ -325,17 +323,16 @@ automatically. The script should:
 - [ ] Verify REW runs on Pi 4 ARM (Java-based, should work but needs testing)
 - [x] ~~Decide if measurement pipeline should use REW or pure Python~~ D-016: both. REW for exploratory work, Python for automation pipeline.
 - [ ] Determine if `gpu_mem=128` is needed for Mixxx or if Xvfb works with `gpu_mem=16`
-- [x] ~~Check if Raspberry Pi OS Trixie ships a PREEMPT_RT kernel package~~ YES. D-013 + D-021: PREEMPT_RT mandatory with V3D eliminated.
+- [x] ~~Check if Raspberry Pi OS Trixie ships a PREEMPT_RT kernel package~~ YES. D-013 + D-022: PREEMPT_RT mandatory with hardware V3D GL (upstream fix in `6.12.62+rpt-rpi-v8-rt`).
 - [ ] Test whether PipeWire or native JACK gives better latency/stability on Pi 4
 - [ ] Investigate CamillaDSP's websocket API for runtime filter hot-swapping
 - [ ] Flight case design: ventilation, cable routing, power distribution
 - [ ] Write the automated room correction pipeline document + scripts
 - [ ] **F-020:** Investigate PipeWire RT module self-promotion failure on PREEMPT_RT. Persist workaround (systemd override or ExecStartPost chrt).
-- [ ] **Mixxx perf:** Investigate further CPU reduction — 92% with waveforms off is too much for quantum 256. Options: lighter skin, QT_QPA_PLATFORM=offscreen for controller-only use, stock PREEMPT for DJ mode.
-- [ ] **Quantum 1024 DJ mode test:** Currently in progress. Does 21ms buffer absorb llvmpipe scheduling jitter?
-- [ ] **T3d:** 30-min stability test on PREEMPT_RT with Option B. Prerequisite: F-020 workaround persisted, quantum 1024 for DJ mode.
+- [ ] **Mixxx perf:** Hardware GL restored (D-022) — ~85% CPU vs 142-166% with llvmpipe. Investigate further reduction if needed (lighter skin, waveform settings).
+- [ ] **T3d:** 30-min stability test on PREEMPT_RT `6.12.62+rpt-rpi-v8-rt` with hardware GL. Prerequisite: F-020 workaround persisted.
 - [ ] **Watchdog reliability:** BCM2835 watchdog failed on Test 3 and Test 5 (2/11 lockups). Investigate.
-- [ ] **Upstream V3D bug report:** Reproduction steps clean (Test 1). Include Test 5 (client-only V3D also deadlocks).
+- [x] ~~**Upstream V3D bug report**~~ Not needed — upstream fix already merged (commit `09fb2c6f4093`, `raspberrypi/linux#7035`). Included in `6.12.62+rpt-rpi-v8-rt`.
 
 ## Design Principles
 

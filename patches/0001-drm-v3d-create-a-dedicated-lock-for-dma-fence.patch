@@ -1,0 +1,60 @@
+From 2eaef0b5aa5d52f1fea31d533e1764e1fdc50d1a Mon Sep 17 00:00:00 2001
+From: Melissa Wen <mwen@igalia.com>
+Date: Wed, 10 Sep 2025 17:59:56 -0300
+Subject: [PATCH] drm/v3d: create a dedicated lock for dma fence
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Don't mix dma fence lock with the active_job lock.
+
+Fixes: 5a72e3ae00ec ("drm/v3d: Address race-condition between per-fd GPU stats and fd release") #downstream hash
+Co-developed-by: Maíra Canal <mcanal@igalia.com>
+Signed-off-by: Maíra Canal <mcanal@igalia.com>
+Signed-off-by: Melissa Wen <mwen@igalia.com>
+---
+ drivers/gpu/drm/v3d/v3d_drv.h   | 1 +
+ drivers/gpu/drm/v3d/v3d_fence.c | 2 +-
+ drivers/gpu/drm/v3d/v3d_gem.c   | 1 +
+ 3 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/v3d/v3d_drv.h b/drivers/gpu/drm/v3d/v3d_drv.h
+index 7aa2e02f9e8a..e4956436f95b 100644
+--- a/drivers/gpu/drm/v3d/v3d_drv.h
++++ b/drivers/gpu/drm/v3d/v3d_drv.h
+@@ -62,6 +62,7 @@ struct v3d_queue_state {
+ 	/* Currently active job for this queue */
+ 	struct v3d_job *active_job;
+ 	spinlock_t queue_lock;
++	spinlock_t fence_lock;
+ };
+ 
+ /* Performance monitor object. The perform lifetime is controlled by userspace
+diff --git a/drivers/gpu/drm/v3d/v3d_fence.c b/drivers/gpu/drm/v3d/v3d_fence.c
+index 8f8471adae34..c82500a1df73 100644
+--- a/drivers/gpu/drm/v3d/v3d_fence.c
++++ b/drivers/gpu/drm/v3d/v3d_fence.c
+@@ -15,7 +15,7 @@ struct dma_fence *v3d_fence_create(struct v3d_dev *v3d, enum v3d_queue q)
+ 	fence->dev = &v3d->drm;
+ 	fence->queue = q;
+ 	fence->seqno = ++queue->emit_seqno;
+-	dma_fence_init(&fence->base, &v3d_fence_ops, &queue->queue_lock,
++	dma_fence_init(&fence->base, &v3d_fence_ops, &queue->fence_lock,
+ 		       queue->fence_context, fence->seqno);
+ 
+ 	return &fence->base;
+diff --git a/drivers/gpu/drm/v3d/v3d_gem.c b/drivers/gpu/drm/v3d/v3d_gem.c
+index 234d39a12210..62fcd8c9cbc4 100644
+--- a/drivers/gpu/drm/v3d/v3d_gem.c
++++ b/drivers/gpu/drm/v3d/v3d_gem.c
+@@ -274,6 +274,7 @@ v3d_gem_init(struct drm_device *dev)
+ 		seqcount_init(&queue->stats.lock);
+ 
+ 		spin_lock_init(&queue->queue_lock);
++		spin_lock_init(&queue->fence_lock);
+ 	}
+ 
+ 	spin_lock_init(&v3d->mm_lock);
+-- 
+2.47.2
+

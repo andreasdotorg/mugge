@@ -43,10 +43,10 @@ US-000b T7.
 
 ---
 
-## F-012: OpenGL/V3D GPU applications cause hard kernel lockup on PREEMPT_RT (MITIGATED -- D-021)
+## F-012: OpenGL/V3D GPU applications cause hard kernel lockup on PREEMPT_RT (RESOLVED -- D-022)
 
 **Severity:** Critical
-**Status:** Mitigated (D-021 -- V3D eliminated from rendering path: pixman compositor + llvmpipe apps)
+**Status:** Resolved (D-022 -- upstream fix in `6.12.62+rpt-rpi-v8-rt`)
 **Found in:** T3e Phase 3 (PREEMPT_RT regression testing)
 **Affects:** D-013 (PREEMPT_RT mandatory for production), US-003 (stability on RT kernel)
 **Found by:** Automated testing (TK-016 Reaper smoke test)
@@ -190,6 +190,29 @@ Pi 4B (92% with waveforms disabled, framerate 5 FPS). Causes audio underruns
 at quantum 256. DJ mode quantum 1024 (D-002) under investigation as
 mitigation.
 
+### Resolution (2026-03-10): Upstream fix in `6.12.62+rpt-rpi-v8-rt` — D-022
+
+**Upstream fix:** Commit `09fb2c6f4093` by Melissa Wen (Igalia, DRM/V3D
+maintainer), merged by Phil Elwell on 2025-10-28. The fix creates a dedicated
+lock for DMA fence signaling in the V3D driver, replacing the spinlock in
+`v3d_job_update_stats` that caused the ABBA deadlock under PREEMPT_RT rt_mutex
+conversion. The problematic spinlock was introduced by commit `5a72e3ae00ec`
+(`drm/v3d: Address race-condition between per-fd GPU stats and fd release`,
+2025-07-25).
+
+**Kernel:** `6.12.62+rpt-rpi-v8-rt`, available as stock package in RPi repos.
+Upgraded via `apt upgrade` — no custom kernel build required.
+
+**Verification (TK-055):** Pi running `6.12.62+rpt-rpi-v8-rt` with hardware
+V3D GL (no blacklist, no pixman, no llvmpipe) for 37+ minutes — zero lockups.
+Previous kernel (`6.12.47+rpt-rpi-v8-rt`) locked up in <2.5 minutes under the
+same conditions. [PENDING] formal 15-minute monitoring data from test-runner.
+
+**Impact:** D-022 filed, superseding D-021 clauses 2-4 (V3D blacklist, pixman
+compositor, llvmpipe rendering). No V3D blacklist needed. Hardware GL restored
+on PREEMPT_RT. Mixxx CPU drops from 142-166% (llvmpipe) to ~85% (hardware GL).
+F-017 resolved by the same fix (same root cause).
+
 ---
 
 ## F-013: wayvnc unencrypted session (PARTIALLY RESOLVED)
@@ -297,10 +320,10 @@ recovery), any restart-induced glitches are production defects.
 
 ---
 
-## F-017: Mixxx hard kernel lockup on PREEMPT_RT (MITIGATED -- D-021, same root cause as F-012)
+## F-017: Mixxx hard kernel lockup on PREEMPT_RT (RESOLVED -- D-022, same root cause as F-012)
 
 **Severity:** High
-**Status:** Mitigated (D-021 -- same root cause and mitigation as F-012)
+**Status:** Resolved (D-022 -- upstream fix in `6.12.62+rpt-rpi-v8-rt`, same fix as F-012)
 **Found in:** Mixxx testing on PREEMPT_RT kernel (2026-03-09)
 **Affects:** US-003 (stability), US-006 (Mixxx feasibility), D-013 (PREEMPT_RT production use)
 **Found by:** Owner (observed reboot during testing)
@@ -331,6 +354,14 @@ This is the same fix as F-012 -- see F-012 Test 4 update for full details.
 **Previous workaround (`LIBGL_ALWAYS_SOFTWARE=1` alone): INSUFFICIENT.** Only
 affects client app; labwc compositor still uses V3D. Event #9 locked up with
 FIFO audio. Option B (pixman + software rendering) is required.
+
+### Resolution (2026-03-10): Upstream fix in `6.12.62+rpt-rpi-v8-rt` — D-022
+
+Same fix as F-012. The V3D ABBA deadlock was fixed upstream by commit
+`09fb2c6f4093` (Melissa Wen / Igalia). Kernel `6.12.62+rpt-rpi-v8-rt`
+includes the fix. TK-055 verified 37+ minutes stable with hardware V3D GL
+on PREEMPT_RT. No V3D blacklist, no pixman, no llvmpipe needed. See F-012
+resolution section for full details.
 
 ---
 

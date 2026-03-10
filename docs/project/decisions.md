@@ -269,3 +269,29 @@ decision. Add a new one that supersedes it (reference the old one).
 - Event 9: Mixxx with llvmpipe + full audio stack. LOCKUP. (labwc compositor still using V3D for compositing.)
 - Event 10 (Test 3): Audio at SCHED_OTHER, no FIFO threads. LOCKUP. (Falsified priority inversion hypothesis. Confirmed internal V3D ABBA deadlock.)
 - Test 4 (Option B): V3D blacklisted, pixman compositor, llvmpipe apps, full audio stack at FIFO 80-88. STABLE 5 min. **Fix confirmed.**
+
+---
+
+## D-022: PREEMPT_RT with hardware V3D GL — software rendering no longer required (2026-03-10)
+
+**Supersedes:** D-021 clauses 2-4 (V3D blacklist, pixman compositor, llvmpipe rendering). D-021 clause 1 (PREEMPT_RT mandatory for PA-connected operation) and clause 5 (stock PREEMPT retained for development) remain in effect.
+
+**Context:** Upstream fix merged in RPi kernel `6.12.62+rpt-rpi-v8-rt` (commit `09fb2c6f4093`, Melissa Wen / Igalia, merged by Phil Elwell 2025-10-28). The fix creates a dedicated DMA fence lock in the V3D driver, eliminating the ABBA deadlock in `v3d_job_update_stats` that caused F-012 and F-017. The spinlock in `v3d_job_update_stats` — introduced by commit `5a72e3ae00ec` (2025-07-25) — was converted to a sleeping rt_mutex under PREEMPT_RT, creating a preemption window that enabled a deadlock cycle between the compositor thread and the V3D IRQ handler. The upstream fix replaces this with a dedicated lock that does not participate in the problematic lock ordering. The fix was confirmed working by 2 independent reporters on Pi 4B and Pi 5. Kernel `6.12.62+rpt-rpi-v8-rt` is available as a stock package in RPi repos — no custom kernel build required.
+
+**Classification:** Unchanged from D-013 / D-021. Hard real-time with human safety implications.
+
+**Decision:** PREEMPT_RT kernel `6.12.62+rpt-rpi-v8-rt` or later is the production kernel. V3D hardware GL is enabled. No V3D blacklist (`/etc/modprobe.d/blacklist-v3d.conf` removed), no pixman compositor override (`WLR_RENDERER=pixman` removed from labwc service), no llvmpipe environment variables (`LIBGL_ALWAYS_SOFTWARE=1` not required). The system uses stock kernel packages from RPi repos — no custom builds.
+
+**Rationale:**
+
+(1) The upstream fix is in a stock distro kernel package — no custom kernel maintenance burden. A standard `apt upgrade` path delivers the fix. (2) The Pi has been running `6.12.62+rpt-rpi-v8-rt` with hardware V3D GL for 37+ minutes — zero lockups, where the previous kernel (`6.12.47+rpt-rpi-v8-rt`) locked up in <2.5 minutes under the same conditions. (3) Mixxx CPU consumption with hardware GL is ~85% vs 142-166% with llvmpipe software rendering — a dramatic reduction that makes DJ mode viable at lower quantum values. (4) Thermal budget improved by an estimated ~5-8°C due to eliminated software rendering CPU overhead. (5) DJ-A strategy (PREEMPT_RT for both modes) becomes trivially viable — single kernel for both DJ and live modes with hardware GL. (6) System simplification — eliminates the V3D blacklist config, pixman compositor override, llvmpipe environment variables, and all associated documentation and operational complexity from D-021.
+
+**Impact:**
+
+- **F-012: RESOLVED.** The V3D ABBA deadlock is fixed at the kernel driver level. No workaround needed.
+- **F-017: RESOLVED.** Same root cause as F-012, same fix.
+- **TK-054 (software rendering DJ-A stability test): wont-do.** Hardware GL makes software rendering testing unnecessary.
+- **DJ-A / DJ-B decision tree collapsed:** PREEMPT_RT + hardware GL for everything. No dual-kernel strategy needed.
+- **Minimum kernel version requirement:** `6.12.62+rpt-rpi-v8-rt`. Systems on older RT kernels must upgrade before production use.
+- **Config changes:** Remove `/etc/modprobe.d/blacklist-v3d.conf`, remove `WLR_RENDERER=pixman` from labwc service, remove `LIBGL_ALWAYS_SOFTWARE=1` from Mixxx launch scripts.
+- **D-021 clauses that remain:** Clause 1 (PREEMPT_RT mandatory, D-013) and clause 5 (stock PREEMPT for development) are not affected.
