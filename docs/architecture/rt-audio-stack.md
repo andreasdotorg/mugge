@@ -11,6 +11,30 @@ state is: CLAUDE.md > Pi itself > `configs/` directory > `docs/project/`.
 
 ---
 
+## SAFETY: Reboot and Restart Transient Risk
+
+**The USBStreamer produces full-scale transients when its audio stream is
+interrupted.** These transients pass through the 4x450W amplifier chain
+and can damage speakers and risk hearing.
+
+The following actions cause the USBStreamer to lose its audio stream:
+
+- Rebooting the Pi
+- `systemctl restart camilladsp`
+- `systemctl --user restart pipewire.service`
+- Any action that causes PipeWire or CamillaDSP to drop the USBStreamer
+  ALSA playback stream
+
+**Before performing any of these actions, the owner MUST be warned and
+must explicitly approve.** The owner decides when it is safe to proceed
+(e.g., after turning off amplifiers or lowering volume to zero). There
+are no exceptions to this rule.
+
+This is an operational safety constraint recorded in CLAUDE.md under
+"Safety Rules (2026-03-10)".
+
+---
+
 ## 1. PREEMPT_RT Kernel
 
 ### Why PREEMPT_RT
