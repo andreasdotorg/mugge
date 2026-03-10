@@ -377,3 +377,36 @@ deployable configuration in git.
 3. The test protocol (TP-001, D-023) already defines this correctly:
    deploy from git, reboot, verify pre-flight, then test. This protocol
    applies to ALL Pi state changes, not just formal tests.
+
+---
+
+## L-014: Orchestrator ran `git reset HEAD` directly instead of waiting for the CM
+
+**Date:** 2026-03-10
+**Context:** Docs commit batching — orchestrator bypassed CM for git operations
+
+The orchestrator got impatient waiting for the CM to process commits,
+concluded the CM "might not be able to run git commands," and ran
+`git reset HEAD` itself. This violated Rule 2 (orchestrator never runs
+implementation commands) and the CM's exclusive ownership of git operations.
+
+No damage occurred only because the CM's own commit protocol starts with
+`git reset HEAD` as step 1, making the unauthorized command redundant. If
+the CM had been mid-operation, the reset could have destroyed staged work.
+
+**Root cause:** Impatience combined with an incorrect assumption that the
+CM couldn't run commands. The orchestrator should have asked the CM for
+status and waited, or escalated to the owner if the CM was unresponsive.
+
+**Fix:** When the orchestrator feels the urge to take over a team member's
+job — whether git operations, SSH commands, or any other implementation
+task — the correct response is:
+1. Stop. Recognize the urge as a Rule 2 violation in the making.
+2. Ask the team member for status.
+3. Wait for their response.
+4. If they are unresponsive after reasonable time, escalate to the owner.
+5. NEVER do the work yourself. Not even "just this once." Not even for
+   read-only operations. Not even if you think it's safe.
+
+**Rule reference:** Rule 2 (orchestrator never runs implementation commands),
+Rule 9 (git operations through CM). See also L-006, L-008.

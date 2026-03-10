@@ -48,14 +48,16 @@ owner requires a formal reproducible test procedure per D-023/L-013 before
 state-modifying commands are executed. Read-only audit steps (Steps 1-2 of the
 approved plan) remained valid.
 
-**HOLD VIOLATED:** The pi-recovery-worker executed Steps 3-5 (state-modifying
-commands) before reading the hold message. This is the L-009 pattern: workers
-executing long-running commands cannot read incoming messages until the command
-completes. The hold was issued while the worker was already in flight.
+**HOLD NOT RECEIVED IN TIME:** The pi-recovery-worker executed Steps 3-5
+(state-modifying commands) before reading the hold message. This is the L-009
+pattern: workers executing long-running commands cannot read incoming messages
+until the command completes. The hold was issued while the worker was already
+in flight. This is not a protocol violation by the worker -- it had no
+opportunity to read the hold before completing its command sequence.
 
 All mutations were runtime-only (no persistent config writes). The
-orchestrator directed a revert via reboot (Step 7). All hold-violated changes
-were undone. See Session Outcome below.
+orchestrator directed a revert via reboot (Step 7). All changes from Steps
+3-5 were undone. See Session Outcome below.
 
 ---
 
@@ -99,31 +101,35 @@ The file's content has `chunksize: 256`, matching `live.yml`. This means:
 approach is now the canonical mode-switching method. Architect decision
 needed.
 
-### Finding R-3: soundconfig.xml.jack-known-good Has Wrong HP Channel
+### Finding R-3: soundconfig.xml.jack-known-good HP Channel Discrepancy
 
 **Source:** pi-recovery-worker, during S-002 (OBSERVE) soundconfig.xml review
-**Severity:** High
-**Impact:** Recovery from this backup would break headphone monitoring
+**Severity:** Medium (downgraded from High -- see AE revision below)
+**Impact:** Uncertain -- empirical verification required before any action
 
 The backup file `~/.mixxx/soundconfig.xml.jack-known-good` on the Pi has
-Headphones mapped to `channel="4"`, which is **incorrect**. The correct
-mapping is `channel="2"`, matching `dj-pa.yml` which routes CUE from input
-channels 2-3 to headphone output channels 4-5.
+Headphones mapped to `channel="4"`. The current `soundconfig.xml` has
+`channel="2"`. The two files disagree on the correct HP channel value.
 
-| File | HP channel value | Correct? |
-|------|-----------------|----------|
-| `soundconfig.xml` (current, on Pi) | `channel="2"` | Yes |
-| `soundconfig.xml.jack-known-good` (backup) | `channel="4"` | **No** |
+| File | HP channel value |
+|------|-----------------|
+| `soundconfig.xml` (current, on Pi) | `channel="2"` |
+| `soundconfig.xml.jack-known-good` (backup) | `channel="4"` |
 
-The `.jack-known-good` filename is misleading -- it is actually the less
-correct version. If anyone restores Mixxx config from this backup, headphones
-will be routed to the wrong CamillaDSP input channels.
+**AE revised assessment:** The `channel` attribute in Mixxx's
+`soundconfig.xml` is a PortAudio internal buffer offset, not a JACK port
+index. The mapping between this value and the actual JACK port depends on
+Mixxx's internal PortAudio-to-JACK bridge. The AE now believes `channel="4"`
+in the backup may actually be correct, and `channel="2"` in the current file
+may be the result of a different Mixxx session's auto-detection. The
+relationship between these values and the CamillaDSP input channel routing
+(`dj-pa.yml` dest 4-5 from ch 2-3) is not straightforward.
 
-**Action required:** The `.jack-known-good` file on the Pi must be either
-corrected (change `channel="4"` to `channel="2"`) or deleted to prevent
-accidental use. The current `soundconfig.xml` is the correct version and
-should be the basis for any future backup. This is a DEPLOY-level change
-(persistent file modification on the deployment target).
+**Action required:** Empirical verification -- play audio through Mixxx with
+each config and observe which CamillaDSP input channels receive the HP
+signal. Do NOT correct or delete the `.jack-known-good` file until the
+correct value is determined by testing. This should be part of the formal
+DJ mode test procedure (D-023).
 
 ---
 
@@ -261,8 +267,10 @@ changes from Steps 3-5 demonstrated that the recovery plan works, but the
 execution did not meet the D-023 standard because the hold was violated.
 
 The Mixxx `soundconfig.xml.jack-known-good` backup was preserved (SCP'd off
-the Pi in Step 6), but see **Finding R-3** below -- this backup contains an
-incorrect HP channel mapping and must NOT be used as-is for recovery.
+the Pi in Step 6). See **Finding R-3** -- the backup has a different HP
+channel value than the current config. The AE's revised assessment is that
+either value may be correct; empirical verification is needed before using
+either file as a recovery baseline.
 
 ---
 
@@ -272,8 +280,8 @@ incorrect HP channel mapping and must NOT be used as-is for recovery.
 |----|--------|----------|-------------|--------|
 | R-1 | Audit | Medium | `active.yml` is regular file, not symlink (TK-002 assumption incorrect) | Open -- architect decision needed |
 | R-2 | Audit | Info | Mixxx ALSA warnings (spdif/hdmi/modem/phoneline) are cosmetic | Closed -- informational |
-| R-3 | S-002 | High | `soundconfig.xml.jack-known-good` has wrong HP channel (ch 4 instead of ch 2). Misleadingly named -- restoring from it breaks headphones. | Open -- file must be corrected or deleted |
-| H-1 | CM | Medium | Steps 3-5 executed during hold (L-009 async messaging pattern) | Resolved -- reverted via reboot |
+| R-3 | S-002 | Medium | `soundconfig.xml.jack-known-good` HP channel discrepancy (ch 4 vs ch 2). AE revised: ch 4 may be correct (PortAudio offset, not JACK port). | Open -- empirical verification needed |
+| H-1 | CM | Low | Steps 3-5 executed before hold message was read (L-009 async pattern, not a worker violation) | Resolved -- reverted via reboot |
 
 ---
 

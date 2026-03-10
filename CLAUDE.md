@@ -86,6 +86,37 @@ Documentation alone does not prevent this.
 
 **The orchestrator does NOT fix things. Ever.**
 
+### *** STOP — DO NOT "JUST DO IT YOURSELF" ***
+
+**This has happened REPEATEDLY.** The orchestrator gets impatient waiting for a
+team member (usually the CM) and decides to "just run the command myself" or
+"execute the git operations since the CM seems stuck." This is ALWAYS wrong.
+
+**Trigger pattern:** "The CM isn't responding... I'll just run git add/commit
+myself." Or: "The team seems slow, let me read the files / run the commands /
+check the status directly." Or: "I can do this faster than waiting."
+
+**HARD RULE: If you EVER feel the urge to do something yourself that is
+another team member's job — STOP IMMEDIATELY. PAUSE. WAIT FOR THE OWNER.**
+
+**Specifically, the orchestrator MUST NOT run:**
+- `git` commands of ANY kind (add, commit, reset, status, diff, log, push) —
+  this is the CM's exclusive domain
+- File reads to "verify" what a worker or CM is doing — trust the protocol
+- Shell commands to "check" on progress — ask the team member instead
+
+**What to do instead when a team member seems stuck or slow:**
+1. Send ONE follow-up message asking for status
+2. Wait. Team members may be executing long-running operations.
+3. If still no response after a reasonable wait, report to the owner:
+   "The CM has not responded to my commit request. Should I wait longer
+   or do you want to intervene?"
+4. **NEVER take over their job.** The owner decides what happens next.
+
+**The cost of waiting is LOW. The cost of the orchestrator running unauthorized
+commands is HIGH — protocol violations, potential data corruption, loss of
+audit trail, and loss of owner trust.**
+
 ### Deployment Target Access (L-007, L-010, L-012)
 
 All access to the deployment target goes through the Change Manager using
