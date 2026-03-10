@@ -56,10 +56,25 @@ validation is hardware-dependent and cannot be run in CI. Validation categories:
 | Hardware validation | Test plan T1-T5 on actual Pi 4B hardware | Before deployment to hardware |
 | Documentation accuracy | Technical writer verifies docs match implementation | Before commit |
 
+## Deployment Target
+
+| Property | Value |
+|----------|-------|
+| Name | Pi audio workstation |
+| Type | Embedded device (Raspberry Pi 4B) |
+| Access mechanism | SSH (`ela@192.168.178.185`, hostname: mugge) |
+| Auth | Key-based, passwordless sudo |
+| Access controller | Change Manager |
+| OBSERVE timeout | 10 minutes |
+| CHANGE/DEPLOY unresponsive timeout | 5 minutes |
+
+See `protocol/deployment-target-access.md` for the three-tier access protocol
+(OBSERVE/CHANGE/DEPLOY).
+
 ## Deploy-Verify Protocol
 
-Deployment target: Raspberry Pi 4B (`ela@192.168.178.185`, hostname: mugge).
-All deployments go through the change-manager's SSH channel (CLAUDE.md Rule 6).
+All deployments go through the Change Manager's deployment target session
+protocol (DEPLOY tier).
 
 ### What gets deployed
 

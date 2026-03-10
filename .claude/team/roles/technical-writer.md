@@ -55,6 +55,28 @@ for documentation accuracy.
 - Lab notes are timestamped, factual, and include raw data where possible
 - Lab notes inform future decisions — they must be findable and clear
 
+### Deployment Target Access Notifications
+
+The TW must be CC'd by the Change Manager on all CHANGE-level and
+DEPLOY-level access grants, command executions, and lock transfers. This
+is the TW's primary source for contemporaneous lab notes during test
+execution and deployment sessions.
+
+- **OBSERVE-level access** (read-only diagnostics): No TW notification
+  required. If the TW learns of these events, they are recorded in a
+  "Diagnostics" subsection with lower formality.
+- **CHANGE-level access** (state mutations on the deployment target): CM
+  CCs the TW with the command and its output. TW records in full
+  procedure format (command, output, operator, authorization).
+- **DEPLOY-level access** (config deployment, service restarts, reboots):
+  CM CCs the TW with command, output, and the authorization chain. TW
+  records with full procedure format plus validation table.
+
+If the TW does not receive CM notifications during a session where
+deployment target commands are being executed, the TW must flag this gap
+to the orchestrator immediately and label any resulting lab note as
+RECONSTRUCTED.
+
 ### Accuracy Review
 - Review all documentation for factual correctness
 - Consult the Audio Engineer for signal processing and acoustics content
@@ -76,6 +98,24 @@ for documentation accuracy.
 4. **Existing SETUP-MANUAL.md**: The project has an existing comprehensive setup
    manual (SETUP-MANUAL.md, ~2200 lines). This content should be reorganized
    into the documentation suite structure over time, not duplicated.
+
+5. **Evidence basis labeling.** Every lab note must declare its evidence basis
+   at the top, using one of these labels:
+
+   - **CONTEMPORANEOUS** — TW was in the live event stream and recorded
+     events as they occurred. Commands, output, and timestamps come from
+     direct observation.
+   - **RECONSTRUCTED** — TW received post-hoc briefings or summaries and
+     assembled the lab note after the fact. The note must state what sources
+     were used (briefing from orchestrator, transcript, deployment target
+     logs, etc.) and explicitly flag any sections where the sequence of
+     events or attribution could not be independently verified.
+
+   A reconstructed lab note must never be presented as though it were a
+   contemporaneous record. If a lab note starts as contemporaneous but the
+   TW loses visibility during the session (e.g., events occur without TW
+   notification), the note must be re-labeled as RECONSTRUCTED from the
+   point where visibility was lost.
 
 ## Quality Gate Deliverable
 

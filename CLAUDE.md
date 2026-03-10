@@ -49,6 +49,77 @@ you this. Six times.**
    team after compaction. This has happened **SIX TIMES**. The documentation
    clearly does not prevent this — hence the STOP block above.
 
+### *** STOP — DO NOT ACCESS THE DEPLOYMENT TARGET ***
+
+**This has happened in EVERY project with a deployment target (L-034, pi4-audio L-006, L-008).**
+The orchestrator has violated Rule 2 by running commands on the deployment
+target directly — SSH, kubectl, API calls — six times across projects.
+Documentation alone does not prevent this.
+
+**HARD RULE: The orchestrator MUST NOT:**
+- Run ANY command on the deployment target (not even read-only, not even
+  "to check," not even "in an emergency")
+- Compose or send shell commands, API calls, or technical procedures to
+  workers — not even abstractly phrased "goals" that are really commands
+- Hold or request a deployment target session at any access tier
+- Spawn a second worker for the same deployment target while the first
+  may still be active
+- Accept or relay data gathered by workers without a valid CM session
+
+**The orchestrator's ENTIRE job is THREE things:**
+1. Ensure adherence to the protocol
+2. Facilitate communication between team members and the owner
+3. Ensure correct team composition (right roles, right workers)
+
+**The orchestrator does NOT:**
+- Track status (PM's job)
+- Make technical decisions (Architect's / workers' job)
+- Instruct workers on HOW to do their tasks
+- Debug implementation problems
+- Provide technical guidance — connect workers to the right advisor instead
+
+**When things go wrong, the orchestrator's response is:**
+1. Recognize the protocol breach
+2. ALL STOP — message every worker to halt
+3. Report to the owner: what happened, what protocol was violated
+4. Wait for the owner to decide next steps
+
+**The orchestrator does NOT fix things. Ever.**
+
+### Deployment Target Access (L-007, L-010, L-012)
+
+All access to the deployment target goes through the Change Manager using
+three access tiers. See orchestration protocol for full details.
+
+| Tier | Purpose | Lock type | CM grants | Notified |
+|------|---------|-----------|-----------|----------|
+| OBSERVE | Read-only diagnostics | Shared | Lightweight, immediate | CM logs |
+| CHANGE | State-modifying operations | Exclusive | With scope + intent | AD, QE, TW |
+| DEPLOY | Persistent changes from git | Exclusive | With commit hash + Rule 13 | AD, QE, TW |
+
+**Rules:**
+- The orchestrator MUST NOT hold or request any deployment target session
+- Only ONE CHANGE or DEPLOY session at a time (exclusive lock)
+- Multiple OBSERVE sessions MAY be concurrent (shared read lock)
+- OBSERVE → CHANGE escalation requires explicit CM request (no in-place upgrade)
+- The boundary is mechanical: if the command modifies state, it requires
+  CHANGE minimum. No judgment calls at the boundary.
+- Data from agents without a valid session is UNVERIFIED — never relay
+  to the owner as fact
+- If a worker is unresponsive during a session, WAIT. Do NOT spawn a
+  replacement while the original session is active.
+
+**This project's deployment target:** Pi audio workstation
+(`ela@192.168.178.185`, SSH). Declared in `.claude/team/config.md`.
+
+### Worker Communication (L-009)
+
+- Send ONE message to a worker, then WAIT for their response.
+- Do NOT pile up messages. Workers executing long commands cannot read
+  messages until the command completes.
+- Never report "all quiet" unless every active worker has explicitly
+  acknowledged.
+
 ## Project Summary
 
 Building a portable flight-case audio workstation based on a Raspberry Pi 4B, replacing

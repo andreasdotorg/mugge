@@ -5,13 +5,14 @@ Read this file at the start of every session and before every phase transition.
 ## Reading Order
 
 1. This file (orchestration protocol — how the team works)
-2. Project `config.md` (team shape, work management backend, validation rules)
-3. `~/mobile/gabriela-bogk/team-protocol/lessons-learned.md` (global process lessons)
-4. Project `lessons-learned.md` (project-specific lessons)
-5. Project state files (per work management backend — status, decisions, defects)
-6. Project `CLAUDE.md` (domain conventions)
-7. Project `consultation-matrix.md` (domain-specific consultation rules)
-8. Role prompts as needed when spawning agents
+2. `deployment-target-access.md` (three-tier access protocol, if project has deployment targets)
+3. Project `config.md` (team shape, work management backend, validation rules)
+4. `~/mobile/gabriela-bogk/team-protocol/lessons-learned.md` (global process lessons)
+5. Project `lessons-learned.md` (project-specific lessons)
+6. Project state files (per work management backend — status, decisions, defects)
+7. Project `CLAUDE.md` (domain conventions)
+8. Project `consultation-matrix.md` (domain-specific consultation rules)
+9. Role prompts as needed when spawning agents
 
 ## Configuration
 
@@ -483,9 +484,14 @@ During Deploy and Verify phases (if enabled), only ONE worker operates at a time
 The orchestrator MUST NOT run multiple workers in parallel during these phases.
 One change at a time to production.
 
+Subsumed by the CHANGE and DEPLOY session exclusivity in the Deployment Target
+Access section. CHANGE and DEPLOY sessions are exclusive locks — only one session
+holder at a time. This rule remains as a human-readable reminder of the principle.
+
 **The orchestrator enforces this by:**
 - Assigning Deploy and Verify tasks to a single worker
 - Not spawning additional workers until Deploy + Verify complete
+- Verifying with the CM that no other session is active before assigning deploy tasks
 
 ### Rule 11: The orchestrator owns the process and its documentation
 
@@ -571,6 +577,30 @@ Additional consultation rules are defined per project.
 The quality gate is **Phase 7 (Review)** in the work phases above. It is
 the in-review story status. See "Work phases within a story" for the full
 process, advisor deliverables, and defect filing requirements.
+
+## Deployment Target Access
+
+See `deployment-target-access.md` for the full protocol. Summary:
+
+Projects that operate on external systems declare **deployment targets** in
+`config.md`. Access is managed by the Change Manager through three tiers
+based on a readers-writer lock.
+
+| Tier | Purpose | Lock | CM grants | Notified |
+|------|---------|------|-----------|----------|
+| **OBSERVE** | Read-only diagnostics | Shared | Lightweight, immediate | CM logs only |
+| **CHANGE** | State-modifying operations | Exclusive | With scope + approved plan | AD, QE, TW |
+| **DEPLOY** | Persistent changes from git | Exclusive | With commit hash + AD challenge + Rule 13 | AD, QE, TW, PM |
+
+**Key rules:**
+- The orchestrator MUST NOT hold or request target sessions at any tier
+- The boundary between OBSERVE and CHANGE is mechanical: if the command
+  modifies state, it requires CHANGE minimum. No judgment calls.
+- No self-escalation: release current session, request new one at higher tier
+- Workers classify their own access tier (worker Rule 6)
+- Workers escalate protocol violations from the orchestrator to the AD (worker Rule 5)
+
+Rule 10 (single-worker deployment) is subsumed by CHANGE/DEPLOY exclusivity.
 
 ## Lessons Learned
 

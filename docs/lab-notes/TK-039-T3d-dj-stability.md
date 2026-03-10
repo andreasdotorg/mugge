@@ -137,8 +137,13 @@ Owner reports audible stuttering even after switching Mixxx to JACK output via
 | Mixxx audio backend | JACK (via pw-jack) | Initially ALSA (reverted), corrected to JACK | FAIL then corrected |
 | Audio stuttering | None | Stuttering reported | **INVESTIGATING** |
 
-**Phase 1 result: IN PROGRESS.** Mixxx configuration corrected but stuttering
-under investigation.
+**Phase 1 result: ABORTED.** Debugging escalated to uncontrolled API calls
+that corrupted the audio state. See
+`docs/lab-notes/TK-039-restore-session.md` for the full restore session
+including root cause analysis (F-021, F-022) and restore procedure.
+
+Finding F-1 was formally filed as **F-021** (libjack resolution issue).
+Finding F-2 (stuttering) was a consequence of the cascading state corruption.
 
 ---
 
@@ -146,9 +151,10 @@ under investigation.
 
 | ID | Phase | Severity | Description | Status |
 |----|-------|----------|-------------|--------|
-| F-1 | 1 | Medium | Mixxx soundconfig.xml reverts to ALSA/bcm2835 without `pw-jack` wrapper | Open -- needs launch script fix |
-| F-2 | 1 | High | Audio stuttering persists after JACK switch | Investigating |
-| DG-1 | 1 | Medium | SETUP-MANUAL.md is obsolete -- config paths, procedures, and Pi state do not match reality. Ground truth is CLAUDE.md + Pi + configs/. Full reconciliation needed. | Open -- documentation gap |
+| F-1 | 1 | Medium | Mixxx soundconfig.xml reverts to ALSA/bcm2835 without `pw-jack` wrapper | **Filed as F-021** -- root cause: libjack.so.0 resolves to JACK2 |
+| F-2 | 1 | High | Audio stuttering persists after JACK switch | **Cascading failure** -- result of uncontrolled API calls during debugging |
+| F-022 | 1 | High | Mixxx autostart launches bare without `pw-jack`, re-triggers F-021 on every reboot | Open -- autostart entry needs fix |
+| DG-1 | 1 | Medium | SETUP-MANUAL.md is obsolete -- config paths, procedures, and Pi state do not match reality. Ground truth is CLAUDE.md + Pi + configs/. Full reconciliation needed. | Open -- TK-057 |
 
 ---
 
