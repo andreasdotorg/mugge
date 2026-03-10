@@ -70,8 +70,27 @@ regular file, not a symlink).
 
 ## Step 2: Deploy + Reboot
 
-**Status:** Awaiting CM forwarded output
+**Status:** BLOCKED — dirty working tree
+
+The deploy script's D-023 clean-tree check rejected the deploy. Two files
+in the working tree caused the block:
+
+1. `docs/project/tasks.md` — PM tracking updates (modified, not committed)
+2. `docs/lab-notes/TK-039-deploy-cycle1.md` — this lab note (untracked)
+
+**Irony noted:** The contemporaneous lab note for the deploy is itself
+blocking the deploy. This is a process tension between D-023 (clean tree
+required for deploy) and the TW's contemporaneous recording duty (which
+creates untracked files during the deploy session).
+
+**Process observation:** Future deploy sessions may need to either:
+(a) commit the lab note before the deploy step, or (b) the deploy script
+could exclude `docs/lab-notes/` from the clean-tree check, or (c) the TW
+writes the lab note after the deploy completes (but that makes it
+RECONSTRUCTED, not CONTEMPORANEOUS). This is a workflow gap to resolve.
+
+Awaiting orchestrator decision on resolution (quick commit or stash).
 
 ---
 
-*Lab note in progress. Events will be appended as CM notifications arrive.*
+*Lab note in progress. Deploy blocked, awaiting resolution.*
