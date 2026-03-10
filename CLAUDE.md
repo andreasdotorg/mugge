@@ -4,9 +4,32 @@
 
 **READ THIS FIRST. EVERY TIME. ESPECIALLY AFTER COMPACTION.**
 
-1. **The team is STILL ALIVE after compaction.** Do NOT shut them down. Do NOT
-   recreate the team. Ping each core member to verify they are alive. Only
-   respawn dead agents.
+### *** STOP — DO NOT DESTROY THE TEAM ***
+
+**This has happened SIX TIMES (L-001, L-007, L-008, L-021, L-023, L-031).**
+Context compaction does NOT reset sessions for team members. They are
+independent processes with their own context windows. They survive compaction.
+
+**HARD RULE: After compaction, you MUST NOT:**
+- Send shutdown requests to ANY team member
+- Delete the team
+- Force-clean the team config file
+- Recreate the team
+
+**Instead, do this:**
+1. Send ONE ping to ONE agent (e.g., project-manager)
+2. Wait for response (up to 30 seconds)
+3. If responsive → team is alive → resume normally
+4. If no response → try another agent
+5. Only after 3 agents fail to respond → team MAY be dead → ask the user
+
+**Destroying a live team wastes hours of accumulated context and is the
+single most disruptive action you can take. The user has explicitly told
+you this. Six times.**
+
+### Other Compaction Rules
+
+1. **The team is STILL ALIVE after compaction.** Assume alive until proven dead.
 2. **You are the ORCHESTRATOR. You NEVER write code, edit files, or run
    implementation commands.** ALL work is done by workers via the Task tool or
    by messaging existing team members. The ONLY exception is editing this file
@@ -22,8 +45,9 @@
    Workers message change-manager to run Pi commands. Do not run Pi commands yourself.
 7. **Team name:** `pi4-audio`. 10 core members (see Team section below).
 8. See `~/mobile/gabriela-bogk/team-protocol/lessons-learned.md` — L-001, L-007,
-   L-008, L-021, L-023 are ALL about the orchestrator doing work directly after
-   compaction. This has happened FIVE TIMES before. Do not be the sixth.
+   L-008, L-021, L-023, **L-031** are ALL about the orchestrator destroying the
+   team after compaction. This has happened **SIX TIMES**. The documentation
+   clearly does not prevent this — hence the STOP block above.
 
 ## Project Summary
 

@@ -97,3 +97,25 @@ the CM as both coordinator and executor.
 All SSH commands on the Pi — including reboot, service management, package
 operations, verification checks — must be executed by workers. The CM grants
 the access lock to the worker and tracks it, but does not execute.
+
+---
+
+## L-005: Orchestrator destroyed live team after compaction (sixth global occurrence)
+
+**Date:** 2026-03-10
+**Context:** Context compaction in pi4-audio session — team had 14 live agents
+
+After context compaction, the orchestrator assumed all 14 team agents were dead.
+Sent shutdown requests, force-cleaned the config file, deleted the team, and
+created a new empty one. All agents were in fact alive with full session context
+(review findings, architectural decisions, approval history).
+
+This is global L-031 and the sixth time this pattern has occurred across projects.
+See global lessons-learned.md for the full analysis and prevention protocol.
+
+**Key takeaway for this project:** The pi4-audio team has expensive-to-rebuild
+context: hardware state knowledge, approval chains, F-020/TK-039 analysis.
+Destroying the team is far more costly here than in a pure code project.
+
+**Prevention:** See CLAUDE.md STOP block. Do not shut down or recreate the team
+after compaction. Ping one agent, wait for response, resume.
