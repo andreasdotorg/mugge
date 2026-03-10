@@ -8,11 +8,20 @@
 # soundconfig.xml). With PipeWire's libjack as the preferred alternative,
 # bare `mixxx` uses PipeWire automatically — no pw-jack wrapper needed.
 #
+# Uses dpkg-divert to move the package-managed libjack.so.0 symlink out of
+# the way so update-alternatives can own the link path. This survives package
+# upgrades (dpkg-divert is recorded in dpkg's database).
+#
 # Run on the Pi as root (or with sudo). Idempotent — safe to re-run.
 #
 # Usage:
 #   configure-libjack-alternatives.sh              # register + verify
 #   configure-libjack-alternatives.sh --discover   # show installed paths only
+#
+# Rollback:
+#   sudo update-alternatives --remove-all libjack.so.0
+#   sudo dpkg-divert --rename --remove /usr/lib/aarch64-linux-gnu/libjack.so.0
+#   sudo ldconfig
 #
 set -euo pipefail
 
@@ -31,6 +40,9 @@ ALT_LINK="${LIB_DIR}/libjack.so.0"
 # If these are wrong, use --discover to find the actual paths.
 PIPEWIRE_LIBJACK="${LIB_DIR}/pipewire-0.3/jack/libjack.so.0.3.1402"
 JACK2_LIBJACK="${LIB_DIR}/libjack.so.0.1.0"
+
+# Diverted path for the package-managed symlink
+DIVERT_PATH="${ALT_LINK}.dpkg-jackd2"
 
 # Priorities: higher wins in auto mode
 PIPEWIRE_PRIORITY=200
@@ -72,6 +84,10 @@ discover() {
     ldconfig -p | grep libjack || echo "  (no libjack entries in ldconfig cache)"
     echo ""
 
+    echo "--- dpkg-divert status ---"
+    dpkg-divert --list "${ALT_LINK}" 2>/dev/null || echo "  No diversion configured for ${ALT_LINK}."
+    echo ""
+
     echo "--- Current alternatives (if configured) ---"
     update-alternatives --display "${ALT_GROUP}" 2>/dev/null || echo "  No alternatives configured for ${ALT_GROUP}."
 }
@@ -99,6 +115,23 @@ check_library_exists() {
     echo "  Found ${label}: ${path}"
 }
 
+divert_package_symlink() {
+    echo "=== Diverting package-managed symlink ==="
+    echo ""
+
+    # Check if already diverted (idempotent)
+    if dpkg-divert --list "${ALT_LINK}" 2>/dev/null | grep -q "diversion of ${ALT_LINK}"; then
+        echo "  Already diverted: ${ALT_LINK} -> ${DIVERT_PATH}"
+        echo "  (idempotent — no action needed)"
+    else
+        echo "  Diverting ${ALT_LINK} to ${DIVERT_PATH}..."
+        dpkg-divert --divert "${DIVERT_PATH}" --rename "${ALT_LINK}"
+        echo "  Diversion recorded. Package upgrades to libjack-jackd2-0 will"
+        echo "  install to ${DIVERT_PATH} instead of ${ALT_LINK}."
+    fi
+    echo ""
+}
+
 register_alternatives() {
     echo "=== Registering alternatives ==="
     echo ""
@@ -111,9 +144,9 @@ register_alternatives() {
     check_library_exists "JACK2 libjack" "${JACK2_LIBJACK}" "libjack-jackd2-0"
     echo ""
 
-    # Note: update-alternatives will replace the existing file/symlink at
-    # ALT_LINK with a managed symlink to /etc/alternatives/libjack.so.0,
-    # which in turn points to the highest-priority alternative.
+    # update-alternatives --install creates/replaces the file at ALT_LINK
+    # with a managed symlink to /etc/alternatives/libjack.so.0, which in
+    # turn points to the highest-priority alternative.
     echo "Registering PipeWire libjack (priority ${PIPEWIRE_PRIORITY})..."
     update-alternatives --install \
         "${ALT_LINK}" \
@@ -176,6 +209,17 @@ verify() {
         echo "WARNING: ${ALT_LINK} resolves to: ${resolved}"
         echo "  Expected: ${PIPEWIRE_LIBJACK}"
     fi
+
+    # Check dpkg-divert is in place
+    echo ""
+    echo "--- dpkg-divert status ---"
+    if dpkg-divert --list "${ALT_LINK}" 2>/dev/null | grep -q "diversion of ${ALT_LINK}"; then
+        echo "OK: dpkg-divert is active for ${ALT_LINK}."
+        dpkg-divert --list "${ALT_LINK}"
+    else
+        echo "WARNING: No dpkg-divert for ${ALT_LINK}."
+        echo "  Package upgrades to libjack-jackd2-0 may overwrite the alternatives symlink."
+    fi
 }
 
 # --- Main -------------------------------------------------------------------
@@ -186,6 +230,7 @@ if [ "${1:-}" = "--discover" ]; then
 fi
 
 check_root
+divert_package_symlink
 register_alternatives
 verify
 
