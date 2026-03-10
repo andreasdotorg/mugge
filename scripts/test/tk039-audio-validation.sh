@@ -173,7 +173,7 @@ PROV
     log "--- Criterion 10: F-020 scheduling priorities ---"
 
     local pw_sched camilladsp_sched
-    pw_sched="$(chrt -p "$(pgrep -x pipewire)" 2>&1)"
+    pw_sched="$(chrt -p "$(pgrep -x pipewire | head -1)" 2>&1)"
     echo "$pw_sched" > "$EVIDENCE_DIR/pipewire-sched.txt"
 
     camilladsp_sched="$(chrt -p "$(pgrep -x camilladsp)" 2>&1)"
