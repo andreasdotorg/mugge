@@ -29,8 +29,8 @@ ALT_LINK="${LIB_DIR}/libjack.so.0"
 
 # Best-guess library paths (Debian Trixie aarch64 packaging conventions).
 # If these are wrong, use --discover to find the actual paths.
-PIPEWIRE_LIBJACK="${LIB_DIR}/pipewire-0.3/jack/libjack.so.0.4096.0"
-JACK2_LIBJACK="${LIB_DIR}/libjack.so.0.2.0"
+PIPEWIRE_LIBJACK="${LIB_DIR}/pipewire-0.3/jack/libjack.so.0.3.1402"
+JACK2_LIBJACK="${LIB_DIR}/libjack.so.0.1.0"
 
 # Priorities: higher wins in auto mode
 PIPEWIRE_PRIORITY=200
