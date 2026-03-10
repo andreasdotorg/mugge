@@ -11,7 +11,7 @@
 | Parent story/task | TK-039, US-029 (DJ UAT), US-030 (Live UAT), TK-022 (Reaper RT stability) |
 | Author | Quality Engineer |
 | Reviewer | Audio Engineer (domain), Advocatus Diaboli (challenge) |
-| Status | Draft |
+| Status | Approved (DJ phase: QE + AE + AD); Live phase pending |
 
 ### 1.2 Test Objective
 
@@ -49,8 +49,8 @@ uninterrupted audio in both operational modes on the production kernel?
 | PipeWire quantum (Live) | 256 | Static config: `configs/pipewire/10-audio-settings.conf` |
 | PipeWire loopback | 8ch sink on Loopback device | `configs/pipewire/25-loopback-8ch.conf` |
 | Mixxx version | 2.5.0 | Pre-installed |
-| Mixxx audio backend | JACK (via PipeWire bridge) | `soundconfig.xml` (TODO: version-control, Phase A) |
-| Mixxx launch method | TBD (`pw-jack mixxx` or bare `mixxx`) | Launch script (TODO: Phase A) |
+| Mixxx audio backend | JACK (via PipeWire bridge) | `configs/mixxx/soundconfig.xml` deployed by `scripts/deploy/deploy.sh` |
+| Mixxx launch method | `~/bin/start-mixxx` (pw-jack + D-026 readiness probe) | `scripts/launch/start-mixxx.sh` deployed by `scripts/deploy/deploy.sh` (commit `467cc1e`) |
 | Reaper version | 7.31 | Pre-installed |
 | Reaper audio backend | JACK | `reaper.ini` `linux_audio_srate=48000` (TK-046) |
 | Reaper launch method | TBD (`pw-jack reaper` or bare `reaper`) | Launch script (TODO: Phase A) |
@@ -108,7 +108,7 @@ The audio signal path has multiple stages where state can deviate silently:
 
 ### 1.6 Execution Procedure
 
-**Test script:** `scripts/test/tk039-audio-validation.sh --phase both`
+**Test script:** `scripts/test/tk039-audio-validation.sh --phase both` (commit `8ab9aa9`)
 
 The script automates criteria 1-7 and 9-11. Criterion 8 requires interactive owner
 confirmation (script pauses with a prompt).
@@ -197,9 +197,9 @@ under `data/TK-039/` along with this protocol's execution record.
 
 | Role | Name | Date | Verdict |
 |------|------|------|---------|
-| QE (author) | Quality Engineer | | Draft |
-| Audio Engineer | | | Pending |
-| Advocatus Diaboli | | | Pending |
+| QE (author) | Quality Engineer | 2026-03-10 | Approved (DJ-only phase) |
+| Audio Engineer | Audio Engineer | 2026-03-10 | Approved (DJ-only phase) |
+| Advocatus Diaboli | Advocatus Diaboli | 2026-03-10 | Approved (DJ-only phase) |
 | Owner | | | Pending (UAT scope) |
 
 ---
