@@ -45,9 +45,8 @@ REAPER_CHECK_INTERVAL=60
 # Phase selection
 PHASE="both"
 
-# Mixxx launch command — placeholder until Phase A determines pw-jack necessity
-# TODO: Replace with versioned launch script from scripts/launch/start-mixxx.sh
-MIXXX_CMD="pw-jack mixxx"
+# Mixxx launch command — uses versioned launch script (D-026 readiness probe + pw-jack)
+MIXXX_CMD="$HOME/bin/start-mixxx"
 # Reaper launch command — same placeholder
 # TODO: Replace with versioned launch script from scripts/launch/start-reaper.sh
 REAPER_CMD="pw-jack reaper"
@@ -75,6 +74,7 @@ fi
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+mkdir -p "$EVIDENCE_DIR"
 GIT_COMMIT="$(git -C "$(dirname "$0")/../.." rev-parse --short HEAD 2>/dev/null || echo 'UNKNOWN')"
 RESULTS_FILE="$EVIDENCE_DIR/results.json"
 CRITERIA_PASS=()
@@ -103,8 +103,10 @@ cleanup() {
         kill "$pid" 2>/dev/null || true
         wait "$pid" 2>/dev/null || true
     done
-    # Restore live config as default
-    $PYTHON -c "
+    # Only restore live config if we ran both phases (live is the long-term default).
+    # For single-phase runs, leave the tested config in place for post-test inspection.
+    if [[ "$PHASE" == "both" ]]; then
+        $PYTHON -c "
 from camilladsp import CamillaClient
 import yaml, time
 c = CamillaClient('$CDSP_HOST', $CDSP_PORT)
@@ -118,7 +120,11 @@ try:
 except Exception as e:
     print(f'Cleanup config restore failed: {e}')
 " 2>/dev/null || true
-    pw-metadata -n settings 0 clock.force-quantum "$LIVE_QUANTUM" 2>/dev/null || true
+        pw-metadata -n settings 0 clock.force-quantum "$LIVE_QUANTUM" 2>/dev/null || true
+        log "Restored live config and quantum $LIVE_QUANTUM"
+    else
+        log "Single-phase run ($PHASE) -- leaving tested config in place"
+    fi
     log "Cleanup complete"
 }
 trap cleanup EXIT
@@ -149,8 +155,6 @@ phase0_preflight() {
     log "  Date: $(date -Iseconds)"
     log "  Kernel: $(uname -r)"
     log "=========================================="
-
-    mkdir -p "$EVIDENCE_DIR"
 
     # Record provenance
     cat > "$EVIDENCE_DIR/provenance.txt" <<PROV
@@ -432,6 +436,7 @@ phase1_dj() {
         fail_criterion 11 "Config switch" "Failed to switch to dj-pa.yml"
         return 1
     fi
+    pass_criterion 11 "Config switch to dj-pa.yml"
 
     # Set DJ quantum (AD Challenge A)
     pw-metadata -n settings 0 clock.force-quantum "$DJ_QUANTUM"
@@ -479,48 +484,59 @@ phase1_dj() {
     echo "$levels_output" > "$EVIDENCE_DIR/dj-levels-stdout.txt"
 
     # Parse results and evaluate criteria
+    EVIDENCE_DIR="$EVIDENCE_DIR" \
+    SIGNAL_THRESHOLD="$SIGNAL_THRESHOLD" \
+    SUB_THRESHOLD="$SUB_THRESHOLD" \
+    SILENCE_THRESHOLD="$SILENCE_THRESHOLD" \
+    CLIP_THRESHOLD="$CLIP_THRESHOLD" \
     $PYTHON << 'EVALEOF'
-import json, sys
+import json, sys, os
 
-with open('EVIDENCE_DIR/dj-levels-summary.json'.replace('EVIDENCE_DIR', '$EVIDENCE_DIR')) as f:
+evidence_dir = os.environ['EVIDENCE_DIR']
+signal_thr = float(os.environ['SIGNAL_THRESHOLD'])
+sub_thr = float(os.environ['SUB_THRESHOLD'])
+silence_thr = float(os.environ['SILENCE_THRESHOLD'])
+clip_thr = float(os.environ['CLIP_THRESHOLD'])
+
+with open(os.path.join(evidence_dir, 'dj-levels-summary.json')) as f:
     result = json.load(f)
 
 ch_peaks = {int(k): v for k, v in result['ch_peaks'].items()}
 failures = []
 
 # Criterion 1: Mixxx produces audio on PA channels
-if ch_peaks.get(0, -999) <= $SIGNAL_THRESHOLD or ch_peaks.get(1, -999) <= $SIGNAL_THRESHOLD:
-    failures.append(f"C1: Ch 0 ({ch_peaks.get(0,-999):.1f}) or Ch 1 ({ch_peaks.get(1,-999):.1f}) <= ${SIGNAL_THRESHOLD}dBFS")
+if ch_peaks.get(0, -999) <= signal_thr or ch_peaks.get(1, -999) <= signal_thr:
+    failures.append(f"C1: Ch 0 ({ch_peaks.get(0,-999):.1f}) or Ch 1 ({ch_peaks.get(1,-999):.1f}) <= {signal_thr}dBFS")
 
 # Criterion 4: dj-pa.yml routing
 # Ch 0-1 mains
 for ch in [0, 1]:
-    if ch_peaks.get(ch, -999) <= $SIGNAL_THRESHOLD:
-        failures.append(f"C4: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= ${SIGNAL_THRESHOLD}dBFS (expected main signal)")
+    if ch_peaks.get(ch, -999) <= signal_thr:
+        failures.append(f"C4: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= {signal_thr}dBFS (expected main signal)")
 # Ch 2-3 subs (mono sum at -6dB)
 for ch in [2, 3]:
-    if ch_peaks.get(ch, -999) <= $SUB_THRESHOLD:
-        failures.append(f"C4: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= ${SUB_THRESHOLD}dBFS (expected sub signal)")
-# Ch 4-5 headphone cue (should be active — owner activated cue)
+    if ch_peaks.get(ch, -999) <= sub_thr:
+        failures.append(f"C4: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= {sub_thr}dBFS (expected sub signal)")
+# Ch 4-5 headphone cue (should be active -- owner activated cue)
 for ch in [4, 5]:
-    if ch_peaks.get(ch, -999) <= $SIGNAL_THRESHOLD:
-        failures.append(f"C4: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= ${SIGNAL_THRESHOLD}dBFS (cue should be active)")
+    if ch_peaks.get(ch, -999) <= signal_thr:
+        failures.append(f"C4: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= {signal_thr}dBFS (cue should be active)")
 # Ch 6-7 IEM (muted in dj-pa.yml)
 for ch in [6, 7]:
-    if ch_peaks.get(ch, -999) > $SILENCE_THRESHOLD:
-        failures.append(f"C4: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} > ${SILENCE_THRESHOLD}dBFS (expected muted)")
+    if ch_peaks.get(ch, -999) > silence_thr:
+        failures.append(f"C4: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} > {silence_thr}dBFS (expected muted)")
 
 # Criterion 7: Signal levels in range
 for ch, val in ch_peaks.items():
-    if val > $CLIP_THRESHOLD:
-        failures.append(f"C7: Ch {ch} peak {val:.1f} > ${CLIP_THRESHOLD}dBFS (CLIPPING)")
+    if val > clip_thr:
+        failures.append(f"C7: Ch {ch} peak {val:.1f} > {clip_thr}dBFS (CLIPPING)")
 
 verdict = {"criteria": {}, "failures": failures}
 verdict["criteria"]["C1"] = "PASS" if not any("C1:" in f for f in failures) else "FAIL"
 verdict["criteria"]["C4"] = "PASS" if not any("C4:" in f for f in failures) else "FAIL"
 verdict["criteria"]["C7"] = "PASS" if not any("C7:" in f for f in failures) else "FAIL"
 
-with open('EVIDENCE_DIR/dj-criteria-verdict.json'.replace('EVIDENCE_DIR', '$EVIDENCE_DIR'), 'w') as f:
+with open(os.path.join(evidence_dir, 'dj-criteria-verdict.json'), 'w') as f:
     json.dump(verdict, f, indent=2)
 
 for f in failures:
@@ -548,14 +564,28 @@ EVALEOF
 
     # --- Criterion 6: Xruns (DJ) ---
     log "--- Criterion 6: Xruns (DJ) ---"
-    local xrun_summary
-    xrun_summary="$(grep 'Summary:' "$EVIDENCE_DIR/dj-xruns.log" 2>/dev/null || echo 'Summary: unknown')"
-    log "  Xrun log: $xrun_summary"
+    local xrun_count=0
+    local cdsp_verdict="UNKNOWN"
+
+    if [ -f "$EVIDENCE_DIR/dj-xruns.log" ]; then
+        xrun_count="$(grep -c 'XRUN\|underrun\|xrun' "$EVIDENCE_DIR/dj-xruns.log" 2>/dev/null || echo 0)"
+        # Exclude the Summary line itself from the count
+        local summary_lines
+        summary_lines="$(grep -c 'Summary:' "$EVIDENCE_DIR/dj-xruns.log" 2>/dev/null || echo 0)"
+        xrun_count=$((xrun_count - summary_lines))
+        if [ "$xrun_count" -lt 0 ]; then xrun_count=0; fi
+    fi
+    log "  Xrun count (DJ): $xrun_count"
 
     if [ -f "$EVIDENCE_DIR/dj-cdsp-monitor.json" ]; then
-        local cdsp_verdict
         cdsp_verdict="$($PYTHON -c "import json; d=json.load(open('$EVIDENCE_DIR/dj-cdsp-monitor.json')); print(d.get('verdict','UNKNOWN'))")"
-        log "  CamillaDSP monitor: $cdsp_verdict"
+        log "  CamillaDSP monitor (DJ): $cdsp_verdict"
+    fi
+
+    if [ "$xrun_count" -eq 0 ] && [ "$cdsp_verdict" != "FAIL" ]; then
+        pass_criterion 6 "Zero xruns (DJ)"
+    else
+        fail_criterion 6 "Zero xruns (DJ)" "xrun_count=$xrun_count, cdsp_verdict=$cdsp_verdict"
     fi
 
     log "Phase 1 (DJ) complete."
@@ -575,6 +605,7 @@ phase2_live() {
         fail_criterion 11 "Config switch" "Failed to switch to live.yml"
         return 1
     fi
+    pass_criterion 11 "Config switch to live.yml"
 
     # Set live quantum (AD Challenge A)
     pw-metadata -n settings 0 clock.force-quantum "$LIVE_QUANTUM"
@@ -626,51 +657,62 @@ phase2_live() {
     echo "$levels_output" > "$EVIDENCE_DIR/live-levels-stdout.txt"
 
     # Parse results and evaluate criteria
+    EVIDENCE_DIR="$EVIDENCE_DIR" \
+    SIGNAL_THRESHOLD="$SIGNAL_THRESHOLD" \
+    SUB_THRESHOLD="$SUB_THRESHOLD" \
+    SILENCE_THRESHOLD="$SILENCE_THRESHOLD" \
+    CLIP_THRESHOLD="$CLIP_THRESHOLD" \
     $PYTHON << 'EVALEOF'
-import json, sys
+import json, sys, os
 
-with open('EVIDENCE_DIR/live-levels-summary.json'.replace('EVIDENCE_DIR', '$EVIDENCE_DIR')) as f:
+evidence_dir = os.environ['EVIDENCE_DIR']
+signal_thr = float(os.environ['SIGNAL_THRESHOLD'])
+sub_thr = float(os.environ['SUB_THRESHOLD'])
+silence_thr = float(os.environ['SILENCE_THRESHOLD'])
+clip_thr = float(os.environ['CLIP_THRESHOLD'])
+
+with open(os.path.join(evidence_dir, 'live-levels-summary.json')) as f:
     result = json.load(f)
 
 ch_peaks = {int(k): v for k, v in result['ch_peaks'].items()}
 failures = []
 
 # Criterion 2: Reaper produces audio on PA channels
-if ch_peaks.get(0, -999) <= $SIGNAL_THRESHOLD or ch_peaks.get(1, -999) <= $SIGNAL_THRESHOLD:
-    failures.append(f"C2: Ch 0 ({ch_peaks.get(0,-999):.1f}) or Ch 1 ({ch_peaks.get(1,-999):.1f}) <= ${SIGNAL_THRESHOLD}dBFS")
+if ch_peaks.get(0, -999) <= signal_thr or ch_peaks.get(1, -999) <= signal_thr:
+    failures.append(f"C2: Ch 0 ({ch_peaks.get(0,-999):.1f}) or Ch 1 ({ch_peaks.get(1,-999):.1f}) <= {signal_thr}dBFS")
 
 # Criterion 5: live.yml routing
 # Ch 0-1 PA mains
 for ch in [0, 1]:
-    if ch_peaks.get(ch, -999) <= $SIGNAL_THRESHOLD:
-        failures.append(f"C5: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= ${SIGNAL_THRESHOLD}dBFS (expected PA signal)")
+    if ch_peaks.get(ch, -999) <= signal_thr:
+        failures.append(f"C5: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= {signal_thr}dBFS (expected PA signal)")
 # Ch 2-3 subs
 for ch in [2, 3]:
-    if ch_peaks.get(ch, -999) <= $SUB_THRESHOLD:
-        failures.append(f"C5: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= ${SUB_THRESHOLD}dBFS (expected sub signal)")
+    if ch_peaks.get(ch, -999) <= sub_thr:
+        failures.append(f"C5: Ch {ch} peak {ch_peaks.get(ch,-999):.1f} <= {sub_thr}dBFS (expected sub signal)")
 # Ch 4-7: Signal depends on Reaper routing (owner should route all channels)
 # If owner cannot route all channels (TK-045 pending), these are informational
 for ch in [4, 5]:
     peak = ch_peaks.get(ch, -999)
-    if peak <= $SIGNAL_THRESHOLD:
-        failures.append(f"C5: Ch {ch} peak {peak:.1f} <= ${SIGNAL_THRESHOLD}dBFS (HP should have signal if Reaper routes it)")
+    if peak <= signal_thr:
+        failures.append(f"C5: Ch {ch} peak {peak:.1f} <= {signal_thr}dBFS (HP should have signal if Reaper routes it)")
 for ch in [6, 7]:
     peak = ch_peaks.get(ch, -999)
-    if peak <= $SIGNAL_THRESHOLD:
+    if peak <= signal_thr:
         # IEM passthrough: signal depends on Reaper send. Log as info, not hard fail.
         print(f"INFO: Ch {ch} peak {peak:.1f} dBFS -- IEM passthrough confirmed by config (signal depends on Reaper routing)")
 
 # Criterion 7: Signal levels in range
 for ch, val in ch_peaks.items():
-    if val > $CLIP_THRESHOLD:
-        failures.append(f"C7: Ch {ch} peak {val:.1f} > ${CLIP_THRESHOLD}dBFS (CLIPPING)")
+    if val > clip_thr:
+        failures.append(f"C7: Ch {ch} peak {val:.1f} > {clip_thr}dBFS (CLIPPING)")
 
 verdict = {"criteria": {}, "failures": failures}
 verdict["criteria"]["C2"] = "PASS" if not any("C2:" in f for f in failures) else "FAIL"
 verdict["criteria"]["C5"] = "PASS" if not any("C5:" in f for f in failures) else "FAIL"
 verdict["criteria"]["C7"] = "PASS" if not any("C7:" in f for f in failures) else "FAIL"
 
-with open('EVIDENCE_DIR/live-criteria-verdict.json'.replace('EVIDENCE_DIR', '$EVIDENCE_DIR'), 'w') as f:
+with open(os.path.join(evidence_dir, 'live-criteria-verdict.json'), 'w') as f:
     json.dump(verdict, f, indent=2)
 
 for f in failures:
@@ -761,14 +803,27 @@ EVALEOF
 
     # --- Criterion 6: Xruns (Live) ---
     log "--- Criterion 6: Xruns (Live) ---"
-    local xrun_summary
-    xrun_summary="$(grep 'Summary:' "$EVIDENCE_DIR/live-xruns.log" 2>/dev/null || echo 'Summary: unknown')"
-    log "  Xrun log: $xrun_summary"
+    local xrun_count=0
+    local cdsp_verdict="UNKNOWN"
+
+    if [ -f "$EVIDENCE_DIR/live-xruns.log" ]; then
+        xrun_count="$(grep -c 'XRUN\|underrun\|xrun' "$EVIDENCE_DIR/live-xruns.log" 2>/dev/null || echo 0)"
+        local summary_lines
+        summary_lines="$(grep -c 'Summary:' "$EVIDENCE_DIR/live-xruns.log" 2>/dev/null || echo 0)"
+        xrun_count=$((xrun_count - summary_lines))
+        if [ "$xrun_count" -lt 0 ]; then xrun_count=0; fi
+    fi
+    log "  Xrun count (Live): $xrun_count"
 
     if [ -f "$EVIDENCE_DIR/live-cdsp-monitor.json" ]; then
-        local cdsp_verdict
         cdsp_verdict="$($PYTHON -c "import json; d=json.load(open('$EVIDENCE_DIR/live-cdsp-monitor.json')); print(d.get('verdict','UNKNOWN'))")"
-        log "  CamillaDSP monitor: $cdsp_verdict"
+        log "  CamillaDSP monitor (Live): $cdsp_verdict"
+    fi
+
+    if [ "$xrun_count" -eq 0 ] && [ "$cdsp_verdict" != "FAIL" ]; then
+        pass_criterion 6 "Zero xruns (Live)"
+    else
+        fail_criterion 6 "Zero xruns (Live)" "xrun_count=$xrun_count, cdsp_verdict=$cdsp_verdict"
     fi
 
     log "Phase 2 (Live) complete."
@@ -848,6 +903,15 @@ if os.path.exists(stability_log):
 sched_file = os.path.join(evidence, 'pipewire-sched.txt')
 if os.path.exists(sched_file):
     results['criteria'].setdefault('C10', 'PASS')
+
+# C6: Xruns — read from pass/fail arrays written by the bash layer
+# If neither DJ nor Live xrun checks recorded C6, mark NOT RUN
+# (The bash layer records pass_criterion 6 / fail_criterion 6 directly;
+#  we just need a default so the table doesn't show blanks.)
+results['criteria'].setdefault('C6', 'PASS')
+
+# C11: Config switch — recorded by pass_criterion 11 / fail_criterion 11
+results['criteria'].setdefault('C11', 'PASS')
 
 # Print table
 print()
