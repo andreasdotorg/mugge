@@ -90,7 +90,7 @@ The dashboard uses a fixed three-row layout with a collapsible sidebar.
 - All 16 channels in signal-flow order: capture left-to-right, then playback left-to-right
 - Capture meters: cyan (`#00BCD4`), grouped as "CAPTURE (pre-DSP)"
 - Playback meters: grouped as "PA SENDS" (ch 1-4) and "MON SENDS" (ch 5-8)
-- Capture ch 3-8: collapsed by default, auto-expand when peak > -60 dB (per D-020 spec)
+- Capture ch 3-8: always visible, dimmed when silent (auto-hide rejected per TK-095 -- spatial memory > space savings)
 - Each meter: RMS bar + peak hold indicator + dB readout below
 - Meter height: 150px. Width: 28-36px each, flex-distributed.
 - Group labels above each group in `#888` small text
@@ -830,7 +830,7 @@ Client-side:
 - Derive stage status from existing data streams
 - Implement sidebar collapse/expand
 - Upgrade meter display to show all 16 channels with proper grouping
-- Implement auto-show for capture ch 3-8 (threshold at -60 dB)
+- Implement dim-when-silent for capture ch 3-8 (threshold at -60 dB, auto-hide rejected per TK-095)
 - Add stage-click-to-panel navigation
 
 **Why third:** The pipeline view synthesizes data from all other streams. It makes

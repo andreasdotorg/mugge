@@ -87,7 +87,7 @@ This provides 16 meters total: 8 capture (pre-DSP) + 8 playback (post-DSP). Valu
 
 **ADA8200 input channels:** The ADA8200 has mic preamps on ch 1-2, but these are ADC inputs -- they feed INTO the USBStreamer's capture side, not into CamillaDSP's Loopback capture. CamillaDSP captures from the ALSA Loopback, not from the USBStreamer input. ADA8200 input monitoring requires a separate path (US-035 or future story). Channels 3-8 on the ADA8200 have no internal DAC-to-ADC loopback -- they show only noise floor.
 
-**Auto-show threshold:** Meters for capture channels 3-8 are hidden by default (they carry only Loopback routing signals that may be silent). Show a meter automatically when its peak exceeds -60 dBFS. This prevents 6 dead meters cluttering the dashboard.
+**Meter visibility policy (updated 2026-03-11, TK-095):** All meters are always visible in fixed positions. Silent meters are dimmed (reduced opacity) rather than hidden. Auto-hide was rejected by owner/AE/AD consensus: spatial memory (knowing where each meter is by position) is more important than space savings in a live sound monitoring context. This overrides the original auto-show threshold design. The dashboard implementation dims meters below -60 dBFS but never removes them from the layout.
 
 **Poll rate:** 20 Hz (50ms interval). The asyncio loop calls `client.levels.levels_since_last()` every 50ms and broadcasts the JSON to subscribed clients.
 
@@ -318,61 +318,70 @@ Server validates subscription against role. Singer requesting "spectrograph" get
 ### Engineer Dashboard (tablet, landscape orientation)
 
 ```
+Stage 1 (implemented, TK-093 + TK-095):
+
 +------------------------------------------------------------------+
-|  Audio Workstation -- Engineer                   [Connected] 62C  |
+| Pi Audio  [Dashboard] [System] [Measure] [MIDI]  DJ  62C  [*]   |
 +------------------------------------------------------------------+
-|                                                                    |
-|  CAPTURE          PA SENDS                 MONITOR SENDS          |
-|  In L  In R       ML   MR   S1   S2       EL   ER   IL   IR     |
-|  |#### |####      |==  |==  |==  |==      |==  |==  |==  |==    |
-|  |#### |####      |==  |==  |==  |==      |==  |==  |==  |==    |
-|  |#### |####      |==  |==  |==  |==      |==  |==  |==  |==    |
-|  |#### |####      |==  |==  |==  |==      |==  |==  |==  |==    |
-|  -18dB -18dB      -18  -18  -24  -24      -21  -21  -22  -22    |
-|                                                                    |
-|  (In 3-8: auto-show >-60dB)                                      |
-|                                                                    |
+| DSP:Run Load:[===] Buf:8192 Clip:0 Xr:0 | SPL:-- |              |
+| CPU:[===] Temp:[===] Mem:[===] PW:Q1024 FIFO 88/80  Up:0h12m    |
 +------------------------------------------------------------------+
-|  SPECTROGRAPH (L+R+Sub, 30fps)                                   |
-|  +----------------------------------------------------------+    |
-|  |  [scrolling spectrograph display, log-freq Y axis,       |    |
-|  |   time X axis, dB-colored magnitude]                     |    |
-|  |  20Hz ----------------------------------------- 20kHz    |    |
-|  +----------------------------------------------------------+    |
-+------------------------------------------------------------------+
-|  STATUS BAR                                                       |
-|  DSP: Running  Load: 19.2%  Buf: 8192  Clip: 0                  |
-|  CPU: 38.5%  Temp: 62C  PW xruns: 0  PW quantum: 256            |
-|  USB: OK  Uptime: 1h 00m                                         |
+|  dB|  MAIN       PA SENDS          MON SENDS       SOURCE        |
+|   0|  ML   MR    SatL SatR S1 S2   EL  ER  IL IR   S3..S8       |
+|  -6|  |##| |##|  |==| |==||==||==| |==||==||==||==| (dimmed      |
+| -12|  |##| |##|  |==| |==||==||==| |==||==||==||==|  when        |  SPL
+| -24|  |##| |##|  |==| |==||==||==| |==||==||==||==|  silent)     |  --
+| -48|  |##| |##|  |==| |==||==||==| |==||==||==||==|              |  dB SPL
+|    |  -18  -18   -18  -18 -24 -24  -21 -21 -22 -22              |
+|    |                                                    LUFS:     |
+|    |                                                    S-T --    |
+|    |                                                    Int --    |
+|    |                                                    Mom --    |
 +------------------------------------------------------------------+
 ```
 
-(Note: `####` represents cyan-colored meter bars for inputs; `====` represents standard green/yellow/red meter bars for outputs.)
+**Key changes from original D-020 wireframe (TK-093, TK-095):**
+- Monitor + System merged into dense single-screen Dashboard (owner feedback: "very little information density")
+- 20px health bar with inline gauges replaces status bar
+- Meter groups reordered: MAIN (capture ch 0-1, 48px wide, white/silver) | PA SENDS | MONITOR SENDS | SOURCE (capture ch 2-7)
+- MAIN meters are the primary visual reference -- wider bars, first position
+- SOURCE meters always visible but dimmed when silent (auto-hide rejected, see meter visibility policy above)
+- SPL hero + LUFS in 180px right panel (Stage 2 placeholder)
+- System tab kept as fallback diagnostic view
+- No spectrograph until Stage 2 PCM data available
 
-**Abbreviated label legend:**
+(Note: `####` represents white/silver-colored meter bars for MAIN; `====` represents standard green/yellow/red meter bars for outputs. SOURCE meters use cyan when active.)
 
-| Label | Full name | CamillaDSP channel |
-|-------|-----------|-------------------|
-| In L | Capture input left | Capture ch 1 (Loopback from Reaper/Mixxx L) |
-| In R | Capture input right | Capture ch 2 (Loopback from Reaper/Mixxx R) |
-| ML | Main left | Playback ch 1 (left wideband speaker) |
-| MR | Main right | Playback ch 2 (right wideband speaker) |
-| S1 | Subwoofer 1 | Playback ch 3 |
-| S2 | Subwoofer 2 | Playback ch 4 |
-| EL | Engineer headphone left | Playback ch 5 |
-| ER | Engineer headphone right | Playback ch 6 |
-| IL | Singer IEM left | Playback ch 7 |
-| IR | Singer IEM right | Playback ch 8 |
+**Abbreviated label legend (updated TK-095):**
 
-**Layout principles:**
-- Meters follow signal-flow order in 3 functional groups: CAPTURE (pre-DSP, cyan #00BCD4) | PA SENDS (post-DSP, green/yellow/red) | MONITOR SENDS (post-DSP, green/yellow/red). Capture meters are read-only (no faders) -- CamillaDSP capture side has no gain control.
-- Spectrograph occupies full width, below meters. Scrolling waterfall (time on X, frequency on Y, magnitude as color).
-- Status bar at bottom -- scannable at a glance during performance.
-- Each meter shows peak hold indicator (thin line above current bar, decays over 2s).
-- Clip indicators: meter bar turns red when peak exceeds -1 dBFS. Stays red for 3 seconds.
-- All meters have dB scale labels at 0, -6, -12, -24, -48 dB.
+| Group | Label | Full name | CamillaDSP channel |
+|-------|-------|-----------|-------------------|
+| MAIN | ML | Main left | Capture ch 1 (Loopback from Reaper/Mixxx L) |
+| MAIN | MR | Main right | Capture ch 2 (Loopback from Reaper/Mixxx R) |
+| PA SENDS | SatL | Satellite left | Playback ch 1 (left wideband speaker) |
+| PA SENDS | SatR | Satellite right | Playback ch 2 (right wideband speaker) |
+| PA SENDS | S1 | Subwoofer 1 | Playback ch 3 |
+| PA SENDS | S2 | Subwoofer 2 | Playback ch 4 |
+| MON SENDS | EL | Engineer headphone left | Playback ch 5 |
+| MON SENDS | ER | Engineer headphone right | Playback ch 6 |
+| MON SENDS | IL | Singer IEM left | Playback ch 7 |
+| MON SENDS | IR | Singer IEM right | Playback ch 8 |
+| SOURCE | Src3-8 | Source channels 3-8 | Capture ch 3-8 (Loopback routing, often silent) |
 
-**Future extensibility:** When ADA8200 input monitoring is added (US-035), a fourth group "INPUTS" appears to the left of CAPTURE. Signal-flow order becomes: INPUTS | CAPTURE | PA SENDS | MONITOR SENDS. This adds 2 meters (VC = vocal mic, SP = spare), bringing the total to 12 meters in the primary row. At 40px per meter + gaps, this fits within 70% of a 1024px tablet viewport.
+**Note:** MAIN meters show capture channels 0-1 (the primary mix bus from Reaper/Mixxx). Both DJ and live modes capture from ALSA Loopback (`hw:Loopback,1,0`). ADA8200 physical inputs (vocal mic, spare) are separate -- metered via a future JACK client (US-035, TK-096).
+
+**Layout principles (updated TK-093 + TK-095):**
+- Meters follow signal-flow order in 4 functional groups: MAIN (capture ch 0-1, 48px wide, white/silver) | PA SENDS (playback ch 1-4, green/yellow/red) | MONITOR SENDS (playback ch 5-8, green/yellow/red) | SOURCE (capture ch 2-7, cyan #00BCD4, dimmed when silent).
+- MAIN meters are wider (48px vs 36px) and use a distinct white/silver color scheme to visually anchor the display. They represent the primary mix bus entering CamillaDSP.
+- All meters always visible in fixed positions. Silent meters are dimmed, never hidden. Spatial memory is more important than space savings for live sound monitoring (owner/AE/AD consensus, TK-095).
+- 20px health bar above meters provides condensed system health with inline gauges (CPU, temp, memory, DSP load). Expandable to full System view for diagnostics.
+- SPL hero display (42px font) + LUFS readouts in 180px right panel. Stage 2 placeholder.
+- Spectrograph deferred to Stage 2 (requires JACK PCM data). No empty space reserved -- meters use full available height.
+- Each meter shows peak hold indicator (thin line above current bar, decays over 1.5s).
+- Clip indicators: "CLIP" text above meter turns red when peak exceeds -0.5 dBFS. Auto-clears after 3 seconds (F-1 fix).
+- dB scale labels at 0, -6, -12, -24, -48 dB on left edge, aligned with meter bars.
+
+**Future extensibility:** When ADA8200 input monitoring is added (US-035, TK-096), a fifth group "INPUTS" appears to the left of MAIN. Signal-flow order becomes: INPUTS | MAIN | PA SENDS | MONITOR SENDS | SOURCE. This adds 2 meters (VOC = vocal mic, SPARE = spare mic/line) via a dedicated JACK client reading USBStreamer capture channels. Requires Pi + USBStreamer + ADA8200 hardware -- not pure software.
 
 **Interaction:**
 - Gain faders: slider per output channel (engineer only). Sends gain change to CamillaDSP via pycamilladsp.
@@ -520,7 +529,45 @@ Key behavior: on disconnect, the singer sees a clear "your mix is unchanged" mes
 - Server-side 0 dB ceiling enforcement
 - **Gate:** Audio engineer verifies IEM control does not affect PA path.
 
-## 13. Resource Budget Summary
+## 13. Dashboard Review Findings (2026-03-11)
+
+The Stage 1 dashboard underwent three review cycles after TK-093 (dense redesign). Architecturally significant findings are captured here; task-level tracking is in `docs/project/tasks.md` (TK-095).
+
+### Design Decisions from Review
+
+**Auto-hide rejection (owner/AE/AD consensus).** The original D-020 spec called for auto-hiding capture channels 3-8 when their peak was below -60 dBFS. This was rejected during the AE dashboard review. In live sound monitoring, the engineer learns meter positions by spatial memory -- a meter that appears and disappears breaks that mental model. All meters are always visible; silent ones are dimmed. This is now the permanent design principle for all meter groups.
+
+**MAIN meters as primary visual anchor.** The AE clarified that capture channels 0-1 (the Loopback mix bus from Reaper/Mixxx) are the most-watched meters during operation. They were promoted from generic "In L / In R" labels to "ML / MR" (MAIN), placed first in the layout, rendered at 48px width (vs 36px for other meters), and given a distinct white/silver color scheme. This makes the primary mix bus immediately identifiable.
+
+**Signal path clarification.** Both DJ mode and live mode capture from the ALSA Loopback device (`hw:Loopback,1,0`). CamillaDSP does NOT capture from the USBStreamer input. The ADA8200's mic preamps on channels 1-2 are ADC inputs that feed the USBStreamer's capture side -- they are a separate signal path entirely. Dashboard meters for ADA8200 inputs require a dedicated JACK client reading USBStreamer capture channels (US-035, TK-096). This is not a Stage 1 feature.
+
+**SPL metering design.** The UMIK-1 measurement microphone provides continuous SPL data (dBA and dBC). The SPL hero display occupies the right panel with a 42px readout, above LUFS placeholders. The full SPL metering design (including A/C weighting filters, Leq computation, and UMIK-1 calibration pipeline) is documented in `docs/architecture/web-ui-monitoring-plan.md` Section 3.
+
+### Bug Fixes Applied (TK-095)
+
+| ID | Severity | Issue | Resolution |
+|----|----------|-------|------------|
+| F-1 | Critical | Clip indicators stuck red (no auto-clear) | Auto-clear after 3s (CLIP_LATCH_MS). Only activates when peak >= -0.5 dBFS. |
+| F-3 | High | Auto-hide not working / rejected | All meters always visible, silent ones dimmed. Design change, not bug fix. |
+| F-6 | Low | dB readout color thresholds too aggressive | Thresholds corrected: green < -12 dB, yellow -12 to -3 dB, red > -3 dB. |
+| F-7 | High | Temperature 62.6C shown red | Threshold raised to 75C (Pi 4 thermal spec). Green < 65C, yellow 65-75C, red > 75C. |
+| F-8 | Medium | Total CPU 156% confusing | Normalized display: sum divided by 4 cores, shown as single percentage. |
+| F-9 | Low | "Running" text not color-coded | CamillaDSP state color-coded: green=Running, red=other states. |
+
+### Deferred Items
+
+| ID | Description | Rationale |
+|----|-------------|-----------|
+| M-1 | RMS vs peak dual-bar per meter | Professional standard but adds visual complexity. Defer to Stage 2. |
+| M-2 | Mono sum indicator for sub mix | Useful for sub verification. Defer to Stage 2 spectrograph phase. |
+| M-3 | USB device status (USBStreamer/UMIK-1) | Requires ALSA device polling. Defer to system health expansion. |
+| M-4 | USB isochronous error count | Early warning metric. Defer to system health expansion. |
+| F-UX-103 | Temperature redundancy (health bar + System view) | Low priority cosmetic. |
+| F-UX-104 | Uptime shows page load time, not system uptime | Needs server-side uptime in system health stream. |
+| F-UX-107 | CLIP indicator wastes 10px height | Very low priority. Fixed height aids layout stability. |
+| F-UX-108 | "FIFO 88/80" opaque to non-experts | Very low priority. Expert-audience tool. |
+
+## 14. Resource Budget Summary
 
 | Component | CPU (Pi) | Bandwidth (per engineer client) |
 |-----------|----------|-------------------------------|
