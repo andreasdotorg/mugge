@@ -221,7 +221,7 @@ def fade_window(length, fade_in_samples, fade_out_samples):
         fade_in = 0.5 * (1 - np.cos(np.pi * np.arange(fade_in_samples) / fade_in_samples))
         window[:fade_in_samples] = fade_in
     if fade_out_samples > 0:
-        fade_out = 0.5 * (1 + np.cos(np.pi * np.arange(fade_out_samples) / fade_out_samples))
+        fade_out = 0.5 * (1 + np.cos(np.pi * np.arange(1, fade_out_samples + 1) / fade_out_samples))
         window[-fade_out_samples:] = fade_out
     return window
 
