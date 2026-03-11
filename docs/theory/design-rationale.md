@@ -402,6 +402,206 @@ frequency (D-009) -- supersedes an earlier assumption that allowed up to +12dB
 of boost.
 
 
+## Room Correction Theory
+
+The previous sections explain *what* the correction filter does (cut peaks,
+preserve phase, combine with crossover). This section explains *how* the
+correction is computed from a room measurement -- the signal processing
+theory that turns a microphone recording into a useful filter.
+
+### From Measurement to Impulse Response
+
+The measurement pipeline plays a logarithmic sine sweep (20Hz to 20kHz)
+through each speaker individually and records the result with a calibrated
+microphone (UMIK-1). Deconvolving the recorded signal with the original
+sweep produces the room's impulse response for that speaker-microphone
+path -- a complete characterization of how the room transforms sound from
+that speaker to that position.
+
+The impulse response contains everything: the direct sound from the
+speaker, early reflections off nearby surfaces, late reverberation from
+the room, and the frequency response distortions caused by standing waves
+and boundary effects. The correction filter's job is to undo the
+distortions that are consistent and correctable, while leaving alone those
+that are not.
+
+### Frequency-Dependent Windowing
+
+Not all parts of the impulse response are equally useful for correction.
+The direct sound and early reflections (arriving within roughly 5-10ms of
+the direct sound) represent the consistent acoustic behavior of the
+speaker-room combination. Late reflections (arriving after 20-50ms) are
+diffuse and position-dependent -- they change if the microphone moves by
+a few centimeters.
+
+Correcting for late reflections at a single measurement point makes things
+*worse* everywhere else. The correction creates a new set of comb-filter
+artifacts tuned to cancel the reflections at the exact mic position, but
+those same corrections add constructive interference a meter away.
+
+The solution is frequency-dependent windowing of the impulse response
+before computing the inverse. The window length varies with frequency:
+
+- **Below ~300Hz:** Long window (captures several room mode cycles). Room
+  modes are standing waves between parallel surfaces. They are spatially
+  broad -- the same mode affects a large area of the room similarly. They
+  are also the dominant problem: a 60Hz room mode can add 12dB of boom
+  that is audible everywhere. These are aggressively corrected.
+
+- **Above ~300Hz:** Short window (captures only the direct sound and
+  earliest reflections). Individual reflections at higher frequencies
+  create narrow comb-filter patterns that shift with any positional change.
+  The correction only addresses broad speaker response deviations
+  (frequency response shape of the driver itself), not individual
+  reflection artifacts.
+
+This approach -- aggressive correction of spatial modes at low frequencies,
+gentle smoothing at high frequencies -- matches the physics of how rooms
+distort sound. Low-frequency problems are global (the whole room hears
+them); high-frequency problems are local (they depend on exact position).
+
+### Psychoacoustic Smoothing
+
+Before computing the inverse of the measured response, the response is
+smoothed using fractional-octave averaging. This prevents the correction
+filter from chasing narrow-band artifacts that are not perceptually
+relevant.
+
+Human hearing does not resolve individual frequency bins the way an FFT
+does. Instead, the ear integrates energy within critical bands whose width
+increases with frequency. A sharp 3dB notch at 4,137Hz is inaudible; a
+broad 3dB tilt across 2-8kHz is obvious. The smoothing matches the
+correction's resolution to what the ear can perceive.
+
+The smoothing bandwidth increases with frequency:
+
+| Frequency Range | Smoothing | Rationale |
+|----------------|-----------|-----------|
+| Below 200Hz | 1/6 octave | Room modes are narrow; fine resolution needed to target them |
+| 200Hz - 1kHz | 1/3 octave | Transition region; moderate resolution sufficient |
+| Above 1kHz | 1/2 octave | Reflections dominate; broad smoothing prevents overcorrection |
+
+Smoothing also improves the correction's spatial robustness. A correction
+filter that matches every narrow peak and dip at the measurement position
+is fragile -- it becomes wrong as soon as the listener moves. A
+smoothed correction targets only the broad spectral shape, which is more
+consistent across the listening area.
+
+### Regularization
+
+Regularization prevents the correction filter from attempting physically
+impossible corrections. When the room measurement shows a deep null (a
+frequency where destructive interference nearly cancels the sound), the
+naive inverse would require enormous boost at that frequency -- boost that
+wastes amplifier power, risks clipping, and only works at one point in
+space.
+
+The system uses cut-only regularization (D-009): the correction filter
+may only attenuate, never boost. Room peaks are cut; room nulls are left
+uncorrected. A -0.5dB safety margin ensures no frequency bin exceeds
+-0.5dB gain, accounting for FIR truncation ripple and numerical precision.
+
+This is more aggressive than the regularization used in many room
+correction systems, which allow moderate boost (typically 3-6dB) at
+nulls. The cut-only constraint is driven by the source material:
+psytrance mastered at -0.5 LUFS leaves zero headroom for any boost
+without clipping. The correction sacrifices null correction for absolute
+safety against digital clipping at PA power levels.
+
+### Minimum-Phase Consistency
+
+The correction filter must be minimum-phase at every stage of the
+computation. If any step introduces linear-phase or mixed-phase behavior,
+the resulting filter will have pre-ringing -- energy that arrives before
+the event that caused it.
+
+The minimum-phase chain:
+
+1. **UMIK-1 calibration:** Magnitude-only correction file (inherently
+   minimum-phase when applied as a magnitude adjustment).
+2. **Measured impulse response:** The minimum-phase component is extracted
+   from the measured IR, discarding the excess-phase component that
+   represents arrival time and room reflections.
+3. **Computed inverse:** The inverse of a minimum-phase response is itself
+   minimum-phase.
+4. **Crossover shape:** Designed as a minimum-phase FIR (the crossover
+   slope is synthesized directly in the minimum-phase domain).
+5. **Combined filter:** The magnitude spectra of correction and crossover
+   are multiplied (equivalent to time-domain convolution). The combined
+   magnitude is clipped to satisfy D-009, then a new minimum-phase FIR
+   is synthesized directly from this clipped magnitude using the cepstral
+   method (IFFT of log magnitude, causal windowing, exponentiation). This
+   builds the minimum-phase filter from scratch rather than converting an
+   existing impulse response -- synthesizing from magnitude produces the
+   mathematically optimal result without the artifacts that come from
+   discarding phase information in a mixed-phase IR.
+
+If the mic calibration were applied as a complex (magnitude + phase)
+correction, or if the crossover were designed as a linear-phase filter,
+the combined result would contain pre-ringing. Consistency across the
+entire chain is what makes the final filter clean.
+
+
+## Time Alignment
+
+When multiple speakers reproduce the same signal, their sound must arrive
+at the listening position simultaneously. If the subwoofers are 2 meters
+further from the listener than the main speakers, their sound arrives
+about 5.8ms later. This time offset causes destructive interference at
+the crossover frequency -- the bass from the subs partially cancels the
+bass from the mains, creating a dip in the response exactly where the
+two drivers overlap.
+
+Time alignment compensates for this by adding digital delay to the
+closer speakers so that all arrivals coincide.
+
+### Measuring Arrival Time
+
+The measurement pipeline determines each speaker's arrival time from its
+impulse response. The onset of energy in the impulse response corresponds
+to the moment sound first reaches the microphone. The pipeline detects
+this onset for each speaker individually.
+
+### Computing Delays
+
+The furthest speaker (latest arrival) becomes the reference with delay
+zero. All other speakers receive positive delay equal to the difference
+between their arrival time and the reference. This ensures no speaker
+needs negative delay (which would require predicting the future).
+
+For example, if the main speakers arrive at 8.2ms and the subwoofers at
+14.0ms:
+
+- Subwoofers: delay = 0ms (reference, furthest)
+- Main speakers: delay = 14.0 - 8.2 = 5.8ms
+
+CamillaDSP applies these delays as sample-accurate offsets in its
+pipeline configuration.
+
+### Why Per-Speaker Delays
+
+Each speaker gets its own delay value because each is at a different
+distance from the listening position. Even the left and right mains may
+be at slightly different distances if the PA setup is not perfectly
+symmetric (which it rarely is in a live venue). The two subwoofers are
+typically at very different positions -- one near a wall, one in a
+corner -- and may differ by several milliseconds.
+
+The delays are regenerated at every venue along with the correction
+filters. Speaker placement changes between gigs, and even small changes
+(moving a sub 30cm) shift the arrival time by nearly a millisecond.
+
+### Temperature Effects
+
+The speed of sound varies with temperature: 343 m/s at 20C, 349 m/s at
+30C (a 1.7% increase). For a speaker 5 meters from the microphone, this
+changes the arrival time by approximately 0.25ms -- below the threshold
+of audible impact for crossover alignment but worth noting for
+documentation completeness. The measurement pipeline measures actual
+arrival times rather than computing them from distance, so temperature
+effects are captured implicitly.
+
+
 ## Speaker Profiles: One Pipeline, Many Configurations
 
 The system is designed to work at different venues with different speaker
