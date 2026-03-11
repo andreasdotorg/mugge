@@ -1,0 +1,16 @@
+[Unit]
+Description=Pi4 Audio Workstation monitoring web UI (D-020)
+After=pipewire.service
+Wants=pipewire.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ela/web-ui
+ExecStart=/home/ela/audio-workstation-venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1
+Restart=on-failure
+RestartSec=5
+# Web UI must not compete with RT audio
+Nice=10
+
+[Install]
+WantedBy=default.target

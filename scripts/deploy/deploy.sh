@@ -77,6 +77,7 @@ USER_CONFIGS=(
     "configs/wireplumber/52-umik1-low-priority.conf|.config/wireplumber/wireplumber.conf.d/52-umik1-low-priority.conf"
     "configs/systemd/user/labwc.service|.config/systemd/user/labwc.service"
     "configs/systemd/user/pipewire-force-quantum.service|.config/systemd/user/pipewire-force-quantum.service"
+    "configs/systemd/user/pi4-audio-webui.service|.config/systemd/user/pi4-audio-webui.service"
     "configs/labwc/autostart|.config/labwc/autostart"
     "configs/labwc/environment|.config/labwc/environment"
     "configs/labwc/rc.xml|.config/labwc/rc.xml"
@@ -367,11 +368,37 @@ for glob_pattern in "${STABILITY_SCRIPT_GLOBS[@]}"; do
 done
 echo ""
 
-# --- Section 7: Verify deployment -------------------------------------------
+# --- Section 7: Deploy web UI ------------------------------------------------
 
-echo "=== Section 7: Verify deployment ==="
+echo "=== Section 7: Deploy web UI ==="
 
-# 7a: CamillaDSP config syntax check
+ssh_cmd "mkdir -p ~/web-ui"
+
+echo "  scripts/web-ui/{app,static} -> ~/web-ui/"
+if $DRY_RUN; then
+    echo "  [dry-run] rsync -a --delete --exclude __pycache__ --exclude .pytest_cache --exclude .venv --exclude tests --exclude test_server.py --exclude Makefile --exclude README.md --exclude screenshots $REPO_ROOT/scripts/web-ui/app $REPO_ROOT/scripts/web-ui/static $PI:~/web-ui/"
+else
+    rsync -a --delete \
+        --exclude __pycache__ \
+        --exclude .pytest_cache \
+        --exclude .venv \
+        --exclude tests \
+        --exclude test_server.py \
+        --exclude Makefile \
+        --exclude README.md \
+        --exclude screenshots \
+        "$REPO_ROOT/scripts/web-ui/app" \
+        "$REPO_ROOT/scripts/web-ui/static" \
+        "$PI:~/web-ui/"
+    file_count=$((file_count + 1))
+fi
+echo ""
+
+# --- Section 8: Verify deployment -------------------------------------------
+
+echo "=== Section 8: Verify deployment ==="
+
+# 8a: CamillaDSP config syntax check
 echo "  Checking CamillaDSP config syntax..."
 if $DRY_RUN; then
     echo "  [dry-run] ssh $PI camilladsp -c /etc/camilladsp/active.yml"
@@ -383,7 +410,7 @@ else
     fi
 fi
 
-# 7b: Launch script syntax check
+# 8b: Launch script syntax check
 echo "  Checking start-mixxx syntax..."
 if $DRY_RUN; then
     echo "  [dry-run] ssh $PI bash -n ~/bin/start-mixxx"
@@ -395,7 +422,7 @@ else
     fi
 fi
 
-# 7c: Libjack resolution check
+# 8c: Libjack resolution check
 echo "  Checking libjack resolution..."
 if $DRY_RUN; then
     echo "  [dry-run] ssh $PI ldconfig -p | grep libjack"
@@ -410,7 +437,7 @@ else
     fi
 fi
 
-# 7d: Summary
+# 8d: Summary
 echo ""
 echo "=== Deployment summary ==="
 echo "  Commit: $COMMIT_HASH"
@@ -419,10 +446,10 @@ echo "  Mode: ${MODE:-<unchanged>}"
 echo "  Files deployed: $file_count"
 echo ""
 
-# --- Section 8: Optionally reboot -------------------------------------------
+# --- Section 9: Optionally reboot -------------------------------------------
 
 if $REBOOT; then
-    echo "=== Section 8: Reboot ==="
+    echo "=== Section 9: Reboot ==="
     ssh_cmd "sudo reboot"
     echo "  Reboot initiated."
 else
