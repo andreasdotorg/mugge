@@ -208,8 +208,11 @@ data/                        Raw test data (see data/README.md)
   US-003/T3c/                Informational stability test data
   US-003/T3e/                PREEMPT_RT validation data
 docs/
-  project/                   Status, decisions, user stories, task register
+  guide/introduction.md      Documentation entry point and navigation map
+  guide/howto/               Step-by-step operational procedures
+  architecture/              System architecture (RT audio stack, web UI)
   theory/                    Design rationale, enclosure topologies, Zynq exploration
+  project/                   Status, decisions, user stories, task register
   lab-notes/                 Experiment logs with raw data and exact commands
 ```
 
