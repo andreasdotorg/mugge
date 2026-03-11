@@ -1,0 +1,38 @@
+# Venue-specific parameter template.
+#
+# Copy this file for each venue and fill in the measured values.
+# These override default_profile.yml settings.
+
+venue:
+  name: "Example Venue"
+  date: "2026-01-01"
+  notes: "Small club, wooden floor, concrete walls"
+
+# Override room config for this venue
+room:
+  dimensions: [10.0, 8.0, 3.5]
+  wall_absorption: 0.25
+  temperature: 25.0
+
+# Override speaker positions for this venue's setup
+speakers:
+  main_left:
+    position: [1.5, 7.0, 2.0]
+  main_right:
+    position: [8.5, 7.0, 2.0]
+  sub1:
+    position: [3.0, 7.5, 0.3]
+  sub2:
+    position: [7.0, 7.5, 0.3]
+
+microphone:
+  position: [5.0, 4.0, 1.2]
+
+# Override pipeline parameters if needed
+# pipeline:
+#   target_curve: pa
+#   filter_taps: 8192
+
+# crossover:
+#   frequency: 100.0
+#   slope_db_per_oct: 96.0

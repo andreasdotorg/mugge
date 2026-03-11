@@ -1,0 +1,37 @@
+# Default speaker profile for room correction pipeline.
+#
+# This profile defines the correction parameters for the standard
+# 2-main + 2-sub speaker configuration. Venue-specific overrides
+# can be applied via venue_template.yml.
+
+pipeline:
+  sample_rate: 48000
+  filter_taps: 16384        # 341ms at 48kHz
+  target_curve: flat         # 'flat', 'harman', or 'pa'
+
+sweep:
+  duration: 5.0              # seconds
+  f_start: 20.0              # Hz
+  f_end: 20000.0             # Hz
+
+crossover:
+  frequency: 80.0            # Hz
+  slope_db_per_oct: 48.0     # dB/octave (48-96 recommended)
+
+correction:
+  d009_margin_db: -0.5       # HARD LIMIT: max filter gain
+  transition_freq: 300.0     # Hz: below=aggressive correction, above=gentle
+
+channels:
+  main_left:
+    type: highpass
+    speaker_key: main_left   # references room_config speakers section
+  main_right:
+    type: highpass
+    speaker_key: main_right
+  sub1:
+    type: lowpass
+    speaker_key: sub1
+  sub2:
+    type: lowpass
+    speaker_key: sub2

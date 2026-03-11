@@ -1,0 +1,32 @@
+# Default mock room configuration for testing the room correction pipeline.
+#
+# Simulates a small-to-medium venue (8m x 6m x 3m) with moderate absorption
+# (typical of a lightly treated room or small club). Two main speakers at the
+# front, two subwoofers near the front wall, mic at the approximate center
+# of the listening area.
+#
+# Room modes are chosen to represent typical problematic low-frequency
+# resonances that the correction pipeline should address.
+
+room:
+  dimensions: [8.0, 6.0, 3.0]       # L x W x H meters
+  wall_absorption: 0.3               # 0-1 (0.3 = moderate absorption)
+  temperature: 22.0                  # Celsius
+
+speakers:
+  main_left:
+    position: [1.0, 5.0, 1.5]       # near front-left
+  main_right:
+    position: [7.0, 5.0, 1.5]       # near front-right
+  sub1:
+    position: [2.0, 5.5, 0.3]       # near front wall, floor level
+  sub2:
+    position: [6.0, 5.5, 0.3]       # near front wall, floor level
+
+microphone:
+  position: [4.0, 3.0, 1.2]         # center of room, ear height
+
+room_modes:
+  - { frequency: 42.5, q: 8.0, gain: 12.0 }   # strong axial mode
+  - { frequency: 28.7, q: 6.0, gain: 8.0 }     # deep bass mode
+  - { frequency: 57.2, q: 5.0, gain: 6.0 }     # tangential mode
