@@ -20,7 +20,7 @@ crossover:
 
 correction:
   d009_margin_db: -0.5       # HARD LIMIT: max filter gain
-  transition_freq: 300.0     # Hz: below=aggressive correction, above=gentle
+  transition_freq: 500.0     # Hz: below=aggressive correction, above=gentle
 
 channels:
   main_left:

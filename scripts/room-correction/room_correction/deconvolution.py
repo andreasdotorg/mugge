@@ -69,27 +69,3 @@ def deconvolve(recording, sweep, regularization=1e-3, sr=SAMPLE_RATE):
     ir = ir[:max_length]
 
     return ir
-
-
-def deconvolve_with_inverse(recording, inverse_sweep):
-    """
-    Extract impulse response by convolving recording with the inverse sweep.
-
-    This is the time-domain approach: the inverse sweep is the matched filter
-    for the log sweep. Convolution produces the impulse response directly.
-    Simpler than frequency-domain division but produces the same result for
-    a well-designed inverse sweep.
-
-    Parameters
-    ----------
-    recording : np.ndarray
-        Recorded sweep response.
-    inverse_sweep : np.ndarray
-        Pre-computed inverse sweep filter.
-
-    Returns
-    -------
-    np.ndarray
-        The extracted impulse response.
-    """
-    return dsp_utils.convolve_fir(recording, inverse_sweep)

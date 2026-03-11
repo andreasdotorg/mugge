@@ -44,28 +44,6 @@ class TestGenerateLogSweep(unittest.TestCase):
         self.assertGreater(mags[idx_10k], 0.01)
 
 
-class TestInverseSweep(unittest.TestCase):
-
-    def test_output_length_matches(self):
-        """Inverse sweep should have same length as original."""
-        s = sweep.generate_log_sweep(duration=1.0)
-        inv = sweep.generate_inverse_sweep(s)
-        self.assertEqual(len(inv), len(s))
-
-    def test_convolution_produces_impulse(self):
-        """Convolving sweep with its inverse should approximate a Dirac delta."""
-        s = sweep.generate_log_sweep(duration=1.0)
-        inv = sweep.generate_inverse_sweep(s)
-        result = dsp_utils.convolve_fir(s, inv)
-        # Peak should dominate
-        peak_val = np.max(np.abs(result))
-        self.assertGreater(peak_val, 0)
-        # Energy should be concentrated around the peak
-        peak_idx = np.argmax(np.abs(result))
-        nearby = result[max(0, peak_idx - 100):peak_idx + 100]
-        self.assertGreater(np.sum(nearby ** 2) / np.sum(result ** 2), 0.5)
-
-
 class TestSaveSweep(unittest.TestCase):
 
     def test_save_and_load(self):

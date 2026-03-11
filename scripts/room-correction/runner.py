@@ -23,6 +23,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import sys
 import time
@@ -30,11 +31,14 @@ import time
 import numpy as np
 import yaml
 
+logger = logging.getLogger(__name__)
+
 # Add parent directory to path so room_correction package is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from room_correction import dsp_utils, sweep, deconvolution, correction
 from room_correction import crossover, combine, export, verify, time_align
+from room_correction import recording as rec_module
 from mock import room_simulator
 
 
@@ -98,9 +102,6 @@ def run_full_pipeline(args):
     sweep_signal = sweep.generate_log_sweep(
         duration=sweep_duration, f_start=f_start, f_end=f_end, sr=sr
     )
-    inverse_sweep = sweep.generate_inverse_sweep(
-        sweep_signal, f_start=f_start, f_end=f_end, sr=sr
-    )
     sweep_path = os.path.join(output_dir, "sweep.wav")
     sweep.save_sweep(sweep_signal, sweep_path, sr=sr)
     print(f"  Sweep: {len(sweep_signal)} samples ({len(sweep_signal)/sr:.1f}s)")
@@ -142,6 +143,28 @@ def run_full_pipeline(args):
         print(f"  {ch_name}: IR {len(ir)} samples, saved to {ir_path}")
 
     print(f"  Time: {time.time()-t0:.1f}s")
+
+    # --- Stage 2b: Apply UMIK-1 calibration ---
+    calibration_path = getattr(args, 'calibration', None)
+    if args.mock:
+        print("\n[2b] Skipping UMIK-1 calibration (mock mode, synthetic data)")
+    elif calibration_path:
+        print(f"\n[2b] Applying UMIK-1 calibration from {calibration_path}...")
+        t0 = time.time()
+        for ch_name in list(impulse_responses.keys()):
+            ir = impulse_responses[ch_name]
+            calibrated_ir = rec_module.apply_umik1_calibration(ir, calibration_path, sr=sr)
+            impulse_responses[ch_name] = calibrated_ir
+            print(f"  {ch_name}: calibration applied")
+        print(f"  Time: {time.time()-t0:.1f}s")
+    else:
+        logger.warning(
+            "No --calibration file provided. Uncalibrated UMIK-1 measurements "
+            "may produce inaccurate corrections. Provide the calibration file "
+            "path (e.g., --calibration /home/ela/7161942.txt) for best results."
+        )
+        print("\n[2b] WARNING: No UMIK-1 calibration file provided.")
+        print("  Uncalibrated measurements may produce inaccurate corrections.")
 
     # --- Stage 3: Time alignment ---
     print("\n[3/7] Computing time alignment...")
@@ -185,6 +208,27 @@ def run_full_pipeline(args):
         print(f"  {ch_name}: {filter_type} crossover at {xo_freq}Hz, {xo_slope}dB/oct")
     print(f"  Time: {time.time()-t0:.1f}s")
 
+    # --- Stage 5b: Generate subsonic protection filters (ported subs only) ---
+    subsonic_filters = {}
+    has_subsonic = False
+    for ch_name, ch_cfg in channels_cfg.items():
+        speaker_identity = ch_cfg.get('speaker_identity', {})
+        if speaker_identity.get('type') == 'ported' and 'mandatory_hpf_hz' in speaker_identity:
+            hpf_freq = speaker_identity['mandatory_hpf_hz']
+            subsonic = crossover.generate_subsonic_filter(
+                hpf_freq=hpf_freq,
+                n_taps=n_taps,
+                sr=sr,
+            )
+            subsonic_filters[ch_name] = subsonic
+            has_subsonic = True
+
+    if has_subsonic:
+        print("\n[5b] Generating subsonic protection filters (ported subs)...")
+        for ch_name, subsonic in subsonic_filters.items():
+            hpf_freq = channels_cfg[ch_name]['speaker_identity']['mandatory_hpf_hz']
+            print(f"  {ch_name}: subsonic HPF at {hpf_freq}Hz (ported sub protection)")
+
     # --- Stage 6: Combine correction + crossover ---
     print("\n[6/7] Combining correction + crossover filters...")
     t0 = time.time()
@@ -198,15 +242,20 @@ def run_full_pipeline(args):
     for ch_name in channels_cfg:
         if ch_name not in correction_filters or ch_name not in crossover_filters:
             continue
+        subsonic = subsonic_filters.get(ch_name)
         combined = combine.combine_filters(
             correction_filters[ch_name],
             crossover_filters[ch_name],
             n_taps=n_taps,
             margin_db=margin_db,
+            subsonic_filter=subsonic,
         )
         out_key = output_names.get(ch_name, ch_name)
         combined_filters[out_key] = combined
-        print(f"  {ch_name} -> {out_key}: {len(combined)} taps")
+        if subsonic is not None:
+            print(f"  {ch_name} -> {out_key}: {len(combined)} taps (with subsonic protection)")
+        else:
+            print(f"  {ch_name} -> {out_key}: {len(combined)} taps")
     print(f"  Time: {time.time()-t0:.1f}s")
 
     # --- Stage 7: Export ---
@@ -309,6 +358,7 @@ def test_pipeline():
             room_config=room_config_path,
             profile=profile_path,
             output_dir=tmpdir,
+            calibration=None,
         )
 
         success = run_full_pipeline(args)
@@ -366,6 +416,10 @@ def main():
     parser.add_argument("--recording", help="Recording WAV file (for deconvolve stage)")
     parser.add_argument("--ir", help="Impulse response WAV file (for correct stage)")
     parser.add_argument("--filter", help="Filter WAV file (for verify stage)")
+    parser.add_argument(
+        "--calibration",
+        help="Path to UMIK-1 calibration file (.txt from miniDSP, e.g., /home/ela/7161942.txt)",
+    )
     parser.add_argument("--test", action="store_true", help="Run end-to-end test")
 
     args = parser.parse_args()

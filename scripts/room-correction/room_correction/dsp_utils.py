@@ -226,7 +226,7 @@ def fade_window(length, fade_in_samples, fade_out_samples):
     return window
 
 
-def frequency_dependent_window(ir, sr=SAMPLE_RATE, transition_freq=300.0):
+def frequency_dependent_window(ir, sr=SAMPLE_RATE, transition_freq=500.0):
     """
     Apply frequency-dependent windowing to an impulse response.
 

@@ -47,19 +47,5 @@ class TestDeconvolve(unittest.TestCase):
         self.assertTrue(np.all(np.isfinite(ir)))
 
 
-class TestDeconvolveWithInverse(unittest.TestCase):
-
-    def test_produces_impulse(self):
-        """Convolving sweep recording with inverse should yield IR."""
-        s = sweep.generate_log_sweep(duration=0.5)
-        inv = sweep.generate_inverse_sweep(s)
-        # Simulate: sweep through identity system (Dirac room)
-        ir = deconvolution.deconvolve_with_inverse(s, inv)
-        # Should produce something impulse-like
-        peak_idx = np.argmax(np.abs(ir))
-        peak_val = np.abs(ir[peak_idx])
-        self.assertGreater(peak_val, 0)
-
-
 if __name__ == "__main__":
     unittest.main()
