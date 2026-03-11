@@ -33,6 +33,34 @@ are no exceptions to this rule.
 This is an operational safety constraint recorded in CLAUDE.md under
 "Safety Rules (2026-03-10)".
 
+## SAFETY: Driver Protection Filters in Production Configs
+
+**All production CamillaDSP configs MUST include driver protection filters
+for every speaker channel.** This is a safety requirement to prevent
+mechanical damage from out-of-band content.
+
+The critical scenario is **dirac placeholder FIR filters** (used before room
+measurement). A dirac filter passes all frequencies with unity gain -- no
+crossover, no subsonic protection. Sub drivers receive full-bandwidth signal
+including subsonic content that can cause over-excursion damage.
+
+**The Bose PS28 III deployment exposed this gap:** The 5.25" sealed isobaric
+sub drivers (`mandatory_hpf_hz: 42`) were receiving unfiltered signal through
+dirac placeholders. The room correction pipeline only generated subsonic
+protection for ported enclosures, not sealed ones -- but small sealed drivers
+need protection too.
+
+**Requirement:** Any speaker identity declaring `mandatory_hpf_hz` MUST have
+an IIR Butterworth HPF in the CamillaDSP pipeline as a safety net,
+regardless of enclosure type. This IIR filter is present from first deploy
+and remains until replaced by the combined FIR (which embeds the HPF).
+Satellites similarly need an HPF at or above the crossover frequency to
+prevent bass-induced damage.
+
+See `docs/theory/design-rationale.md` "Driver Protection Filters" for the
+full design principle. See D-031 for the formal decision and D-029 for the
+gain staging framework.
+
 ---
 
 ## 1. PREEMPT_RT Kernel

@@ -615,12 +615,44 @@ slope steepness, speaker type (sealed or ported), port tuning frequency (if
 applicable), and target SPL. Pre-defined profiles cover common configurations,
 with a custom override for anything unusual.
 
-The ported sub protection is mandatory, not optional. A ported subwoofer that
-receives significant energy below its port tuning frequency will unload the
-driver -- the air in the port stops providing the restoring force that keeps
-the cone from over-excursing. The result is mechanical damage to the driver.
-The protection takes the form of a steep subsonic rolloff built into the
-combined FIR filter.
+### Driver Protection Filters: A Safety Requirement
+
+All speaker configurations MUST include appropriate driver protection filters.
+This is a safety requirement, not an optimization.
+
+**Subwoofers (all enclosure types):** A highpass filter (HPF) below the
+driver's usable bandwidth is mandatory. The `mandatory_hpf_hz` field in the
+speaker identity schema declares the cutoff frequency. The HPF is embedded
+in the combined FIR filter and cannot be bypassed or omitted.
+
+- **Ported subwoofers:** HPF below the port tuning frequency. Without it,
+  the driver unloads -- the air in the port stops providing the restoring
+  force that keeps the cone from over-excursing. Result: mechanical damage.
+- **Sealed subwoofers with small drivers:** HPF below the driver's
+  mechanical limit (Xmax). Small sealed-box drivers (e.g., 5.25" isobaric)
+  have limited excursion and receive full-bandwidth signal without rolloff
+  from the enclosure. Subsonic content causes over-excursion even in a
+  sealed enclosure. The Bose PS28 III deployment exposed this gap: the
+  5.25" isobaric drivers were receiving full-bandwidth signal through a
+  dirac placeholder FIR (pre-measurement), with no protection below 42 Hz.
+- **Large sealed subwoofers:** May omit the HPF if the driver's Xmax is
+  sufficient for the full amplifier output at all frequencies. This is the
+  exception, not the rule.
+
+**Satellites:** A highpass filter at or above the crossover frequency is
+mandatory. This limits low-frequency content that the satellite drivers
+cannot reproduce and that wastes amplifier power. For the crossover to
+function correctly, this HPF is inherent in the crossover filter design.
+
+**Critical gap in dirac placeholder configs (D-031):** When FIR filters are
+dirac placeholders (pre-measurement), NO crossover filtering occurs. Subs
+receive full-bandwidth signal including subsonic content. Satellites receive
+full-bandwidth signal including bass. Production configs using dirac
+placeholders MUST include IIR protection filters as a safety net until real
+FIR filters are measured and deployed. The config generator pipeline MUST
+enforce this: any speaker identity with `mandatory_hpf_hz` triggers an IIR
+Butterworth HPF in the CamillaDSP pipeline regardless of enclosure type.
+See D-031 for the formal decision and D-029 for the gain staging framework.
 
 Three-way speaker support (separate drivers for bass, midrange, and treble)
 is deferred to Phase 2. A three-way configuration requires six speaker output

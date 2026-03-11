@@ -397,7 +397,10 @@ Cone excursion is at its minimum at Fb (the port does the work). Below Fb,
 excursion increases rapidly because the port no longer provides loading -- the
 driver is effectively operating in free air. This is the "unloading"
 phenomenon that can cause mechanical damage, and the reason D-010 requires
-subsonic protection for ported enclosures.
+subsonic protection for ported enclosures. D-031 extends this requirement
+to ALL enclosure types when small drivers are involved -- sealed enclosures
+with limited-excursion drivers (e.g., 5.25" isobaric) also need subsonic
+HPF protection to prevent over-excursion from subsonic content.
 
 #### 3.2.4 Transient behavior
 
