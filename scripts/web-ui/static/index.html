@@ -80,28 +80,28 @@
                 <div class="meter-db-scale-spacer-bottom"></div>
             </div>
 
-            <!-- MAIN group (capture ch 0-1) -->
+            <!-- MAIN group (capture ch 0-1, program bus) -->
             <div class="meter-group-section" id="group-main">
                 <div class="meter-group-label meter-group-label-main">MAIN</div>
                 <div class="meters-row meters-row-main" id="meters-main"></div>
             </div>
 
-            <!-- PA SENDS group -->
-            <div class="meter-group-section" id="group-pa">
-                <div class="meter-group-label">PA SENDS</div>
-                <div class="meters-row" id="meters-pa"></div>
+            <!-- APP→DSP group (capture ch 2-7, application routing) -->
+            <div class="meter-group-section" id="group-app">
+                <div class="meter-group-label meter-group-label-app">APP→DSP</div>
+                <div class="meters-row" id="meters-app"></div>
             </div>
 
-            <!-- MONITOR SENDS group -->
-            <div class="meter-group-section" id="group-monitor">
-                <div class="meter-group-label">MONITOR SENDS</div>
-                <div class="meters-row" id="meters-monitor"></div>
+            <!-- DSP→OUT group (playback ch 0-7, post-DSP to speakers/headphones/IEM) -->
+            <div class="meter-group-section" id="group-dspout">
+                <div class="meter-group-label">DSP→OUT</div>
+                <div class="meters-row" id="meters-dspout"></div>
             </div>
 
-            <!-- SOURCE group (capture ch 2-7, dim-when-silent) -->
-            <div class="meter-group-section" id="group-source">
-                <div class="meter-group-label meter-group-label-source">SOURCE</div>
-                <div class="meters-row" id="meters-source"></div>
+            <!-- PHYS IN group (ADA8200 analog inputs, placeholder) -->
+            <div class="meter-group-section" id="group-physin">
+                <div class="meter-group-label meter-group-label-physin">PHYS IN</div>
+                <div class="meters-row" id="meters-physin"></div>
             </div>
         </div>
 

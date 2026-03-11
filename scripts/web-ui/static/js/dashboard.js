@@ -4,9 +4,9 @@
  * Renders the dense single-screen engineer dashboard. Subscribes to BOTH
  * /ws/monitoring and /ws/system WebSocket endpoints.
  *
- * Stage 1 layout:
+ * 24-channel layout (4 groups, signal-flow order):
  *   - Health bar (20px) — condensed system health from /ws/system
- *   - Level meters in signal-flow groups (MAIN, PA SENDS, MONITOR SENDS, SOURCE)
+ *   - MAIN (2ch capture), APP→DSP (6ch capture), DSP→OUT (8ch playback), PHYS IN (8ch placeholder)
  *   - SPL hero + LUFS panel (180px right)
  */
 
@@ -16,21 +16,21 @@
 
     // -- Channel configuration (signal-flow order) --
 
-    // MAIN group: capture channels 0-1
+    // MAIN: capture ch 0-1 (program bus)
     var MAIN_LABELS = ["ML", "MR"];
-    var MAIN_CHANNELS = [0, 1]; // indices into capture arrays
+    var MAIN_CHANNELS = [0, 1];
 
-    // SOURCE group: capture channels 2-7
-    var SOURCE_LABELS = ["Src3", "Src4", "Src5", "Src6", "Src7", "Src8"];
-    var SOURCE_CHANNELS = [2, 3, 4, 5, 6, 7]; // indices into capture arrays
+    // APP→DSP: capture ch 2-7 (application routing)
+    var APP_LABELS = ["A3", "A4", "A5", "A6", "A7", "A8"];
+    var APP_CHANNELS = [2, 3, 4, 5, 6, 7];
 
-    // PA SENDS group: playback channels 0-3
-    var PA_LABELS = ["SatL", "SatR", "S1", "S2"];
-    var PA_CHANNELS = [0, 1, 2, 3]; // indices into playback arrays
+    // DSP→OUT: playback ch 0-7 (all post-DSP outputs)
+    var DSPOUT_LABELS = ["SatL", "SatR", "S1", "S2", "EL", "ER", "IL", "IR"];
+    var DSPOUT_CHANNELS = [0, 1, 2, 3, 4, 5, 6, 7];
 
-    // MONITOR SENDS group: playback channels 4-7
-    var MONITOR_LABELS = ["EL", "ER", "IL", "IR"];
-    var MONITOR_CHANNELS = [4, 5, 6, 7]; // indices into playback arrays
+    // PHYS IN: USBStreamer capture ch 0-7 (ADA8200 analog inputs, placeholder)
+    var PHYSIN_LABELS = ["Mic", "Sp", "P3", "P4", "P5", "P6", "P7", "P8"];
+    var PHYSIN_CHANNELS = [0, 1, 2, 3, 4, 5, 6, 7];
 
     // -- Constants --
 
@@ -51,15 +51,16 @@
 
     var captureState = [];
     var playbackState = [];
+    var physinState = [];
     var mainCanvases = [];
-    var sourceCanvases = [];
-    var paCanvases = [];
-    var monitorCanvases = [];
+    var appCanvases = [];
+    var dspoutCanvases = [];
+    var physinCanvases = [];
     // Column references for all groups (for dim toggling)
     var mainColumns = [];
-    var sourceColumns = [];
-    var paColumns = [];
-    var monitorColumns = [];
+    var appColumns = [];
+    var dspoutColumns = [];
+    var physinColumns = [];
     var animating = false;
     var startTime = performance.now();
 
@@ -71,6 +72,7 @@
     for (i = 0; i < 8; i++) {
         captureState.push({ rms: -120, peak: -120, peakHold: -120, peakHoldTime: 0, clipTime: 0 });
         playbackState.push({ rms: -120, peak: -120, peakHold: -120, peakHoldTime: 0, clipTime: 0 });
+        physinState.push({ rms: -120, peak: -120, peakHold: -120, peakHoldTime: 0, clipTime: 0 });
     }
 
     // -- Helpers --
@@ -97,7 +99,7 @@
 
     // -- Meter building --
 
-    function buildMeterGroup(containerId, labels, channels, canvasArray, columnArray, source) {
+    function buildMeterGroup(containerId, labels, channels, canvasArray, columnArray, source, group) {
         var container = document.getElementById(containerId);
         if (!container) return;
         container.innerHTML = "";
@@ -117,6 +119,7 @@
             var canvas = document.createElement("canvas");
             canvas.dataset.channel = String(channels[idx]);
             canvas.dataset.source = source;
+            canvas.dataset.group = group || source;
             wrapper.appendChild(canvas);
 
             // "NO SIG" overlay inside the canvas wrapper
@@ -164,16 +167,16 @@
 
     function resizeAll() {
         resizeCanvasArray(mainCanvases);
-        resizeCanvasArray(sourceCanvases);
-        resizeCanvasArray(paCanvases);
-        resizeCanvasArray(monitorCanvases);
+        resizeCanvasArray(appCanvases);
+        resizeCanvasArray(dspoutCanvases);
+        resizeCanvasArray(physinCanvases);
     }
 
     // -- dB scale labels --
 
     function updateDbScaleLabels() {
         var scaleTrack = document.querySelector("#meter-db-scale .meter-db-scale-track");
-        var refCanvas = mainCanvases[0] || paCanvases[0];
+        var refCanvas = mainCanvases[0] || dspoutCanvases[0];
         if (!scaleTrack || !refCanvas || !refCanvas.h) return;
         scaleTrack.innerHTML = "";
         var h = refCanvas.h;
@@ -213,14 +216,24 @@
                 grad.addColorStop(Math.min(FRAC_12, 1), "#ccc");
                 grad.addColorStop(Math.min(FRAC_6, 1), "#f9a825");
                 grad.addColorStop(1, "#e53935");
-            } else if (group === "capture") {
+            } else if (group === "app") {
+                // Cyan theme for APP→DSP meters
                 grad.addColorStop(0, "#00838f");
                 grad.addColorStop(Math.min(FRAC_12, 1), "#00838f");
                 grad.addColorStop(Math.min(FRAC_12 + 0.01, 1), "#00acc1");
                 grad.addColorStop(Math.min(FRAC_6, 1), "#00acc1");
                 grad.addColorStop(Math.min(FRAC_6 + 0.01, 1), "#e53935");
                 grad.addColorStop(1, "#e53935");
+            } else if (group === "physin") {
+                // Amber theme for PHYS IN meters
+                grad.addColorStop(0, "#e65100");
+                grad.addColorStop(Math.min(FRAC_12, 1), "#e65100");
+                grad.addColorStop(Math.min(FRAC_12 + 0.01, 1), "#ff8f00");
+                grad.addColorStop(Math.min(FRAC_6, 1), "#ff8f00");
+                grad.addColorStop(Math.min(FRAC_6 + 0.01, 1), "#e53935");
+                grad.addColorStop(1, "#e53935");
             } else {
+                // Green/yellow/red theme for DSP→OUT (playback) meters
                 grad.addColorStop(0, "#43a047");
                 grad.addColorStop(Math.min(FRAC_12, 1), "#43a047");
                 grad.addColorStop(Math.min(FRAC_12 + 0.01, 1), "#f9a825");
@@ -320,34 +333,34 @@
             updateDbReadout("meters-main-db-" + idx, state.peak);
         }
 
-        // SOURCE meters (capture ch 2-7)
-        for (idx = 0; idx < SOURCE_CHANNELS.length; idx++) {
-            ch = SOURCE_CHANNELS[idx];
+        // APP→DSP meters (capture ch 2-7)
+        for (idx = 0; idx < APP_CHANNELS.length; idx++) {
+            ch = APP_CHANNELS[idx];
             state = captureState[ch];
-            updateChannelDim("meters-source", idx, sourceColumns, state, now);
-            drawMeter(sourceCanvases[idx], state, now, "capture");
-            updateClipIndicator("meters-source", idx, state, now);
-            updateDbReadout("meters-source-db-" + idx, state.peak);
+            updateChannelDim("meters-app", idx, appColumns, state, now);
+            drawMeter(appCanvases[idx], state, now, "app");
+            updateClipIndicator("meters-app", idx, state, now);
+            updateDbReadout("meters-app-db-" + idx, state.peak);
         }
 
-        // PA meters
-        for (idx = 0; idx < PA_CHANNELS.length; idx++) {
-            ch = PA_CHANNELS[idx];
+        // DSP→OUT meters (playback ch 0-7)
+        for (idx = 0; idx < DSPOUT_CHANNELS.length; idx++) {
+            ch = DSPOUT_CHANNELS[idx];
             state = playbackState[ch];
-            updateChannelDim("meters-pa", idx, paColumns, state, now);
-            drawMeter(paCanvases[idx], state, now, "playback");
-            updateClipIndicator("meters-pa", idx, state, now);
-            updateDbReadout("meters-pa-db-" + idx, state.peak);
+            updateChannelDim("meters-dspout", idx, dspoutColumns, state, now);
+            drawMeter(dspoutCanvases[idx], state, now, "dspout");
+            updateClipIndicator("meters-dspout", idx, state, now);
+            updateDbReadout("meters-dspout-db-" + idx, state.peak);
         }
 
-        // Monitor meters
-        for (idx = 0; idx < MONITOR_CHANNELS.length; idx++) {
-            ch = MONITOR_CHANNELS[idx];
-            state = playbackState[ch];
-            updateChannelDim("meters-monitor", idx, monitorColumns, state, now);
-            drawMeter(monitorCanvases[idx], state, now, "playback");
-            updateClipIndicator("meters-monitor", idx, state, now);
-            updateDbReadout("meters-monitor-db-" + idx, state.peak);
+        // PHYS IN meters (placeholder — no data source yet)
+        for (idx = 0; idx < PHYSIN_CHANNELS.length; idx++) {
+            ch = PHYSIN_CHANNELS[idx];
+            state = physinState[ch];
+            updateChannelDim("meters-physin", idx, physinColumns, state, now);
+            drawMeter(physinCanvases[idx], state, now, "physin");
+            updateClipIndicator("meters-physin", idx, state, now);
+            updateDbReadout("meters-physin-db-" + idx, state.peak);
         }
 
         requestAnimationFrame(renderFrame);
@@ -373,6 +386,13 @@
         for (var ch = 0; ch < 8; ch++) {
             updateChannel(captureState[ch], data.capture_rms[ch], data.capture_peak[ch], now);
             updateChannel(playbackState[ch], data.playback_rms[ch], data.playback_peak[ch], now);
+        }
+
+        // PHYS IN: optional usbstreamer arrays (not yet provided by backend)
+        if (data.usbstreamer_rms && data.usbstreamer_peak) {
+            for (var pch = 0; pch < 8; pch++) {
+                updateChannel(physinState[pch], data.usbstreamer_rms[pch], data.usbstreamer_peak[pch], now);
+            }
         }
 
         // Health bar: DSP section (from monitoring data, higher update rate)
@@ -457,13 +477,13 @@
 
     function init() {
         buildMeterGroup("meters-main", MAIN_LABELS, MAIN_CHANNELS,
-            mainCanvases, mainColumns, "capture");
-        buildMeterGroup("meters-source", SOURCE_LABELS, SOURCE_CHANNELS,
-            sourceCanvases, sourceColumns, "capture");
-        buildMeterGroup("meters-pa", PA_LABELS, PA_CHANNELS,
-            paCanvases, paColumns, "playback");
-        buildMeterGroup("meters-monitor", MONITOR_LABELS, MONITOR_CHANNELS,
-            monitorCanvases, monitorColumns, "playback");
+            mainCanvases, mainColumns, "capture", "main");
+        buildMeterGroup("meters-app", APP_LABELS, APP_CHANNELS,
+            appCanvases, appColumns, "capture", "app");
+        buildMeterGroup("meters-dspout", DSPOUT_LABELS, DSPOUT_CHANNELS,
+            dspoutCanvases, dspoutColumns, "playback", "dspout");
+        buildMeterGroup("meters-physin", PHYSIN_LABELS, PHYSIN_CHANNELS,
+            physinCanvases, physinColumns, "physin", "physin");
 
         window.addEventListener("resize", function () {
             resizeAll();

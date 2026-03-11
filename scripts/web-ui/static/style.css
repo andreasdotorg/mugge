@@ -22,6 +22,7 @@
     --blue: #42a5f5;
     --cyan: #00acc1;
     --orange: #ff6f00;
+    --amber: #ffab00;
 
     --meter-bg: #1a1a1a;
     --meter-peak: #ffffff;
@@ -216,8 +217,7 @@ html, body {
     min-width: 0;
 }
 
-#group-pa .meters-row,
-#group-monitor .meters-row {
+#group-dspout .meters-row {
     margin-left: 4px;
 }
 
@@ -239,8 +239,12 @@ html, body {
     font-size: 9px;
 }
 
-.meter-group-label-source {
+.meter-group-label-app {
     color: var(--cyan);
+}
+
+.meter-group-label-physin {
+    color: var(--amber);
 }
 
 .meters-row-main {
@@ -686,6 +690,7 @@ html, body {
 .c-red { color: var(--red) !important; }
 .c-blue { color: var(--blue) !important; }
 .c-cyan { color: var(--cyan) !important; }
+.c-amber { color: #ffab00 !important; }
 
 /* -- Reconnect overlay ---------------------------------------------------- */
 
@@ -716,4 +721,33 @@ html, body {
 .reconnect-detail {
     font-size: 11px;
     color: var(--text-dim);
+}
+
+/* -- 1/3-octave spectrum analyzer ---------------------------------------- */
+
+.spectrum-container {
+    position: relative;
+    min-height: 140px;
+    background: var(--bg-meter, #0f0f0f);
+    border: 1px solid var(--border, #222);
+    border-radius: 2px;
+}
+
+.spectrum-title {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #555;
+    z-index: 1;
+}
+
+.spectrum-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
 }

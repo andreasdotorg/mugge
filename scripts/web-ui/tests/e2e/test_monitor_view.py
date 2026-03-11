@@ -1,10 +1,10 @@
 """Dashboard view tests for the D-020 Web UI.
 
 Verifies the dense single-screen dashboard: health bar, level meter groups
-(Main, PA Sends, Monitor Sends, Source), LUFS placeholder, SPL hero,
+(Main, APP->DSP, DSP->OUT, PHYS IN), LUFS placeholder, SPL hero,
 silent channel dimming, and WebSocket data flow.
 
-Stage 1 scope: meters + health bar + LUFS placeholder panel + SPL hero.
+24-channel layout (4 groups): MAIN (2), APP->DSP (6), DSP->OUT (8), PHYS IN (8).
 """
 
 import pytest
@@ -79,28 +79,28 @@ def test_main_meters_present(page):
     expect(canvases).to_have_count(2)
 
 
-def test_source_meters_present(page):
-    """SOURCE meter group has 6 canvas elements (Src3-Src8)."""
-    canvases = page.locator("#meters-source canvas")
+def test_app_meters_present(page):
+    """APP->DSP meter group has 6 canvas elements (A3-A8)."""
+    canvases = page.locator("#meters-app canvas")
     expect(canvases).to_have_count(6)
 
 
-def test_source_group_always_visible(page):
-    """SOURCE group is always visible (no auto-hide)."""
-    group = page.locator("#group-source")
+def test_app_group_always_visible(page):
+    """APP->DSP group is always visible (no auto-hide)."""
+    group = page.locator("#group-app")
     expect(group).to_be_visible()
 
 
-def test_pa_meters_present(page):
-    """PA Sends meter group has 4 canvas elements."""
-    canvases = page.locator("#meters-pa canvas")
-    expect(canvases).to_have_count(4)
+def test_dspout_group_exists(page):
+    """DSP->OUT meter group has 8 canvas elements."""
+    canvases = page.locator("#meters-dspout canvas")
+    expect(canvases).to_have_count(8)
 
 
-def test_monitor_meters_present(page):
-    """Monitor Sends meter group has 4 canvas elements."""
-    canvases = page.locator("#meters-monitor canvas")
-    expect(canvases).to_have_count(4)
+def test_physin_group_exists(page):
+    """PHYS IN meter group has 8 canvas elements."""
+    canvases = page.locator("#meters-physin canvas")
+    expect(canvases).to_have_count(8)
 
 
 def test_main_group_label(page):
@@ -110,23 +110,25 @@ def test_main_group_label(page):
     expect(label).to_have_text("MAIN")
 
 
-def test_source_group_label(page):
-    """SOURCE group has the 'SOURCE' label."""
-    label = page.locator(".meter-group-label-source")
+def test_app_group_label(page):
+    """APP->DSP group has the 'APP->DSP' label with cyan color class."""
+    label = page.locator(".meter-group-label-app")
     expect(label).to_have_count(1)
-    expect(label).to_have_text("SOURCE")
+    # The arrow is a Unicode right arrow in the HTML
+    expect(label).to_contain_text("DSP")
 
 
-def test_pa_group_label(page):
-    """PA Sends group has the 'PA SENDS' label."""
-    label = page.locator("#group-pa .meter-group-label")
-    expect(label).to_have_text("PA SENDS")
+def test_dspout_group_label(page):
+    """DSP->OUT group has the 'DSP->OUT' label."""
+    label = page.locator("#group-dspout .meter-group-label")
+    expect(label).to_contain_text("OUT")
 
 
-def test_monitor_group_label(page):
-    """Monitor Sends group has the 'MONITOR SENDS' label."""
-    label = page.locator("#group-monitor .meter-group-label")
-    expect(label).to_have_text("MONITOR SENDS")
+def test_physin_group_label(page):
+    """PHYS IN group has the 'PHYS IN' label."""
+    label = page.locator(".meter-group-label-physin")
+    expect(label).to_have_count(1)
+    expect(label).to_have_text("PHYS IN")
 
 
 def test_channel_labels_main(page):
@@ -135,25 +137,31 @@ def test_channel_labels_main(page):
     expect(labels.first).to_have_text("ML")
 
 
-def test_channel_labels_pa(page):
-    """PA Sends group has SatL as first label (satellite speakers)."""
-    labels = page.locator("#meters-pa .meter-label")
+def test_dspout_first_label(page):
+    """DSP->OUT group has SatL as first label (satellite speakers)."""
+    labels = page.locator("#meters-dspout .meter-label")
     expect(labels.first).to_have_text("SatL")
 
 
-def test_channel_labels_monitor(page):
-    """Monitor Sends group has abbreviated channel labels."""
-    labels = page.locator("#meters-monitor .meter-label")
-    expect(labels.first).to_have_text("EL")
+def test_physin_first_label(page):
+    """PHYS IN group has Mic as first label."""
+    labels = page.locator("#meters-physin .meter-label")
+    expect(labels.first).to_have_text("Mic")
+
+
+def test_app_first_label(page):
+    """APP->DSP group has A3 as first label."""
+    labels = page.locator("#meters-app .meter-label")
+    expect(labels.first).to_have_text("A3")
 
 
 # -- Silent channel dimming --
 
 def test_no_signal_overlay_exists(page):
-    """Each meter channel has a 'NO SIG' overlay element."""
-    # Check MAIN group (2 channels) + SOURCE (6) + PA (4) + MONITOR (4) = 16
+    """Each meter channel has a 'NO SIG' overlay element (24 total)."""
+    # MAIN (2) + APP->DSP (6) + DSP->OUT (8) + PHYS IN (8) = 24
     overlays = page.locator(".meter-no-signal")
-    expect(overlays).to_have_count(16)
+    expect(overlays).to_have_count(24)
 
 
 def test_no_signal_overlay_hidden_by_default(page):
@@ -168,6 +176,15 @@ def test_meters_not_silent_initially(page):
     page.wait_for_timeout(1000)  # Wait 1s, well under 5s threshold
     silent = page.locator(".meter-channel.silent")
     expect(silent).to_have_count(0)
+
+
+def test_physin_meters_dimmed(page):
+    """PHYS IN meters start with .silent class after dim timeout (no data source)."""
+    # PHYS IN receives no data, so after SILENT_DIM_MS (5s) all 8 should be dimmed.
+    # Wait slightly longer than the 5s dim threshold.
+    page.wait_for_timeout(6000)
+    silent = page.locator("#meters-physin .meter-channel.silent")
+    expect(silent).to_have_count(8)
 
 
 # -- SPL hero --
@@ -218,7 +235,7 @@ def test_main_db_readout_updates(page):
     expect(db_readout).not_to_have_text("-inf", timeout=3000)
 
 
-def test_pa_db_readout_updates(page):
-    """PA meter dB readout updates from '-inf' within 3 s."""
-    db_readout = page.locator("#meters-pa-db-0")
+def test_dspout_db_readout_updates(page):
+    """DSP->OUT meter dB readout updates from '-inf' within 3 s."""
+    db_readout = page.locator("#meters-dspout-db-0")
     expect(db_readout).not_to_have_text("-inf", timeout=3000)
