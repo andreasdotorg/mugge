@@ -20,7 +20,8 @@ from . import dsp_utils
 SAMPLE_RATE = dsp_utils.SAMPLE_RATE
 
 
-def combine_filters(correction_filter, crossover_filter, n_taps=16384, margin_db=-0.5):
+def combine_filters(correction_filter, crossover_filter, n_taps=16384, margin_db=-0.5,
+                    subsonic_filter=None):
     """
     Combine a correction filter and crossover filter into one FIR.
 
@@ -34,6 +35,11 @@ def combine_filters(correction_filter, crossover_filter, n_taps=16384, margin_db
     intermediate IR). This guarantees that the output magnitude spectrum
     exactly matches the clipped design.
 
+    An optional subsonic protection filter can be convolved in as well.
+    This is used for ported subwoofers to prevent excursion damage below
+    the port tuning frequency. If not provided, behavior is unchanged
+    (backward compatible).
+
     Parameters
     ----------
     correction_filter : np.ndarray
@@ -44,6 +50,9 @@ def combine_filters(correction_filter, crossover_filter, n_taps=16384, margin_db
         Target output length.
     margin_db : float
         D-009 safety margin.
+    subsonic_filter : np.ndarray, optional
+        Subsonic protection highpass FIR filter for ported subs.
+        If None, no subsonic protection is applied.
 
     Returns
     -------
@@ -53,12 +62,22 @@ def combine_filters(correction_filter, crossover_filter, n_taps=16384, margin_db
     correction_filter = np.asarray(correction_filter, dtype=np.float64)
     crossover_filter = np.asarray(crossover_filter, dtype=np.float64)
 
+    # Determine FFT size based on all filters
+    total_len = len(correction_filter) + len(crossover_filter)
+    if subsonic_filter is not None:
+        subsonic_filter = np.asarray(subsonic_filter, dtype=np.float64)
+        total_len += len(subsonic_filter)
+
     # Compute combined magnitude by multiplying individual spectra
-    n_fft = dsp_utils.next_power_of_2(max(n_taps * 4, len(correction_filter) + len(crossover_filter)))
+    n_fft = dsp_utils.next_power_of_2(max(n_taps * 4, total_len))
     combined_spectrum = (
         np.fft.rfft(correction_filter, n=n_fft)
         * np.fft.rfft(crossover_filter, n=n_fft)
     )
+
+    # Convolve in subsonic protection if provided
+    if subsonic_filter is not None:
+        combined_spectrum *= np.fft.rfft(subsonic_filter, n=n_fft)
 
     # D-009: clip combined magnitude to margin
     combined_mag = np.abs(combined_spectrum)

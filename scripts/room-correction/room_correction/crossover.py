@@ -76,6 +76,94 @@ def _design_crossover_magnitude(freqs, crossover_freq, filter_type, slope_db_per
     return magnitude
 
 
+def generate_subsonic_filter(
+    hpf_freq,
+    slope_db_per_oct=24.0,
+    n_taps=16384,
+    sr=SAMPLE_RATE,
+):
+    """
+    Generate a minimum-phase FIR subsonic protection highpass filter.
+
+    Ported subwoofers have sharply rising cone excursion below their tuning
+    frequency. Without a subsonic filter, room correction could boost
+    sub-bass energy that pushes the driver past its Xmax limit. This filter
+    provides a steep highpass rolloff below the specified frequency.
+
+    The filter uses a minimum-phase design to avoid pre-ringing, consistent
+    with the rest of the FIR pipeline.
+
+    Parameters
+    ----------
+    hpf_freq : float
+        Highpass cutoff frequency in Hz (typically the port tuning frequency
+        or a safety margin above it).
+    slope_db_per_oct : float
+        Rolloff steepness in dB/octave. Must be >= 24 for adequate
+        excursion protection. Default 24 dB/oct.
+    n_taps : int
+        Output filter length.
+    sr : int
+        Sample rate.
+
+    Returns
+    -------
+    np.ndarray
+        Minimum-phase FIR subsonic protection filter.
+
+    Raises
+    ------
+    ValueError
+        If slope_db_per_oct < 24 (insufficient protection).
+    """
+    if slope_db_per_oct < 24.0:
+        raise ValueError(
+            f"Subsonic filter slope must be >= 24 dB/oct for adequate "
+            f"excursion protection, got {slope_db_per_oct}"
+        )
+
+    n_fft = dsp_utils.next_power_of_2(n_taps * 4)
+    freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+
+    # Design target magnitude: highpass at hpf_freq
+    magnitude = _design_crossover_magnitude(freqs, hpf_freq, 'highpass', slope_db_per_oct)
+
+    # Build minimum-phase FIR from target magnitude via cepstral method
+    log_mag_half = np.log(np.maximum(magnitude, 1e-10))
+    log_mag_full = np.zeros(n_fft, dtype=np.float64)
+    log_mag_full[:len(log_mag_half)] = log_mag_half
+    log_mag_full[len(log_mag_half):] = log_mag_half[-2:0:-1]
+
+    cepstrum = np.fft.ifft(log_mag_full).real
+
+    n_half = n_fft // 2
+    causal_window = np.zeros(n_fft)
+    causal_window[0] = 1.0
+    causal_window[1:n_half] = 2.0
+    if n_fft % 2 == 0:
+        causal_window[n_half] = 1.0
+
+    min_phase_cepstrum = cepstrum * causal_window
+    min_phase_spectrum = np.exp(np.fft.fft(min_phase_cepstrum))
+    subsonic_filter = np.fft.ifft(min_phase_spectrum).real
+
+    # Truncate with fade-out
+    subsonic_filter = subsonic_filter[:n_taps]
+    fade_out_len = n_taps // 20
+    fade = dsp_utils.fade_window(n_taps, 0, fade_out_len)
+    subsonic_filter *= fade
+
+    # Normalize: passband (above hpf_freq) should be at unity
+    passband_freqs, passband_mag = dsp_utils.rfft_magnitude(subsonic_filter)
+    mask = (passband_freqs >= hpf_freq * 2) & (passband_freqs <= sr / 2 * 0.9)
+    if np.any(mask):
+        passband_level = np.mean(passband_mag[mask])
+        if passband_level > 0:
+            subsonic_filter /= passband_level
+
+    return subsonic_filter
+
+
 def generate_crossover_filter(
     filter_type,
     crossover_freq=80.0,
