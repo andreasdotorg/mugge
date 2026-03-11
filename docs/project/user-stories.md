@@ -1822,6 +1822,127 @@ APCmini mk2 is physically available for layout experimentation.
 
 ---
 
+## US-037: Playwright Browser Test Scaffolding for D-020 Web UI
+
+**As** the development team,
+**I want** a working Playwright test framework with shared fixtures, a mock
+backend, and example tests covering each D-020 web UI view,
+**so that** future web UI changes (Measure view, MIDI view, Stage 2+
+enhancements) can be validated with automated browser tests before deployment.
+
+**Status:** draft
+**Depends on:** US-022/TK-063 (D-020 web UI must exist — tests target the existing Monitor and System views)
+**Blocks:** none directly, but enables test coverage for all future web UI stories (US-023, Measure view implementation, MIDI view)
+**Decisions:** none yet
+
+**Note:** This is a test infrastructure story, not a feature story. The
+deliverable is a working test harness with example tests, not comprehensive
+test coverage. Follow-on stories add tests for new views as they are built.
+
+The scaffolding supports two modes:
+- **Local/mock mode:** Tests run against the real FastAPI app (`app/main.py`)
+  started as a subprocess on a random port. The app's existing mock data
+  generator provides deterministic test data. No Pi hardware required. This
+  is the default for development.
+- **End-to-end mode:** Tests run against the real web UI served from a live
+  Pi. Observation-only by default (reads state, does not trigger actions).
+  Destructive e2e tests (e.g., triggering CamillaDSP reload) require explicit
+  opt-in via `@pytest.mark.destructive` and the `--destructive` CLI flag.
+  Speaker safety rule (CLAUDE.md) applies to all destructive e2e tests.
+
+**Advisor input:**
+- QE: 8 AC criteria, test markers, DoD gates, mock fixture must use real
+  FastAPI app. Recommended moving test_server.py into `tests/`.
+- Architect: Subprocess uvicorn on random port, `tests/e2e/` subdirectory
+  separate from test_server.py (different dependency profiles), visual
+  regression is the primary value proposition, `freeze_time` mode needed
+  for deterministic screenshots, cover stub views too.
+- Reconciliation: Adopted architect's directory structure (test_server.py
+  stays in place, Playwright tests in `tests/e2e/`). Different test suites
+  with different dependencies and execution speeds should be separate.
+  Visual regression included as optional AC pending owner confirmation.
+
+**Acceptance criteria:**
+
+*Mock backend fixture (architect: subprocess uvicorn, session-scoped):*
+- [ ] Session-scoped pytest fixture `mock_server` starts the real FastAPI app (`app/main.py`) via `subprocess.Popen` with uvicorn on a random free port
+- [ ] The app runs with its existing `MockDataGenerator` providing test data — no separate mock server, no dependency overrides needed (the app already has mock mode)
+- [ ] Fixture waits for the server to accept connections (socket poll with timeout), yields the base URL, and calls `proc.terminate()` on teardown. Teardown has a timeout (e.g., 5s) — if the server does not stop within the timeout, the fixture force-kills it (`proc.kill()`) and logs a warning. Prevents test suite hangs from uvicorn shutdown issues
+- [ ] Clean process isolation: server runs in its own process with its own event loop, no asyncio thread-safety issues
+
+*Playwright browser fixture:*
+- [ ] Session-scoped fixture `browser` launches Playwright Chromium (headless by default, `--headed` flag for debugging)
+- [ ] Per-test fixture `page` creates a new browser context and page, navigates to the mock server URL, yields the `Page` object, and closes the context on teardown
+- [ ] Fixture handles browser lifecycle (launch, close) and server lifecycle cleanly — no leaked processes
+- [ ] Playwright installed as a dev dependency with browser binaries managed via `playwright install chromium`
+
+*Example functional tests (minimum viable coverage — all 4 SPA views):*
+- [ ] `test_navigation.py`: SPA tab switching works — Monitor, Measure, System, MIDI tabs all render their content area. Back/forward browser navigation works
+- [ ] `test_monitor_view.py`: Monitor view loads, level meters are present, WebSocket connection established, meter values update within timeout
+- [ ] `test_system_view.py`: System view loads, health indicators present, CPU/memory/temperature metrics displayed
+- [ ] `test_stub_views.py`: Measure and MIDI stub views render their placeholder content ("Coming in Stage 2" or equivalent)
+- [ ] All functional tests assert no JS console errors during execution (capture via `page.on('console')` — catches broken imports, undefined references, and API errors that don't visibly break the UI)
+
+*Visual regression (optional — pending owner confirmation):*
+- [ ] Reference screenshots captured for Monitor and System views using at least one mock scenario (e.g., scenario A)
+- [ ] `MockDataGenerator` extended with a `freeze_time` parameter that pins `start_time` to a fixed value and seeds random offsets deterministically, producing identical mock data across runs (required for stable screenshot comparison)
+- [ ] Tests use Playwright's `expect(page).to_have_screenshot("name.png")` with a small pixel tolerance (`max_diff_pixel_ratio=0.01`) for anti-aliasing differences
+- [ ] Reference screenshots stored in `tests/e2e/screenshots/` and version-controlled
+- [ ] `pytest --update-snapshots` workflow documented for regenerating reference images
+
+*E2e support (scaffolding only — no mandatory e2e tests in this story):*
+- [ ] `conftest.py` reads Pi endpoint URL from `PI_AUDIO_URL` environment variable (e.g., `PI_AUDIO_URL=http://192.168.178.185:8080`)
+- [ ] E2e fixture `pi_url` uses pytest skip pattern: tests depending on `pi_url` are skipped when `PI_AUDIO_URL` is not set — no explicit `-m e2e` invocation required
+- [ ] `@pytest.mark.destructive` marker registered; destructive tests are skipped unless both `PI_AUDIO_URL` is set AND `--destructive` CLI flag is passed
+- [ ] At least one example e2e test file exists (e.g., `test_monitor_e2e.py`) demonstrating the fixture-skip pattern with a single smoke test (page loads, title correct)
+
+*Test markers and configuration:*
+- [ ] `@pytest.mark.e2e` marker for end-to-end tests against real Pi
+- [ ] `@pytest.mark.destructive` marker for tests that modify Pi state
+- [ ] `@pytest.mark.slow` marker for tests exceeding 10 seconds
+- [ ] pytest configuration (`pyproject.toml` or `pytest.ini`) registers all custom markers
+- [ ] Test discovery: `pytest scripts/web-ui/test_server.py` runs unit tests (fast, no browser). `pytest scripts/web-ui/tests/e2e/` runs Playwright tests (slow, needs browser). Both can run independently with different dependency profiles
+
+*File organization (architect recommendation):*
+- [ ] Playwright tests in a separate `tests/e2e/` directory. Existing `test_server.py` stays in place (different test suite, different dependencies, different execution speed)
+  ```
+  scripts/web-ui/
+    app/                          # existing FastAPI app
+    static/                       # existing frontend
+    test_server.py                # existing 71 backend unit tests (unchanged)
+    tests/
+      e2e/
+        conftest.py               # fixtures: mock_server, pi_url, browser, page
+        test_navigation.py        # SPA routing, view switching
+        test_monitor_view.py      # Monitor view DOM + WebSocket
+        test_system_view.py       # System view metrics display
+        test_stub_views.py        # Measure + MIDI stub rendering
+        test_monitor_e2e.py       # E2e example (observation-only)
+        screenshots/              # reference screenshots (if visual regression included)
+  ```
+
+*Local test runner:*
+- [ ] `scripts/web-ui/Makefile` (or equivalent shell script) with targets for: `test-unit` (runs test_server.py), `test-e2e` (runs tests/e2e/ headless), `test-e2e-headed` (visible browser for debugging), `test-all`, `install-test-deps` (pip install + playwright install chromium)
+
+**Future scope (explicitly NOT in this story):**
+- Accessibility testing (axe-core integration)
+- Performance testing (Lighthouse CI)
+- CI pipeline integration (GitHub Actions — no CI exists yet)
+- Comprehensive e2e test suite against real Pi
+- Measure view functional tests (requires Measure view implementation)
+- MIDI view functional tests (requires MIDI view implementation)
+
+**DoD:**
+- [ ] All 71 existing unit tests still pass from `test_server.py` (unchanged location)
+- [ ] At least 4 Playwright functional tests pass against the mock backend (one per SPA view)
+- [ ] At least 1 e2e example test passes against a real Pi (verified by worker with CM OBSERVE session — observation-only smoke test, no state changes)
+- [ ] `conftest.py` reviewed by QE: fixture design, marker registration, mock data injection pattern
+- [ ] Architect review: test infrastructure does not affect production code paths (exception: `freeze_time` addition to MockDataGenerator if visual regression included)
+- [ ] README or docstring in `conftest.py` documents how to run tests in both modes
+- [ ] Makefile or equivalent provides simple test invocation targets
+
+---
+
 ## Tier 8 — User Acceptance Testing
 
 Real-content validation with actual music, real controllers, and real
@@ -2008,4 +2129,6 @@ US-003 + US-028 + US-017 ──> US-035 (feedback suppression) ──> US-030 (o
 US-005 + US-006 + US-028 ──> US-029 (DJ/PA UAT) ──┐
 US-017 + US-028 ──> US-030 (Live Vocal UAT) ───────┤
                                                     └──> US-031 (Full Rehearsal)
+
+US-022/TK-063 ──> US-037 (Playwright test scaffolding) — enables test coverage for all web UI stories
 ```
