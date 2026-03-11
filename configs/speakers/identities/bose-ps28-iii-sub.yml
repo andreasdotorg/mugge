@@ -1,14 +1,23 @@
 # Bose Panaray System 28 III — isobaric subwoofer module
 # Passive conversion of the PS28 III. Two 5.25" drivers in isobaric
-# (clamshell) configuration. Very low impedance — amp must handle 2.33 ohm.
+# (clamshell) configuration. Ported enclosure with folded dual-vent
+# labyrinth (Bose waveguide design). Very low impedance — amp must
+# handle 2.33 ohm.
 #
 # The enclosure has a strong resonance peak around 65Hz that needs
 # compensation EQ baked into the FIR filter.
+#
+# Port tuning frequency: estimated 50-60Hz, NEEDS MEASUREMENT via
+# impedance sweep or near-field vent measurement with UMIK-1.
+#
+# Subsonic HPF at 42Hz is MANDATORY — cone excursion rises sharply
+# below port tuning and will exceed Xmax without protection.
 
 name: "Bose PS28 III Subwoofer"
 manufacturer: "Bose"
 model: "Panaray System 28 III"
-type: sealed
+type: ported
+enclosure_note: "Folded dual-vent labyrinth (Bose waveguide design)"
 
 impedance_ohm: 2.33
 sensitivity_db_spl: null
@@ -23,10 +32,10 @@ power_limit_note: >
   62W thermal limit for isobaric pair. Amp delivers up to 450W into 4 ohm
   (more into 2.33 ohm). Power limiting is CRITICAL.
 
-# Compensation EQ — enclosure resonance peak
+# Compensation EQ — port/enclosure resonance peak
 compensation_eq:
   - type: peak
     frequency_hz: 65
     gain_db: 10.0
     q: 1.0
-    description: "Enclosure resonance compensation (+10dB at 65Hz)"
+    description: "Port/enclosure resonance peak (+10dB at 65Hz)"
