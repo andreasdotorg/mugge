@@ -602,3 +602,74 @@ unfixable without also fixing F-022.
 **Related:** F-021 (Mixxx ALSA fallback root cause). F-022 is the trigger
 mechanism that re-introduces F-021 on every reboot. Both must be fixed
 together.
+
+---
+
+## F-023: Dual V3D GL GPU contention causes system stall on Pi 4B (OPEN)
+
+**Severity:** Medium
+**Status:** Open (workaround identified, not yet validated)
+**Found in:** TK-067 Phase 1a (Reaper-always-on feasibility test, 2026-03-10)
+**Affects:** TK-067 (Reaper-always-on), dual-app coexistence (Mixxx + Reaper)
+**Found by:** Team (during TK-067 Phase 1a testing)
+
+**Description:** Running two hardware GL applications simultaneously (Mixxx +
+Reaper) on the Pi 4B causes a system-wide stall: mouse barely moves, audio
+stalls. Killing one GL application (Reaper) causes immediate recovery.
+
+**Root cause:** V3D GPU contention. The Pi 4B has a single V3D GPU shared
+between all GL clients. Two applications performing simultaneous GL rendering
+saturate the GPU, starving the compositor and the audio pipeline. This is a
+resource contention issue, NOT the ABBA deadlock fixed in D-022/F-012 — F-023
+occurs on the patched `6.12.62+rpt-rpi-v8-rt` kernel.
+
+**Impact:** Blocks TK-067 (Reaper-always-on feasibility). If both Mixxx and
+Reaper must run simultaneously, one must use software rendering.
+
+**Workaround (identified, pending validation):**
+Run Reaper with `LIBGL_ALWAYS_SOFTWARE=1` (llvmpipe software rendering).
+Reaper's GUI is less demanding than Mixxx and should tolerate llvmpipe
+overhead. Mixxx retains hardware V3D GL (it needs it — llvmpipe caused
+142-166% CPU on Mixxx per F-012 testing).
+
+**Validation needed:** TK-067 Phase 1a retest with `LIBGL_ALWAYS_SOFTWARE=1
+pw-jack reaper`. Must confirm: (a) no GPU contention stall, (b) Reaper CPU
+acceptable with llvmpipe, (c) Mixxx remains stable with hardware GL.
+
+**Related:** F-012 (V3D ABBA deadlock — different root cause, now resolved).
+D-022 (upstream fix — does not address resource contention).
+
+---
+
+## F-024: PipeWire QUANT=0 / silent audio path after Reaper launch-kill cycles (OPEN)
+
+**Severity:** Medium
+**Status:** Open (investigation needed)
+**Found in:** TK-067 Phase 1a session (2026-03-10)
+**Affects:** Audio reliability, PipeWire graph stability
+**Found by:** Owner + CM (owner confirmed Mixxx was playing; CM diagnosed path issue)
+
+**Description:** After multiple Reaper launch/kill cycles during TK-067 testing,
+Mixxx showed active playback (waveform scrolling, transport active) but audio
+was NOT reaching headphones despite PipeWire connections appearing correct.
+`pw-top` showed QUANT=0 for the Mixxx node despite active playback.
+
+**Root cause:** TBD. Suspected PipeWire internal state corruption from rapid
+JACK client connect/disconnect cycles (Reaper launches via `pw-jack` create
+and destroy JACK client connections). The PipeWire graph may have entered an
+inconsistent state where the node was registered but not scheduled for
+processing (QUANT=0 = no quantum allocated = node not participating in the
+audio graph cycle).
+
+**Impact:** Silent audio path with no visible error — the most dangerous
+failure mode because the operator sees playback activity but hears nothing.
+Required a full reboot to recover.
+
+**Investigation needed:**
+1. Can this be reproduced by rapid `pw-jack` client connect/disconnect?
+2. Does `pw-link` show correct connections when QUANT=0 occurs?
+3. Does restarting PipeWire (without full reboot) recover the state?
+4. Are there PipeWire journal logs that correspond to the state change?
+
+**Related:** TK-067 (context where it was discovered). F-023 (same session,
+different issue).
