@@ -15,6 +15,23 @@
       let
         pkgs = import nixpkgs { inherit system; };
         python = pkgs.python313;
+        pycamilladsp = python.pkgs.buildPythonPackage rec {
+          pname = "camilladsp";
+          version = "3.0.0";
+          pyproject = true;
+          src = pkgs.fetchFromGitHub {
+            owner = "HEnquist";
+            repo = "pycamilladsp";
+            rev = "v${version}";
+            hash = "sha256-WyyeYAEi2s46WSSuSl/s04+yW4rXWMPUx+oT1bVP3HM=";
+          };
+          build-system = with python.pkgs; [ setuptools ];
+          dependencies = with python.pkgs; [
+            pyyaml
+            websocket-client
+          ];
+          doCheck = false;  # tests need a running CamillaDSP instance
+        };
       in
       {
         devShells.default = pkgs.mkShell {
@@ -33,6 +50,7 @@
               ps.pytest
               ps.playwright
               ps.pytest-playwright
+              pycamilladsp
             ]))
             pkgs.playwright-driver
           ];
@@ -56,19 +74,7 @@
             echo "  pytest, playwright, pytest-playwright"
             echo ""
 
-            # pycamilladsp is not in nixpkgs — install via pip in a venv.
-            if [ ! -d .venv ]; then
-              echo "Creating venv for pip-only packages..."
-              python3 -m venv .venv --system-site-packages
-            fi
-            source .venv/bin/activate
-
-            if ! python3 -c "import camilladsp" 2>/dev/null; then
-              echo "Installing pycamilladsp via pip..."
-              pip install --quiet pycamilladsp
-            fi
-
-            echo "pycamilladsp: $(pip show pycamilladsp 2>/dev/null | grep Version || echo 'not installed')"
+            echo "pycamilladsp: $(python3 -c 'from camilladsp.versions import VERSION; print(VERSION)' 2>/dev/null || echo 'not available')"
           '';
         };
       }
