@@ -563,8 +563,9 @@ visible. Mic-move prompts use the compact numbered list format (see above).
 ### Comparison modes
 
 - **Before/After:** Raw measurement (red) vs corrected (green)
-- **Multi-position overlay:** Individual position responses overlaid (for
-  advanced users to inspect spatial variation before averaging)
+- **Multi-position overlay:** Individual position responses in faded gray,
+  averaged curve in bold, target as dashed line. Shows spatial variation and
+  flags outliers > 6dB from mean. See section 9.7 for averaging details.
 - **Preset comparison:** Current measurement vs loaded preset
 
 ### All-speakers summary
@@ -871,6 +872,97 @@ correction filters active.
 **Display:** Gray = uncorrected, colored = corrected, dashed = target curve.
 The corrected trace should converge on the target.
 
+### 9.6 Near-Field Splice (Calibrate workflow)
+
+**Automatic, computed by pipeline. Not exposed in the UI.**
+
+The splice frequency is determined by physics (driver diameter), not user
+preference. The formula is `f_splice = c / (2 * pi * a)` where `c` = speed of
+sound (343 m/s) and `a` = effective piston radius.
+
+| Driver size | Effective radius | Theoretical f_splice |
+|-------------|-----------------|---------------------|
+| 6.5" woofer | 0.065m | ~840 Hz |
+| 5.25" woofer | 0.052m | ~1050 Hz |
+| 12" woofer | 0.127m | ~430 Hz |
+
+In practice, near-field measurements become unreliable above the frequency
+where the driver cone is no longer a coherent piston. The practical splice
+point is typically 200-300Hz for woofers.
+
+**Pipeline behavior:**
+
+1. Compute both near-field and 1m frequency responses
+2. Find the frequency range where they agree within 2dB (the "overlap zone")
+3. Cross-fade between them across the overlap zone using a half-cosine window
+4. If the overlap zone is narrower than 1/3 octave, flag a warning
+   (measurement may have an issue)
+
+Default splice target: 250Hz. Pipeline adjusts automatically based on overlap
+quality. An incorrect splice point produces a discontinuity that sounds like a
+resonance -- the algorithm does this better than a human.
+
+**UI display:** Show the single combined curve in the Calibrate review stage.
+In an advanced/detail view, show the two individual measurements with the
+splice zone highlighted. Never let the user drag the splice point.
+
+### 9.7 Multi-Position Averaging (Measure workflow)
+
+**Arithmetic mean of smoothed dB magnitude responses. NOT complex average.**
+
+This is a critical distinction:
+
+- **Complex average** (magnitude + phase): Causes destructive cancellation at
+  frequencies where phase differs between positions. Above ~200Hz, phase shifts
+  rapidly with position (10cm shift = 180 degrees at 1.7kHz). Complex averaging
+  above a few hundred Hz produces deep nulls that do not exist at any real
+  listening position. This is incorrect.
+
+- **Arithmetic mean of dB magnitudes** (correct): Average the dB values across
+  all positions for each speaker. This represents the "typical energy" across
+  the measurement zone. This is the method used by REW, Dirac Live, and
+  Audyssey for spatial averaging.
+
+**Pipeline steps:**
+
+1. Compute the smoothed magnitude response for each position
+   (1/6 octave smoothing below 200Hz, 1/3 octave 200Hz-1kHz, 1/2 octave
+   above 1kHz -- per the psychoacoustic smoothing spec in CLAUDE.md)
+2. Convert each to dB
+3. Arithmetic mean of the dB values across all positions for that speaker
+4. The averaged response becomes the input to the correction filter computation
+
+**Phase handling:** Phase (and time alignment) comes from Position 1 ONLY. The
+averaged magnitude response is converted to minimum-phase using the Hilbert
+transform. This gives a phase response mathematically consistent with the
+averaged magnitude -- no phase discontinuities, no artifacts from averaging
+different propagation paths.
+
+**UI display during correction stage (Stage 4):**
+
+```
+|  CORRECTION FILTER: Main Left                                      |
+|  +---------------------------------------------------------+      |
+|  |  [Individual position curves in faded gray (4 lines)]    |     |
+|  |  [Averaged curve in bold green]                          |     |
+|  |  [Target curve as dashed white line]                     |     |
+|  +---------------------------------------------------------+      |
+|  Position spread: 4.2 dB max (at 63Hz) -- normal                  |
+|  No outliers detected.                                             |
+```
+
+The overlay lets the user see:
+- How much the response varies across positions (spread of gray curves).
+  Large spread = correction is a compromise. Small spread = correction is
+  effective across the whole zone.
+- Whether any single position is an outlier (one gray curve far from others).
+  The UI flags outliers automatically (> 6dB from the mean at any frequency).
+  Could indicate a measurement error (mic bumped, noise during sweep).
+
+**Outlier handling (not MVP):** Future enhancement -- let the user click to
+exclude a position if they suspect a bad measurement. The average recomputes
+without it. For MVP, show the overlay and flag outliers only.
+
 ---
 
 ## 10. Integration with Existing Web UI
@@ -946,13 +1038,12 @@ No new design tokens needed.
 
 ## 11. Open Questions
 
-1. **Near-field splice frequency:** AE says automatic at ~250Hz. Should this be
-   exposed as an advanced setting in the Calibrate UI, or hidden completely?
-   **Recommendation:** Hidden. Expose only if users report problems.
+1. ~~**Near-field splice frequency:**~~ **RESOLVED.** Automatic, computed by
+   pipeline. Not exposed in the UI. See section 9.6.
 
-2. **Multi-position averaging method:** Arithmetic mean of magnitude responses?
-   Complex average? Spatially-weighted? Affects what the Results view shows
-   during processing. **Awaiting AE follow-up.**
+2. ~~**Multi-position averaging method:**~~ **RESOLVED.** Arithmetic mean of
+   smoothed dB magnitudes. Phase from Position 1 only, converted to
+   minimum-phase via Hilbert transform. See section 9.7.
 
 3. **Calibrate sub-tab detail:** The Calibrate stepper is sketched at high
    level. Full wireframe design deferred until speaker calibration stories are
@@ -960,7 +1051,8 @@ No new design tokens needed.
 
 4. **Measurement positions on phone:** Should the mic placement guide show a
    diagram on phone? The cross-pattern diagram may be too small. Alternative:
-   text-only instructions with distances.
+   text-only instructions with distances. **UX recommendation:** compact
+   numbered list on phone (implemented in Stage 2 mic-move prompt).
 
 5. **Quick Verify and Time Alignment Only workflows:** These are subsets of the
    full Measure workflow. Should they be separate buttons on the Measure
