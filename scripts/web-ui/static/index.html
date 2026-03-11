@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pi Audio Workstation</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- Navigation bar -->
+<nav class="nav-bar">
+    <div class="nav-left">
+        <span class="nav-title">Pi Audio Workstation</span>
+    </div>
+    <div class="nav-tabs">
+        <button class="nav-tab active" data-view="monitor">Monitor</button>
+        <button class="nav-tab" data-view="measure">Measure</button>
+        <button class="nav-tab" data-view="system">System</button>
+        <button class="nav-tab" data-view="midi">MIDI</button>
+    </div>
+    <div class="nav-right">
+        <span class="connection-dot" id="conn-dot"></span>
+    </div>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════
+     VIEW: Monitor — Level meters + CamillaDSP health
+     ════════════════════════════════════════════════════════════ -->
+<div class="view active" id="view-monitor">
+
+    <!-- Compact status strip -->
+    <div class="monitor-status-strip">
+        <div class="strip-item">
+            <span class="strip-label">CamillaDSP</span>
+            <span class="strip-value" id="mon-cdsp-state">--</span>
+        </div>
+        <div class="strip-item">
+            <span class="strip-label">Load</span>
+            <span class="strip-value" id="mon-cdsp-load">--</span>
+        </div>
+        <div class="strip-item">
+            <span class="strip-label">Buffer</span>
+            <span class="strip-value" id="mon-cdsp-buffer">--</span>
+        </div>
+        <div class="strip-item">
+            <span class="strip-label">Xruns</span>
+            <span class="strip-value" id="mon-cdsp-xruns">--</span>
+        </div>
+        <div class="strip-item">
+            <span class="strip-label">Clipped</span>
+            <span class="strip-value" id="mon-cdsp-clipped">--</span>
+        </div>
+        <div class="strip-item">
+            <span class="strip-label">Rate Adj</span>
+            <span class="strip-value" id="mon-cdsp-rate-adj">--</span>
+        </div>
+        <div class="strip-item">
+            <span class="strip-label">Chunk</span>
+            <span class="strip-value" id="mon-cdsp-chunksize">--</span>
+        </div>
+    </div>
+
+    <!-- Level meters -->
+    <div class="meters-area">
+        <!-- Capture meters -->
+        <div class="meter-group">
+            <div class="meter-group-title">Capture</div>
+            <div class="meters-row" id="meters-capture"></div>
+        </div>
+        <!-- Playback meters -->
+        <div class="meter-group">
+            <div class="meter-group-title">Playback</div>
+            <div class="meters-row" id="meters-playback"></div>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     VIEW: Measure — Stub
+     ════════════════════════════════════════════════════════════ -->
+<div class="view" id="view-measure">
+    <div class="stub-container">
+        <div class="stub-icon">&#x1f50a;</div>
+        <div class="stub-title">Measurement</div>
+        <div class="stub-text">Room correction measurement pipeline. Coming in Stage 2.</div>
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     VIEW: System — Full system health
+     ════════════════════════════════════════════════════════════ -->
+<div class="view" id="view-system">
+    <div class="system-grid">
+
+        <!-- Top strip: mode + audio config -->
+        <div class="sys-section sys-header-strip">
+            <div class="sys-header-item">
+                <span class="sys-header-label">Mode</span>
+                <span class="sys-header-value" id="sys-mode">--</span>
+            </div>
+            <div class="sys-header-item">
+                <span class="sys-header-label">Quantum</span>
+                <span class="sys-header-value" id="sys-quantum">--</span>
+            </div>
+            <div class="sys-header-item">
+                <span class="sys-header-label">Chunksize</span>
+                <span class="sys-header-value" id="sys-chunksize">--</span>
+            </div>
+            <div class="sys-header-item">
+                <span class="sys-header-label">Sample Rate</span>
+                <span class="sys-header-value" id="sys-rate">--</span>
+            </div>
+            <div class="sys-header-item">
+                <span class="sys-header-label">Temperature</span>
+                <span class="sys-header-value" id="sys-temp">--</span>
+            </div>
+        </div>
+
+        <!-- CPU -->
+        <div class="sys-section">
+            <div class="sys-section-title">CPU</div>
+            <div id="sys-cpu-bars"></div>
+        </div>
+
+        <!-- CamillaDSP -->
+        <div class="sys-section">
+            <div class="sys-section-title">CamillaDSP</div>
+            <div class="kv-grid">
+                <div class="kv-item"><span class="kv-label">State</span><span class="kv-value" id="sys-cdsp-state">--</span></div>
+                <div class="kv-item"><span class="kv-label">Load</span><span class="kv-value" id="sys-cdsp-load">--</span></div>
+                <div class="kv-item"><span class="kv-label">Buffer</span><span class="kv-value" id="sys-cdsp-buffer">--</span></div>
+                <div class="kv-item"><span class="kv-label">Rate Adj</span><span class="kv-value" id="sys-cdsp-rate-adj">--</span></div>
+                <div class="kv-item"><span class="kv-label">Clipped</span><span class="kv-value" id="sys-cdsp-clipped">--</span></div>
+                <div class="kv-item"><span class="kv-label">Xruns</span><span class="kv-value" id="sys-cdsp-xruns">--</span></div>
+            </div>
+        </div>
+
+        <!-- Scheduling -->
+        <div class="sys-section">
+            <div class="sys-section-title">Scheduling</div>
+            <div class="kv-grid">
+                <div class="kv-item"><span class="kv-label">PipeWire</span><span class="kv-value" id="sys-sched-pw">--</span></div>
+                <div class="kv-item"><span class="kv-label">CamillaDSP</span><span class="kv-value" id="sys-sched-cdsp">--</span></div>
+                <div class="kv-item"><span class="kv-label">Graph</span><span class="kv-value" id="sys-sched-graph">--</span></div>
+            </div>
+        </div>
+
+        <!-- Memory -->
+        <div class="sys-section">
+            <div class="sys-section-title">Memory</div>
+            <div class="kv-grid">
+                <div class="kv-item"><span class="kv-label">Used</span><span class="kv-value" id="sys-mem-used">--</span></div>
+                <div class="kv-item"><span class="kv-label">Available</span><span class="kv-value" id="sys-mem-avail">--</span></div>
+            </div>
+        </div>
+
+        <!-- Processes -->
+        <div class="sys-section">
+            <div class="sys-section-title">Processes</div>
+            <div class="proc-grid">
+                <div class="proc-item"><span class="proc-name">Mixxx</span><span class="proc-value" id="sys-proc-mixxx">--</span></div>
+                <div class="proc-item"><span class="proc-name">Reaper</span><span class="proc-value" id="sys-proc-reaper">--</span></div>
+                <div class="proc-item"><span class="proc-name">CamillaDSP</span><span class="proc-value" id="sys-proc-camilladsp">--</span></div>
+                <div class="proc-item"><span class="proc-name">PipeWire</span><span class="proc-value" id="sys-proc-pipewire">--</span></div>
+                <div class="proc-item"><span class="proc-name">labwc</span><span class="proc-value" id="sys-proc-labwc">--</span></div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     VIEW: MIDI — Stub
+     ════════════════════════════════════════════════════════════ -->
+<div class="view" id="view-midi">
+    <div class="stub-container">
+        <div class="stub-icon">&#x1f3b9;</div>
+        <div class="stub-title">MIDI</div>
+        <div class="stub-text">MIDI controller mapping and monitoring. Coming in Stage 2.</div>
+    </div>
+</div>
+
+<!-- Reconnect overlay -->
+<div class="reconnect-overlay" id="reconnect-overlay">
+    <div class="reconnect-message">Connection lost</div>
+    <div class="reconnect-detail" id="reconnect-detail">Reconnecting...</div>
+</div>
+
+<script src="/static/js/app.js"></script>
+<script src="/static/js/monitor.js"></script>
+<script src="/static/js/system.js"></script>
+<script src="/static/js/measure.js"></script>
+<script src="/static/js/midi.js"></script>
+</body>
+</html>

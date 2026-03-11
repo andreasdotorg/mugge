@@ -1,0 +1,445 @@
+/* D-020 Monitoring Web UI — Dark theme for kiosk display.
+ *
+ * Designed for fullscreen Chromium on 1920x1080 HDMI (Pi 4).
+ * Stage-friendly: dark background, high-contrast indicators.
+ */
+
+:root {
+    --bg: #0d0d0d;
+    --bg-panel: #1a1a1a;
+    --bg-bar: #262626;
+    --border: #333;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --text-label: #aaa;
+
+    --green: #4caf50;
+    --yellow: #ffc107;
+    --red: #f44336;
+    --blue: #42a5f5;
+
+    --meter-bg: #1a1a1a;
+    --meter-peak: #ffffff;
+
+    --nav-height: 40px;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ── Navigation bar ─────────────────────────────────────────── */
+
+.nav-bar {
+    display: flex;
+    align-items: center;
+    height: var(--nav-height);
+    padding: 0 16px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+}
+
+.nav-left {
+    flex-shrink: 0;
+}
+
+.nav-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+}
+
+.nav-tabs {
+    display: flex;
+    gap: 2px;
+    flex: 1;
+    justify-content: center;
+}
+
+.nav-tab {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 8px 20px;
+    cursor: pointer;
+    border-radius: 3px 3px 0 0;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.nav-tab:hover {
+    color: var(--text);
+}
+
+.nav-tab.active {
+    color: var(--text);
+    border-bottom-color: var(--blue);
+}
+
+.nav-right {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.connection-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    transition: background 0.3s;
+}
+
+.connection-dot.connected {
+    background: var(--green);
+}
+
+/* ── View containers ────────────────────────────────────────── */
+
+.view {
+    display: none;
+    height: calc(100vh - var(--nav-height));
+    overflow: hidden;
+}
+
+.view.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Monitor view ───────────────────────────────────────────── */
+
+.monitor-status-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    height: 36px;
+    padding: 0 16px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.strip-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.strip-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.strip-value {
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.meters-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+    padding: 12px 16px 8px;
+}
+
+.meter-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.meter-group-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    flex-shrink: 0;
+}
+
+.meters-row {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+}
+
+.meter-channel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-height: 0;
+}
+
+.meter-canvas-wrapper {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    position: relative;
+}
+
+.meter-canvas-wrapper canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.meter-label {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-label);
+    text-align: center;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.meter-db-value {
+    font-size: 9px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    height: 12px;
+}
+
+/* ── System view ────────────────────────────────────────────── */
+
+.system-grid {
+    padding: 16px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    height: 100%;
+}
+
+.sys-section {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 16px;
+}
+
+.sys-header-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    gap: 16px;
+    padding: 10px 24px;
+}
+
+.sys-header-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.sys-header-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.sys-header-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.sys-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+}
+
+/* CPU bars */
+.cpu-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+
+.cpu-row:last-child {
+    margin-bottom: 0;
+}
+
+.cpu-label {
+    width: 60px;
+    font-size: 12px;
+    color: var(--text-label);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.cpu-bar-track {
+    flex: 1;
+    height: 14px;
+    background: var(--bg-bar);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.cpu-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease, background-color 0.5s ease;
+}
+
+.cpu-value {
+    width: 48px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* Key-value pairs */
+.kv-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 24px;
+}
+
+.kv-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.kv-label {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.kv-value {
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Process grid */
+.proc-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px 24px;
+}
+
+.proc-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.proc-name {
+    color: var(--text-label);
+}
+
+.proc-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Stub views ─────────────────────────────────────────────── */
+
+.stub-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 16px;
+    color: var(--text-dim);
+}
+
+.stub-icon {
+    font-size: 48px;
+    opacity: 0.4;
+}
+
+.stub-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.stub-text {
+    font-size: 13px;
+    max-width: 400px;
+    text-align: center;
+    line-height: 1.5;
+}
+
+/* ── Color utilities ────────────────────────────────────────── */
+
+.c-green { color: var(--green) !important; }
+.c-yellow { color: var(--yellow) !important; }
+.c-red { color: var(--red) !important; }
+.c-blue { color: var(--blue) !important; }
+
+/* ── Reconnect overlay ──────────────────────────────────────── */
+
+.reconnect-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 100;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.reconnect-overlay.visible {
+    display: flex;
+}
+
+.reconnect-message {
+    font-size: 18px;
+    color: var(--text);
+}
+
+.reconnect-detail {
+    font-size: 13px;
+    color: var(--text-dim);
+}
