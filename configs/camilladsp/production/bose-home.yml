@@ -1,0 +1,196 @@
+# Bose PS28 III — Home/Office Configuration
+# Speaker: Bose Panaray System 28 III (passive conversion)
+# Amp: McGrey PA4504 (4x450W @ 4 ohm)
+# DAC: Behringer ADA8200 via USBStreamer
+#
+# Channel assignment:
+#   0: Satellite L (Jewel Double Cube, 8 ohm)
+#   1: Satellite R (Jewel Double Cube, 8 ohm)
+#   2: Sub driver 1 (5.25" isobaric, 2.33 ohm, normal polarity)
+#   3: Sub driver 2 (5.25" isobaric, 2.33 ohm, INVERTED — clamshell)
+#   4: HP L (engineer headphone)
+#   5: HP R (engineer headphone)
+#   6: HP2 L / loopback (during testing)
+#   7: HP2 R / loopback (during testing)
+#
+# Gain staging (D-029 compliant):
+#   Headroom reservation creates digital space for FIR boost.
+#   FIR filters contain speaker EQ + crossover + room correction.
+#   Power limit protects drivers from amp's full output.
+#
+#   Satellite: -7dB headroom → FIR (up to +4dB baffle step) → -13.5dB power limit
+#     Worst case: 0 - 7 + 4 - 13.5 = -16.5dBFS → 10.1W into 4 ohm (20W limit)
+#   Sub: -13dB headroom → FIR (up to +10dB enclosure comp) → -8.6dB power limit
+#     Worst case: 0 - 6 - 13 + 10 - 8.6 = -17.6dBFS → 7.8W into 2.33 ohm (62W limit)
+#
+# CAUTION: Sub driver 2 (ch 3) is phase-inverted for isobaric clamshell.
+# Do NOT use this config with other speaker systems.
+#
+# Filter coefficients are dirac placeholders until REW measurement.
+# After measurement, replace with combined FIR (crossover + room correction + speaker EQ).
+
+devices:
+  samplerate: 48000
+  chunksize: 256
+  queuelimit: 4
+  capture:
+    type: Alsa
+    channels: 8
+    device: "hw:Loopback,1,0"
+    format: S32LE
+  playback:
+    type: Alsa
+    channels: 8
+    device: "hw:USBStreamer,0"
+    format: S32LE
+
+mixers:
+  route_bose_home:
+    channels:
+      in: 8
+      out: 8
+    mapping:
+      # Satellite L (input ch 0) -> dest 0
+      - dest: 0
+        sources:
+          - channel: 0
+            gain: 0
+            inverted: false
+      # Satellite R (input ch 1) -> dest 1
+      - dest: 1
+        sources:
+          - channel: 1
+            gain: 0
+            inverted: false
+      # Mono sum L+R -> Sub driver 1 (dest 2, normal polarity)
+      - dest: 2
+        sources:
+          - channel: 0
+            gain: -6
+          - channel: 1
+            gain: -6
+      # Mono sum L+R -> Sub driver 2 (dest 3, INVERTED for isobaric clamshell)
+      - dest: 3
+        sources:
+          - channel: 0
+            gain: -6
+            inverted: true
+          - channel: 1
+            gain: -6
+            inverted: true
+      # HP L (input ch 4) -> dest 4
+      - dest: 4
+        sources:
+          - channel: 4
+            gain: 0
+            inverted: false
+      # HP R (input ch 5) -> dest 5
+      - dest: 5
+        sources:
+          - channel: 5
+            gain: 0
+            inverted: false
+      # HP2 L / loopback (input ch 6) -> dest 6
+      - dest: 6
+        sources:
+          - channel: 6
+            gain: 0
+            inverted: false
+      # HP2 R / loopback (input ch 7) -> dest 7
+      - dest: 7
+        sources:
+          - channel: 7
+            gain: 0
+            inverted: false
+
+filters:
+  # --- Headroom reservation (pre-FIR) ---
+  # Creates digital headroom for FIR boost (D-029 mechanism).
+  sat_headroom:
+    type: Gain
+    parameters:
+      gain: -7.0
+  sub_headroom:
+    type: Gain
+    parameters:
+      gain: -13.0
+
+  # --- FIR convolution (placeholder dirac until measured) ---
+  # After REW measurement, replace with combined minimum-phase FIR containing:
+  #   Satellite: HP at 150-160Hz LR-48, baffle step comp (+4dB), room correction
+  #   Sub: LP at 150-160Hz LR-48, HP at 42-45Hz >=48dB/oct (Xmax protection),
+  #        enclosure comp (+10dB @ 50-80Hz), room correction
+  sat_left_fir:
+    type: Conv
+    parameters:
+      type: Wav
+      filename: "/etc/camilladsp/coeffs/dirac_16384.wav"
+  sat_right_fir:
+    type: Conv
+    parameters:
+      type: Wav
+      filename: "/etc/camilladsp/coeffs/dirac_16384.wav"
+  sub1_fir:
+    type: Conv
+    parameters:
+      type: Wav
+      filename: "/etc/camilladsp/coeffs/dirac_16384.wav"
+  sub2_fir:
+    type: Conv
+    parameters:
+      type: Wav
+      filename: "/etc/camilladsp/coeffs/dirac_16384.wav"
+
+  # --- Power limiting (post-FIR) ---
+  # Protects drivers from exceeding thermal limits.
+  # Values calculated from D-009 worst case (-0.5dBFS after FIR):
+  #   sat: 20W into 4 ohm → need -14.0dBFS → power limit = -13.5dB
+  #   sub: 62W into 2.33 ohm → need -9.1dBFS → power limit = -8.6dB
+  sat_power_limit:
+    type: Gain
+    parameters:
+      gain: -13.5
+  sub_power_limit:
+    type: Gain
+    parameters:
+      gain: -8.6
+
+pipeline:
+  # 1. Route stereo input to 8 output channels
+  - type: Mixer
+    name: route_bose_home
+  # 2. Headroom reservation (before FIR)
+  - type: Filter
+    channels: [0, 1]
+    names:
+      - sat_headroom
+  - type: Filter
+    channels: [2, 3]
+    names:
+      - sub_headroom
+  # 3. FIR convolution (crossover + room correction + speaker EQ)
+  - type: Filter
+    channels: [0]
+    names:
+      - sat_left_fir
+  - type: Filter
+    channels: [1]
+    names:
+      - sat_right_fir
+  - type: Filter
+    channels: [2]
+    names:
+      - sub1_fir
+  - type: Filter
+    channels: [3]
+    names:
+      - sub2_fir
+  # 4. Power limiting (after FIR, protects drivers)
+  - type: Filter
+    channels: [0, 1]
+    names:
+      - sat_power_limit
+  - type: Filter
+    channels: [2, 3]
+    names:
+      - sub_power_limit
