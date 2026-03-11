@@ -584,7 +584,7 @@ and computes the impulse response via deconvolution,
 - [ ] Per-channel measurement: plays sweep through each output channel defined in the speaker profile (D-010), records on UMIK-1 input. Channel list comes from the profile's topology, not hardcoded (supports 2-way with 4 channels, 3-way with 6+ channels). Sweep level uses the gain-calibrated output level from US-012's gain structure calibration phase (-18dBFS digital, 75dB SPL per speaker at measurement position)
 - [ ] Deconvolution: computes impulse response from recorded sweep using inverse filter method
 - [ ] Multiple measurement positions: supports taking 3-5 measurements at different mic positions, stores each separately
-- [ ] Spatial averaging: averages multiple impulse responses (complex average in frequency domain) to reduce position sensitivity
+- [ ] Spatial averaging: arithmetic mean of smoothed magnitude responses in dB across measurement positions (NOT complex average — complex averaging causes destructive cancellation above ~200Hz, producing artificial nulls). Phase taken from Position 1 only. Averaged magnitude converted to minimum-phase via Hilbert transform. See `docs/project/requirements/measurement-ui-flows.md` section 9.7 for full procedure (AE correction, 2026-03-11)
 - [ ] Output: per-channel averaged impulse response saved as WAV file
 - [ ] Audio routing: correctly routes sweep output and UMIK-1 input through PipeWire/JACK
 - [ ] Error handling: detects clipping, low signal level, or failed recording and reports clearly
