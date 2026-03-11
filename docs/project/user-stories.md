@@ -726,6 +726,14 @@ is Phase 2, DJ mode only — 3-way requires 6 speaker channels, leaving only
 (channels 7-8). The schema must enforce this constraint via channel budget
 validation.
 
+**Note (2026-03-11):** Speaker identity — physical device characteristics
+(make, model, frequency response, EQ compensation, safety limits) — is a
+separate layer ABOVE this speaker profile schema. A speaker profile references
+speaker identities but does not define them. The speaker identity schema will
+be defined in a future story. See `docs/project/requirements/speaker-management-requirements.md`
+for the full requirements capture and architect's two-layer schema design.
+Decisions: D-028 (preset recall), D-029 (D-009 boost exception framework).
+
 **Acceptance criteria:**
 - [ ] YAML schema defined for speaker profiles with the following fields:
   - `name`: profile identifier (e.g., "2way-80hz-ported", "3way-80-3k")

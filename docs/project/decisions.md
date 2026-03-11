@@ -414,3 +414,49 @@ No batching multiple changes into a single deploy-reboot cycle. Each change is i
 - D-026 (PipeWire readiness probe in launch script) remains valid and important.
 - `configure-libjack-alternatives.sh` can be removed or archived. The S-006/S-007 partial state (alternatives registered, dpkg-divert applied) should be cleaned up on the Pi.
 - Lab notes: `docs/lab-notes/TK-039-deploy-cycle2.md` documents the full investigation.
+
+## D-028: Preset recall for fixed installations alongside D-008 per-venue measurement (2026-03-11)
+
+**Context:** D-008 mandates fresh measurement at every gig setup. The owner uses Bose PS28 III speakers in a fixed home installation where the room and speaker positions do not change between sessions. Regenerating correction filters from scratch every time is unnecessary for fixed installations and adds setup friction that discourages casual use.
+
+**Decision:** Fixed installations (home system, rehearsal space, or any location where speakers and room geometry do not change) may store and recall correction presets. Venue gigs continue to require fresh measurement per D-008. Preset recall requires a mandatory verification measurement to confirm the system state has not drifted (e.g., from firmware updates, speaker repositioning, or room changes).
+
+**Rationale:**
+1. D-008's fresh-measurement rule exists because venue acoustics are unpredictable. Fixed installations do not have this problem -- the room is known and stable.
+2. A stored preset with verification measurement is more reliable than no correction at all, which is what happens when the measurement ceremony is too burdensome for casual home use.
+3. The verification measurement is a safety net: if the system has drifted beyond a configurable threshold, the pipeline warns and recommends a full re-measurement.
+4. Stored presets also serve as regression baselines -- comparing a fresh measurement against the stored preset reveals system or room changes.
+
+**Impact:**
+- Preset directory structure: `presets/installations/<name>/` with measurements, filters, config, and verification timestamp.
+- Venue measurements continue to be stored under `presets/venues/<date-name>/` for regression tracking, but are always regenerated fresh.
+- Pipeline needs a `--recall` mode that loads a stored preset and runs a verification measurement.
+- Pipeline needs a configurable drift threshold (dB deviation from stored measurement at which it warns).
+- D-008 is NOT amended -- it remains the rule for venue gigs. D-028 adds a parallel path for fixed installations only.
+- Requirements detail: `docs/project/requirements/speaker-management-requirements.md`.
+
+## D-029: D-009 amendment — per-speaker-identity boost budget with compensating global attenuation (2026-03-11)
+
+**Context:** D-009 mandates that all correction filters have gain <= -0.5dB at every frequency (zero-gain, cut-only). The Bose PS28 III passive drivers have a rolled-off bass response requiring approximately +10dB of boost centered around 80Hz to produce adequate output in their usable passband. Without this boost, the speakers are unusable for music reproduction. D-009 as written prohibits this boost, making the Bose speakers incompatible with the system.
+
+**Decision:** Amend D-009 to allow per-speaker-identity boost with the following mandatory conditions:
+
+1. **Bounded boost:** The maximum boost at any frequency is declared in the speaker identity schema as `max_boost_db`. This is a per-speaker-identity property, not a per-venue or per-measurement parameter. The pipeline enforces this limit.
+2. **Compensating global attenuation:** A global attenuation gain stage is applied at the START of the CamillaDSP pipeline, before any filter processing. The attenuation value equals the maximum `max_boost_db` across all speaker identities in the active profile, plus the 0.5dB D-009 safety margin. For example, if the Bose identity declares `max_boost_db: 12`, the global attenuation is -12.5dB.
+3. **Mandatory HPF in combined filter:** Any speaker identity that declares boost must also declare `mandatory_hpf_hz`. The HPF is embedded in the combined FIR filter and cannot be bypassed or omitted. This prevents over-excursion damage to passive drivers.
+4. **D-009 compliance on FINAL output:** The -0.5dB maximum gain rule applies to the FINAL combined filter (global attenuation + speaker EQ + room correction + crossover), not to individual components. The programmatic verification check (D-009) examines the net result at every frequency bin after all stages are convolved.
+
+**Rationale:**
+1. The boost is not arbitrary gain -- it compensates for a known, measured speaker deficiency. Without it, the speaker cannot reproduce music.
+2. The compensating global attenuation guarantees that the digital signal level at the output of CamillaDSP is LOWER than the input at every frequency. The amplifier gain compensates for the reduced digital level. Net SPL is the same; clipping risk is eliminated.
+3. D-009's original concern (psytrance at -0.5 LUFS leaving zero headroom) is fully addressed: the global attenuation creates the headroom, and the final verification confirms it.
+4. The mandatory HPF protects the physical speakers from damage due to over-excursion below their mechanical limits.
+
+**Impact:**
+- D-009 remains in force for the FINAL combined filter. This amendment does not weaken D-009 -- it clarifies where in the processing chain the compliance check applies.
+- Speaker identity schema must include `max_boost_db` and `mandatory_hpf_hz` fields.
+- `combine.py` must accept speaker EQ as an additional input to the convolution chain.
+- `deploy.py` must read the speaker identity to determine the global attenuation value.
+- CamillaDSP YAML template must include a global attenuation gain stage at the pipeline start.
+- For speakers that require no boost (e.g., the self-built wideband speakers), `max_boost_db` is 0 and global attenuation is -0.5dB (the D-009 safety margin only). No behavioral change for the existing pipeline.
+- Requirements detail: `docs/project/requirements/speaker-management-requirements.md`.
