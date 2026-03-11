@@ -1,11 +1,11 @@
-"""Tests for subsonic protection filter (TK-080).
+"""Tests for subsonic protection filter (TK-080, TK-107).
 
 Verifies that:
 - Subsonic filter is generated with correct HPF shape
 - Filter has steep rolloff below the cutoff frequency (>= 24 dB/oct)
 - Filter passband above cutoff is near unity
 - Filter integrates correctly into the combine pipeline
-- Sealed subs are unaffected (no subsonic filter generated)
+- Mandatory HPF triggers on any enclosure type when mandatory_hpf_hz is set
 """
 
 import os
@@ -204,35 +204,51 @@ class TestCombineWithSubsonicFilter(unittest.TestCase):
                         f"{np.max(diff_db):.1f}dB (should be < 3dB)")
 
 
-class TestSealedSubNotAffected(unittest.TestCase):
-    """Verify sealed subs don't get subsonic protection in the runner logic."""
+class TestMandatoryHpfTrigger(unittest.TestCase):
+    """Verify mandatory HPF triggers based on mandatory_hpf_hz, not enclosure type.
 
-    def test_sealed_sub_identity_has_no_mandatory_hpf(self):
-        """A sealed sub config should not trigger subsonic filter generation.
+    TK-107: The runner condition must check mandatory_hpf_hz regardless of
+    enclosure type (sealed, ported, or anything else). The old logic
+    required type == 'ported', which silently skipped sealed subs with
+    mandatory_hpf_hz — a safety bug.
+    """
 
-        This tests the logic that the runner uses: it checks for
-        speaker_identity.type == 'ported' AND mandatory_hpf_hz.
-        A sealed sub won't match.
-        """
-        sealed_channel_cfg = {
+    @staticmethod
+    def _should_generate_subsonic(channel_cfg):
+        """Replicate the runner's mandatory HPF trigger logic (TK-107 fixed)."""
+        identity = channel_cfg.get('speaker_identity', {})
+        return identity.get('mandatory_hpf_hz') is not None
+
+    def test_sealed_sub_with_mandatory_hpf_triggers_subsonic(self):
+        """Sealed sub WITH mandatory_hpf_hz -> YES, generate subsonic filter."""
+        cfg = {
             'type': 'lowpass',
             'speaker_key': 'sub1',
             'speaker_identity': {
                 'type': 'sealed',
                 'model': 'Bose PS28 III',
+                'mandatory_hpf_hz': 42,
             },
         }
-        identity = sealed_channel_cfg.get('speaker_identity', {})
-        is_ported = (
-            identity.get('type') == 'ported'
-            and 'mandatory_hpf_hz' in identity
-        )
-        self.assertFalse(is_ported,
-                         "Sealed sub should not trigger subsonic filter")
+        self.assertTrue(self._should_generate_subsonic(cfg),
+                        "Sealed sub with mandatory_hpf_hz must trigger subsonic filter")
 
-    def test_ported_sub_identity_triggers_hpf(self):
-        """A ported sub config with mandatory_hpf_hz should trigger subsonic."""
-        ported_channel_cfg = {
+    def test_sealed_sub_without_mandatory_hpf_no_subsonic(self):
+        """Sealed sub WITHOUT mandatory_hpf_hz -> no subsonic filter."""
+        cfg = {
+            'type': 'lowpass',
+            'speaker_key': 'sub1',
+            'speaker_identity': {
+                'type': 'sealed',
+                'model': 'Generic sealed sub',
+            },
+        }
+        self.assertFalse(self._should_generate_subsonic(cfg),
+                         "Sealed sub without mandatory_hpf_hz should not trigger subsonic filter")
+
+    def test_ported_sub_with_mandatory_hpf_triggers_subsonic(self):
+        """Ported sub WITH mandatory_hpf_hz -> YES, generate subsonic filter."""
+        cfg = {
             'type': 'lowpass',
             'speaker_key': 'sub1',
             'speaker_identity': {
@@ -241,13 +257,17 @@ class TestSealedSubNotAffected(unittest.TestCase):
                 'mandatory_hpf_hz': 25.0,
             },
         }
-        identity = ported_channel_cfg.get('speaker_identity', {})
-        is_ported = (
-            identity.get('type') == 'ported'
-            and 'mandatory_hpf_hz' in identity
-        )
-        self.assertTrue(is_ported,
-                        "Ported sub with mandatory_hpf_hz should trigger subsonic filter")
+        self.assertTrue(self._should_generate_subsonic(cfg),
+                        "Ported sub with mandatory_hpf_hz must trigger subsonic filter")
+
+    def test_no_identity_no_subsonic(self):
+        """Missing speaker_identity -> no subsonic filter."""
+        cfg = {
+            'type': 'lowpass',
+            'speaker_key': 'sub1',
+        }
+        self.assertFalse(self._should_generate_subsonic(cfg),
+                         "Missing identity should not trigger subsonic filter")
 
 
 if __name__ == "__main__":

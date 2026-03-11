@@ -21,6 +21,7 @@ from config_generator import (
     load_identity,
     load_profile,
     load_profile_with_identities,
+    validate_hpf_in_config,
     validate_profile,
 )
 
@@ -422,7 +423,7 @@ class TestGenerateConfig(unittest.TestCase):
         self.assertEqual(live_config["devices"]["chunksize"], 256)
 
     def test_pipeline_order(self):
-        """Pipeline should follow: mixer -> headroom -> FIR -> power_limit."""
+        """Pipeline should follow: mixer -> headroom -> HPF -> FIR -> power_limit."""
         config = generate_config("bose-home")
         pipeline = config["pipeline"]
 
@@ -435,6 +436,8 @@ class TestGenerateConfig(unittest.TestCase):
                 names = step["names"]
                 if any("headroom" in n for n in names):
                     steps.append("headroom")
+                elif any("_hpf" in n for n in names):
+                    steps.append("hpf")
                 elif any("fir" in n for n in names):
                     steps.append("fir")
                 elif any("power_limit" in n for n in names):
@@ -444,8 +447,9 @@ class TestGenerateConfig(unittest.TestCase):
 
         # Verify order
         self.assertEqual(steps[0], "mixer")
-        # After mixer, headroom should come before FIR
+        # After mixer, headroom should come before HPF and FIR
         headroom_indices = [i for i, s in enumerate(steps) if s == "headroom"]
+        hpf_indices = [i for i, s in enumerate(steps) if s == "hpf"]
         fir_indices = [i for i, s in enumerate(steps) if s == "fir"]
         power_indices = [i for i, s in enumerate(steps) if s == "power_limit"]
 
@@ -453,6 +457,15 @@ class TestGenerateConfig(unittest.TestCase):
             all(h < min(fir_indices) for h in headroom_indices),
             "All headroom steps should come before FIR steps",
         )
+        if hpf_indices:
+            self.assertTrue(
+                all(h < min(hpf_indices) for h in headroom_indices),
+                "All headroom steps should come before HPF steps",
+            )
+            self.assertTrue(
+                all(hp < min(fir_indices) for hp in hpf_indices),
+                "All HPF steps should come before FIR steps",
+            )
         self.assertTrue(
             all(f < min(power_indices) for f in fir_indices),
             "All FIR steps should come before power limit steps",
@@ -604,7 +617,10 @@ class TestBoseHomeMatchesReference(unittest.TestCase):
     def test_pipeline_structure_matches(self):
         """
         Pipeline structure should match reference:
-        mixer -> headroom -> FIR -> power_limit
+        mixer -> headroom -> HPF -> FIR -> power_limit
+
+        The generated config includes mandatory HPF steps that the
+        hand-written reference lacks. We verify the non-HPF steps match.
         """
         gen_p = self.generated["pipeline"]
         ref_p = self.reference["pipeline"]
@@ -613,10 +629,14 @@ class TestBoseHomeMatchesReference(unittest.TestCase):
         self.assertEqual(gen_p[0]["type"], "Mixer")
         self.assertEqual(ref_p[0]["type"], "Mixer")
 
-        # Count Filter steps
-        gen_filter_count = sum(1 for s in gen_p if s["type"] == "Filter")
+        # Count non-HPF Filter steps in generated config (HPF is new)
+        gen_non_hpf_count = sum(
+            1 for s in gen_p
+            if s["type"] == "Filter"
+            and not any("_hpf" in n for n in s.get("names", []))
+        )
         ref_filter_count = sum(1 for s in ref_p if s["type"] == "Filter")
-        self.assertEqual(gen_filter_count, ref_filter_count)
+        self.assertEqual(gen_non_hpf_count, ref_filter_count)
 
     def test_sub2_inversion_matches_reference(self):
         """
@@ -660,6 +680,204 @@ class TestWriteConfig(unittest.TestCase):
                 parsed = yaml.safe_load(f)
             self.assertIn("devices", parsed)
             self.assertIn("pipeline", parsed)
+
+
+class TestMandatoryHPF(unittest.TestCase):
+    """Test TK-107/TK-108: mandatory HPF filter generation and validation."""
+
+    def test_hpf_filter_generated_for_mandatory_hpf_speaker(self):
+        """Speaker with mandatory_hpf_hz produces a BiquadCombo HPF filter."""
+        config = generate_config("bose-home")
+        filters = config["filters"]
+
+        # bose-ps28-iii-sub has mandatory_hpf_hz: 42 — used by sub1 and sub2
+        self.assertIn("sub1_hpf", filters)
+        sub1_hpf = filters["sub1_hpf"]
+        self.assertEqual(sub1_hpf["type"], "BiquadCombo")
+        self.assertEqual(sub1_hpf["parameters"]["type"], "ButterworthHighpass")
+        self.assertEqual(sub1_hpf["parameters"]["order"], 4)
+        self.assertEqual(sub1_hpf["parameters"]["freq"], 42)
+
+        self.assertIn("sub2_hpf", filters)
+        sub2_hpf = filters["sub2_hpf"]
+        self.assertEqual(sub2_hpf["type"], "BiquadCombo")
+        self.assertEqual(sub2_hpf["parameters"]["type"], "ButterworthHighpass")
+        self.assertEqual(sub2_hpf["parameters"]["order"], 4)
+        self.assertEqual(sub2_hpf["parameters"]["freq"], 42)
+
+    def test_hpf_filter_generated_for_satellite_with_hpf(self):
+        """Bose Jewel satellites also have mandatory_hpf_hz: 155."""
+        config = generate_config("bose-home")
+        filters = config["filters"]
+
+        self.assertIn("sat_left_hpf", filters)
+        self.assertEqual(filters["sat_left_hpf"]["parameters"]["freq"], 155)
+        self.assertIn("sat_right_hpf", filters)
+        self.assertEqual(filters["sat_right_hpf"]["parameters"]["freq"], 155)
+
+    def test_no_hpf_for_null_mandatory_hpf(self):
+        """Speaker with mandatory_hpf_hz: null does NOT produce an HPF filter."""
+        config = generate_config("2way-80hz-sealed")
+        filters = config["filters"]
+
+        # wideband-selfbuilt-v1 has mandatory_hpf_hz: null
+        self.assertNotIn("sat_left_hpf", filters)
+        self.assertNotIn("sat_right_hpf", filters)
+        # sub-custom-15 has mandatory_hpf_hz: null
+        self.assertNotIn("sub1_hpf", filters)
+        self.assertNotIn("sub2_hpf", filters)
+
+    def test_bose_home_hpf_in_pipeline(self):
+        """HPF filter steps appear in the pipeline for bose-home speakers."""
+        config = generate_config("bose-home")
+        pipeline = config["pipeline"]
+
+        # Collect all filter names in the pipeline
+        pipeline_filter_names = set()
+        for step in pipeline:
+            if step.get("type") == "Filter":
+                for name in step.get("names", []):
+                    pipeline_filter_names.add(name)
+
+        # Sub HPFs must be in pipeline
+        self.assertIn("sub1_hpf", pipeline_filter_names)
+        self.assertIn("sub2_hpf", pipeline_filter_names)
+        # Satellite HPFs must be in pipeline
+        self.assertIn("sat_left_hpf", pipeline_filter_names)
+        self.assertIn("sat_right_hpf", pipeline_filter_names)
+
+    def test_no_hpf_in_pipeline_for_null(self):
+        """Speakers with null mandatory_hpf_hz have no HPF pipeline steps."""
+        config = generate_config("2way-80hz-sealed")
+        pipeline = config["pipeline"]
+
+        pipeline_filter_names = set()
+        for step in pipeline:
+            if step.get("type") == "Filter":
+                for name in step.get("names", []):
+                    pipeline_filter_names.add(name)
+
+        hpf_names = [n for n in pipeline_filter_names if "_hpf" in n]
+        self.assertEqual(hpf_names, [], f"Unexpected HPF filters: {hpf_names}")
+
+    def test_bose_home_subs_have_hpf_sats_have_hpf(self):
+        """
+        For bose-home: both subs and satellites have mandatory HPFs.
+        Subs at 42Hz, satellites at 155Hz.
+        """
+        config = generate_config("bose-home")
+        filters = config["filters"]
+
+        # Subs: 42Hz
+        self.assertEqual(filters["sub1_hpf"]["parameters"]["freq"], 42)
+        self.assertEqual(filters["sub2_hpf"]["parameters"]["freq"], 42)
+        # Satellites: 155Hz
+        self.assertEqual(filters["sat_left_hpf"]["parameters"]["freq"], 155)
+        self.assertEqual(filters["sat_right_hpf"]["parameters"]["freq"], 155)
+
+    def test_hpf_pipeline_order_before_fir(self):
+        """HPF steps must come after headroom and before FIR in the pipeline."""
+        config = generate_config("bose-home")
+        pipeline = config["pipeline"]
+
+        # Find indices of HPF and FIR steps
+        hpf_indices = []
+        fir_indices = []
+        headroom_indices = []
+        for i, step in enumerate(pipeline):
+            if step.get("type") == "Filter":
+                names = step.get("names", [])
+                if any("_hpf" in n for n in names):
+                    hpf_indices.append(i)
+                elif any("_fir" in n or "fir" in n for n in names):
+                    fir_indices.append(i)
+                elif any("headroom" in n for n in names):
+                    headroom_indices.append(i)
+
+        self.assertGreater(len(hpf_indices), 0, "No HPF steps found")
+        self.assertGreater(len(fir_indices), 0, "No FIR steps found")
+
+        # All headroom before all HPF
+        self.assertTrue(
+            all(h < min(hpf_indices) for h in headroom_indices),
+            "All headroom steps should come before HPF steps",
+        )
+        # All HPF before all FIR
+        self.assertTrue(
+            all(hp < min(fir_indices) for hp in hpf_indices),
+            "All HPF steps should come before FIR steps",
+        )
+
+    def test_validation_raises_when_hpf_missing_from_filters(self):
+        """validate_hpf_in_config raises error when mandatory HPF missing from filters."""
+        profile, identities = load_profile_with_identities("bose-home")
+
+        # Build a config that deliberately omits HPF filters
+        config = {
+            "filters": {
+                "sat_headroom": {"type": "Gain", "parameters": {"gain": -7.0}},
+                "sub_headroom": {"type": "Gain", "parameters": {"gain": -13.0}},
+                "sat_left_fir": {"type": "Conv", "parameters": {"type": "Wav", "filename": "x.wav"}},
+            },
+            "pipeline": [
+                {"type": "Mixer", "name": "route_bose_home"},
+                {"type": "Filter", "channels": [0], "names": ["sat_left_fir"]},
+            ],
+        }
+
+        with self.assertRaises(ValidationError) as ctx:
+            validate_hpf_in_config(profile, identities, config)
+        self.assertIn("mandatory hpf", str(ctx.exception).lower())
+
+    def test_validation_raises_when_hpf_missing_from_pipeline(self):
+        """validate_hpf_in_config raises error when HPF filter exists but not in pipeline."""
+        profile, identities = load_profile_with_identities("bose-home")
+
+        # Build a config with HPF in filters but NOT in pipeline
+        config = {
+            "filters": {
+                "sub1_hpf": {
+                    "type": "BiquadCombo",
+                    "parameters": {"type": "ButterworthHighpass", "order": 4, "freq": 42},
+                },
+                "sub2_hpf": {
+                    "type": "BiquadCombo",
+                    "parameters": {"type": "ButterworthHighpass", "order": 4, "freq": 42},
+                },
+                "sat_left_hpf": {
+                    "type": "BiquadCombo",
+                    "parameters": {"type": "ButterworthHighpass", "order": 4, "freq": 155},
+                },
+                "sat_right_hpf": {
+                    "type": "BiquadCombo",
+                    "parameters": {"type": "ButterworthHighpass", "order": 4, "freq": 155},
+                },
+            },
+            "pipeline": [
+                {"type": "Mixer", "name": "route_bose_home"},
+                # HPF filters NOT referenced in pipeline
+            ],
+        }
+
+        with self.assertRaises(ValidationError) as ctx:
+            validate_hpf_in_config(profile, identities, config)
+        self.assertIn("pipeline", str(ctx.exception).lower())
+
+    def test_validation_succeeds_for_complete_config(self):
+        """validate_hpf_in_config passes when HPF is in both filters and pipeline."""
+        config = generate_config("bose-home")
+        profile, identities = load_profile_with_identities("bose-home")
+
+        # Should not raise — config from generate_config is complete
+        validate_hpf_in_config(profile, identities, config)
+
+    def test_validation_succeeds_for_null_hpf_profile(self):
+        """validate_hpf_in_config passes for profiles with no mandatory HPF."""
+        config = generate_config("2way-80hz-sealed")
+        profile, identities = load_profile_with_identities("2way-80hz-sealed")
+
+        # Should not raise — no mandatory HPFs
+        validate_hpf_in_config(profile, identities, config)
 
 
 if __name__ == "__main__":

@@ -208,12 +208,12 @@ def run_full_pipeline(args):
         print(f"  {ch_name}: {filter_type} crossover at {xo_freq}Hz, {xo_slope}dB/oct")
     print(f"  Time: {time.time()-t0:.1f}s")
 
-    # --- Stage 5b: Generate subsonic protection filters (ported subs only) ---
+    # --- Stage 5b: Generate subsonic protection filters (mandatory HPF) ---
     subsonic_filters = {}
     has_subsonic = False
     for ch_name, ch_cfg in channels_cfg.items():
         speaker_identity = ch_cfg.get('speaker_identity', {})
-        if speaker_identity.get('type') == 'ported' and 'mandatory_hpf_hz' in speaker_identity:
+        if speaker_identity.get('mandatory_hpf_hz') is not None:
             hpf_freq = speaker_identity['mandatory_hpf_hz']
             subsonic = crossover.generate_subsonic_filter(
                 hpf_freq=hpf_freq,
@@ -224,10 +224,10 @@ def run_full_pipeline(args):
             has_subsonic = True
 
     if has_subsonic:
-        print("\n[5b] Generating subsonic protection filters (ported subs)...")
+        print("\n[5b] Generating subsonic protection filters (mandatory HPF protection)...")
         for ch_name, subsonic in subsonic_filters.items():
             hpf_freq = channels_cfg[ch_name]['speaker_identity']['mandatory_hpf_hz']
-            print(f"  {ch_name}: subsonic HPF at {hpf_freq}Hz (ported sub protection)")
+            print(f"  {ch_name}: subsonic HPF at {hpf_freq}Hz (mandatory HPF protection)")
 
     # --- Stage 6: Combine correction + crossover ---
     print("\n[6/7] Combining correction + crossover filters...")
@@ -271,6 +271,21 @@ def run_full_pipeline(args):
     print("VERIFICATION")
     print("=" * 60)
     all_passed, results = verify.run_all_checks(output_dir, crossover_freq=xo_freq)
+
+    # Mandatory HPF verification for channels with mandatory_hpf_hz
+    for ch_name, ch_cfg in channels_cfg.items():
+        speaker_identity = ch_cfg.get('speaker_identity', {})
+        hpf_hz = speaker_identity.get('mandatory_hpf_hz')
+        if hpf_hz is not None:
+            out_key = output_names.get(ch_name, ch_name)
+            filter_path = os.path.join(output_dir, f"combined_{out_key}.wav")
+            if os.path.exists(filter_path):
+                result = verify.verify_mandatory_hpf(filter_path, hpf_hz)
+                result.name = f"Mandatory HPF ({out_key})"
+                results.append(result)
+                if not result.passed:
+                    all_passed = False
+
     verify.print_report(all_passed, results)
 
     if not all_passed:

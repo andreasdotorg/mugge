@@ -287,6 +287,73 @@ def verify_format(filter_path, expected_taps=16384, expected_sr=SAMPLE_RATE):
     )
 
 
+def verify_mandatory_hpf(filter_path, mandatory_hpf_hz, min_attenuation_db=18.0):
+    """
+    Verify that a filter provides adequate subsonic protection.
+
+    Checks that the magnitude response at half the mandatory HPF frequency
+    is at least min_attenuation_db below the passband level. This ensures
+    the subsonic protection filter is actually present and effective in the
+    combined FIR.
+
+    Parameters
+    ----------
+    filter_path : str
+        Path to the filter WAV file.
+    mandatory_hpf_hz : float
+        The mandatory highpass frequency declared in the speaker identity.
+    min_attenuation_db : float
+        Minimum required attenuation at (mandatory_hpf_hz / 2) relative
+        to passband. Default 18dB.
+
+    Returns
+    -------
+    VerificationResult
+    """
+    data, sr = load_filter(filter_path)
+    freqs, magnitudes = dsp_utils.rfft_magnitude(data)
+    gains_db = dsp_utils.linear_to_db(magnitudes)
+
+    # Check frequency: half the mandatory HPF
+    check_freq = mandatory_hpf_hz / 2.0
+    idx_check = np.argmin(np.abs(freqs - check_freq))
+    gain_at_check = gains_db[idx_check]
+
+    # Passband reference: average gain between 2x HPF and min(10x HPF, 20kHz)
+    passband_low = mandatory_hpf_hz * 2.0
+    passband_high = min(mandatory_hpf_hz * 10.0, 20000.0)
+    passband_mask = (freqs >= passband_low) & (freqs <= passband_high)
+
+    if not np.any(passband_mask):
+        return VerificationResult(
+            "Mandatory HPF", False,
+            f"No passband bins between {passband_low}Hz and {passband_high}Hz",
+            {},
+        )
+
+    passband_level = float(np.mean(gains_db[passband_mask]))
+    attenuation = passband_level - gain_at_check
+
+    passed = attenuation >= min_attenuation_db
+    message = (
+        f"Attenuation at {check_freq:.0f}Hz: {attenuation:.1f}dB "
+        f"(passband ref: {passband_level:.1f}dB, "
+        f"required: >= {min_attenuation_db}dB)"
+    )
+
+    return VerificationResult(
+        "Mandatory HPF",
+        passed,
+        message,
+        {
+            "check_freq_hz": check_freq,
+            "attenuation_db": attenuation,
+            "passband_level_db": passband_level,
+            "gain_at_check_db": gain_at_check,
+        },
+    )
+
+
 def verify_crossover_sum(hp_path, lp_path, crossover_freq=80.0, tolerance_db=6.0):
     """
     Verify that HP + LP filters have reasonable energy in the crossover region.

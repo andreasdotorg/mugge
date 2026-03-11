@@ -161,14 +161,6 @@ filters:
     parameters:
       gain: -8.6
 
-  # --- Subsonic protection (temporary until real FIR replaces dirac) ---
-  sub_subsonic_hp:
-    type: BiquadCombo
-    parameters:
-      type: ButterworthHighpass
-      order: 4
-      freq: 45
-
 pipeline:
   # 1. Route stereo input to 8 output channels
   - type: Mixer
@@ -182,11 +174,6 @@ pipeline:
     channels: [2, 3]
     names:
       - sub_headroom
-  # 2b. Subsonic protection (temporary until real FIR replaces dirac)
-  - type: Filter
-    channels: [2, 3]
-    names:
-      - sub_subsonic_hp
   # 3. FIR convolution (crossover + room correction + speaker EQ)
   - type: Filter
     channels: [0]

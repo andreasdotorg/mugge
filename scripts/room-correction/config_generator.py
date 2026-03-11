@@ -8,7 +8,7 @@ CamillaDSP-compatible YAML configuration.
 The output is built as a Python dict and serialised via yaml.dump() —
 NO string templating.
 
-Pipeline pattern: mixer -> headroom -> FIR -> power_limit -> delay
+Pipeline pattern: mixer -> headroom -> HPF -> FIR -> power_limit -> delay
 
 Design decision D-029: headroom reservation creates digital space for FIR
 boost. The headroom value must be >= max_boost_db + 0.5dB margin.
@@ -247,6 +247,66 @@ def validate_and_raise(profile, identities, identities_dir=None):
         )
 
 
+def validate_hpf_in_config(profile, identities, config):
+    """
+    Post-generation validation: verify that every speaker with a mandatory
+    HPF in its identity has a corresponding HPF filter definition AND
+    pipeline step in the generated config.
+
+    Parameters
+    ----------
+    profile : dict
+        Loaded profile data.
+    identities : dict
+        Mapping of identity names to loaded identity dicts.
+    config : dict
+        Generated CamillaDSP configuration dict.
+
+    Raises
+    ------
+    ValidationError
+        If any mandatory HPF is missing from the generated config.
+    """
+    errors = []
+    filters = config.get("filters", {})
+    pipeline = config.get("pipeline", [])
+
+    # Collect all filter names referenced in pipeline steps
+    pipeline_filter_names = set()
+    for step in pipeline:
+        if step.get("type") == "Filter":
+            for name in step.get("names", []):
+                pipeline_filter_names.add(name)
+
+    for spk_key, spk_cfg in profile["speakers"].items():
+        id_name = spk_cfg["identity"]
+        identity = identities.get(id_name, {})
+        mandatory_hpf = identity.get("mandatory_hpf_hz")
+
+        if mandatory_hpf is None:
+            continue
+
+        hpf_name = f"{spk_key}_hpf"
+
+        if hpf_name not in filters:
+            errors.append(
+                f"Speaker '{spk_key}' ({id_name}) requires mandatory HPF "
+                f"at {mandatory_hpf}Hz but filter '{hpf_name}' is missing "
+                f"from generated config."
+            )
+        if hpf_name not in pipeline_filter_names:
+            errors.append(
+                f"Speaker '{spk_key}' ({id_name}) requires mandatory HPF "
+                f"at {mandatory_hpf}Hz but '{hpf_name}' is not in the "
+                f"pipeline."
+            )
+
+    if errors:
+        raise ValidationError(
+            "Mandatory HPF validation failed:\n  - " + "\n  - ".join(errors)
+        )
+
+
 # ----- CamillaDSP config generation ------------------------------------
 
 def _classify_speakers(profile):
@@ -356,16 +416,44 @@ def _build_mixer(profile):
     }
 
 
-def _build_filters(profile, filter_paths=None):
+def _resolve_speaker_identities(profile, identities):
     """
-    Build the CamillaDSP filters section.
-
-    Creates headroom, FIR convolution, and power limit filters.
+    Build a mapping from speaker key to its resolved identity dict.
 
     Parameters
     ----------
     profile : dict
         Loaded profile data.
+    identities : dict
+        Mapping of identity names to loaded identity dicts.
+
+    Returns
+    -------
+    dict
+        Mapping of speaker key to identity dict.
+    """
+    spk_identities = {}
+    for spk_key, spk_cfg in profile["speakers"].items():
+        id_name = spk_cfg["identity"]
+        if id_name in identities:
+            spk_identities[spk_key] = identities[id_name]
+    return spk_identities
+
+
+def _build_filters(profile, identities=None, filter_paths=None):
+    """
+    Build the CamillaDSP filters section.
+
+    Creates headroom, HPF (mandatory subsonic protection), FIR convolution,
+    and power limit filters.
+
+    Parameters
+    ----------
+    profile : dict
+        Loaded profile data.
+    identities : dict, optional
+        Mapping of identity names to loaded identity dicts.
+        Used to generate mandatory HPF filters.
     filter_paths : dict, optional
         Mapping of speaker keys to FIR WAV file paths.
         If not provided, uses DEFAULT_DIRAC_PATH for all.
@@ -377,9 +465,12 @@ def _build_filters(profile, filter_paths=None):
     """
     if filter_paths is None:
         filter_paths = {}
+    if identities is None:
+        identities = {}
 
     gain_staging = profile.get("gain_staging", {})
     satellites, subwoofers = _classify_speakers(profile)
+    spk_identities = _resolve_speaker_identities(profile, identities)
 
     filters = {}
 
@@ -399,6 +490,20 @@ def _build_filters(profile, filter_paths=None):
             "gain": float(sub_gs.get("headroom_db", -13.0)),
         },
     }
+
+    # Mandatory HPF filters (subsonic protection per speaker identity)
+    for spk_key, spk_cfg in satellites + subwoofers:
+        identity = spk_identities.get(spk_key, {})
+        mandatory_hpf = identity.get("mandatory_hpf_hz")
+        if mandatory_hpf is not None:
+            filters[f"{spk_key}_hpf"] = {
+                "type": "BiquadCombo",
+                "parameters": {
+                    "type": "ButterworthHighpass",
+                    "order": 4,
+                    "freq": mandatory_hpf,
+                },
+            }
 
     # FIR convolution filters (one per speaker)
     for spk_key, spk_cfg in satellites + subwoofers:
@@ -429,11 +534,11 @@ def _build_filters(profile, filter_paths=None):
     return filters
 
 
-def _build_pipeline(profile, mixer_name, delays=None):
+def _build_pipeline(profile, mixer_name, identities=None, delays=None):
     """
     Build the CamillaDSP pipeline section.
 
-    Pipeline pattern: mixer -> headroom -> FIR -> power_limit -> delay
+    Pipeline pattern: mixer -> headroom -> HPF -> FIR -> power_limit -> delay
 
     Parameters
     ----------
@@ -441,6 +546,9 @@ def _build_pipeline(profile, mixer_name, delays=None):
         Loaded profile data.
     mixer_name : str
         Name of the mixer (from _build_mixer).
+    identities : dict, optional
+        Mapping of identity names to loaded identity dicts.
+        Used to determine which speakers need HPF pipeline steps.
     delays : dict, optional
         Mapping of speaker keys to delay in ms. If provided, delay
         filters are appended to the pipeline.
@@ -450,7 +558,11 @@ def _build_pipeline(profile, mixer_name, delays=None):
     list
         Pipeline steps for CamillaDSP config.
     """
+    if identities is None:
+        identities = {}
+
     satellites, subwoofers = _classify_speakers(profile)
+    spk_identities = _resolve_speaker_identities(profile, identities)
     pipeline = []
 
     # 1. Mixer
@@ -476,7 +588,19 @@ def _build_pipeline(profile, mixer_name, delays=None):
             "names": ["sub_headroom"],
         })
 
-    # 3. FIR convolution (one per speaker channel)
+    # 3. Mandatory HPF (subsonic protection, before FIR)
+    for spk_key, spk_cfg in satellites + subwoofers:
+        identity = spk_identities.get(spk_key, {})
+        mandatory_hpf = identity.get("mandatory_hpf_hz")
+        if mandatory_hpf is not None:
+            ch = spk_cfg["channel"]
+            pipeline.append({
+                "type": "Filter",
+                "channels": [ch],
+                "names": [f"{spk_key}_hpf"],
+            })
+
+    # 4. FIR convolution (one per speaker channel)
     for spk_key, spk_cfg in satellites + subwoofers:
         ch = spk_cfg["channel"]
         filter_name = f"{spk_key}_fir"
@@ -486,7 +610,7 @@ def _build_pipeline(profile, mixer_name, delays=None):
             "names": [filter_name],
         })
 
-    # 4. Power limiting (after FIR)
+    # 5. Power limiting (after FIR)
     if sat_channels:
         pipeline.append({
             "type": "Filter",
@@ -500,7 +624,7 @@ def _build_pipeline(profile, mixer_name, delays=None):
             "names": ["sub_power_limit"],
         })
 
-    # 5. Delay (optional, only if delay values provided)
+    # 6. Delay (optional, only if delay values provided)
     if delays:
         for spk_key, spk_cfg in satellites + subwoofers:
             delay_ms = delays.get(spk_key)
@@ -604,8 +728,12 @@ def generate_config(
     # Build each config section
     devices = _build_devices(mode=mode, sample_rate=sample_rate)
     mixer_name, mixer_def = _build_mixer(profile)
-    filters = _build_filters(profile, filter_paths=filter_paths)
-    pipeline = _build_pipeline(profile, mixer_name, delays=delays)
+    filters = _build_filters(
+        profile, identities=identities, filter_paths=filter_paths,
+    )
+    pipeline = _build_pipeline(
+        profile, mixer_name, identities=identities, delays=delays,
+    )
 
     # Add delay filters if specified
     if delays:
@@ -618,6 +746,9 @@ def generate_config(
         "filters": filters,
         "pipeline": pipeline,
     }
+
+    # TK-108: Post-generation validation — verify mandatory HPF presence
+    validate_hpf_in_config(profile, identities, config)
 
     return config
 
