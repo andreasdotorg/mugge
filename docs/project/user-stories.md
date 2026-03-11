@@ -506,32 +506,54 @@ X11/XWayland — verify. Remote access is via wayvnc (D-018).
 
 ---
 
-## US-007: APCmini mk2 Mixxx Mapping Research and Creation
+## US-007: APCmini mk2 System Controller and Reaper Mixer Surface
 
-**As** the DJ,
-**I want** a working Mixxx MIDI mapping for the Akai APCmini mk2,
-**so that** I can use it as a supplementary controller (grid launcher, mixer,
-effects) alongside the Hercules.
+**As** the performer,
+**I want** the APCmini mk2 configured as both the system management controller
+and a Reaper mixer surface (faders for live mode channel levels),
+**so that** I have one device for system-level operations (launch apps, switch
+modes, toggle views) and live mode mixing, while the Hercules stays dedicated
+to Mixxx DJ control.
 
-**Status:** draft
-**Depends on:** US-006 (Mixxx must be working first)
-**Blocks:** none (nice-to-have for DJ mode, not critical path)
-**Decisions:** none yet
+**Status:** draft (scope revised 2026-03-10 — was: Mixxx mapping)
+**Depends on:** US-036 (system MIDI daemon must exist for system control functions), US-017 (Reaper IEM/mixer routing must be defined for fader mapping)
+**Blocks:** US-036 (APCmini must be verified as USB-MIDI before the system daemon can use it)
+**Decisions:** Architect recommendation (2026-03-10): APCmini mk2 = system control + Reaper mixer. Hercules = Mixxx DJ only. Clean device split, no MIDI routing complexity.
 
-**Note:** The mk2 has a different MIDI mapping from the mk1. Existing mk1
-mappings will not work without modification.
+**Note (scope change 2026-03-10):** Originally scoped as an APCmini mk2 Mixxx
+mapping (supplementary DJ controller alongside the Hercules). Revised per
+architect recommendation: the APCmini mk2 is now the system controller +
+Reaper mixer surface, NOT a Mixxx controller. The Hercules handles all Mixxx
+DJ functions (TK-065). This avoids MIDI device routing conflicts — each
+controller has one exclusive role.
+
+**Note:** The mk2 has a different MIDI mapping from the mk1. The mk2's 9
+faders are well-suited for Reaper channel mixing (live mode), while the 64
+grid buttons provide ample room for system management controls (US-036) with
+LED feedback for state indication.
+
+**Note:** A8 (original assumption: "APCmini mk2 Mixxx mapping exists or can
+be created") is no longer relevant in its original form. The APCmini is not
+a Mixxx controller. A8 should be updated to reflect the new role: "APCmini
+mk2 is viable as a system controller + Reaper mixer surface on Linux."
 
 **Acceptance criteria:**
-- [ ] Research completed: Mixxx forums, GitHub, wiki checked for existing mk2 mappings
-- [ ] If mapping exists: installed and tested on Pi 4B with Mixxx
-- [ ] If no mapping exists: basic custom mapping created using Mixxx's MIDI learning wizard covering at minimum: play/cue, volume faders, crossfader, EQ kills
-- [ ] APCmini mk2 LED feedback verified (button LEDs respond to Mixxx state)
-- [ ] Mapping file committed to the project repository
+- [ ] APCmini mk2 USB-MIDI verified on Pi: visible in `aconnect -l`, sends MIDI events for all buttons and faders (validates revised A8)
+- [ ] **Reaper mixer mapping:** 9 faders mapped to Reaper mixer channels via Reaper's MIDI learn or CSI (Control Surface Integrator). Minimum: vocal mic level, backing track level, IEM mix level, PA master level
+- [ ] **Reaper mixer bidirectional:** Fader positions in Reaper reflected on physical faders (if APCmini mk2 supports motorized feedback — verify; if not, LED indicators for level ranges)
+- [ ] **System control buttons:** Grid buttons reserved for US-036 system management functions (launch Mixxx, launch Reaper, mode switch, view toggle). Button assignments documented
+- [ ] **LED feedback:** Button LEDs indicate system state — which mode is active, which app is running, which view is visible. Color mapping documented
+- [ ] **No MIDI conflicts:** APCmini mk2 is exclusively claimed by the system daemon + Reaper. Mixxx does NOT see or use the APCmini (Hercules only). Verified by checking Mixxx MIDI settings show only Hercules
+- [ ] Mapping/configuration files committed to the project repository
 
 **DoD:**
-- [ ] Working mapping tested on Pi 4B hardware
-- [ ] Lab note documenting the mapping layout and any limitations
-- [ ] CLAUDE.md assumption A8 updated with validation result
+- [ ] APCmini mk2 USB-MIDI verified on Pi hardware
+- [ ] Reaper fader mapping tested with actual audio routing (live mode)
+- [ ] System control buttons tested (requires US-036 daemon)
+- [ ] Lab note documenting: button/fader layout, LED color meanings, MIDI channel assignments, any hardware limitations
+- [ ] CLAUDE.md assumption A8 updated to reflect revised role and validation result
+- [ ] Audio engineer review: Reaper fader mapping covers the right channels for live performance
+- [ ] UX specialist review: button layout is intuitive, LED feedback readable under stage lighting
 
 ---
 
@@ -1690,6 +1712,105 @@ owner uses a MacBook as the primary operator laptop.
 - [ ] Configuration changes documented (wayvnc flags, auth setup, any firewall adjustments)
 - [ ] Lab note documenting: root cause, fix applied, tested client versions (macOS version, Remmina version)
 - [ ] Security specialist review passed
+
+---
+
+## US-036: MIDI Controller System Management — Headless Operation via Hardware Controls
+
+**As** the performer,
+**I want** to launch applications, switch modes, and toggle between views
+entirely from my MIDI controller, without needing a keyboard, mouse, VNC,
+or SSH,
+**so that** the Pi workstation functions as a self-contained appliance during
+setup and performance — I walk up, press buttons, and it works.
+
+**Status:** draft
+**Depends on:** US-007 (APCmini mk2 verified as USB-MIDI and system controller role confirmed), US-021 (mode switching script exists), US-022/TK-063 (D-020 web monitoring dashboard — stats view is a fullscreen kiosk browser showing D-020)
+**Blocks:** none directly, but enables fully headless operation (design principle #6)
+**Decisions:** Architect recommendation (2026-03-10): APCmini mk2 = system control + Reaper mixer (US-007). Hercules = Mixxx DJ only (TK-065). Clean device split.
+
+**Note:** Owner request (2026-03-10, verbatim): "I want to be able to launch
+mixxx (including mode switch) and toggle reaper, stats, mixxx view, all from
+the MIDI controller."
+
+This is a system-level control layer that sits ABOVE individual application
+MIDI mappings. The Hercules controls Mixxx (DJ functions). The APCmini mk2
+is the system controller (architect recommendation, 2026-03-10). This story
+adds a daemon that listens on the APCmini mk2 for system-management commands.
+The APCmini mk2's faders also serve as a Reaper mixer surface (US-007).
+
+**Open questions (require owner clarification before AC are final):**
+1. ~~**Which controller?**~~ RESOLVED: APCmini mk2 is the system controller
+   (architect recommendation, 2026-03-10). Hercules stays DJ-only.
+2. ~~**"Stats" definition**~~ RESOLVED (owner, 2026-03-10): Stats = D-020
+   web monitoring dashboard in a fullscreen kiosk browser (level meters,
+   CamillaDSP load, system health). D-020/TK-063 Stage 1 is a dependency.
+3. **Mode switch safety** — Mode switching involves CamillaDSP restart, which
+   triggers the speaker safety rule (USBStreamer transients through 4x450W
+   amps). Should there be a confirmation mechanism (e.g., hold for 3 seconds,
+   two-button combo) to prevent accidental mode switches?
+4. **Scope of "launch Mixxx"** — Cold start from stopped, or bring to
+   foreground if already running? Does this include the full start-mixxx.sh
+   (D-026 readiness probe, pw-jack wrapper)?
+
+**Note (owner, 2026-03-10):** Detailed UX design (exact button layout, LED
+color assignments, timeout values) is deferred to a separate session. The
+architecture is settled: proxy daemon, dual-mode grid, toggle shift,
+auto-timeout, faders always Reaper. UX details will be refined when the
+APCmini mk2 is physically available for layout experimentation.
+
+**Acceptance criteria (draft — pending owner clarification on questions 3-4):**
+
+*Daemon and grid dual-mode architecture (UX + architect consensus, 2026-03-10):*
+- [ ] Background MIDI daemon running on Pi, exclusively claiming the APCmini mk2 MIDI device
+- [ ] **Dual grid mode:** APCmini mk2 grid buttons operate in two modes, toggled by a dedicated shift button:
+  - **Reaper mode (default):** Grid buttons control Reaper (clip launch, mute, solo, etc.). LED color scheme: green/blue
+  - **System mode (shift toggle):** Grid buttons become system controls (mode switch, app launch, view toggle, stats). LED color scheme: amber/red
+- [ ] **Shift button:** Toggle behavior (press once to enter system mode, press again to return to Reaper mode). NOT momentary hold — system actions require stable state for multi-step operations
+- [ ] **Auto-timeout:** If no system button is pressed within 5-10 seconds of entering system mode, automatically reverts to Reaper mode. Prevents accidental system mode persistence during a show
+- [ ] **Faders always Reaper:** 9 faders are permanently mapped to Reaper mixer channels regardless of grid mode. Fader mapping defined in US-007
+
+*System mode actions (available only when shift is active):*
+- [ ] **Launch Mixxx:** Dedicated grid button triggers `start-mixxx.sh` (includes PipeWire readiness probe per D-026 and pw-jack wrapper per F-021 mitigation). If Mixxx is already running, brings it to foreground
+- [ ] **Launch Reaper:** Dedicated grid button launches Reaper with pw-jack. If already running, brings to foreground
+- [ ] **Mode switch DJ-to-Live:** Dedicated grid button (with safety confirmation mechanism — TBD, see question 3) executes mode switch script (US-021): stop Mixxx, load live.yml, set quantum 256, launch Reaper. **Owner must be warned before CamillaDSP restart per speaker safety rule**
+- [ ] **Mode switch Live-to-DJ:** Dedicated grid button, reverse sequence. Same safety gate
+- [ ] **Toggle stats view:** Dedicated grid button launches or brings to foreground a fullscreen kiosk browser showing the D-020 web monitoring dashboard (level meters, CamillaDSP processing load, system health). Requires D-020/TK-063 Stage 1 to be deployed
+- [ ] **Toggle Mixxx view:** Dedicated grid button switches display to Mixxx window
+- [ ] **Toggle Reaper view:** Dedicated grid button switches display to Reaper window
+
+*LED feedback:*
+- [ ] Grid LEDs clearly distinguish Reaper mode (green/blue) from system mode (amber/red) — the performer must instantly know which mode is active under stage lighting
+- [ ] In system mode, LEDs indicate current system state: which mode is active (DJ/Live), which apps are running, which view is visible
+- [ ] Shift button LED indicates current grid mode (e.g., off = Reaper mode, lit = system mode)
+
+*Infrastructure:*
+- [ ] Daemon starts automatically on boot (systemd user service)
+- [ ] Daemon does not interfere with Mixxx's own MIDI mapping on the Hercules (separate MIDI devices, no conflicts)
+- [ ] APCmini mk2 is exclusively owned by the daemon — Mixxx does NOT see the APCmini (Hercules only per TK-065). Daemon forwards Reaper-mode events to Reaper via OSC or MIDI passthrough
+- [ ] All system actions logged (for debugging)
+- [ ] CPU overhead of daemon < 1% idle
+
+**Safety considerations:**
+- Mode switch involves CamillaDSP restart -> USBStreamer transient risk through 4x450W amplifier chain. Physical safety gate required (confirmation mechanism on controller or mandatory amp-off state). The safety mechanism design is open question 3 — pending owner input
+- Auto-timeout to Reaper mode is a safety feature: prevents accidental system actions if the performer forgets they are in system mode
+- Accidental single button press in system mode should not trigger destructive actions. Mode switch specifically requires a deliberate confirmation gesture (TBD)
+
+**DoD:**
+- [ ] MIDI daemon implemented and running on Pi
+- [ ] Dual grid mode tested: Reaper mode controls Reaper, system mode controls system, shift toggles between them, auto-timeout reverts to Reaper mode
+- [ ] All system actions tested on Pi hardware with physical APCmini mk2
+- [ ] Button mapping documented (which button does what in each mode, LED color meanings)
+- [ ] Safety confirmation mechanism for mode switch reviewed by audio engineer and security specialist
+- [ ] UX specialist review: button layout is intuitive, LED feedback readable under stage lighting, shift toggle and auto-timeout feel natural
+- [ ] Architect review: daemon design, MIDI device routing, Reaper event forwarding, resource usage
+- [ ] Lab note with button layout diagram for both modes and operational workflow
+
+**Relationships to existing stories:**
+- **US-007 (APCmini system controller + Reaper mixer):** US-007 establishes the APCmini as a working USB-MIDI device and maps faders to Reaper. US-036 adds the daemon that implements dual grid mode and system actions. The daemon owns the APCmini exclusively and forwards Reaper-mode grid events to Reaper.
+- **US-021 (Mode switching):** US-036 provides the hardware trigger for US-021's mode switch script. US-021 must be done first (the script must exist before a button can trigger it).
+- **US-022/TK-063 (D-020 web monitoring dashboard):** Stats view is a fullscreen kiosk browser showing D-020. D-020 Stage 1 must be deployed before the stats toggle button works.
+- **US-008-013 (Room correction pipeline, future):** Owner note (2026-03-10): "We will need to think about control for the room correction measurements too, might be along the same avenue." The daemon should be designed to accommodate future measurement control buttons in system mode: start measurement, per-channel progress LEDs, abort, deploy-filters confirmation. Same daemon, same controller, same "one-button" philosophy (design principle #6). No AC changes now — this is a design consideration for the daemon architecture, not a current requirement. When US-012 (end-to-end automation script) is built, measurement control buttons become a natural extension of the system mode grid.
 
 ---
 
