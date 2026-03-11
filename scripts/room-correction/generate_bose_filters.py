@@ -3,10 +3,10 @@
 Generate combined minimum-phase FIR crossover filters for the Bose home speaker config.
 
 Produces 4 WAV files at 16384 taps / 48kHz:
-  - combined_left_hp.wav   — Satellite highpass at 155Hz, 48dB/oct
-  - combined_right_hp.wav  — Satellite highpass at 155Hz, 48dB/oct (identical)
-  - combined_sub1_lp.wav   — Sub lowpass at 155Hz + subsonic HPF at 42Hz, both 48dB/oct
-  - combined_sub2_lp.wav   — Sub lowpass at 155Hz + subsonic HPF at 42Hz (identical)
+  - combined_left_hp.wav   — Satellite highpass at 200Hz, 48dB/oct
+  - combined_right_hp.wav  — Satellite highpass at 200Hz, 48dB/oct (identical)
+  - combined_sub1_lp.wav   — Sub lowpass at 200Hz + subsonic HPF at 42Hz, both 48dB/oct
+  - combined_sub2_lp.wav   — Sub lowpass at 200Hz + subsonic HPF at 42Hz (identical)
 
 All filters are minimum-phase and D-009 compliant (gain <= -0.5dB everywhere).
 No room correction is applied yet — these are crossover-only filters with dirac

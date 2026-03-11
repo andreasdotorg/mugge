@@ -4,8 +4,8 @@ Tests for the Bose home speaker FIR filter generator.
 Verifies:
 - All 4 WAV files are generated
 - All pass D-009 (gain <= -0.5dB)
-- Satellite HP attenuates below 155Hz (gain at 50Hz < -20dB)
-- Sub LP attenuates above 155Hz (gain at 500Hz < -20dB)
+- Satellite HP attenuates below 200Hz (gain at 50Hz < -20dB)
+- Sub LP attenuates above 200Hz (gain at 500Hz < -20dB)
 - Sub filter attenuates below 42Hz (gain at 20Hz < -20dB)
 - All filters are minimum phase (energy concentrated at start)
 """
@@ -98,7 +98,7 @@ class TestSatelliteHighpass:
         "combined_right_hp.wav",
     ])
     def test_attenuates_below_crossover(self, bose_output_dir, filename):
-        """Gain at 50Hz must be < -20dB (well below 155Hz crossover)."""
+        """Gain at 50Hz must be < -20dB (well below 200Hz crossover)."""
         path = os.path.join(bose_output_dir, filename)
         data, sr = load_filter(path)
         freqs, mags = dsp_utils.rfft_magnitude(data)
@@ -139,7 +139,7 @@ class TestSubLowpass:
         "combined_sub2_lp.wav",
     ])
     def test_attenuates_above_crossover(self, bose_output_dir, filename):
-        """Gain at 500Hz must be < -20dB (well above 155Hz crossover)."""
+        """Gain at 500Hz must be < -20dB (well above 200Hz crossover)."""
         path = os.path.join(bose_output_dir, filename)
         data, sr = load_filter(path)
         freqs, mags = dsp_utils.rfft_magnitude(data)
@@ -181,7 +181,7 @@ class TestSubLowpass:
         freqs, mags = dsp_utils.rfft_magnitude(data)
         gains_db = dsp_utils.linear_to_db(mags)
 
-        # Check at 80Hz — between 42Hz subsonic and 155Hz crossover
+        # Check at 80Hz — between 42Hz subsonic and 200Hz crossover
         idx_80hz = np.argmin(np.abs(freqs - 80.0))
         gain_at_80hz = gains_db[idx_80hz]
 
