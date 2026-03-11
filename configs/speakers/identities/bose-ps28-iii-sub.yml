@@ -4,11 +4,12 @@
 # labyrinth (Bose waveguide design). Very low impedance — amp must
 # handle 2.33 ohm.
 #
+# Staggered dual-port design: upper port tuned ~58Hz, lower port ~88Hz.
+# Combined port bandwidth approximately 45-100Hz. Measured via near-field
+# UMIK-1 at 1-2cm per vent, 2026-03-11.
+#
 # The enclosure has a strong resonance peak around 65Hz that needs
 # compensation EQ baked into the FIR filter.
-#
-# Port tuning frequency: estimated 50-60Hz, NEEDS MEASUREMENT via
-# impedance sweep or near-field vent measurement with UMIK-1.
 #
 # Subsonic HPF at 42Hz is MANDATORY — cone excursion rises sharply
 # below port tuning and will exceed Xmax without protection.
@@ -18,13 +19,20 @@ manufacturer: "Bose"
 model: "Panaray System 28 III"
 type: ported
 enclosure_note: "Folded dual-vent labyrinth (Bose waveguide design)"
+port_tuning_hz:
+  upper_port: 58
+  lower_port: 88
+port_tuning_note: >
+  Measured via near-field UMIK-1 at 1-2cm per vent, 2026-03-11.
+  Staggered dual-port design: upper port ~58Hz, lower port ~88Hz.
+  Combined port bandwidth approximately 45-100Hz.
 
 impedance_ohm: 2.33
 sensitivity_db_spl: null
 
 # D-029 gain staging
 max_boost_db: 10
-mandatory_hpf_hz: 42
+mandatory_hpf_hz: 42  # 0.72x upper port tuning (58Hz measured). Standard safety margin.
 
 # Power handling
 max_power_watts: 62
