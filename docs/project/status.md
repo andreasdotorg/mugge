@@ -36,9 +36,11 @@ ahead.
 | User stories | active | 42 stories (US-000 through US-038 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md` |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
-| Room correction pipeline | not started | Stories US-008 through US-013 defined |
+| Room correction pipeline | scripts written | See row above — crossover + spatial averaging modules complete, FIR generator for Bose config, tests passing |
 | Documentation suite | not started | Stories US-014 through US-016 defined |
-| Web UI platform | PoC validated | D-020 PoC: 8/8 PASS (P8 marginal). FastAPI + binary WS PCM + browser FFT + pycamilladsp meters. CPU ~17%, 47.2C. P8 optimization deferred to Stage 2. Lab note: `docs/lab-notes/D-020-poc-validation.md`. |
+| Web UI platform | Stage 1+2 deployed | D-020 production dashboard deployed with 4 real backend collectors (CamillaDSP, PCM, System, PipeWire). HTTPS via self-signed cert (D-032). Spectrum analyzer via browser FFT. 24-channel meter layout. Lab notes: `D-020-poc-validation.md`, `webui-real-data-deployment.md`. |
+| Room correction pipeline | scripts written | `scripts/room-correction/` — crossover, spatial averaging, combine, export, verify modules. FIR filter generator for Bose config (`generate_bose_filters.py`). Tests pass. |
+| Speaker profiles (Bose) | measured | PS28 III sub: port tuning measured (58/88 Hz dual-port), type changed to ported. Jewel Double Cube satellite: near-field measured (peak 339.8 Hz, usable 200Hz-6kHz), crossover moved 155->200 Hz. Lab notes written. |
 | Core software (CamillaDSP, Mixxx, Reaper) | installed | CamillaDSP 3.0.1, Mixxx 2.5.0, Reaper 7.31, wayvnc, Python venv. 7.5G/117G disk. RustDesk removed per D-018. |
 | Platform security | partial | US-000a: firewall active, SSH hardened, services disabled. CamillaDSP systemd service with `-a 127.0.0.1` (F-002 resolved). nfs-blkmap masked (F-011). wayvnc password auth (F-013 partially resolved — TLS needed before US-018 guest devices). RustDesk purged, firewall cleaned (F-014 resolved). |
 | Desktop trimming (US-000b) | done | lightdm disabled, labwc user service, RTKit installed, PipeWire FIFO rtprio 83-88. RAM: 397→302Mi. USBStreamer path fixed (hw:USBStreamer,0). |
@@ -87,7 +89,19 @@ ahead.
 ### Completed (previous sessions)
 - US-000, US-000b, US-001 (16k taps both modes), US-002 (D-011 confirmed), T3e Phases 1-3 (PREEMPT_RT installed + validated), TK-002 (active.yml symlink)
 
-### Completed (this session, 2026-03-10)
+### Completed (this session, 2026-03-12)
+- Web UI dashboard deployed with 4 real backend collectors (CamillaDSP, PCM stream, System, PipeWire). HTTPS self-signed cert. Spectrum analyzer with browser FFT.
+- D-032 filed: Web UI requires HTTPS for AudioWorklet secure context.
+- 8 deployment issues resolved (libjack-pw, AudioWorklet secure context, autoplay policy, pycamilladsp API, pw-top zeros, spectrum signal path, color approach, JACK auto-start). Lab note: `docs/lab-notes/webui-real-data-deployment.md`.
+- Architecture doc (`docs/architecture/web-ui.md`) updated: Section 3 stream table rewritten (3 endpoints + 4 collectors), new Section 12 (HTTPS/D-032), new Section 13 (backend collector architecture).
+- D-031 driver protection documented across `design-rationale.md`, `rt-audio-stack.md`, `enclosure-topologies.md`.
+- Bose PS28 III port tuning measurement: dual-port staggered tuning (58/88 Hz). Lab note: `docs/lab-notes/bose-ps28-iii-port-tuning.md`. Identity updated to `type: ported`.
+- Bose Jewel Double Cube satellite near-field measurement: peak 339.8 Hz, usable 200Hz-6kHz. Lab note: `docs/lab-notes/bose-jewel-double-cube-nearfield.md`. Crossover moved 155->200 Hz.
+- D-029 per-speaker-identity boost budget + mandatory HPF framework filed and implemented.
+- Dashboard review findings (TK-095) persisted into architecture docs: auto-hide rejection, MAIN meters, signal path clarification, SPL metering design.
+- Spectrum visual polish: grid lines, frequency labels, overlay, smoothing adjustments (TK-112 color approach pending).
+
+### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.
 - D-022 filed: PREEMPT_RT with hardware V3D GL -- software rendering no longer required. Supersedes D-021 clauses 2-4.
 - F-012 RESOLVED: V3D ABBA deadlock fixed upstream (commit `09fb2c6f4093`, Melissa Wen / Igalia, merged 2025-10-28). Kernel `6.12.62+rpt-rpi-v8-rt` includes the fix.
@@ -226,3 +240,12 @@ See `docs/project/defects.md` for full details.
 - D-020: Web UI Architecture — FastAPI + raw PCM streaming + browser-side analysis (2026-03-09)
 - D-021: PREEMPT_RT with V3D GPU driver disabled for production — supersedes D-015, reinstates D-013, mitigates F-012/F-017 (2026-03-09)
 - D-022: PREEMPT_RT with hardware V3D GL — software rendering no longer required. Supersedes D-021 clauses 2-4. F-012/F-017 RESOLVED (2026-03-10)
+- D-023: Reproducible Test Protocol — version-controlled state, scripted tests, deploy-and-reboot (2026-03-10)
+- D-024: Testing DoD requires QE approval of both test protocol and execution record (2026-03-10)
+- D-025: Deployment sequencing — one change at a time (2026-03-10)
+- D-026: Mixxx launch script must include PipeWire readiness probe (2026-03-10)
+- D-027: TK-061 libjack alternatives is wont-fix — pw-jack is the permanent solution (2026-03-10)
+- D-028: Preset recall for fixed installations alongside D-008 per-venue measurement (2026-03-11)
+- D-029: D-009 amendment — per-speaker-identity boost budget with compensating global attenuation (2026-03-11)
+- D-031: Mandatory subsonic driver protection in all speaker configurations (2026-03-11)
+- D-032: Web UI requires HTTPS for AudioWorklet secure context — self-signed cert on LAN (2026-03-12)
