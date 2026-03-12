@@ -34,7 +34,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
-| User stories | active | 42 stories (US-000 through US-038 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md` |
+| User stories | active | 47 stories (US-000 through US-043 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039 through US-043): Speaker driver database — owner selected 2026-03-12. |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | done (TK-071) | `scripts/room-correction/` — 13 modules (sweep, deconvolution, correction, crossover, combine, export, verify), mock room simulator, CLI runner, spatial averaging. Bose FIR generator (`generate_bose_filters.py`). All verification tests pass (D-009 compliant). |

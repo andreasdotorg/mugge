@@ -210,14 +210,19 @@ speaker_profile:
 
 ---
 
-## 6. Deferred Work
+## 6. Deferred Work (Partially Active)
 
-Per AD recommendation (accepted by PO and owner), no new user stories will be
-written for speaker management features at this time. This document captures the
-requirements for future story writing when the Tier 1 validation path
-(US-003 stability, TK-039 end-to-end, US-029 DJ UAT) is complete.
+**Update (2026-03-12):** The owner explicitly selected the driver database
+portion of speaker management for parallel execution, overriding the AD's
+previous deferral recommendation. Driver database stories US-039 through US-043
+are now **active** (status: selected). See Tier 5 in `docs/project/user-stories.md`.
 
-The following stories will eventually need to be written:
+The driver database sits at the bottom of the three-layer hierarchy: Driver
+(T/S parameters, US-039) -> Speaker Identity (operational parameters) -> Speaker
+Profile (topology, US-011b). It is a standalone data model with no dependencies
+on Tier 1 completion.
+
+**Remaining deferred work** (unchanged -- still waiting on Tier 1 completion):
 - Speaker identity schema definition and validation
 - Speaker EQ generation (static or parametric)
 - Preset management (store, recall, verify)

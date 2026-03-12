@@ -734,6 +734,14 @@ be defined in a future story. See `docs/project/requirements/speaker-management-
 for the full requirements capture and architect's two-layer schema design.
 Decisions: D-028 (preset recall), D-029 (D-009 boost exception framework).
 
+**Note (2026-03-12):** The driver layer (US-039) sits below this speaker
+profile schema in the three-layer hierarchy: Driver (T/S parameters, US-039)
+-> Speaker Identity (operational parameters) -> Speaker Profile (topology,
+this story). A driver record describes a raw transducer; a speaker identity
+describes how the system uses that transducer operationally; a speaker profile
+defines the topology and channel assignment that references one or more
+speaker identities.
+
 **Acceptance criteria:**
 - [ ] YAML schema defined for speaker profiles with the following fields:
   - `name`: profile identifier (e.g., "2way-80hz-ported", "3way-80-3k")
@@ -2148,6 +2156,250 @@ test filters.
 
 ---
 
+## Tier 5 — Speaker Driver Database
+
+Speaker driver database with Thiele-Small parameters, web scrapers for three
+sources, and a CLI for searching and comparing drivers. This is the bottom
+layer of the three-layer hierarchy: Driver (T/S parameters) -> Speaker Identity
+(operational parameters) -> Speaker Profile (topology, US-011b).
+
+Owner explicitly selected this work for parallel execution (2026-03-12),
+overriding the AD's previous deferral recommendation in
+`docs/project/requirements/speaker-management-requirements.md` Section 6.
+
+---
+
+## US-039: Speaker Driver Database Schema and Storage
+
+**As** the sound engineer and speaker builder,
+**I want** a validated YAML schema for individual speaker drivers that captures
+Thiele-Small parameters, mechanical specifications, enclosure recommendations,
+crossover suitability, and measurement data references,
+**so that** I have a structured, queryable database of driver characteristics
+that feeds into enclosure design, speaker identity creation, and the correction
+pipeline.
+
+**Status:** selected
+**Depends on:** none (standalone data model)
+**Blocks:** US-040 (scraper output format), US-041 (scraper output format), US-042 (scraper output format), US-043 (query target)
+**Decisions:** D-010 (speaker profiles), D-029 (per-speaker boost budget)
+
+**Note:** This is the bottom layer of the three-layer hierarchy: Driver (T/S
+parameters, this story) -> Speaker Identity (operational: HPF, max boost, power
+limit, per `speaker-management-requirements.md`) -> Speaker Profile (topology:
+crossover, channels, monitoring, US-011b). A driver record describes a raw
+transducer; a speaker identity describes how the system uses that transducer
+operationally.
+
+**Schema version:** 1.0. One YAML file per driver at
+`configs/drivers/{id}/driver.yml` with a `data/` subdirectory for raw
+measurement curves.
+
+**Acceptance criteria:**
+- [ ] YAML schema defined with the following top-level sections:
+  - `metadata`: id, manufacturer, model, driver_type (enum: woofer|midrange|tweeter|full-range|subwoofer|coaxial), nominal_diameter_in, actual_diameter_mm, magnet_type, cone_material, surround_material, voice_coil_diameter_mm, weight_kg, mounting (cutout_mm, bolt_circle_mm, depth_mm, flange_mm), datasheet_url, datasheet_file, ts_parameter_source (enum: manufacturer|measured-added-mass|measured-impedance-jig), ts_measurement_date, notes, quantity_owned, serial_numbers, purchase_date, condition
+  - `thiele_small`: fs_hz, qts, qes, qms, vas_liters, cms_m_per_n, xmax_mm, xmech_mm, re_ohm, le_mh, z_nom_ohm, bl_tm, mms_g, mmd_g, sd_cm2, sensitivity_db_1w1m, sensitivity_db_2v83_1m, pe_max_watts, pe_peak_watts, power_handling_note, eta0_percent, vd_cm3, efficiency_bandwidth_product (computed: Fs/Qes)
+  - `enclosure_recommendations`: vb_sealed_liters, f3_sealed_hz, qtc_sealed, vb_ported_liters, fb_ported_hz, f3_ported_hz, actual_enclosure (type, internal_volume_liters, port_tuning_hz, port_dimensions, stuffing, notes)
+  - `crossover_suitability`: usable_low_hz, usable_high_hz, recommended_crossover_low_hz, recommended_crossover_high_hz, acoustic_center_offset_mm, beaming_onset_hz
+  - `measurements`: impedance_curve, frequency_response, nearfield_response, csd (cumulative spectral decay), distortion -- each with source, date, conditions, data_file (path to file in `data/` subdirectory)
+  - `pipeline_integration`: mandatory_hpf_hz, max_boost_db, compensation_eq -- links to speaker identity schema fields
+- [ ] Standard measurement file formats supported: FRD (frequency response), ZMA (impedance), CSV (fallback), WAV (impulse response). Raw curves stored as separate files in `configs/drivers/{id}/data/`, NOT inline YAML
+- [ ] Python validation module that:
+  - Validates a driver YAML file against the schema (required fields present, correct types, enum values valid)
+  - Validates physical consistency: Qts = (Qes * Qms) / (Qes + Qms) within 5% tolerance
+  - Validates Vd = Sd * Xmax within 10% tolerance (if all three provided)
+  - Validates efficiency_bandwidth_product = Fs / Qes within 5% tolerance (if provided)
+  - Warns on missing optional fields that would be useful (e.g., xmech_mm, le_mh)
+  - Validates that referenced data files exist in the `data/` subdirectory
+- [ ] Directory structure: `configs/drivers/{id}/driver.yml` + `configs/drivers/{id}/data/` per driver
+- [ ] At least one example driver record committed (can be manually created or from a scraper)
+- [ ] Schema documented: field descriptions, units, which fields are required vs optional, enum values
+
+**DoD:**
+- [ ] Schema YAML template and documentation written
+- [ ] Python validation module written and syntax-validated (`python -m py_compile`)
+- [ ] Validation module has unit tests: valid driver passes, invalid driver (bad types, missing required fields, inconsistent T/S params) rejected with clear error messages
+- [ ] Example driver record committed and passes validation
+- [ ] Architecture review: architect confirms three-layer hierarchy alignment (Driver -> Speaker Identity -> Speaker Profile)
+
+---
+
+## US-040: loudspeakerdatabase.com Scraper
+
+**As** the sound engineer,
+**I want** a scraper that extracts speaker driver specifications and Thiele-Small
+parameters from loudspeakerdatabase.com and stores them as validated driver
+records in the database,
+**so that** I can populate the driver database from a comprehensive
+community-maintained source without manual data entry.
+
+**Status:** selected
+**Depends on:** US-039 (schema must be defined before scraper can output conforming records)
+**Blocks:** none
+**Decisions:** none
+
+**Note:** loudspeakerdatabase.com is a community-maintained database of speaker
+driver specifications. Scraper must be polite (rate-limited, respects
+robots.txt) and attribute the data source. This is for personal use in a
+private project, not redistribution.
+
+**Acceptance criteria:**
+- [ ] Python scraper script at `scripts/drivers/scrape_loudspeakerdatabase.py`
+- [ ] Scraper accepts command-line arguments: manufacturer filter (optional), driver type filter (optional), output directory (default: `configs/drivers/`)
+- [ ] Scraper extracts all available T/S parameters and maps them to the US-039 schema fields
+- [ ] Scraper sets `metadata.ts_parameter_source` to `"manufacturer"` (or appropriate value based on source page context)
+- [ ] Scraper downloads available frequency response and impedance data files to the driver's `data/` subdirectory (if available on the source)
+- [ ] Each scraped driver record passes the US-039 validation module
+- [ ] Rate limiting: minimum 2-second delay between HTTP requests (configurable)
+- [ ] Respects robots.txt (checks before scraping)
+- [ ] Error handling: logs failures per driver (network error, parse error, missing data) without aborting the entire run; produces a summary report at the end
+- [ ] Idempotent: re-running the scraper for an existing driver updates the record rather than duplicating it (matched by manufacturer + model)
+- [ ] `metadata.datasheet_url` populated with the source page URL for attribution
+
+**DoD:**
+- [ ] Script written and syntax-validated (`python -m py_compile`)
+- [ ] Script runs successfully against at least 5 drivers from different manufacturers
+- [ ] All output records pass US-039 validation
+- [ ] Rate limiting verified (manual inspection of timing or log output)
+- [ ] Requirements documented (Python dependencies needed beyond stdlib + requests/beautifulsoup4)
+
+---
+
+## US-041: soundimports.eu Scraper
+
+**As** the sound engineer,
+**I want** a scraper that extracts speaker driver specifications and Thiele-Small
+parameters from soundimports.eu product pages and stores them as validated
+driver records in the database,
+**so that** I can populate the driver database from a European supplier that
+carries high-quality drivers (Dayton Audio, SB Acoustics, Scan-Speak, etc.)
+with detailed T/S parameter listings.
+
+**Status:** selected
+**Depends on:** US-039 (schema must be defined before scraper can output conforming records)
+**Blocks:** none
+**Decisions:** none
+
+**Note:** soundimports.eu is a European speaker component retailer. Product
+pages typically include T/S parameter tables. Scraper must be polite
+(rate-limited, respects robots.txt). This is for personal use, not
+redistribution.
+
+**Acceptance criteria:**
+- [ ] Python scraper script at `scripts/drivers/scrape_soundimports.py`
+- [ ] Scraper accepts command-line arguments: manufacturer filter (optional), driver type filter (optional), category URL (optional, to scope to a specific product category), output directory (default: `configs/drivers/`)
+- [ ] Scraper extracts T/S parameters from product pages and maps them to the US-039 schema fields
+- [ ] Scraper extracts mechanical specs (diameter, weight, mounting dimensions) where available on the product page
+- [ ] Scraper sets `metadata.ts_parameter_source` to `"manufacturer"`
+- [ ] Scraper downloads available datasheet PDFs to the driver's `data/` subdirectory (if linked on the product page)
+- [ ] Each scraped driver record passes the US-039 validation module
+- [ ] Rate limiting: minimum 2-second delay between HTTP requests (configurable)
+- [ ] Respects robots.txt
+- [ ] Error handling: logs failures per driver without aborting; summary report at end
+- [ ] Idempotent: re-running updates existing records (matched by manufacturer + model)
+- [ ] `metadata.datasheet_url` populated with the product page URL
+
+**DoD:**
+- [ ] Script written and syntax-validated (`python -m py_compile`)
+- [ ] Script runs successfully against at least 5 drivers from different manufacturers
+- [ ] All output records pass US-039 validation
+- [ ] Rate limiting verified
+- [ ] Requirements documented
+
+---
+
+## US-042: parts-express.com Scraper
+
+**As** the sound engineer,
+**I want** a scraper that extracts speaker driver specifications and Thiele-Small
+parameters from parts-express.com product pages and stores them as validated
+driver records in the database,
+**so that** I can populate the driver database from the largest US speaker
+component retailer, which carries Dayton Audio, GRS, and other
+budget-to-mid-range drivers.
+
+**Status:** selected
+**Depends on:** US-039 (schema must be defined before scraper can output conforming records)
+**Blocks:** none
+**Decisions:** none
+
+**Note:** parts-express.com is a major US retailer. Product pages typically
+list T/S parameters in a specifications table. Scraper must be polite
+(rate-limited, respects robots.txt). This is for personal use, not
+redistribution.
+
+**Acceptance criteria:**
+- [ ] Python scraper script at `scripts/drivers/scrape_partsexpress.py`
+- [ ] Scraper accepts command-line arguments: search query (optional), driver type filter (optional), category URL (optional), output directory (default: `configs/drivers/`)
+- [ ] Scraper extracts T/S parameters from product specification tables and maps them to the US-039 schema fields
+- [ ] Scraper extracts mechanical specs (diameter, weight, mounting dimensions) where available
+- [ ] Scraper sets `metadata.ts_parameter_source` to `"manufacturer"`
+- [ ] Scraper downloads available datasheet PDFs and frequency response images to the driver's `data/` subdirectory (if linked on the product page)
+- [ ] Each scraped driver record passes the US-039 validation module
+- [ ] Rate limiting: minimum 2-second delay between HTTP requests (configurable)
+- [ ] Respects robots.txt
+- [ ] Error handling: logs failures per driver without aborting; summary report at end
+- [ ] Idempotent: re-running updates existing records (matched by manufacturer + model)
+- [ ] `metadata.datasheet_url` populated with the product page URL
+
+**DoD:**
+- [ ] Script written and syntax-validated (`python -m py_compile`)
+- [ ] Script runs successfully against at least 5 drivers from different manufacturers/categories
+- [ ] All output records pass US-039 validation
+- [ ] Rate limiting verified
+- [ ] Requirements documented
+
+---
+
+## US-043: Driver Database CLI — Search, Filter, and Compare
+
+**As** the sound engineer and speaker builder,
+**I want** a command-line tool to search, filter, and compare drivers in the
+database by T/S parameters,
+**so that** I can find suitable drivers for enclosure designs, compare candidates
+side-by-side, and make informed component selection decisions without manually
+opening YAML files.
+
+**Status:** selected
+**Depends on:** US-039 (schema), and at least one of US-040/US-041/US-042 (needs data to be useful)
+**Blocks:** none
+**Decisions:** none
+
+**Note:** This tool enables the enclosure design workflow described in
+`docs/theory/enclosure-topologies.md` Section 4.3 (Thiele-Small parameter
+guidance). Key use cases: "show me all woofers with Qts < 0.4 and Vas < 30L
+for a ported sub" or "compare these three 8-inch woofers side by side."
+
+**Acceptance criteria:**
+- [ ] Python CLI script at `scripts/drivers/driver_db.py`
+- [ ] `list` command: lists all drivers in the database (id, manufacturer, model, type, diameter)
+- [ ] `show` command: displays full details for a single driver by id
+- [ ] `search` command with filters:
+  - `--type` (woofer, midrange, tweeter, full-range, subwoofer, coaxial)
+  - `--manufacturer` (substring match, case-insensitive)
+  - `--fs-range` (min-max Hz, e.g., "20-40")
+  - `--qts-range` (min-max, e.g., "0.3-0.5")
+  - `--vas-range` (min-max liters, e.g., "10-50")
+  - `--diameter` (nominal inches, e.g., "8" or "10-12")
+  - `--xmax-min` (minimum Xmax in mm)
+  - `--sensitivity-min` (minimum sensitivity in dB)
+  - Multiple filters combine with AND logic
+- [ ] `compare` command: takes 2+ driver ids, displays a side-by-side table of key T/S parameters (Fs, Qts, Qes, Qms, Vas, Xmax, sensitivity, Re, BL, Sd, Vd, efficiency_bandwidth_product)
+- [ ] `enclosure` command: takes a driver id and suggests sealed and ported alignments using the driver's T/S parameters:
+  - Sealed: computes Qtc for a range of box volumes, highlights Butterworth (Qtc=0.707) and Bessel (Qtc=0.577) alignments with corresponding volume and F3
+  - Ported: computes F3 for a range of tuning frequencies, highlights B4 alignment
+  - Uses formulas from `docs/theory/enclosure-topologies.md` Section 4.3
+- [ ] Output formats: human-readable table (default), JSON (`--json`), CSV (`--csv`)
+- [ ] Handles missing optional fields gracefully (displays "n/a" or omits from calculations with a warning)
+
+**DoD:**
+- [ ] Script written and syntax-validated (`python -m py_compile`)
+- [ ] All commands demonstrated with at least 3 drivers in the database
+- [ ] Enclosure calculations validated against known reference (e.g., manufacturer's recommended enclosure matches computed alignment within 10%)
+- [ ] `--help` output is clear and complete for all commands and options
+
+---
+
 ## Summary — Story Dependency Graph
 
 ```
@@ -2197,4 +2449,9 @@ US-017 + US-028 ──> US-030 (Live Vocal UAT) ───────┤
 US-022/TK-063 ──> US-037 (Playwright test scaffolding) — enables test coverage for all web UI stories
 
 US-022 + US-023 + US-027a + US-035 ──> US-038 (signal flow diagram view)
+
+US-039 (driver schema) ──+──> US-040 (loudspeakerdatabase.com scraper)
+                         +──> US-041 (soundimports.eu scraper)
+                         +──> US-042 (parts-express.com scraper)
+                         +──> US-043 (driver CLI) — also needs data from at least one scraper
 ```
