@@ -337,6 +337,9 @@
 
         pcmWs.onopen = function () {
             pcmConnected = true;
+            // Hide the "click to start" overlay (no longer need user gesture)
+            var overlay = document.getElementById("spectrum-start-overlay");
+            if (overlay) overlay.classList.add("hidden");
         };
 
         pcmWs.onmessage = function (ev) {
