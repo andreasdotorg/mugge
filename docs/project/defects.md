@@ -674,10 +674,10 @@ Required a full reboot to recover.
 **Related:** TK-067 (context where it was discovered). F-023 (same session,
 different issue).
 
-## F-025: Config generator missing subsonic driver protection filter (CRITICAL)
+## F-025: Config generator missing subsonic driver protection filter (RESOLVED)
 
 **Severity:** Critical (risk of mechanical damage to speakers)
-**Status:** Open (fix in progress by CM)
+**Status:** Resolved (TK-107 + TK-108 done, `ac0cbb8`)
 **Found in:** Bose home deployment via config_generator.py (2026-03-11)
 **Affects:** US-011b, all speaker profiles using identities with `mandatory_hpf_hz`
 **Found by:** Team-lead during Bose deployment review

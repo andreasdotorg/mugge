@@ -195,7 +195,7 @@ See `docs/project/defects.md` for full details.
 | F-019 | Medium | Open | US-000b (headless operation) |
 | F-021 | High | Open | TK-039, US-029 (DJ UAT), DJ mode audio routing |
 | F-022 | High | Open | F-021 (triggers ALSA fallback on every reboot) |
-| F-025 | Critical | Open | Speaker protection (config generator missing mandatory HPF) |
+| F-025 | Critical | Resolved | Speaker protection — TK-107 + TK-108 done (`ac0cbb8`) |
 | F-026 | High | Open | TK-114 (spectrum validation), TK-115 (JS FFT pipeline in progress) |
 
 ### Resolved
