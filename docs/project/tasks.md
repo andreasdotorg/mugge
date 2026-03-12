@@ -191,7 +191,7 @@ current and future tasks.
 | TK-130 | Vectorize pink noise generator for RT safety | unassigned | open | TK-126 | Team review finding, 2026-03-12 | **Filed (LOW).** Current Voss-McCartney uses per-sample Python loop in JACK RT callback — may cause xruns on Pi. Needs vectorization or pre-generation. Needs Pi to validate. |
 | TK-131 | Update web-ui.md Sections 5 and 12 for JS FFT architecture | technical-writer | done | TK-115, F-026 | Team review finding, 2026-03-12 | **DONE** (`f0a501d`). web-ui.md Sections 5 and 12 updated for JS FFT architecture — AudioContext/AudioWorklet/AnalyserNode references replaced. |
 | TK-132 | Add mock PCM stream for spectrum display in dev mode | mock-backend-fix worker (#67) | done | D-020 Stage 2 | PO priority session, 2026-03-12 | **DONE** (`fc46c34`). Synthetic multi-tone + pink noise PCM generation, scenario-aware, matching 3-channel float32 format expected by `spectrum.js`. **QE DoD PASS** (`9b8efb1`): 5/5 WebSocket tests, wire format correct. |
-| TK-133 | Add `httpx` to nix shell test dependencies | unassigned | open | standalone | Worker finding (mock-backend-fix #67), 2026-03-12 | **Filed (LOW).** `test_server.py` has a pre-existing failure due to missing `httpx` in nix shell. Same category as QE-F1 (numpy missing from Makefile `install-test-deps`). Fix: add `httpx` to `flake.nix` Python test deps. No Pi needed. |
+| TK-133 | Add `httpx` to nix shell test dependencies | unassigned | done | standalone | Worker finding (mock-backend-fix #67), 2026-03-12 | **DONE** (`b42b2e4`). Added `httpx` to `flake.nix` Python test deps. Verified next time tests run in nix shell. |
 
 ---
 
