@@ -2,15 +2,15 @@
  * D-020 Web UI — FFT spectrum analyzer module (mountain range display).
  *
  * High-resolution FFT display driven by raw PCM data from a binary WebSocket
- * (/ws/pcm). Uses Web Audio API AnalyserNode for 2048-point FFT with
- * Blackman-Harris window, rendered as a filled "mountain range" area with
- * amplitude-based vertical heat palette on a log-frequency x-axis.
+ * (/ws/pcm). Uses a JavaScript radix-2 Cooley-Tukey FFT for 2048-point
+ * analysis with Blackman-Harris window, rendered as a filled "mountain range"
+ * area with amplitude-based vertical heat palette on a log-frequency x-axis.
  *
  * Data flow:
  *   Pi audio -> binary WebSocket /ws/pcm (raw PCM, 3ch float32)
- *     -> AudioContext + AudioWorklet
- *     -> AnalyserNode (2048-point FFT, smoothingTimeConstant 0.5)
- *     -> getFloatFrequencyData() -> Float32Array(1024) in dB
+ *     -> JS accumulator (L+R mono sum at -6dB)
+ *     -> Blackman-Harris window + radix-2 FFT (2048-point, 50% overlap)
+ *     -> magnitude (dB) + exponential smoothing
  *     -> Canvas 2D renderer at requestAnimationFrame rate
  *
  * The log-frequency axis, dB scale, and color palette are designed to be
@@ -88,11 +88,8 @@
     var ctx = null;
     var animFrame = null;
 
-    // Audio pipeline
-    var audioCtx = null;
-    var workletNode = null;
-    var analyser = null;
-    var freqData = null;       // Float32Array(1024) for dB data
+    // FFT data (filled by processFFT)
+    var freqData = null;       // Float32Array(FFT_SIZE/2 + 1) for dB data
 
     // WebSocket
     var pcmWs = null;
@@ -117,6 +114,25 @@
 
     // Legacy 1/3-octave fallback
     var legacyBands = null;
+
+    // =====================================================================
+    // FFT pipeline state
+    // =====================================================================
+
+    // Mono accumulator: L+R summed at -6dB each
+    var accumBuf = new Float32Array(FFT_SIZE);
+    var accumPos = 0;
+
+    // Pre-computed Blackman-Harris window
+    var windowFunc = new Float32Array(FFT_SIZE);
+
+    // FFT working buffers
+    var fftReal = new Float32Array(FFT_SIZE);
+    var fftImag = new Float32Array(FFT_SIZE);
+    var windowed = new Float32Array(FFT_SIZE);
+
+    // Smoothed magnitude in dB
+    var smoothedDB = null; // Float32Array(FFT_SIZE/2 + 1), lazily initialized
 
     // =====================================================================
     // Log-frequency utilities (reusable for TK-109, TK-110)
@@ -198,62 +214,105 @@
     }
 
     // =====================================================================
-    // Audio pipeline setup
+    // Blackman-Harris window (computed once at init)
     // =====================================================================
 
-    function initAudioPipeline() {
-        if (audioCtx) return;
+    function initWindow() {
+        var N = FFT_SIZE;
+        var a0 = 0.35875, a1 = 0.48829, a2 = 0.14128, a3 = 0.01168;
+        for (var i = 0; i < N; i++) {
+            windowFunc[i] = a0
+                - a1 * Math.cos(2 * Math.PI * i / (N - 1))
+                + a2 * Math.cos(4 * Math.PI * i / (N - 1))
+                - a3 * Math.cos(6 * Math.PI * i / (N - 1));
+        }
+    }
 
-        audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-        // Resume synchronously in the user gesture call stack
-        audioCtx.resume();
+    // =====================================================================
+    // Radix-2 Cooley-Tukey FFT (in-place, decimation-in-time)
+    // =====================================================================
 
-        // We use an inline Blob URL for the worklet processor to avoid
-        // cross-origin issues. Alternatively, the separate pcm-worklet.js
-        // file can be served from the same origin.
-        var workletUrl = "/static/js/pcm-worklet.js";
+    function fft(input) {
+        var N = input.length;
+        var halfN = N / 2;
 
-        audioCtx.audioWorklet.addModule(workletUrl).then(function () {
-            workletNode = new AudioWorkletNode(audioCtx, "pcm-feeder", {
-                numberOfInputs: 0,
-                numberOfOutputs: 1,
-                outputChannelCount: [NUM_CHANNELS]
-            });
+        // Copy input to real part, zero imag
+        for (var i = 0; i < N; i++) {
+            fftReal[i] = input[i];
+            fftImag[i] = 0;
+        }
 
-            // Channel splitter -> L+R mono sum -> AnalyserNode
-            var splitter = audioCtx.createChannelSplitter(NUM_CHANNELS);
-            workletNode.connect(splitter);
+        // Bit reversal permutation
+        var j = 0;
+        for (var i = 0; i < N - 1; i++) {
+            if (i < j) {
+                var tr = fftReal[i]; fftReal[i] = fftReal[j]; fftReal[j] = tr;
+                var ti = fftImag[i]; fftImag[i] = fftImag[j]; fftImag[j] = ti;
+            }
+            var k = halfN;
+            while (k <= j) { j -= k; k >>= 1; }
+            j += k;
+        }
 
-            analyser = audioCtx.createAnalyser();
-            analyser.fftSize = FFT_SIZE;
-            analyser.smoothingTimeConstant = ANALYSER_SMOOTHING;
+        // Cooley-Tukey butterflies
+        for (var step = 1; step < N; step <<= 1) {
+            var halfStep = step;
+            var tableStep = Math.PI / halfStep;
+            for (var group = 0; group < halfStep; group++) {
+                var angle = group * tableStep;
+                var wr = Math.cos(angle);
+                var wi = -Math.sin(angle);
+                for (var pair = group; pair < N; pair += step << 1) {
+                    var match = pair + halfStep;
+                    var tr = wr * fftReal[match] - wi * fftImag[match];
+                    var ti = wr * fftImag[match] + wi * fftReal[match];
+                    fftReal[match] = fftReal[pair] - tr;
+                    fftImag[match] = fftImag[pair] - ti;
+                    fftReal[pair] += tr;
+                    fftImag[pair] += ti;
+                }
+            }
+        }
+    }
 
-            // Sum L+R at -6dB each for a proper mono representation
-            var merger = audioCtx.createChannelMerger(1);
-            var gainL = audioCtx.createGain();
-            var gainR = audioCtx.createGain();
-            gainL.gain.value = 0.5;
-            gainR.gain.value = 0.5;
-            splitter.connect(gainL, 0);
-            splitter.connect(gainR, 1);
-            gainL.connect(merger, 0, 0);
-            gainR.connect(merger, 0, 0);
-            merger.connect(analyser);
+    // =====================================================================
+    // FFT processing: window -> FFT -> magnitude dB -> smoothing
+    // =====================================================================
 
-            freqData = new Float32Array(analyser.frequencyBinCount);
+    function processFFT() {
+        // Apply window
+        for (var i = 0; i < FFT_SIZE; i++) {
+            windowed[i] = accumBuf[i] * windowFunc[i];
+        }
 
-            // Keep the audio graph alive by connecting to a muted destination
-            var gain = audioCtx.createGain();
-            gain.gain.value = 0;
-            workletNode.connect(gain);
-            gain.connect(audioCtx.destination);
+        // Run FFT
+        fft(windowed);
 
-            // Now connect the PCM WebSocket
-            connectPcmWebSocket();
-        }).catch(function (err) {
-            // AudioWorklet not supported or module load failed — fall back
-            connectPcmWebSocket();
-        });
+        // Compute magnitude in dB
+        var binCount = FFT_SIZE / 2 + 1;
+        if (!smoothedDB) {
+            smoothedDB = new Float32Array(binCount);
+            for (var i = 0; i < binCount; i++) smoothedDB[i] = DB_MIN;
+        }
+
+        for (var i = 0; i < binCount; i++) {
+            var re = fftReal[i];
+            var im = fftImag[i];
+            var mag = Math.sqrt(re * re + im * im);
+            var db = mag > 0 ? 20 * Math.log10(mag / FFT_SIZE) : DB_MIN;
+            db = Math.max(DB_MIN, Math.min(DB_MAX, db));
+
+            // Exponential smoothing
+            smoothedDB[i] = ANALYSER_SMOOTHING * smoothedDB[i] + (1 - ANALYSER_SMOOTHING) * db;
+        }
+
+        // Update freqData for the renderer
+        if (!freqData || freqData.length !== binCount) {
+            freqData = new Float32Array(binCount);
+        }
+        for (var i = 0; i < binCount; i++) {
+            freqData[i] = smoothedDB[i];
+        }
     }
 
     // =====================================================================
@@ -278,10 +337,6 @@
 
         pcmWs.onopen = function () {
             pcmConnected = true;
-            // Resume AudioContext if suspended (requires user gesture first)
-            if (audioCtx && audioCtx.state === "suspended") {
-                audioCtx.resume();
-            }
         };
 
         pcmWs.onmessage = function (ev) {
@@ -289,8 +344,20 @@
             if (data.byteLength < 4) return;
             // Skip 4-byte header (frame count LE uint32)
             var pcm = new Float32Array(data, 4);
-            if (workletNode) {
-                workletNode.port.postMessage(pcm, [pcm.buffer]);
+            var frames = pcm.length / NUM_CHANNELS;
+
+            for (var i = 0; i < frames; i++) {
+                // Sum L (ch0) + R (ch1) at -6dB each for mono
+                var mono = 0.5 * pcm[i * NUM_CHANNELS] + 0.5 * pcm[i * NUM_CHANNELS + 1];
+                accumBuf[accumPos] = mono;
+                accumPos++;
+
+                if (accumPos >= FFT_SIZE) {
+                    processFFT();
+                    // 50% overlap: keep last half
+                    accumBuf.copyWithin(0, FFT_SIZE / 2);
+                    accumPos = FFT_SIZE / 2;
+                }
             }
         };
 
@@ -416,9 +483,7 @@
     }
 
     function drawMountainRange(now) {
-        if (!freqData || !analyser || !freqLUT) return;
-
-        analyser.getFloatFrequencyData(freqData);
+        if (!freqData || !freqLUT) return;
 
         var lutLen = freqLUT.length;
         if (lutLen <= 0) return;
@@ -512,38 +577,13 @@
 
         drawBackground();
 
-        if (analyser && pcmConnected) {
+        if (freqData && pcmConnected) {
             drawMountainRange(now);
         } else {
             drawNoSignalMessage();
         }
 
         animFrame = requestAnimationFrame(render);
-    }
-
-    // =====================================================================
-    // User gesture handling for AudioContext
-    // =====================================================================
-
-    var gestureHandled = false;
-    var startOverlay = null;
-
-    function hideOverlay() {
-        if (startOverlay) {
-            startOverlay.classList.add("hidden");
-        }
-    }
-
-    function handleUserGesture() {
-        if (gestureHandled) return;
-        gestureHandled = true;
-
-        initAudioPipeline();
-        hideOverlay();
-
-        document.removeEventListener("click", handleUserGesture);
-        document.removeEventListener("touchstart", handleUserGesture);
-        document.removeEventListener("keydown", handleUserGesture);
     }
 
     // =====================================================================
@@ -563,20 +603,11 @@
             cachedH = 0;
         });
 
-        // Overlay click-to-start
-        startOverlay = document.getElementById("spectrum-start-overlay");
-        if (audioCtx && audioCtx.state === "running") {
-            hideOverlay();
-        } else if (startOverlay) {
-            startOverlay.addEventListener("click", function () {
-                handleUserGesture();
-            });
-        }
+        // Initialize Blackman-Harris window coefficients
+        initWindow();
 
-        // Listen for user gesture to start AudioContext (fallback)
-        document.addEventListener("click", handleUserGesture);
-        document.addEventListener("touchstart", handleUserGesture);
-        document.addEventListener("keydown", handleUserGesture);
+        // Connect WebSocket immediately (no user gesture required)
+        connectPcmWebSocket();
 
         render();
     }
@@ -603,13 +634,9 @@
             clearTimeout(pcmReconnectTimer);
             pcmReconnectTimer = null;
         }
-        if (audioCtx) {
-            audioCtx.close();
-            audioCtx = null;
-        }
-        analyser = null;
-        workletNode = null;
         freqData = null;
+        smoothedDB = null;
+        accumPos = 0;
     }
 
     // =====================================================================
