@@ -24,3 +24,4 @@ result-*
 
 # Project-specific
 data/US-003/T3e/cyclictest_output.txt
+scripts/room-correction/output/
