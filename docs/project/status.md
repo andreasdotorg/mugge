@@ -201,6 +201,7 @@ See `docs/project/defects.md` for full details.
 | F-022 | High | Open | F-021 (triggers ALSA fallback on every reboot) |
 | F-025 | Critical | Resolved | Speaker protection — TK-107 + TK-108 done (`ac0cbb8`) |
 | F-026 | High | Open | TK-114 (spectrum validation), TK-115 (JS FFT pipeline in progress) |
+| F-030 | High | Open | D-020 (web UI), US-029 (DJ UAT). Workaround: stop web UI service. |
 
 ### Resolved
 

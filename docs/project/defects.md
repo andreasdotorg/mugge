@@ -892,3 +892,37 @@ readings for the same signal. Undermines trust in metering accuracy.
 
 **Related:** TK-095 (meter spec). Files: `scripts/web-ui/static/js/dashboard.js`,
 `scripts/web-ui/templates/index.html`.
+
+---
+
+## F-030: Web UI monitor JACK client causes xruns under DJ load (OPEN)
+
+**Severity:** High (audible xruns during DJ sets)
+**Status:** Open (workaround available)
+**Found in:** DJ mode testing with web UI service active, 2026-03-12
+**Affects:** D-020 (web UI), US-029 (DJ UAT), operational reliability
+**Found by:** Xrun diagnostic during DJ load testing, 2026-03-12
+
+**Description:** The web UI service's `webui-monitor` participates in the
+PipeWire audio graph as a JACK client. Under Mixxx DJ load, it accumulates
+errors at approximately 110/minute (1,327 errors in 12 minutes), cascading
+xruns through to CamillaDSP. The web UI also consumes approximately 14% CPU.
+
+**Root cause:** `webui-monitor` runs at SCHED_OTHER (non-RT scheduling) and
+cannot keep up with the PipeWire graph's real-time deadlines under high CPU
+load. As a JACK client in the graph, it blocks the entire audio pipeline when
+it misses its deadline.
+
+**Workaround:** Stop the web UI service:
+`systemctl --user stop pi4-audio-webui`. Service remains enabled and will
+restart on next reboot.
+
+**Fix needed:** Redesign `webui-monitor` to use out-of-band monitoring instead
+of being an active node in the real-time PipeWire audio graph. Options:
+- Poll CamillaDSP websocket API for levels (already used by other collectors)
+- Use `pw-top` snapshots for PipeWire graph state
+- Read from PipeWire monitor ports outside the critical audio path
+
+**Related:** D-020 (web UI architecture), P8 finding from PoC validation (JACK
+callback 871us, target <500us — `D-020-poc-validation.md`). TW flagged this
+connection in S-005 lab note.
