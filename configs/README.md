@@ -17,6 +17,7 @@ Deployed to the Pi at `/etc/camilladsp/`.
 |------|-------------|
 | `dj-pa.yml` | DJ/PA mode. Chunksize 2048, 16k-tap FIR on 4 speaker channels, passthrough on 4 monitor channels. |
 | `live.yml` | Live vocal mode. Chunksize 256, same FIR processing, lower latency for the singer IEM path. |
+| `bose-home.yml` | Bose PS28 III home/office configuration. 4-channel output: 2 Jewel Double Cube satellites + 2 isobaric sub drivers (clamshell, inverted polarity on driver 2). |
 
 ### Test (`camilladsp/test/`)
 
@@ -146,3 +147,63 @@ Deployed to the Pi at `~/.config/xdg-desktop-portal-wlr/`.
 | File | Description |
 |------|-------------|
 | `config` | Screen share auto-approve for headless operation. Skips the interactive chooser dialog (`chooser_type = none`) and targets the `NOOP-fallback` virtual output. |
+
+---
+
+## MIDI (`midi/`)
+
+MIDI controller mappings used by the MIDI system controller daemon
+(`scripts/midi/midi-system-controller.py`).
+
+| File | Description |
+|------|-------------|
+| `apcmini-mk2.yml` | APCmini mk2 button and fader mapping: pad colors, mode assignments, fader ranges. |
+
+---
+
+## Mixxx (`mixxx/`)
+
+Mixxx DJ software configuration and controller mappings. Deployed to the Pi at
+`~/.mixxx/` (Mixxx 2.5) or `~/.local/share/mixxx/` (future versions).
+
+| File / Directory | Description |
+|------------------|-------------|
+| `soundconfig.xml` | Mixxx audio routing configuration (PipeWire JACK outputs). |
+| `controllers/Hercules DJControl MIX Ultra.midi.xml` | Hercules DJControl Mix Ultra MIDI mapping for Mixxx. |
+| `controllers/Hercules-DJControl-MIX-Ultra-scripts.js` | Hercules controller JavaScript callback scripts. |
+| `controllers/djercula-inputmap-reference.py` | Reference script for Hercules input mapping analysis. |
+
+---
+
+## Room correction (`room-correction/`)
+
+Room correction profile templates and venue configuration.
+
+| File | Description |
+|------|-------------|
+| `default_profile.yml` | Default room correction profile (target curve, smoothing, regularization parameters). |
+| `venue_template.yml` | Template for per-venue measurement and correction settings. |
+
+---
+
+## Speakers (`speakers/`)
+
+Speaker identity files (driver parameters, enclosure characteristics) and system
+profiles (complete speaker system configurations for CamillaDSP filter generation).
+
+### Identity files (`speakers/identities/`)
+
+| File | Description |
+|------|-------------|
+| `bose-jewel-double-cube.yml` | Bose Jewel Double Cube satellite driver parameters. |
+| `bose-ps28-iii-sub.yml` | Bose PS28 III subwoofer driver parameters (5.25" isobaric). |
+| `sub-custom-15.yml` | Custom 15" subwoofer driver parameters. |
+| `wideband-selfbuilt-v1.yml` | Self-built wideband speaker driver parameters. |
+
+### System profiles (`speakers/profiles/`)
+
+| File | Description |
+|------|-------------|
+| `2way-80hz-ported.yml` | 2-way system profile: 80Hz crossover, ported subwoofer enclosure. |
+| `2way-80hz-sealed.yml` | 2-way system profile: 80Hz crossover, sealed subwoofer enclosure. |
+| `bose-home.yml` | Bose PS28 III home system profile (satellites + isobaric sub). |

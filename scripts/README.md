@@ -78,7 +78,7 @@ testing.
 
 | Script | Purpose | Requirements |
 |--------|---------|--------------|
-| `jack-tone-generator.py` | JACK callback-based sine tone generator. Registers 8 output ports, outputs tone on ch 1+2 (L/R mains), silence on ch 3-8. Detects JACK xruns and callback gaps. Auto-connects to `loopback-8ch-sink`. | venv with `numpy`, `jack` (JACK client library) |
+| `jack-tone-generator.py` | JACK callback-based tone/noise generator. Supports sine, white noise, pink noise, and log sweep waveforms. Registers 8 output ports, configurable channel selection (default ch 1+2). Detects JACK xruns and callback gaps. Auto-connects to `loopback-8ch-sink`. | venv with `numpy`, `jack` (JACK client library) |
 | `monitor-camilladsp.py` | CamillaDSP websocket state monitor. Polls state, processing load, buffer level, clipping, and rate adjust. Detects anomalies: frozen buffer (stalls), load > 85%, state changes, clipping. Outputs JSON summary. | venv with `pycamilladsp` |
 
 **Usage:**
@@ -91,8 +91,13 @@ python3 scripts/test/monitor-camilladsp.py --duration 30 --output-json results.j
 
 `jack-tone-generator.py` options:
 - `--duration` — test duration in seconds (default: 30)
-- `--frequency` — tone frequency in Hz (default: 1000)
+- `--continuous` — run until Ctrl+C (overrides --duration)
+- `--waveform` — signal type: `sine`, `white`, `pink`, `sweep` (default: `sine`)
+- `--frequency` — tone frequency in Hz (default: 1000, sine only)
 - `--amplitude` — amplitude, 0.0-1.0 (default: 0.063 = -24dBFS)
+- `--channels` — comma-separated output channels (default: `1,2`)
+- `--sweep-start` — sweep start frequency in Hz (default: 20)
+- `--sweep-end` — sweep end frequency in Hz (default: 20000)
 - `--connect-to` — JACK sink name to auto-connect (default: `CamillaDSP 8ch Input`)
 
 `monitor-camilladsp.py` options:
@@ -103,6 +108,20 @@ python3 scripts/test/monitor-camilladsp.py --duration 30 --output-json results.j
 - `--output-json` — write JSON summary to file (optional)
 
 Both scripts exit with code 0 on PASS, non-zero on FAIL.
+
+### End-to-end validation
+
+| Script | Purpose | Requirements |
+|--------|---------|--------------|
+| `tk039-audio-validation.sh` | End-to-end audio validation for TK-039. Validates that Mixxx (DJ mode) and Reaper (Live mode) produce correctly routed audio through CamillaDSP to the USBStreamer, with zero xruns and correct signal levels. | CamillaDSP + PipeWire running, deploy.sh completed |
+
+**Usage:**
+
+```bash
+./scripts/test/tk039-audio-validation.sh --phase dj      # DJ mode only
+./scripts/test/tk039-audio-validation.sh --phase live     # Live mode only
+./scripts/test/tk039-audio-validation.sh --phase both     # Both modes
+```
 
 ### Legacy / exploratory (kept for reference)
 
@@ -163,6 +182,70 @@ Stability and monitoring scripts for US-003 long-duration tests.
 ```bash
 ./scripts/stability/deploy-to-pi.sh         # copies scripts + configs to Pi
 ```
+
+---
+
+## scripts/deploy/
+
+Deployment and system configuration scripts.
+
+| Script | Purpose | Requirements |
+|--------|---------|--------------|
+| `deploy.sh` | Main deployment script: copies versioned configs, scripts, and systemd units to the Pi. | SSH access to Pi |
+| `configure-libjack-alternatives.sh` | Configures Debian alternatives to select the correct libjack library (PipeWire JACK vs native JACK). | Root on Pi |
+
+---
+
+## scripts/launch/
+
+Application launch scripts.
+
+| Script | Purpose | Requirements |
+|--------|---------|--------------|
+| `start-mixxx.sh` | Launch Mixxx with correct environment and PipeWire JACK bridge. | Mixxx installed, PipeWire running |
+
+---
+
+## scripts/midi/
+
+MIDI system controller daemon for the APCmini mk2.
+
+| Script | Purpose | Requirements |
+|--------|---------|--------------|
+| `midi-system-controller.py` | MIDI daemon that maps APCmini mk2 buttons and faders to system actions (mode switching, volume control, transport). | venv with `mido`, `python-rtmidi` |
+| `test_midi_daemon.py` | Test suite for the MIDI daemon. | venv with `pytest` |
+
+See `scripts/midi/README.md` for configuration and usage details.
+
+---
+
+## scripts/room-correction/
+
+Automated room correction pipeline: measurement, analysis, and FIR filter generation.
+
+| Script | Purpose | Requirements |
+|--------|---------|--------------|
+| `runner.py` | Pipeline orchestrator: runs measurement, analysis, and filter generation in sequence. | venv with scipy, numpy, soundfile |
+| `analyze_measurement.py` | Analyzes captured impulse responses and computes correction targets. | venv with scipy, numpy |
+| `config_generator.py` | Generates CamillaDSP YAML configs from correction results. | venv |
+| `generate_bose_filters.py` | Generates FIR filters for the Bose PS28 III home system. | venv with scipy, numpy |
+
+---
+
+## scripts/web-ui/
+
+Real-time monitoring web UI (FastAPI backend + JavaScript frontend).
+
+The web UI provides a live dashboard with spectrum analysis, level meters, and
+CamillaDSP health monitoring over the local network. See `scripts/web-ui/README.md`
+for architecture and deployment details.
+
+| Entry point | Purpose | Requirements |
+|-------------|---------|--------------|
+| `app/` | FastAPI application (backend collectors, WebSocket endpoints) | venv with fastapi, uvicorn, pycamilladsp |
+| `static/` | Frontend assets (HTML, CSS, JavaScript including JS FFT spectrum renderer) | Served by FastAPI |
+| `Makefile` | Build and deploy targets | make |
+| `test_server.py`, `test_collectors.py`, `tests/` | Backend test suites | venv with pytest |
 
 ---
 

@@ -181,10 +181,13 @@ vocalist targets approximately 21 milliseconds at the D-011 parameters --
 within the range where a singer can perform comfortably. Stability testing
 under sustained load is in progress.
 
-The next major milestone is the automated room correction pipeline: arrive at
-a venue, set up speakers, place the measurement microphone, press one button,
-and have the system measure the room, compute correction filters, and deploy
-them -- ready to perform.
+Current work focuses on the automated room correction pipeline and the
+real-time monitoring web UI. The room correction pipeline will automate the
+arrive-at-venue workflow: set up speakers, place the measurement microphone,
+press one button, and have the system measure the room, compute correction
+filters, and deploy them -- ready to perform. The web UI provides a live
+dashboard with spectrum analysis, level meters, and CamillaDSP health
+monitoring over the local network.
 
 For detailed progress, see [docs/project/status.md](docs/project/status.md).
 
@@ -195,11 +198,24 @@ SETUP-MANUAL.md              Comprehensive setup manual (~2200 lines)
 scripts/                     Automation scripts (see scripts/README.md)
   test/                      Benchmark and latency measurement scripts
   stability/                 Long-running stability test scripts
+  deploy/                    Deployment scripts (deploy.sh, libjack alternatives)
+  launch/                    Application launch scripts (start-mixxx.sh)
+  midi/                      MIDI system controller daemon and tests
+  room-correction/           Automated room correction pipeline
+  web-ui/                    Monitoring web UI application (FastAPI + JS)
 configs/                     All configuration files (see configs/README.md)
-  camilladsp/production/     Live and DJ mode CamillaDSP configs
+  camilladsp/production/     Live, DJ, and Bose home CamillaDSP configs
   camilladsp/test/           Benchmark and test CamillaDSP configs
   pipewire/                  PipeWire audio server configuration
   wireplumber/               WirePlumber routing rules
+  midi/                      MIDI controller mappings (APCmini mk2)
+  mixxx/                     Mixxx DJ software config and controller mappings
+  room-correction/           Room correction profiles and venue templates
+  speakers/                  Speaker identity files and system profiles
+  systemd/                   systemd service overrides (CamillaDSP, labwc)
+  labwc/                     labwc Wayland compositor configuration
+  wayvnc/                    wayvnc remote desktop configuration
+  xdg-desktop-portal-wlr/   Screen share auto-approve for headless operation
 results/                     Processed test results (see results/README.md)
   benchmarks/                US-001 CPU benchmark results
   latency/                   US-002 latency measurement results
@@ -207,11 +223,14 @@ data/                        Raw test data (see data/README.md)
   US-003/T3b/                Live mode stability test data
   US-003/T3c/                Informational stability test data
   US-003/T3e/                PREEMPT_RT validation data
+patches/                     Kernel patches (V3D DMA fence deadlock fix)
+poc/                         Proof-of-concept prototypes (web UI PoC)
 docs/
   guide/introduction.md      Documentation entry point and navigation map
   guide/howto/               Step-by-step operational procedures
   architecture/              System architecture (RT audio stack, web UI)
   theory/                    Design rationale, enclosure topologies, Zynq exploration
+  design-reference/          External reference material (minimeters)
   project/                   Status, decisions, user stories, task register
   lab-notes/                 Experiment logs with raw data and exact commands
 ```
