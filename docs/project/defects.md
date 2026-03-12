@@ -779,3 +779,38 @@ Browser-side only change. No server/backend modifications needed.
 **Related:** TK-099 (spectrum module), TK-112 (amplitude coloring), TK-114 (blocked
 by this defect), TK-115 (fix task). Files: `scripts/web-ui/static/js/pcm-worklet.js`,
 `scripts/web-ui/static/js/spectrum.js`.
+
+## F-027: DSP load bar on dashboard health bar broken (OPEN)
+
+**Severity:** Medium (visual-only, does not affect audio)
+**Status:** Open
+**Found in:** Dashboard health bar on Pi, 2026-03-12
+**Affects:** TK-095 (health bar inline gauges), TK-063 (dashboard)
+**Found by:** Owner during dashboard review
+
+**Description:** The DSP load bar in the dashboard health bar status line is broken.
+The health bar was specified in TK-095 to include inline 48x10px gauge bars for CPU,
+temperature, memory, and DSP load. The DSP load bar is not rendering correctly on the
+deployed dashboard.
+
+**Likely root cause:** TBD. Possible causes: (1) CamillaDSP collector not providing
+DSP load data in the expected format. (2) pycamilladsp 3.0.0 API change affecting
+the load metric retrieval (similar to the `.get_signal_levels()` enum change fixed
+in `6497f83`). (3) Health bar rendering code not handling the DSP load value correctly.
+(4) WebSocket message format mismatch between collector and frontend.
+
+**Impact:** Dashboard does not show DSP load — an important operational metric for
+monitoring CamillaDSP CPU usage during live performance. Operator cannot see if DSP
+processing is approaching its CPU budget limit.
+
+**Fix required:**
+1. Diagnose whether the issue is backend (collector not sending data) or frontend
+   (renderer not displaying it)
+2. Check pycamilladsp `.get_processing_load()` or equivalent API
+3. Fix the broken rendering or data path
+4. Verify on Pi with CamillaDSP running
+
+**Related:** TK-095 (health bar spec), TK-116 (health bar clustering — may have
+affected load bar position), TK-063 (dashboard). Files:
+`scripts/web-ui/app/collectors/`, `scripts/web-ui/static/js/dashboard.js`,
+`scripts/web-ui/templates/index.html`.
