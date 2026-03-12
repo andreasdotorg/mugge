@@ -318,7 +318,7 @@
         PiAudio.setText("sys-cdsp-state", cdsp.state,
             cdspRunning ? "c-green" : "c-red");
         PiAudio.setText("sys-cdsp-load",
-            (cdsp.processing_load * 100).toFixed(1) + "%");
+            cdsp.processing_load.toFixed(1) + "%");
         PiAudio.setText("sys-cdsp-buffer", String(cdsp.buffer_level));
         PiAudio.setText("sys-cdsp-rate-adj", cdsp.rate_adjust.toFixed(6));
         PiAudio.setText("sys-cdsp-clipped", String(cdsp.clipped_samples),
