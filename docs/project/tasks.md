@@ -198,6 +198,7 @@ current and future tasks.
 | TK-137 | Rename `measure_latency.py` to `measure_latency_pipewire.py` | repo-hygiene-cleanup worker (#72) | done | standalone | QE repo hygiene assessment H-12, 2026-03-12 | **DONE** (`d008dfa`). Script renamed. |
 | TK-138 | Add `packages.mixxx = pkgs.mixxx` to flake.nix (D-033 Stage 1) | flake-mixxx worker (#73) | done | D-033, TK-066 | Architect proposal, 2026-03-12 | **DONE** (`f9e8df5`). Mixxx 2.5.4 + Qt 6.10.2 available via `nix build .#mixxx`. Unblocks TK-139 (Pi validation). |
 | TK-139 | Test Nix-built Mixxx 2.5.4 on Pi (D-033 Stage 1 validation) | unassigned | blocked | D-033, TK-138 | Architect proposal, 2026-03-12 | **Filed (HIGH).** Validate Nix-built Mixxx 2.5.4 on Pi: Wayland integration, PipeWire audio, controller input, CPU usage, VSync visibility throttling. TK-138 done — now blocked on Pi access only. |
+| TK-140 | Persist nftables port 8080 rule for web UI access | unassigned | open | D-020, US-000a | Status.md TODO + security specialist approval, 2026-03-12 | **Filed (MEDIUM).** Add `tcp dport 8080 accept` to nftables persistent config on Pi. Currently runtime-only (lost on reboot). Security specialist approved — no source-IP restriction needed; HTTPS + role-based auth is stronger than already-open VNC on 5900. Prerequisite for web UI access from phones/tablets during shows. **Pi deploy queue.** Needs Pi. |
 
 ---
 

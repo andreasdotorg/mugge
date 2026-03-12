@@ -102,6 +102,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - TK-126 DONE: Tone generator (`jack-tone-generator.py`) enhanced with `--continuous`, `--waveform {sine,white,pink,sweep}`, `--channels` (`6a66254`). Backward-compatible.
 - Spectrum Playwright investigation: No bug — spectrum works correctly, was empty due to no audio signal playing.
 - TK-124/TK-125 web UI fixes committed but NOT YET DEPLOYED to Pi (Pi offline until tonight). Deploy next session.
+- User journeys document (`docs/user-journeys.md`) committed (`81046f2`). 10 operational flow user journeys, 1259 lines. 5 `[TODO: AE input needed]` placeholders remain — AE providing answers.
 
 ### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.
@@ -154,7 +155,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - ~~Quantum reduction testing on RT~~ COMPLETE: quantum 128 CATASTROPHIC FAIL (1750 xruns), D-011 confirmed
 - ~~Deploy and test D-020 PoC on Pi~~ DONE (8/8 PASS, P8 marginal. Lab note: `docs/lab-notes/D-020-poc-validation.md`)
 - D-020 P8 optimization: JACK callback 871us -> target <500us (deferred to Stage 2 per PO priority)
-- Persist nftables port 8080 rule for PoC web UI (runtime-only, lost on reboot)
+- Persist nftables port 8080 rule for web UI (runtime-only, lost on reboot) — **security specialist approved** (no source-IP restriction). TK-140 filed, Pi deploy queue.
 - Fix poc/requirements.txt: camilladsp package needs GitHub URL, not PyPI
 - ~~F-012/F-017 V3D GPU deadlock on RT~~ RESOLVED (D-022): Upstream fix in `6.12.62+rpt-rpi-v8-rt`. No workaround needed. No V3D blacklist, no pixman, no llvmpipe.
 - ~~D-013 revision~~ DONE: PREEMPT_RT + hardware GL confirmed viable (D-022). D-021 software rendering clauses superseded.
