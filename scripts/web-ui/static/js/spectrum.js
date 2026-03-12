@@ -4,7 +4,7 @@
  * High-resolution FFT display driven by raw PCM data from a binary WebSocket
  * (/ws/pcm). Uses Web Audio API AnalyserNode for 2048-point FFT with
  * Blackman-Harris window, rendered as a filled "mountain range" area with
- * per-frequency heat palette on a log-frequency x-axis.
+ * amplitude-based vertical heat palette on a log-frequency x-axis.
  *
  * Data flow:
  *   Pi audio -> binary WebSocket /ws/pcm (raw PCM, 3ch float32)
@@ -63,18 +63,11 @@
         { freq: 20000, text: "20k" }
     ];
 
-    // Heat palette color stops (per-frequency)
-    var COLOR_STOPS = [
-        { freq: 30,    color: "rgba(155, 89, 182, 0.7)" },
-        { freq: 100,   color: "rgba(192, 64, 200, 0.7)" },
-        { freq: 300,   color: "rgba(230, 74, 25, 0.7)" },
-        { freq: 1000,  color: "rgba(226, 166, 57, 0.7)" },
-        { freq: 3000,  color: "rgba(226, 192, 57, 0.7)" },
-        { freq: 10000, color: "rgba(200, 205, 214, 0.7)" },
-        { freq: 20000, color: "rgba(138, 148, 164, 0.7)" }
-    ];
+    // Legacy frequency-based color stops (replaced by amplitude-based vertical
+    // gradient in buildGradient). Retained for export backward compatibility.
+    var COLOR_STOPS = null;
 
-    var OUTLINE_STYLE = "rgba(200, 205, 214, 0.6)";
+    var OUTLINE_STYLE = "rgba(220, 220, 240, 0.7)";
     var OUTLINE_WIDTH = 1.5;
     var BG_COLOR = "#0c0e12";
     var GRID_COLOR = "rgba(200, 205, 214, 0.08)";
@@ -189,14 +182,18 @@
     // Gradient cache
     // =====================================================================
 
-    function buildGradient(width) {
-        if (!ctx || width <= 0) return null;
-        var grad = ctx.createLinearGradient(plotX, 0, plotX + width, 0);
-        for (var i = 0; i < COLOR_STOPS.length; i++) {
-            var stop = freqToNorm(COLOR_STOPS[i].freq);
-            stop = Math.max(0, Math.min(1, stop));
-            grad.addColorStop(stop, COLOR_STOPS[i].color);
-        }
+    function buildGradient() {
+        if (!ctx || plotH <= 0) return null;
+        var grad = ctx.createLinearGradient(0, plotY + plotH, 0, plotY);
+        // bottom (-60dB) to top (0dB): cool indigo -> hot white
+        grad.addColorStop(0.00, "rgba(30, 20, 60, 0.8)");      // -60 dB: deep indigo
+        grad.addColorStop(0.15, "rgba(80, 40, 120, 0.8)");     // -51 dB: dark purple
+        grad.addColorStop(0.30, "rgba(140, 50, 160, 0.8)");    // -42 dB: magenta
+        grad.addColorStop(0.50, "rgba(220, 80, 40, 0.8)");     // -30 dB: red-orange
+        grad.addColorStop(0.65, "rgba(226, 166, 57, 0.8)");    // -21 dB: amber
+        grad.addColorStop(0.80, "rgba(230, 210, 60, 0.8)");    // -12 dB: yellow
+        grad.addColorStop(0.92, "rgba(255, 240, 180, 0.9)");   // -5 dB: warm white
+        grad.addColorStop(1.00, "rgba(255, 255, 255, 0.95)");  //  0 dB: near-white
         return grad;
     }
 
@@ -223,15 +220,25 @@
                 outputChannelCount: [NUM_CHANNELS]
             });
 
-            // Channel splitter -> single AnalyserNode on channel 0 (L Main)
-            // For the spectrum display we only need one channel.
+            // Channel splitter -> L+R mono sum -> AnalyserNode
             var splitter = audioCtx.createChannelSplitter(NUM_CHANNELS);
             workletNode.connect(splitter);
 
             analyser = audioCtx.createAnalyser();
             analyser.fftSize = FFT_SIZE;
             analyser.smoothingTimeConstant = ANALYSER_SMOOTHING;
-            splitter.connect(analyser, 0);
+
+            // Sum L+R at -6dB each for a proper mono representation
+            var merger = audioCtx.createChannelMerger(1);
+            var gainL = audioCtx.createGain();
+            var gainR = audioCtx.createGain();
+            gainL.gain.value = 0.5;
+            gainR.gain.value = 0.5;
+            splitter.connect(gainL, 0);
+            splitter.connect(gainR, 1);
+            gainL.connect(merger, 0, 0);
+            gainR.connect(merger, 0, 0);
+            merger.connect(analyser);
 
             freqData = new Float32Array(analyser.frequencyBinCount);
 
@@ -337,7 +344,7 @@
 
         if (plotW > 0) {
             buildFreqLUT(Math.floor(plotW));
-            cachedGradient = buildGradient(Math.floor(plotW));
+            cachedGradient = buildGradient();
 
             // Reset peak hold state on resize
             peakEnvelope = new Float32Array(Math.floor(plotW));
