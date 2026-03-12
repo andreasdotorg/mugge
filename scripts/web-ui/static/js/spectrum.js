@@ -77,11 +77,11 @@
     var OUTLINE_STYLE = "rgba(200, 205, 214, 0.6)";
     var OUTLINE_WIDTH = 1.5;
     var BG_COLOR = "#0c0e12";
-    var GRID_COLOR = "rgba(200, 205, 214, 0.04)";
-    var LABEL_COLOR = "#454c58";
+    var GRID_COLOR = "rgba(200, 205, 214, 0.08)";
+    var LABEL_COLOR = "#6a7280";
 
     // Smoothing
-    var ANALYSER_SMOOTHING = 0.5;
+    var ANALYSER_SMOOTHING = 0.3;
 
     // Peak hold (toggle-able)
     var PEAK_HOLD_ENABLED = true;
@@ -208,6 +208,8 @@
         if (audioCtx) return;
 
         audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+        // Resume synchronously in the user gesture call stack
+        audioCtx.resume();
 
         // We use an inline Blob URL for the worklet processor to avoid
         // cross-origin issues. Alternatively, the separate pcm-worklet.js
@@ -328,9 +330,9 @@
         // Compute layout in CSS pixels
         var cssW = rect.width;
         var cssH = rect.height;
-        plotX = 0;
+        plotX = 30;
         plotY = 0;
-        plotW = cssW;
+        plotW = cssW - 30;
         plotH = cssH - labelBottomH;
 
         if (plotW > 0) {
@@ -363,6 +365,31 @@
             ctx.beginPath();
             ctx.moveTo(plotX, y);
             ctx.lineTo(plotX + plotW, y);
+            ctx.stroke();
+        }
+
+        // dB axis labels
+        ctx.fillStyle = LABEL_COLOR;
+        ctx.font = "8px monospace";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        for (var m = 0; m < DB_GRID_LINES.length; m++) {
+            var ly = dbToY(DB_GRID_LINES[m]);
+            ctx.fillText(DB_GRID_LINES[m] + " dB", plotX - 3, ly);
+        }
+        ctx.fillText("0 dB", plotX - 3, dbToY(0));
+
+        // Vertical frequency grid lines
+        var FREQ_GRID = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+        ctx.strokeStyle = GRID_COLOR;
+        ctx.lineWidth = 1;
+        for (var k = 0; k < FREQ_GRID.length; k++) {
+            var norm = freqToNorm(FREQ_GRID[k]);
+            if (norm < 0 || norm > 1) continue;
+            var x = plotX + norm * plotW;
+            ctx.beginPath();
+            ctx.moveTo(x, plotY);
+            ctx.lineTo(x, plotY + plotH);
             ctx.stroke();
         }
 
@@ -458,7 +485,7 @@
         ctx.font = "10px monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("No live audio", cssW / 2, cssH / 2);
+        ctx.fillText("", cssW / 2, cssH / 2);
     }
 
     function render() {
@@ -492,12 +519,20 @@
     // =====================================================================
 
     var gestureHandled = false;
+    var startOverlay = null;
+
+    function hideOverlay() {
+        if (startOverlay) {
+            startOverlay.classList.add("hidden");
+        }
+    }
 
     function handleUserGesture() {
         if (gestureHandled) return;
         gestureHandled = true;
 
         initAudioPipeline();
+        hideOverlay();
 
         document.removeEventListener("click", handleUserGesture);
         document.removeEventListener("touchstart", handleUserGesture);
@@ -521,7 +556,17 @@
             cachedH = 0;
         });
 
-        // Listen for user gesture to start AudioContext
+        // Overlay click-to-start
+        startOverlay = document.getElementById("spectrum-start-overlay");
+        if (audioCtx && audioCtx.state === "running") {
+            hideOverlay();
+        } else if (startOverlay) {
+            startOverlay.addEventListener("click", function () {
+                handleUserGesture();
+            });
+        }
+
+        // Listen for user gesture to start AudioContext (fallback)
         document.addEventListener("click", handleUserGesture);
         document.addEventListener("touchstart", handleUserGesture);
         document.addEventListener("keydown", handleUserGesture);

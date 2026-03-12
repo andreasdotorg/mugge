@@ -1473,3 +1473,31 @@ html, body {
     justify-content: flex-end;
     gap: 8px;
 }
+
+/* -- Spectrum start overlay ---------------------------------------------- */
+
+.spectrum-start-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(12, 14, 18, 0.7);
+    z-index: 2;
+    cursor: pointer;
+}
+
+.spectrum-start-overlay.hidden {
+    display: none;
+}
+
+.spectrum-start-text {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #5a6270;
+    padding: 6px 16px;
+    border: 1px solid rgba(200, 205, 214, 0.15);
+    border-radius: 3px;
+}
