@@ -1,13 +1,14 @@
 {
-  description = "Pi 4B audio workstation — development environment";
+  description = "Pi 4B audio workstation — development environment and NixOS deployment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils/11707dc2f618dd54ca8739b309ec4fc024de578b";
+    nixos-hardware.url = "github:NixOS/nixos-hardware";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachSystem [
+  outputs = { self, nixpkgs, flake-utils, nixos-hardware }:
+    (flake-utils.lib.eachSystem [
       "x86_64-darwin"   # macOS Intel dev
       "aarch64-darwin"  # macOS Apple Silicon dev
       "aarch64-linux"   # Pi 4B deployment target
@@ -83,5 +84,14 @@
           '';
         };
       }
-    );
+    ))
+    // {
+      nixosConfigurations.mugge = nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        modules = [
+          nixos-hardware.nixosModules.raspberry-pi-4
+          ./nix/nixos/configuration.nix
+        ];
+      };
+    };
 }
