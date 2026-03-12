@@ -49,9 +49,11 @@
     var DB_MIN = -60;
     var DB_MAX = 0;
     var DB_GRID_LINES = [-12, -24, -36, -48];
+    var DB_GRID_LINES_MINOR = [-6, -18, -30, -42, -54];
 
     // Frequency labels along the bottom
     var FREQ_LABELS = [
+        { freq: 30,    text: "30" },
         { freq: 50,    text: "50" },
         { freq: 100,   text: "100" },
         { freq: 200,   text: "200" },
@@ -61,6 +63,17 @@
         { freq: 5000,  text: "5k" },
         { freq: 10000, text: "10k" },
         { freq: 20000, text: "20k" }
+    ];
+
+    // Tiered frequency grid lines for professional audio analyzer resolution
+    // Major: decade boundaries (strongest visual weight)
+    var FREQ_GRID_MAJOR = [100, 1000, 10000];
+    // Medium: current grid lines demoted from major (moderate weight)
+    var FREQ_GRID_MEDIUM = [50, 200, 500, 2000, 5000, 20000];
+    // Minor: intermediate frequencies (lightest weight)
+    var FREQ_GRID_MINOR = [
+        30, 40, 60, 80, 150, 300, 400, 600, 800,
+        1500, 3000, 4000, 6000, 8000, 15000
     ];
 
     // Legacy frequency-based color stops (replaced by amplitude-based color
@@ -459,7 +472,7 @@
         ctx.fillStyle = BG_COLOR;
         ctx.fillRect(0, 0, cssW, cssH);
 
-        // dB grid lines
+        // --- dB grid lines: major (12dB) ---
         ctx.strokeStyle = GRID_COLOR;
         ctx.lineWidth = 1;
         for (var i = 0; i < DB_GRID_LINES.length; i++) {
@@ -470,7 +483,18 @@
             ctx.stroke();
         }
 
-        // dB axis labels
+        // --- dB grid lines: minor (6dB intermediates) ---
+        ctx.strokeStyle = "rgba(200, 205, 214, 0.04)";
+        ctx.lineWidth = 0.5;
+        for (var im = 0; im < DB_GRID_LINES_MINOR.length; im++) {
+            var ym = dbToY(DB_GRID_LINES_MINOR[im]);
+            ctx.beginPath();
+            ctx.moveTo(plotX, ym);
+            ctx.lineTo(plotX + plotW, ym);
+            ctx.stroke();
+        }
+
+        // --- dB axis labels ---
         ctx.fillStyle = LABEL_COLOR;
         ctx.font = "8px monospace";
         ctx.textAlign = "right";
@@ -480,13 +504,39 @@
             ctx.fillText(DB_GRID_LINES[m] + " dB", plotX - 3, ly);
         }
         ctx.fillText("0 dB", plotX - 3, dbToY(0));
+        ctx.fillText("-60 dB", plotX - 3, dbToY(-60));
 
-        // Vertical frequency grid lines
-        var FREQ_GRID = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+        // --- Vertical frequency grid: minor (lightest) ---
+        ctx.strokeStyle = "rgba(200, 205, 214, 0.025)";
+        ctx.lineWidth = 0.5;
+        for (var km = 0; km < FREQ_GRID_MINOR.length; km++) {
+            var normm = freqToNorm(FREQ_GRID_MINOR[km]);
+            if (normm < 0 || normm > 1) continue;
+            var xm = plotX + normm * plotW;
+            ctx.beginPath();
+            ctx.moveTo(xm, plotY);
+            ctx.lineTo(xm, plotY + plotH);
+            ctx.stroke();
+        }
+
+        // --- Vertical frequency grid: medium ---
+        ctx.strokeStyle = "rgba(200, 205, 214, 0.05)";
+        ctx.lineWidth = 1;
+        for (var kd = 0; kd < FREQ_GRID_MEDIUM.length; kd++) {
+            var normd = freqToNorm(FREQ_GRID_MEDIUM[kd]);
+            if (normd < 0 || normd > 1) continue;
+            var xd = plotX + normd * plotW;
+            ctx.beginPath();
+            ctx.moveTo(xd, plotY);
+            ctx.lineTo(xd, plotY + plotH);
+            ctx.stroke();
+        }
+
+        // --- Vertical frequency grid: major (strongest) ---
         ctx.strokeStyle = GRID_COLOR;
         ctx.lineWidth = 1;
-        for (var k = 0; k < FREQ_GRID.length; k++) {
-            var norm = freqToNorm(FREQ_GRID[k]);
+        for (var k = 0; k < FREQ_GRID_MAJOR.length; k++) {
+            var norm = freqToNorm(FREQ_GRID_MAJOR[k]);
             if (norm < 0 || norm > 1) continue;
             var x = plotX + norm * plotW;
             ctx.beginPath();
@@ -495,7 +545,7 @@
             ctx.stroke();
         }
 
-        // Frequency labels along the bottom
+        // --- Frequency labels along the bottom ---
         ctx.fillStyle = LABEL_COLOR;
         ctx.font = "8px monospace";
         ctx.textAlign = "center";
