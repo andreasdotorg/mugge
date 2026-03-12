@@ -344,7 +344,8 @@
             if (data.byteLength < 4) return;
             // Skip 4-byte header (frame count LE uint32)
             var pcm = new Float32Array(data, 4);
-            var frames = pcm.length / NUM_CHANNELS;
+            // Floor to whole frames to avoid misaligned channel reads
+            var frames = Math.floor(pcm.length / NUM_CHANNELS);
 
             for (var i = 0; i < frames; i++) {
                 // Sum L (ch0) + R (ch1) at -6dB each for mono

@@ -84,6 +84,10 @@ class PcmStreamCollector:
         try:
             while True:
                 available = self._write_pos - read_pos
+                if available > RING_FRAMES:
+                    # Writer lapped us — skip ahead to current position
+                    read_pos = self._write_pos
+                    continue
                 if available < QUANTUM:
                     await asyncio.sleep(PCM_SEND_INTERVAL / 2)
                     continue
@@ -104,7 +108,6 @@ class PcmStreamCollector:
                 # Build binary message: header (frame count) + interleaved float32
                 header = HEADER_STRUCT.pack(QUANTUM)
                 await ws.send_bytes(header + chunk.tobytes())
-                await asyncio.sleep(PCM_SEND_INTERVAL)
         except Exception:
             # WebSocketDisconnect or other errors handled by caller
             raise
