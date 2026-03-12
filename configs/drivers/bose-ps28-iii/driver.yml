@@ -1,0 +1,131 @@
+# Bose PS28 III — individual 5.25" driver unit
+#
+# This file represents a SINGLE driver, not the isobaric pair. The isobaric
+# clamshell configuration (two drivers) is an identity-layer concern — see
+# configs/speakers/identities/bose-ps28-iii-sub.yml.
+#
+# Data sourced from:
+#   - configs/speakers/identities/bose-ps28-iii-sub.yml (operational parameters)
+#   - docs/lab-notes/bose-ps28-iii-port-tuning.md (near-field measurements, 2026-03-11)
+#
+# This is a PASSIVE CONVERSION of the PS28 III powered module.
+# Ported enclosure with folded dual-vent labyrinth (Bose waveguide design).
+#
+# Bose does not publish T/S parameters for proprietary drivers. Most T/S
+# fields are null — this is a placeholder awaiting jig measurements.
+# The identity file carries the operationally important data (impedance,
+# power handling, HPF, port tuning).
+
+schema_version: 1
+
+metadata:
+  id: "bose-ps28-iii"
+  manufacturer: "Bose"
+  model: "Panaray System 28 III"
+  driver_type: subwoofer
+  nominal_diameter_in: 5.25
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: null
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: null
+    flange_diameter_mm: null
+  datasheet_url: null
+  datasheet_file: null
+  ts_parameter_source: null          # No manufacturer T/S data available (Bose proprietary driver)
+  ts_measurement_date: null
+  ts_measurement_notes: >
+    No T/S parameters available from any authoritative source. Bose does
+    not publish T/S data for proprietary drivers. Port tuning (58/88Hz)
+    measured 2026-03-11 but Fs cannot be derived from Fb without box
+    volume and Vas. Full impedance-jig measurement pending.
+  notes: >
+    Single 5.25" driver from Bose Panaray System 28 III module. Used in
+    isobaric clamshell configuration (pair) — see identity layer for
+    pairing details. Folded dual-vent labyrinth enclosure (Bose waveguide
+    design). Staggered port tuning: upper ~58Hz, lower ~88Hz. Combined
+    port bandwidth approximately 45-100Hz. Used system — unknown
+    service history.
+  quantity_owned: 1
+  serial_numbers: []
+  purchase_date: null
+  condition: fair
+
+thiele_small:
+  # REQUIRED fields — incomplete for this driver (no authoritative source):
+  fs_hz: null                   # Unknown. Port tuning 58/88Hz measured but Fs cannot be derived from Fb without box volume and Vas.
+  re_ohm: 2.33                  # DC resistance, per-driver. Provenance uncertain — may be per-driver or isobaric pair DC resistance. Verify with jig measurement.
+  z_nom_ohm: 4                  # Nominal impedance per driver (convention: rounded up from Re 2.33 ohm). Identity file comment says "2.33 per driver."
+  qts: null                     # Unknown. No manufacturer Qts data available for this proprietary driver.
+
+  # Optional fields:
+  qes: null
+  qms: null
+  vas_liters: null
+  cms_m_per_n: null
+  xmax_mm: null
+  xmech_mm: null
+  le_mh: null
+  bl_tm: null
+  mms_g: null
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 62              # Thermal limit for isobaric pair (from identity). Per-driver limit unknown — thermal coupling in clamshell configuration makes individual driver limit difficult to establish.
+  pe_peak_watts: null
+  power_handling_note: >
+    62W thermal limit for isobaric pair (from identity file). Per-driver
+    thermal limit unknown — thermal coupling in clamshell configuration
+    makes individual driver limit difficult to establish. Amp delivers
+    up to 450W into 4 ohm (more into 2.33 ohm). Power limiting is CRITICAL.
+  eta0_percent: null
+  vd_cm3: null
+
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ""
+    data_file: null
+  frequency_response:
+    source: measured
+    date: "2026-03-11"
+    conditions: >
+      Near-field UMIK-1 at 1-2cm per vent. Pink noise stimulus, 30s,
+      48kHz. CamillaDSP FIR active (LP 155Hz + HPF 42Hz, 48dB/oct).
+    reference_distance_m: 0.02
+    data_file: null
+  nearfield_response:
+    source: measured
+    date: "2026-03-11"
+    data_file: "nearfield-upper-port.txt"
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+
+application_notes:
+  - note: >
+      Isobaric clamshell configuration halves the effective Vas, allowing
+      a smaller enclosure for the same low-frequency extension. Trade-off
+      is 3dB lower sensitivity vs a single driver.
+    source: "Bose engineering documentation"
+    confidence: high
+  - note: >
+      Staggered dual-port design (58Hz + 88Hz) broadens port bandwidth
+      vs single-tuned port. Dual-port resonance structure will be
+      addressed by room correction FIR after listening-position measurement.
+    source: "Near-field measurement 2026-03-11"
+    confidence: high
+  - note: >
+      Subsonic HPF at 42Hz is MANDATORY. Cone excursion rises sharply
+      below port tuning and will exceed Xmax without protection.
+      42Hz = 0.72x upper port tuning (58Hz), within standard safety margin.
+    source: "D-031, lab measurement validation"
+    confidence: high

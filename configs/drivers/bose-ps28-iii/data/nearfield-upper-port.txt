@@ -1,0 +1,12 @@
+# Near-field measurement: Bose PS28 III upper port
+# Date: 2026-03-11
+# Operator: Gabriela Bogk
+# Mic: UMIK-1 (serial 7161942), ~1-2cm from upper port opening, on-axis
+# Stimulus: Pink noise, 30s, 48kHz via CamillaDSP loopback
+# Active filters: LP 155Hz + HPF 42Hz, 48dB/oct
+#
+# Peak frequency: 58.6 Hz
+# Response shape: Broad plateau 45-80 Hz
+# Port tuning (rounded): ~58 Hz
+#
+# See docs/lab-notes/bose-ps28-iii-port-tuning.md for full analysis.

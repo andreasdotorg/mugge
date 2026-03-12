@@ -1,0 +1,97 @@
+# Speaker Driver Database — Schema Template (v1)
+#
+# Each driver lives in configs/drivers/<id>/driver.yml with an optional
+# data/ subdirectory for measurement files (impedance, frequency response,
+# nearfield, distortion).
+#
+# REQUIRED fields are marked below. All other fields are optional (null).
+#
+# Architect decisions — NOT stored in the driver file:
+#   - No pipeline_integration section (operational params stay in identity layer)
+#   - No beaming_onset_hz (derived from sd_cm2 at compute time)
+#   - No actual_enclosure block (belongs in identity layer)
+#   - No enclosure_recommendations (computed by pipeline, not stored)
+#   - No crossover_suitability section (editorial, goes in application_notes)
+
+schema_version: 1
+
+metadata:
+  id: ""                        # REQUIRED. Filesystem-safe slug: manufacturer-model (e.g., "dayton-rs225-8")
+  manufacturer: ""
+  model: ""
+  driver_type: null             # woofer | midrange | tweeter | full-range | subwoofer | coaxial
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: null             # ferrite | neodymium | alnico
+  cone_material: null           # paper | polypropylene | aluminum | kevlar | carbon-fiber
+  surround_material: null       # rubber | foam | cloth
+  voice_coil_diameter_mm: null
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: null
+    flange_diameter_mm: null
+  datasheet_url: null
+  datasheet_file: null          # Relative path in data/ subdirectory
+  ts_parameter_source: null     # manufacturer | measured-added-mass | measured-impedance-jig
+  ts_measurement_date: null     # ISO 8601
+  ts_measurement_notes: ""
+  notes: ""
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null               # new | good | fair | needs-repair | retired
+
+thiele_small:
+  # REQUIRED fields (4):
+  fs_hz: null                   # Free-air resonance frequency (Hz)
+  re_ohm: null                  # DC voice coil resistance (ohm)
+  z_nom_ohm: null               # Nominal impedance (ohm) — the rating (4/8/16)
+  qts: null                     # Total Q at Fs (dimensionless)
+
+  # Optional fields:
+  qes: null                     # Electrical Q at Fs
+  qms: null                     # Mechanical Q at Fs
+  vas_liters: null              # Equivalent compliance volume (liters)
+  cms_m_per_n: null             # Mechanical compliance (m/N)
+  xmax_mm: null                 # Maximum linear excursion, one-way (mm)
+  xmech_mm: null                # Maximum mechanical excursion before damage (mm)
+  le_mh: null                   # Voice coil inductance at 1kHz (mH)
+  bl_tm: null                   # Force factor (Tesla-meters)
+  mms_g: null                   # Moving mass including air load (grams)
+  mmd_g: null                   # Moving mass without air load (grams)
+  sd_cm2: null                  # Effective piston area (cm^2)
+  sensitivity_db_1w1m: null     # SPL at 1W/1m (dB SPL)
+  sensitivity_db_2v83_1m: null  # SPL at 2.83V/1m (dB SPL)
+  pe_max_watts: null            # Maximum continuous input power (W)
+  pe_peak_watts: null           # Peak short-term input power (W)
+  power_handling_note: ""
+  eta0_percent: null            # Reference efficiency (%)
+  vd_cm3: null                  # Maximum volume displacement = Sd * Xmax (cm^3)
+
+# Measurement data files (relative paths within data/ subdirectory)
+measurements:
+  impedance_curve:
+    source: null                # measured | datasheet | manufacturer-file
+    date: null
+    conditions: ""
+    data_file: null             # e.g., "impedance.zma"
+  frequency_response:
+    source: null
+    date: null
+    conditions: ""
+    reference_distance_m: null
+    data_file: null             # e.g., "response-farfield.frd"
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+
+# Application notes — editorial guidance, NOT read by pipeline
+application_notes: []
+# Each entry: {note: "...", source: "...", confidence: "high|medium|low|estimated"}

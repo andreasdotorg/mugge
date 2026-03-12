@@ -17,6 +17,7 @@
 name: "Bose Jewel Double Cube"
 manufacturer: "Bose"
 model: "Jewel Double Cube"
+driver: bose-jewel-double-cube
 type: sealed
 
 impedance_ohm: 8

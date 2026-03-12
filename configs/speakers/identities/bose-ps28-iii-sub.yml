@@ -17,6 +17,7 @@
 name: "Bose PS28 III Subwoofer"
 manufacturer: "Bose"
 model: "Panaray System 28 III"
+driver: bose-ps28-iii
 type: ported
 enclosure_note: "Folded dual-vent labyrinth (Bose waveguide design)"
 port_tuning_hz:
