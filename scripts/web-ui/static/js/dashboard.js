@@ -396,8 +396,9 @@
 
         // Health bar: DSP section (from monitoring data, higher update rate)
         var cdsp = data.camilladsp;
+        var dspRunning = cdsp.state.toLowerCase() === "running";
         PiAudio.setText("hb-dsp-state", cdsp.state,
-            cdsp.state === "Running" ? "c-green" : "c-red");
+            dspRunning ? "c-green" : "c-red");
 
         // DSP Load gauge
         var dspLoadPct = cdsp.processing_load * 100;
@@ -415,10 +416,10 @@
         // System health panel — DSP state
         var shDspDot = document.getElementById("sh-dsp-dot");
         if (shDspDot) {
-            shDspDot.style.backgroundColor = cdsp.state === "Running" ? "#79e25b" : "#e5453a";
+            shDspDot.style.backgroundColor = dspRunning ? "#79e25b" : "#e5453a";
         }
         PiAudio.setText("sh-dsp-state", cdsp.state,
-            cdsp.state === "Running" ? "c-green" : "c-red");
+            dspRunning ? "c-green" : "c-red");
 
         // System health panel — DSP load gauge
         setHealthGauge("sh-dsp-load", dspLoadPct,
@@ -426,10 +427,11 @@
             dspLoadPct < 50 ? "#79e25b" : dspLoadPct < 80 ? "#e2c039" : "#e5453a");
 
         // System health panel — Buffer level gauge
+        // buffer_level is in samples; show raw value (not a percentage)
         var bufLevel = cdsp.buffer_level;
         var bufPct = Math.min(100, Math.max(0, bufLevel));
         setHealthGauge("sh-buffer", bufPct,
-            bufLevel + "%",
+            String(bufLevel),
             bufPct > 50 ? "#79e25b" : bufPct > 20 ? "#e2c039" : "#e5453a");
 
         // System health panel — Xruns
@@ -490,9 +492,10 @@
         PiAudio.setText("nav-temp", temp.toFixed(1) + "\u00b0C",
             PiAudio.tempColor(temp));
 
-        // Health bar: CPU gauge
+        // Health bar: CPU gauge (normalize to 0-100% by dividing by core count)
         var cpuTotal = data.cpu.total_percent;
-        var cpuPct = Math.min(100, cpuTotal / 4);
+        var cpuCores = data.cpu.per_core.length || 4;
+        var cpuPct = Math.min(100, cpuTotal / cpuCores);
         PiAudio.setGauge("hb-cpu-gauge",
             cpuPct,
             cpuPct.toFixed(0) + "%",

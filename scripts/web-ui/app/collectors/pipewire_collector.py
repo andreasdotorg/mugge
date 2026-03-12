@@ -1,7 +1,8 @@
 """PipeWire collector — graph state from pw-top.
 
-Parses ``pw-top -b -n 1`` stdout via asyncio.create_subprocess_exec
-with a 2-second timeout. Polled at 1 Hz.
+Parses ``pw-top -b -n 2`` stdout via asyncio.create_subprocess_exec
+with a 3-second timeout. Polled at 1 Hz. Uses -n 2 because the first
+pass of pw-top outputs all zeros; the second pass has real values.
 
 Extracts: quantum, sample rate, xruns, errors, graph state,
 scheduling policy/priority for PipeWire and CamillaDSP.
@@ -69,15 +70,15 @@ class PipeWireCollector:
         """Run pw-top and parse its output."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "pw-top", "-b", "-n", "1",
+                "pw-top", "-b", "-n", "2",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=2.0,
+                proc.communicate(), timeout=3.0,
             )
         except asyncio.TimeoutError:
-            log.warning("pw-top timed out after 2s")
+            log.warning("pw-top timed out after 3s")
             return self._fallback_snapshot()
         except FileNotFoundError:
             log.warning("pw-top not found — PipeWire data unavailable")
@@ -91,6 +92,11 @@ class PipeWireCollector:
 
     def _parse_pw_top(self, output: str) -> dict:
         """Parse pw-top batch output.
+
+        pw-top -b -n 2 output contains two passes separated by a blank
+        line or a repeated header. The first pass typically has all zeros;
+        the second pass has real values. We parse only the LAST set of
+        data lines.
 
         pw-top -b output has a header line like:
             S  ID QUANT   RATE    WAIT    BUSY   W/Q   B/Q  ERR  ...  NAME
@@ -107,13 +113,24 @@ class PipeWireCollector:
         if not lines:
             return result
 
-        # Parse header to find column positions
+        # With -n 2, pw-top outputs two passes. Split on header lines
+        # to find the last pass. A header starts with "S " followed by
+        # column names.
+        last_pass_start = 0
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("S ") and "QUANT" in stripped:
+                last_pass_start = i
+
+        # Parse only lines from the last pass onward
+        parse_lines = lines[last_pass_start:]
+
         quantum = 0
         sample_rate = 0
         total_xruns = 0
         graph_state = "unknown"
 
-        for line in lines:
+        for line in parse_lines:
             line = line.strip()
             if not line or line.startswith("S "):
                 continue

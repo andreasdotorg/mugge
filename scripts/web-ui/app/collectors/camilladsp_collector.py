@@ -204,8 +204,10 @@ class CamillaDSPCollector:
                     continue
                 client = self._client
                 state = client.general.state()
-                # state is a CamillaState enum, convert to string
-                state_str = state.name if hasattr(state, "name") else str(state)
+                # state is a CamillaState enum, convert to string.
+                # .name returns UPPERCASE (e.g. "RUNNING"); .title() gives "Running"
+                # to match the frontend's expected casing.
+                state_str = state.name.title() if hasattr(state, "name") else str(state)
                 processing_load = client.status.processing_load()
                 capture_rate = client.rate.capture()
                 rate_adjust = client.status.rate_adjust()

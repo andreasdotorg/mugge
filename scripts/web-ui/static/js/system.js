@@ -162,7 +162,7 @@
 
         // CamillaDSP state change
         if (data.camilladsp.state !== prev.camilladsp.state) {
-            var sev = data.camilladsp.state === "Running" ? null : "error";
+            var sev = data.camilladsp.state.toLowerCase() === "running" ? null : "error";
             pushEvent("system", sev,
                 "CamillaDSP: " + prev.camilladsp.state + " \u2192 " + data.camilladsp.state);
         }
@@ -314,8 +314,9 @@
 
         // CamillaDSP
         var cdsp = data.camilladsp;
+        var cdspRunning = cdsp.state.toLowerCase() === "running";
         PiAudio.setText("sys-cdsp-state", cdsp.state,
-            cdsp.state === "Running" ? "c-green" : "c-red");
+            cdspRunning ? "c-green" : "c-red");
         PiAudio.setText("sys-cdsp-load",
             (cdsp.processing_load * 100).toFixed(1) + "%");
         PiAudio.setText("sys-cdsp-buffer", String(cdsp.buffer_level));
