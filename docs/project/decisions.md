@@ -520,3 +520,36 @@ element in ALL speaker configurations:
 - Speaker identity schema: `mandatory_hpf_hz` becomes a required field (not optional).
 - Existing self-built wideband speaker identities need `mandatory_hpf_hz` added (likely 20-25Hz).
 - Cross-references: D-029 (boost + HPF), US-011b (config generator + validation).
+
+## D-032: Web UI requires HTTPS for AudioWorklet secure context (2026-03-12)
+
+**Context:** The Web Audio API's `AudioWorklet` interface (used by the
+spectrum analyzer for browser-side FFT) requires a secure context per the
+W3C specification. In a non-secure context (plain HTTP to a non-localhost
+host), `audioContext.audioWorklet` is `undefined`. This was discovered during
+the D-020 PoC validation (`docs/lab-notes/D-020-poc-validation.md`, Step 5).
+During development, SSH tunneling to `localhost` provided the required secure
+context, but production deployment on the Pi needs HTTPS.
+
+**Decision:** The web UI runs over HTTPS using a self-signed certificate.
+uvicorn is started with `--ssl-keyfile` and `--ssl-certfile` flags pointing
+to a locally generated certificate/key pair. This is sufficient for a
+LAN-only deployment where the operator controls the network. The certificate
+is generated once on the Pi with a 10-year validity period.
+
+**Rationale:**
+- Self-signed certificates are standard practice for LAN-only services.
+- No certificate authority infrastructure is needed.
+- The operator accepts the browser warning once per device.
+- Alternatives considered: reverse proxy (nginx) with SSL termination --
+  rejected as unnecessary complexity for a single-process server.
+- The PoC lab note's SSH tunnel workaround is adequate for development but
+  impractical for production use on a headless Pi at a venue.
+
+**Impact:**
+- `configs/systemd/user/pi4-audio-webui.service` includes SSL flags.
+- Certificate files (`cert.pem`, `key.pem`) must be generated on the Pi
+  during initial setup (see `docs/architecture/web-ui.md` Section 12).
+- S6 in web-ui.md Section 9 (security requirements) is now implemented:
+  "HTTPS required before deployment on untrusted networks."
+- Cross-references: D-020 (web UI architecture), web-ui.md Section 12.
