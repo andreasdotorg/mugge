@@ -11,7 +11,7 @@ sensitivity_db_spl: null
 
 # D-029 gain staging
 max_boost_db: 0
-mandatory_hpf_hz: null
+mandatory_hpf_hz: 20  # Conservative subsonic protection (sealed 15" sub). Refine with T/S data.
 
 # Power handling
 max_power_watts: null

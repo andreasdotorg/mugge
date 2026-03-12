@@ -209,7 +209,17 @@ def validate_profile(profile, identities, identities_dir=None):
                         f"no passband."
                     )
 
-    # 4. D-029 gain staging math
+    # 4. D-031: All speakers MUST declare subsonic protection
+    for spk_key, spk_cfg in profile["speakers"].items():
+        id_name = spk_cfg["identity"]
+        identity = identities.get(id_name, {})
+        if identity.get("mandatory_hpf_hz") is None:
+            errors.append(
+                f"D-031 violation: Speaker '{spk_key}' ({id_name}) has no "
+                f"mandatory_hpf_hz. All speakers MUST declare subsonic protection."
+            )
+
+    # 5. D-029 gain staging math
     gain_staging = profile.get("gain_staging", {})
     for spk_key, spk_cfg in profile["speakers"].items():
         id_name = spk_cfg["identity"]
@@ -284,6 +294,11 @@ def validate_hpf_in_config(profile, identities, config):
         mandatory_hpf = identity.get("mandatory_hpf_hz")
 
         if mandatory_hpf is None:
+            errors.append(
+                f"Speaker '{spk_key}' ({id_name}) has mandatory_hpf_hz=None "
+                f"in identity. Subsonic protection is missing — cannot validate "
+                f"HPF in generated config."
+            )
             continue
 
         hpf_name = f"{spk_key}_hpf"

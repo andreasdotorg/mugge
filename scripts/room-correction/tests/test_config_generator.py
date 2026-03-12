@@ -52,7 +52,7 @@ class TestLoadIdentity(unittest.TestCase):
         self.assertEqual(identity["name"], "Wideband Self-Built v1")
         self.assertEqual(identity["impedance_ohm"], 8)
         self.assertEqual(identity["max_boost_db"], 0)
-        self.assertIsNone(identity["mandatory_hpf_hz"])
+        self.assertEqual(identity["mandatory_hpf_hz"], 25)
         self.assertEqual(identity["compensation_eq"], [])
 
     def test_load_custom_sub(self):
@@ -710,17 +710,21 @@ class TestMandatoryHPF(unittest.TestCase):
         self.assertIn("sat_right_hpf", filters)
         self.assertEqual(filters["sat_right_hpf"]["parameters"]["freq"], 200)
 
-    def test_no_hpf_for_null_mandatory_hpf(self):
-        """Speaker with mandatory_hpf_hz: null does NOT produce an HPF filter."""
+    def test_hpf_generated_for_2way_sealed(self):
+        """Speakers with mandatory_hpf_hz produce HPF filters (D-031)."""
         config = generate_config("2way-80hz-sealed")
         filters = config["filters"]
 
-        # wideband-selfbuilt-v1 has mandatory_hpf_hz: null
-        self.assertNotIn("sat_left_hpf", filters)
-        self.assertNotIn("sat_right_hpf", filters)
-        # sub-custom-15 has mandatory_hpf_hz: null
-        self.assertNotIn("sub1_hpf", filters)
-        self.assertNotIn("sub2_hpf", filters)
+        # wideband-selfbuilt-v1 has mandatory_hpf_hz: 25
+        self.assertIn("sat_left_hpf", filters)
+        self.assertEqual(filters["sat_left_hpf"]["parameters"]["freq"], 25)
+        self.assertIn("sat_right_hpf", filters)
+        self.assertEqual(filters["sat_right_hpf"]["parameters"]["freq"], 25)
+        # sub-custom-15 has mandatory_hpf_hz: 20
+        self.assertIn("sub1_hpf", filters)
+        self.assertEqual(filters["sub1_hpf"]["parameters"]["freq"], 20)
+        self.assertIn("sub2_hpf", filters)
+        self.assertEqual(filters["sub2_hpf"]["parameters"]["freq"], 20)
 
     def test_bose_home_hpf_in_pipeline(self):
         """HPF filter steps appear in the pipeline for bose-home speakers."""
@@ -741,8 +745,8 @@ class TestMandatoryHPF(unittest.TestCase):
         self.assertIn("sat_left_hpf", pipeline_filter_names)
         self.assertIn("sat_right_hpf", pipeline_filter_names)
 
-    def test_no_hpf_in_pipeline_for_null(self):
-        """Speakers with null mandatory_hpf_hz have no HPF pipeline steps."""
+    def test_hpf_in_pipeline_for_2way_sealed(self):
+        """Speakers with mandatory_hpf_hz have HPF pipeline steps (D-031)."""
         config = generate_config("2way-80hz-sealed")
         pipeline = config["pipeline"]
 
@@ -752,8 +756,10 @@ class TestMandatoryHPF(unittest.TestCase):
                 for name in step.get("names", []):
                     pipeline_filter_names.add(name)
 
-        hpf_names = [n for n in pipeline_filter_names if "_hpf" in n]
-        self.assertEqual(hpf_names, [], f"Unexpected HPF filters: {hpf_names}")
+        self.assertIn("sat_left_hpf", pipeline_filter_names)
+        self.assertIn("sat_right_hpf", pipeline_filter_names)
+        self.assertIn("sub1_hpf", pipeline_filter_names)
+        self.assertIn("sub2_hpf", pipeline_filter_names)
 
     def test_bose_home_subs_have_hpf_sats_have_hpf(self):
         """
@@ -866,12 +872,12 @@ class TestMandatoryHPF(unittest.TestCase):
         # Should not raise — config from generate_config is complete
         validate_hpf_in_config(profile, identities, config)
 
-    def test_validation_succeeds_for_null_hpf_profile(self):
-        """validate_hpf_in_config passes for profiles with no mandatory HPF."""
+    def test_validation_succeeds_for_2way_sealed_with_hpf(self):
+        """validate_hpf_in_config passes for 2way-80hz-sealed (D-031: all have HPF)."""
         config = generate_config("2way-80hz-sealed")
         profile, identities = load_profile_with_identities("2way-80hz-sealed")
 
-        # Should not raise — no mandatory HPFs
+        # Should not raise — all speakers now have mandatory HPF
         validate_hpf_in_config(profile, identities, config)
 
 
