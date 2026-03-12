@@ -574,3 +574,28 @@ driver but is no longer applicable.
 SSL flags, and production HTTPS configuration remain as specified in D-032.
 The only change is documentation: web-ui.md Section 12 has been updated to
 reflect the reframed rationale.
+
+## D-033: Incremental Nix adoption — staged path from Trixie to reproducible builds (2026-03-12)
+
+**Context:** Owner preference (CLAUDE.md) is NixOS with flake long-term, Trixie +
+lab notes for now. Architect identified that Mixxx 2.5.4 + Qt 6.10.2 is already
+packaged in nixpkgs-unstable, unblocking the Mixxx 2.5.0 → 2.5.4 upgrade that
+was previously blocked by Trixie's Qt 6.8.2 (TK-066).
+
+**Decision:** Incremental Nix adoption in three stages:
+
+- **Stage 1:** Nix builds Mixxx. Add `packages.mixxx = pkgs.mixxx` to flake.nix.
+  Build Mixxx 2.5.4 via `nix build .#mixxx`, deploy binary to Pi running Trixie.
+  Validates Nix cross-compilation and runtime compatibility. (TK-138)
+- **Stage 2:** Nix builds all applications (CamillaDSP, Reaper, PipeWire plugins,
+  Python tooling). Pi still runs Trixie as base OS. Nix provides reproducible
+  application layer.
+- **Stage 3:** Full NixOS image. Replace Trixie entirely with a NixOS configuration
+  that produces the complete system declaratively.
+
+**Rationale:** Staged approach reduces risk. Each stage delivers standalone value
+and validates assumptions before the next. Stage 1 is trivial (one line in
+flake.nix) and immediately unblocks the Mixxx upgrade.
+
+**Related:** TK-138 (Stage 1 flake.nix change), TK-139 (Stage 1 Pi validation).
+Supersedes the implicit "Trixie for now" status quo for application packaging.
