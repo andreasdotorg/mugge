@@ -63,8 +63,8 @@
         { freq: 20000, text: "20k" }
     ];
 
-    // Legacy frequency-based color stops (replaced by amplitude-based vertical
-    // gradient in buildGradient). Retained for export backward compatibility.
+    // Legacy frequency-based color stops (replaced by amplitude-based color
+    // LUT in buildColorLUT). Retained for export backward compatibility.
     var COLOR_STOPS = null;
 
     var OUTLINE_STYLE = "rgba(220, 220, 240, 0.7)";
@@ -97,7 +97,6 @@
 
     // Log-frequency lookup table: pixel x -> FFT bin index
     var freqLUT = null;        // Float32Array mapping x -> fractional bin
-    var cachedGradient = null;
     var cachedW = 0;
     var cachedH = 0;
 
@@ -195,22 +194,50 @@
     }
 
     // =====================================================================
-    // Gradient cache
+    // Amplitude-based color LUT (256 entries, maps dB to uniform color)
     // =====================================================================
 
-    function buildGradient() {
-        if (!ctx || plotH <= 0) return null;
-        var grad = ctx.createLinearGradient(0, plotY + plotH, 0, plotY);
-        // bottom (-60dB) to top (0dB): cool indigo -> hot white
-        grad.addColorStop(0.00, "rgba(30, 20, 60, 0.8)");      // -60 dB: deep indigo
-        grad.addColorStop(0.15, "rgba(80, 40, 120, 0.8)");     // -51 dB: dark purple
-        grad.addColorStop(0.30, "rgba(140, 50, 160, 0.8)");    // -42 dB: magenta
-        grad.addColorStop(0.50, "rgba(220, 80, 40, 0.8)");     // -30 dB: red-orange
-        grad.addColorStop(0.65, "rgba(226, 166, 57, 0.8)");    // -21 dB: amber
-        grad.addColorStop(0.80, "rgba(230, 210, 60, 0.8)");    // -12 dB: yellow
-        grad.addColorStop(0.92, "rgba(255, 240, 180, 0.9)");   // -5 dB: warm white
-        grad.addColorStop(1.00, "rgba(255, 255, 255, 0.95)");  //  0 dB: near-white
-        return grad;
+    // Color stops: position [0..1] maps to dB range [DB_MIN..DB_MAX]
+    var COLOR_LUT_STOPS = [
+        { pos: 0.00, r: 30,  g: 20,  b: 60,  a: 0.80 },  // -60 dB: deep indigo
+        { pos: 0.15, r: 80,  g: 40,  b: 120, a: 0.80 },  // -51 dB: dark purple
+        { pos: 0.30, r: 140, g: 50,  b: 160, a: 0.80 },  // -42 dB: magenta
+        { pos: 0.50, r: 220, g: 80,  b: 40,  a: 0.80 },  // -30 dB: red-orange
+        { pos: 0.65, r: 226, g: 166, b: 57,  a: 0.80 },  // -21 dB: amber
+        { pos: 0.80, r: 230, g: 210, b: 60,  a: 0.80 },  // -12 dB: yellow
+        { pos: 0.92, r: 255, g: 240, b: 180, a: 0.90 },  //  -5 dB: warm white
+        { pos: 1.00, r: 255, g: 255, b: 255, a: 0.95 }   //   0 dB: near-white
+    ];
+
+    var colorLUT = null; // Array of 256 "rgba(r,g,b,a)" strings
+
+    function buildColorLUT() {
+        colorLUT = new Array(256);
+        var stops = COLOR_LUT_STOPS;
+        for (var i = 0; i < 256; i++) {
+            var t = i / 255; // 0..1 normalized position
+            // Find surrounding stops
+            var lo = 0;
+            for (var s = 1; s < stops.length; s++) {
+                if (stops[s].pos >= t) { lo = s - 1; break; }
+            }
+            var hi = lo + 1;
+            if (hi >= stops.length) { hi = stops.length - 1; lo = hi - 1; }
+            var range = stops[hi].pos - stops[lo].pos;
+            var frac = range > 0 ? (t - stops[lo].pos) / range : 0;
+            var r = Math.round(stops[lo].r + frac * (stops[hi].r - stops[lo].r));
+            var g = Math.round(stops[lo].g + frac * (stops[hi].g - stops[lo].g));
+            var b = Math.round(stops[lo].b + frac * (stops[hi].b - stops[lo].b));
+            var a = stops[lo].a + frac * (stops[hi].a - stops[lo].a);
+            colorLUT[i] = "rgba(" + r + "," + g + "," + b + "," + a.toFixed(2) + ")";
+        }
+    }
+
+    function dbToColor(db) {
+        var clamped = Math.max(DB_MIN, Math.min(DB_MAX, db));
+        var idx = Math.floor((clamped - DB_MIN) / (DB_MAX - DB_MIN) * 255);
+        if (idx > 255) idx = 255;
+        return colorLUT[idx];
     }
 
     // =====================================================================
@@ -415,7 +442,7 @@
 
         if (plotW > 0) {
             buildFreqLUT(Math.floor(plotW));
-            cachedGradient = buildGradient();
+            if (!colorLUT) buildColorLUT();
 
             // Reset peak hold state on resize
             peakEnvelope = new Float32Array(Math.floor(plotW));
@@ -487,19 +514,23 @@
     }
 
     function drawMountainRange(now) {
-        if (!freqData || !freqLUT) return;
+        if (!freqData || !freqLUT || !colorLUT) return;
 
         var lutLen = freqLUT.length;
         if (lutLen <= 0) return;
 
-        // Build path
-        ctx.beginPath();
-        ctx.moveTo(plotX, plotY + plotH); // baseline left
+        var baseline = plotY + plotH;
 
+        // Per-column fill: each bin gets a uniform color based on its dB level
         for (var x = 0; x < lutLen; x++) {
             var db = interpolateDB(freqData, freqLUT[x]);
             var y = dbToY(db);
-            ctx.lineTo(plotX + x, y);
+            var colH = baseline - y;
+
+            if (colH > 0) {
+                ctx.fillStyle = dbToColor(db);
+                ctx.fillRect(plotX + x, y, 1, colH);
+            }
 
             // Peak hold update
             if (PEAK_HOLD_ENABLED && peakEnvelope) {
@@ -509,17 +540,6 @@
                 }
             }
         }
-
-        ctx.lineTo(plotX + lutLen - 1, plotY + plotH); // baseline right
-        ctx.closePath();
-
-        // Fill with cached gradient
-        if (cachedGradient) {
-            ctx.fillStyle = cachedGradient;
-        } else {
-            ctx.fillStyle = "rgba(155, 89, 182, 0.5)";
-        }
-        ctx.fill();
 
         // Outline stroke
         ctx.beginPath();
