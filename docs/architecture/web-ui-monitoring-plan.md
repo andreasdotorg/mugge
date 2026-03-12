@@ -665,14 +665,14 @@ the health of the monitoring system itself (not the audio system).
 | Spectrograph FPS | Client-side counter | Rendering frame rate |
 | Levels poll count | Client-side counter | Total level updates received |
 | Frame drops | Client-side detection | Gaps in PCM frame sequence |
-| Browser AudioContext state | Web Audio API | Running/Suspended/Closed |
+| JS FFT pipeline state | Client-side | Active/Idle (replaced AudioContext in TK-115) |
 | Server uptime | Server-side | How long the monitoring server has been running |
 | Connected clients | Server-side | Number of active WebSocket connections |
 
 ### Diagnostics Panel (collapsed, 1-line summary)
 
 ```
-DIAG: PCM:OK Data:OK | FPS 30 | Drops 0 | AudioCtx: running | Clients: 1
+DIAG: PCM:OK Data:OK | FPS 30 | Drops 0 | FFT: active | Clients: 1
 ```
 
 ### Diagnostics Panel (expanded)
@@ -685,9 +685,8 @@ DIAG: PCM:OK Data:OK | FPS 30 | Drops 0 | AudioCtx: running | Clients: 1
 |  PCM WebSocket     connected   frames: 1,234,567   drops: 0          |
 |  Data WebSocket    connected   msgs: 45,678                          |
 |  Spectrograph      30 fps      canvas: 1280x720                      |
-|  AudioContext      running     sampleRate: 48000                      |
+|  JS FFT pipeline   active      2048-point, Blackman-Harris             |
 |  Server            uptime 1h 23m   clients: 1                        |
-|  Worklet queue     3 / 32 chunks                                     |
 |                                                                       |
 +-----------------------------------------------------------------------+
 ```

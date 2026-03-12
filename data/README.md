@@ -57,6 +57,15 @@ Each subdirectory contains unmodified output from the test scripts and tools.
 | `cyclictest_rt.txt` | 14KB | Cyclictest histogram data. Contains latency distribution; max latency: 209 us. This is the authoritative summary. |
 | `cyclictest_output.txt` | 24MB | Full cyclictest output. **Gitignored** -- the histogram in `cyclictest_rt.txt` contains the same statistics. Present in the working tree only if manually copied from the Pi. |
 
+## system-state/ -- System Package State Snapshots
+
+Snapshots of the Pi's installed package state, captured before significant
+system changes for rollback reference.
+
+| File | Description |
+|------|-------------|
+| `pkg-state-2026-03-09.txt` | Full `dpkg --get-selections` output from 2026-03-09, captured before the 148-package upgrade (TK-066). |
+
 ## Notes
 
 - All three tests passed with 0 xruns.
