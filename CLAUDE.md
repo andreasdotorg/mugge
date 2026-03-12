@@ -6,26 +6,36 @@
 
 ### *** STOP — DO NOT DESTROY THE TEAM ***
 
-**This has happened SIX TIMES (L-001, L-007, L-008, L-021, L-023, L-031).**
+**This has happened SEVEN TIMES (L-001, L-007, L-008, L-021, L-023, L-031, L-037).**
 Context compaction does NOT reset sessions for team members. They are
 independent processes with their own context windows. They survive compaction.
 
-**HARD RULE: After compaction, you MUST NOT:**
-- Send shutdown requests to ANY team member
-- Delete the team
-- Force-clean the team config file
-- Recreate the team
+**ABSOLUTE RULE — NO EXCEPTIONS, NO OVERRIDE:**
 
-**Instead, do this:**
+The orchestrator MUST NEVER send `shutdown_request` to ANY core team member
+without **explicit owner instruction**. Not after compaction. Not after a
+session restart. Not after "internal errors." Not ever. The owner — and ONLY
+the owner — decides when the team dies.
+
+**If you believe the team might be dead:**
 1. Send ONE ping to ONE agent (e.g., project-manager)
 2. Wait for response (up to 30 seconds)
 3. If responsive → team is alive → resume normally
 4. If no response → try another agent
-5. Only after 3 agents fail to respond → team MAY be dead → ask the user
+5. Only after 3 agents fail to respond → **ASK THE OWNER**
+6. The owner tells you whether to rebuild. You do NOT decide this.
+
+**If tool calls return "internal error":** This does NOT mean the agent is
+dead. Internal errors are transient. Retry once. If still failing, ASK THE
+OWNER. Do NOT interpret transient errors as evidence of a dead team.
+
+**If the owner says "Team is still there":** STOP ALL SHUTDOWN ACTIVITY
+IMMEDIATELY. Do not send one more shutdown request. Do not "finish the batch."
+STOP.
 
 **Destroying a live team wastes hours of accumulated context and is the
 single most disruptive action you can take. The user has explicitly told
-you this. Six times.**
+you this. Seven times.**
 
 ### Other Compaction Rules
 
@@ -45,9 +55,9 @@ you this. Six times.**
    Workers message change-manager to run Pi commands. Do not run Pi commands yourself.
 7. **Team name:** `pi4-audio`. 10 core members (see Team section below).
 8. See `~/mobile/gabriela-bogk/team-protocol/lessons-learned.md` — L-001, L-007,
-   L-008, L-021, L-023, **L-031** are ALL about the orchestrator destroying the
-   team after compaction. This has happened **SIX TIMES**. The documentation
-   clearly does not prevent this — hence the STOP block above.
+   L-008, L-021, L-023, L-031, **L-037** are ALL about the orchestrator destroying
+   the team. This has happened **SEVEN TIMES**. Documentation alone does not
+   prevent this — hence the absolute rule requiring owner permission above.
 
 ### *** STOP — DO NOT ACCESS THE DEPLOYMENT TARGET ***
 
