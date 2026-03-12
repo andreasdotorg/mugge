@@ -7,6 +7,9 @@ Wants=pipewire.service
 Type=simple
 WorkingDirectory=/home/ela/web-ui
 ExecStart=/home/ela/audio-workstation-venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1
+Environment=PI_AUDIO_MOCK=0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=JACK_NO_START_SERVER=1
 Restart=on-failure
 RestartSec=5
 # Web UI must not compete with RT audio
