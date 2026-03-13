@@ -34,7 +34,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
-| User stories | active | 47 stories (US-000 through US-043 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039 through US-043): Speaker driver database — owner selected 2026-03-12. |
+| User stories | active | 48 stories (US-000 through US-044 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039 through US-043): Speaker driver database — owner selected 2026-03-12. US-044: CamillaDSP bypass protection (safety). |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | done (TK-071) | `scripts/room-correction/` — 13 modules (sweep, deconvolution, correction, crossover, combine, export, verify), mock room simulator, CLI runner, spatial averaging. Bose FIR generator (`generate_bose_filters.py`). All verification tests pass (D-009 compliant). |
@@ -116,6 +116,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - TK-143 DONE: CamillaDSP measurement config generation + pycamilladsp hot-swap (`21a8fc7`). 15 new tests. All-hands review passed. Hard cap updated to -20 dBFS per AD defense-in-depth (S-010 near-miss). Follow-up review fixes pending commit.
 - D-033 Stage 1 COMPLETE: Multi-user Nix 2.34.1 installed on Pi (S-011). All 5 checks pass. TK-139 unblocked.
 - S-010 near-miss reclassified: PA was off, no speaker damage. Defense-in-depth fixes implemented.
+- US-044 filed: CamillaDSP bypass protection (safety story). OS-level protections against accidental circumvention of CamillaDSP gain staging. Relates to D-014, S-010.
 
 ### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.

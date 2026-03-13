@@ -2411,6 +2411,44 @@ for a ported sub" or "compare these three 8-inch woofers side by side."
 
 ---
 
+## US-044: Protect Against Accidental CamillaDSP Bypass (Safety)
+
+**As** the system owner,
+**I want** OS-level protections that prevent any process other than CamillaDSP
+from writing audio directly to the USBStreamer hardware device,
+**so that** the amplifier chain (4x450W into 7W-rated drivers) is never driven
+without CamillaDSP's gain staging, crossover filters, and driver protection
+HPFs in the signal path.
+
+**Status:** selected
+**Depends on:** US-000a (security hardening baseline)
+**Blocks:** none (but should be addressed before production gig use)
+**Decisions:** relates to D-014 (hardware limiter, deferred), D-029 (per-speaker HPF), D-031 (mandatory subsonic protection)
+
+**Background:** CamillaDSP's gain staging is the only active protection between
+the 450W amplifier channels and the speakers. If CamillaDSP is bypassed -- by
+crash, misconfiguration, or a process writing directly to the USBStreamer ALSA
+device -- the drivers are unprotected. S-010 (safety near-miss during
+near-field measurement) demonstrated this risk in practice. AE analysis shows
+10,800W total amplifier capacity at full gain without CamillaDSP attenuation.
+
+**Acceptance criteria:**
+- [ ] ALSA/PipeWire device permissions prevent non-CamillaDSP processes from writing directly to the USBStreamer `hw:` device. Only the CamillaDSP service user/group has write access.
+- [ ] udev rules restrict access to the ALSA Loopback capture device (CamillaDSP's input side) to authorized processes only.
+- [ ] Dedicated user and/or group for CamillaDSP with exclusive write access to the USBStreamer output device. Other users (including `ela`) cannot open the device for playback without explicit group membership.
+- [ ] Monitoring/watchdog detects if CamillaDSP stops unexpectedly and takes protective action (e.g., mutes amp output via USBStreamer mixer control, or triggers a safe-state sequence).
+- [ ] The protection scheme does not interfere with normal audio routing through PipeWire/CamillaDSP (i.e., Mixxx and Reaper continue to route audio via the Loopback device, which CamillaDSP captures and processes).
+- [ ] Protections survive reboot (udev rules, group memberships, and systemd watchdog configuration are persistent).
+- [ ] Documentation: the protection scheme is described in `docs/architecture/rt-audio-stack.md` or a dedicated safety architecture document, explaining what is protected, how, and what failure modes remain.
+
+**DoD:**
+- [ ] All AC items verified on the Pi with the production audio stack running
+- [ ] Security specialist review of the permission scheme (no accidental lockout of legitimate audio paths)
+- [ ] Audio engineer confirmation that the watchdog/mute mechanism does not introduce audible artifacts during normal operation
+- [ ] Architect sign-off on the integration with the existing PipeWire/CamillaDSP/ALSA layering
+
+---
+
 ## Summary — Story Dependency Graph
 
 ```
@@ -2465,4 +2503,6 @@ US-039 (driver schema) ──+──> US-040 (loudspeakerdatabase.com scraper)
                          +──> US-041 (soundimports.eu scraper)
                          +──> US-042 (parts-express.com scraper)
                          +──> US-043 (driver CLI) — also needs data from at least one scraper
+
+US-000a ──> US-044 (CamillaDSP bypass protection — safety)
 ```
