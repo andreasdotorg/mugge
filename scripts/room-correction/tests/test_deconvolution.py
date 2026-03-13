@@ -33,11 +33,17 @@ class TestDeconvolve(unittest.TestCase):
         # Peak should be near the delay
         self.assertLess(abs(peak_idx - delay_samples), 20)
 
-    def test_output_length(self):
-        """IR should not exceed 1 second at the sample rate."""
+    def test_output_length_default(self):
+        """IR should not exceed default duration (1s) at the sample rate."""
         s = sweep.generate_log_sweep(duration=1.0)
         ir = deconvolution.deconvolve(s, s, sr=48000)
         self.assertLessEqual(len(ir), 48000)
+
+    def test_output_length_custom(self):
+        """IR length should respect ir_duration_s parameter."""
+        s = sweep.generate_log_sweep(duration=1.0)
+        ir = deconvolution.deconvolve(s, s, sr=48000, ir_duration_s=0.5)
+        self.assertLessEqual(len(ir), 24000)
 
     def test_regularization_prevents_blowup(self):
         """With regularization, output should not contain extreme values."""

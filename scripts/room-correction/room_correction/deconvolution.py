@@ -16,7 +16,8 @@ from . import dsp_utils
 SAMPLE_RATE = dsp_utils.SAMPLE_RATE
 
 
-def deconvolve(recording, sweep, regularization=1e-3, sr=SAMPLE_RATE):
+def deconvolve(recording, sweep, regularization=1e-3, sr=SAMPLE_RATE,
+               ir_duration_s=1.0):
     """
     Extract the impulse response from a recorded sweep response.
 
@@ -41,6 +42,10 @@ def deconvolve(recording, sweep, regularization=1e-3, sr=SAMPLE_RATE):
         give a smoother but less accurate IR. Default 1e-3 (-30dB).
     sr : int
         Sample rate.
+    ir_duration_s : float
+        Maximum IR length in seconds. The deconvolved result is trimmed
+        to this length. Default 1.0s matches the original behavior.
+        Near-field measurements should use shorter values (e.g., 0.05s).
 
     Returns
     -------
@@ -64,8 +69,7 @@ def deconvolve(recording, sweep, regularization=1e-3, sr=SAMPLE_RATE):
     ir = np.fft.irfft(ir_spectrum, n=n_fft)
 
     # Trim to a reasonable length (the causal part)
-    # The IR should be mostly contained in the first second or so
-    max_length = min(n_fft, int(1.0 * sr))
+    max_length = min(n_fft, int(ir_duration_s * sr))
     ir = ir[:max_length]
 
     return ir
