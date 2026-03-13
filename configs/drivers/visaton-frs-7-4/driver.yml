@@ -31,14 +31,14 @@ thiele_small:
   fs_hz: 250.0
   re_ohm: 3.6
   z_nom_ohm: 4
-  qts: 122.0
-  qes: 196.0
-  qms: 321.0
-  vas_liters: 3.0
+  qts: 1.22
+  qes: 1.96
+  qms: 3.21
+  vas_liters: 0.3
   cms_m_per_n: 0.000437
   xmax_mm: 1.5
   xmech_mm: null
-  le_mh: 3.0
+  le_mh: 0.3
   bl_tm: null
   mms_g: 8.0
   mmd_g: null

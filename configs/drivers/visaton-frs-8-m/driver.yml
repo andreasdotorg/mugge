@@ -34,9 +34,9 @@ thiele_small:
   qts: 0.49
   qes: 0.58
   qms: 3.24
-  vas_liters: 1.1
+  vas_liters: 10.99
   cms_m_per_n: 0.000922
-  xmax_mm: 0.25
+  xmax_mm: 2.5
   xmech_mm: null
   le_mh: 0.3
   bl_tm: 4.0

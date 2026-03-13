@@ -176,6 +176,11 @@ def _parse_float(text):
         r"W|ohms?|Ohms?|liters?|L)\b.*$",
         "", cleaned, flags=re.I,
     )
+    # Handle European decimal comma vs. thousand separator:
+    # - A comma followed by exactly 1 or 2 digits at end-of-string is a decimal
+    #   separator (e.g. "1,22" -> "1.22", "2,5" -> "2.5").
+    # - A comma followed by 3+ digits is a thousand separator (e.g. "1,000" -> "1000").
+    cleaned = re.sub(r",(\d{1,2})$", r".\1", cleaned)
     cleaned = cleaned.replace(",", "").strip()
     # Handle fractions like "6-1/2"
     match = re.match(r"(\d+)-(\d+)/(\d+)", cleaned)
