@@ -44,9 +44,11 @@ Usage:
     --sweep-level -20
 
 SAFETY MODEL (defense-in-depth, see S-010 incident 2026-03-13):
-  Hard cap at -20 dBFS. This level is safe even WITHOUT CamillaDSP in the
-  signal path (PipeWire can bypass CamillaDSP — S-010 showed this).
-    -20 dBFS direct to amp -> ~4.5W into 4 ohm (survivable for 7W CHN-50P)
+  Hard cap at -20 dBFS. At full amp gain (1.0V sensitivity, 42.4x voltage
+  gain), -20 dBFS direct delivers ~107W into 4 ohm — destructive for a 7W
+  CHN-50P. However, Phase 1 calibration requires the operator to set amp
+  gain to a moderate level. The realistic bypass scenario (CamillaDSP bypass
+  per S-010, amp at moderate gain) yields ~1-5W — survivable.
     -20 dBFS through CamillaDSP (-40dB) -> ~0.0005W (extremely conservative)
   The IIR HPF at mandatory_hpf_hz protects against excursion damage.
   The script verifies CamillaDSP reaches RUNNING state after config swap.
@@ -61,6 +63,12 @@ Measurement procedure:
   6. The sweep plays automatically; do not move the mic during the sweep
   7. Results are saved to the output directory
   8. CamillaDSP is automatically restored to the production config
+
+Known limitation: if the script is killed by SIGKILL or OOM, CamillaDSP
+remains on the measurement config and the temp file persists. Recovery:
+restart CamillaDSP via `systemctl restart camilladsp` (note: this resets
+the USBStreamer — warn the owner first per safety rules). On reboot,
+CamillaDSP starts from the production config automatically.
 """
 
 import argparse
@@ -120,7 +128,7 @@ SWEEP_LEVEL_HARD_CAP_DBFS = -20.0
 # power into 4 ohm is ~0.0005W (7W driver limit).
 MEASUREMENT_ATTENUATION_DB = -40.0   # Gain applied to test channel
 MEASUREMENT_MUTE_DB = -100.0         # Gain applied to non-test channels
-MEASUREMENT_CHUNKSIZE = 2048         # Chunksize for measurement (low CPU)
+MEASUREMENT_CHUNKSIZE = 2048         # Fallback; overridden by active config
 MEASUREMENT_SAMPLE_RATE = 48000
 MEASUREMENT_QUEUELIMIT = 4
 CAMILLADSP_DEFAULT_HOST = "localhost"
@@ -729,45 +737,64 @@ def swap_camilladsp_config(config_dict, host=CAMILLADSP_DEFAULT_HOST,
     original_config_path = client.config.file_path()
     print(f"  Original CamillaDSP config: {original_config_path}")
 
+    # Match the running config's chunksize to avoid reload failure.
+    # CamillaDSP's general.reload() may reject device section changes
+    # (including chunksize). By matching the active chunksize, the devices
+    # section stays compatible and reload is guaranteed to work.
+    active_config = client.config.active()
+    if active_config and "devices" in active_config:
+        active_chunksize = active_config["devices"].get("chunksize")
+        if active_chunksize is not None:
+            config_dict["devices"]["chunksize"] = active_chunksize
+            print(f"  Using active chunksize: {active_chunksize}")
+
     # Write measurement config to temp file
-    tmp_fd, temp_config_path = tempfile.mkstemp(
-        suffix=".yml", prefix="camilladsp_measurement_"
-    )
-    f = os.fdopen(tmp_fd, "w")
+    temp_config_path = None
     try:
-        yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
-    finally:
-        f.close()
+        tmp_fd, temp_config_path = tempfile.mkstemp(
+            suffix=".yml", prefix="camilladsp_measurement_"
+        )
+        f = os.fdopen(tmp_fd, "w")
+        try:
+            yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
+        finally:
+            f.close()
 
-    print(f"  Measurement config written to: {temp_config_path}")
+        print(f"  Measurement config written to: {temp_config_path}")
 
-    # Hot-swap: set config path and reload
-    client.config.set_file_path(temp_config_path)
-    client.general.reload()
+        # Hot-swap: set config path and reload
+        client.config.set_file_path(temp_config_path)
+        client.general.reload()
 
-    # SAFETY: Verify CamillaDSP is RUNNING after reload.
-    # The -6 dBFS hard cap is only safe WITH the measurement config active.
-    # If CamillaDSP failed to load the config, audio could pass unattenuated.
-    time.sleep(0.5)  # Brief pause for CamillaDSP to process the reload
-    state = client.general.state()
-    if state != ProcessingState.RUNNING:
-        # Attempt to restore original config before aborting
+        # SAFETY: Verify CamillaDSP is RUNNING after reload.
+        # If CamillaDSP failed to load the config, audio could pass
+        # unattenuated. The hard cap assumes measurement attenuation is active.
+        time.sleep(0.5)  # Brief pause for CamillaDSP to process the reload
+        state = client.general.state()
+        if state != ProcessingState.RUNNING:
+            raise RuntimeError(
+                f"CamillaDSP is not RUNNING after loading measurement config "
+                f"(state: {state}). The measurement config may be invalid. "
+                f"Aborting for safety — the sweep level hard cap assumes "
+                f"the measurement config is providing "
+                f"{MEASUREMENT_ATTENUATION_DB}dB attenuation."
+            )
+
+    except Exception:
+        # Swap failed — attempt to restore original config before re-raising.
+        # This handles partial failures (e.g., config path set but reload
+        # failed, or reload succeeded but state is not RUNNING).
         try:
             client.config.set_file_path(original_config_path)
             client.general.reload()
         except Exception:
             pass
-        try:
-            os.unlink(temp_config_path)
-        except OSError:
-            pass
-        raise RuntimeError(
-            f"CamillaDSP is not RUNNING after loading measurement config "
-            f"(state: {state}). The measurement config may be invalid. "
-            f"Original config has been restored. Aborting for safety — "
-            f"the sweep level hard cap assumes the measurement config is "
-            f"providing {MEASUREMENT_ATTENUATION_DB}dB attenuation."
-        )
+        if temp_config_path is not None:
+            try:
+                os.unlink(temp_config_path)
+            except OSError:
+                pass
+        raise
 
     print(f"  CamillaDSP reloaded with measurement config (state: {state.name})")
     return client, original_config_path, temp_config_path
@@ -785,11 +812,19 @@ def restore_camilladsp_config(client, original_config_path, temp_config_path):
         Path to the original config file.
     temp_config_path : str
         Path to the temp measurement config (will be deleted).
+
+    Returns
+    -------
+    bool
+        True if restore succeeded, False if it failed (system is in a
+        dangerous state -- measurement config still active).
     """
+    restored = False
     try:
         client.config.set_file_path(original_config_path)
         client.general.reload()
         print(f"  CamillaDSP restored to: {original_config_path}")
+        restored = True
     except Exception as e:
         print(f"\n  ** WARNING: Failed to restore CamillaDSP config: {e} **")
         print(f"  ** PA OUTPUT IS CURRENTLY MUTED / ATTENUATED **")
@@ -803,15 +838,19 @@ def restore_camilladsp_config(client, original_config_path, temp_config_path):
 
     # Amp level warning — operator may have set levels for measurement mode
     print("\n  ** CHECK AMP LEVELS **")
-    print("  CamillaDSP is back on the production config.")
+    if restored:
+        print("  CamillaDSP is back on the production config.")
     print("  If you adjusted amp volume during the measurement,")
     print("  verify levels are appropriate for normal listening.")
 
     # Clean up temp file
-    try:
-        os.unlink(temp_config_path)
-    except OSError:
-        pass
+    if temp_config_path is not None:
+        try:
+            os.unlink(temp_config_path)
+        except OSError:
+            pass
+
+    return restored
 
 
 def generate_pink_noise(duration_s, sr=SAMPLE_RATE, level_dbfs=-40.0,
@@ -1567,11 +1606,11 @@ def main():
         ),
     )
     parser.add_argument(
-        "--speaker-profile", type=str, default="bose-home-chn50p",
+        "--speaker-profile", type=str, required=True,
         help=(
             "Speaker profile name (without .yml) for loading speaker identity "
             "and mandatory HPF. Used to generate the measurement CamillaDSP "
-            "config. (default: 'bose-home-chn50p')"
+            "config. Example: 'bose-home-chn50p'."
         ),
     )
     parser.add_argument(
@@ -1608,8 +1647,9 @@ def main():
         "--sweep-level", type=float, default=-20.0,
         help=(
             "Sweep peak level in dBFS (default: -20.0). Hard cap at -20 dBFS "
-            "(defense-in-depth: safe even without CamillaDSP attenuation, "
-            "~4.5W into 7W CHN-50P). See S-010 incident."
+            "(defense-in-depth). At full amp gain: ~107W into 4 ohm "
+            "(destructive). Requires Phase 1 amp calibration to moderate "
+            "gain. See S-010 incident."
         ),
     )
     parser.add_argument(
@@ -1669,14 +1709,15 @@ def main():
         sys.exit(0)
 
     # SAFETY: enforce hard cap on sweep level (defense-in-depth, S-010 incident)
-    # -20 dBFS is safe even without CamillaDSP attenuation (~4.5W into 7W driver)
+    # At full amp gain, -20 dBFS direct delivers ~107W into 4 ohm (destructive).
+    # Phase 1 calibration sets amp to moderate gain (~1-5W, survivable).
     if args.sweep_level > SWEEP_LEVEL_HARD_CAP_DBFS:
         print(f"ERROR: Sweep level {args.sweep_level} dBFS exceeds safety cap "
               f"of {SWEEP_LEVEL_HARD_CAP_DBFS} dBFS.")
-        print(f"Defense-in-depth: {SWEEP_LEVEL_HARD_CAP_DBFS} dBFS is safe even "
-              f"if PipeWire bypasses CamillaDSP (S-010 incident). At "
-              f"{SWEEP_LEVEL_HARD_CAP_DBFS} dBFS direct: ~4.5W into 4 ohm "
-              f"(survivable for 7W CHN-50P).")
+        print(f"Defense-in-depth: at full amp gain, "
+              f"{SWEEP_LEVEL_HARD_CAP_DBFS} dBFS direct delivers ~107W into "
+              f"4 ohm (destructive for 7W CHN-50P). Phase 1 calibration "
+              f"sets amp to moderate gain. See S-010 incident.")
         print(f"Maximum allowed: {SWEEP_LEVEL_HARD_CAP_DBFS} dBFS.")
         sys.exit(1)
 
@@ -1764,21 +1805,18 @@ def main():
     print(f"  All other channels muted at {MEASUREMENT_MUTE_DB}dB")
 
     print("\nSwapping CamillaDSP to measurement config...")
+    client = None
+    original_config_path = None
+    temp_config_path = None
+    success = False
+
     try:
         client, original_config_path, temp_config_path = swap_camilladsp_config(
             meas_config,
             host=args.camilladsp_host,
             port=args.camilladsp_port,
         )
-    except Exception as e:
-        print(f"ERROR: Failed to swap CamillaDSP config: {e}")
-        print("Is CamillaDSP running? Check: systemctl status camilladsp")
-        print("Is pycamilladsp installed? Check: pip3 list | grep camilladsp")
-        sys.exit(1)
 
-    # Everything from here runs inside try/finally to guarantee config restoration
-    success = False
-    try:
         # Phase 1: Calibration
         if not args.skip_calibration_phase:
             phase1_calibration(
@@ -1804,11 +1842,30 @@ def main():
         )
     except KeyboardInterrupt:
         print("\n\nMeasurement interrupted by user.")
+    except Exception as e:
+        print(f"\nERROR: {e}")
+        if client is None:
+            # swap_camilladsp_config() failed before returning a client
+            print("Is CamillaDSP running? Check: systemctl status camilladsp")
+            print("Is pycamilladsp installed? Check: pip3 list | grep camilladsp")
     finally:
-        # Always restore CamillaDSP to production config
-        print("\nRestoring CamillaDSP production config...")
-        restore_camilladsp_config(client, original_config_path, temp_config_path)
+        restore_ok = True
+        if client is not None and original_config_path is not None:
+            # Swap succeeded (at least partially) — restore production config
+            print("\nRestoring CamillaDSP production config...")
+            restore_ok = restore_camilladsp_config(
+                client, original_config_path, temp_config_path)
+        elif client is not None:
+            # Swap failed mid-way; at least disconnect
+            try:
+                client.disconnect()
+            except Exception:
+                pass
 
+    # Exit codes: 0 = success, 1 = measurement failed, 2 = restore failed
+    # (system may be in dangerous state — measurement config still active)
+    if not restore_ok:
+        sys.exit(2)
     sys.exit(0 if success else 1)
 
 
