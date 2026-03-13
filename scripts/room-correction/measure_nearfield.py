@@ -1054,8 +1054,10 @@ def phase2_measurement(output_channel, output_device_idx, input_device_idx,
                     print(f"  Recording integrity FAILED, retrying...")
                     continue
                 else:
-                    print(f"  ** Max retries reached. Proceeding with best available recording. **")
-                    print(f"  ** WARNING: Measurement quality may be compromised! **")
+                    print(f"  Recording integrity FAILED after {MAX_XRUN_RETRIES} retries.")
+                    print(f"  Cannot produce a reliable measurement. Aborting.")
+                    print(f"  Check: environment noise, mic connection, device levels.")
+                    return False
         else:
             print("    All integrity checks PASSED")
 
@@ -1099,17 +1101,20 @@ def phase2_measurement(output_channel, output_device_idx, input_device_idx,
     print("\n[5/6] Computing frequency response...")
     freqs, magnitude_db = compute_frequency_response(ir_calibrated, sr=sr)
 
-    # Also compute a smoothed version for display/analysis
+    # Save raw (unsmoothed) frequency response -- archival data
+    fr_raw_path = os.path.join(output_dir, "frequency_response_raw.txt")
+    save_frequency_response(freqs, magnitude_db, fr_raw_path)
+    print(f"  Raw frequency response saved to: {fr_raw_path}")
+
+    # Compute psychoacoustically smoothed version for display/analysis
+    # (1/6 oct below 200Hz, 1/3 oct 200Hz-1kHz, 1/2 oct above 1kHz)
     magnitude_linear = dsp_utils.db_to_linear(magnitude_db)
-    smoothed_linear = dsp_utils.fractional_octave_smooth(
-        magnitude_linear, freqs, 6  # 1/6 octave smoothing
-    )
+    smoothed_linear = dsp_utils.psychoacoustic_smooth(magnitude_linear, freqs)
     smoothed_db = dsp_utils.linear_to_db(smoothed_linear)
 
-    # Save frequency response
-    fr_path = os.path.join(output_dir, "frequency_response.txt")
-    save_frequency_response(freqs, smoothed_db, fr_path)
-    print(f"  Frequency response saved to: {fr_path}")
+    fr_smooth_path = os.path.join(output_dir, "frequency_response_smoothed.txt")
+    save_frequency_response(freqs, smoothed_db, fr_smooth_path)
+    print(f"  Smoothed frequency response saved to: {fr_smooth_path}")
 
     # Step 6: Compute summary metrics
     print("\n[6/6] Computing summary metrics...")
@@ -1203,7 +1208,8 @@ def phase2_measurement(output_channel, output_device_idx, input_device_idx,
     print(f"  {ir_path}")
     if calibration_path:
         print(f"  {ir_cal_path}")
-    print(f"  {fr_path}")
+    print(f"  {fr_raw_path}")
+    print(f"  {fr_smooth_path}")
     print(f"  {summary_path}")
     print(f"  {plot_path}")
 
