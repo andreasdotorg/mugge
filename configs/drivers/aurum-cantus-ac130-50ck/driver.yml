@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: aurum-cantus-ac130-50ck
+  manufacturer: Aurum Cantus
+  model: AC130/50CK
+  driver_type: woofer
+  nominal_diameter_in: 5.25
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 2.38
+  mounting:
+    cutout_diameter_mm: 127.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 83.06
+    flange_diameter_mm: 156.97
+  datasheet_url: https://www.parts-express.com/Aurum-Cantus-AC130-50CK-5-1-4-Midwoofer-296-442
+  datasheet_file: data/296-442-aurum-cantus-ac13050ck-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 296-442. Unmapped materials (raw): cone=Carbon Fiber / Kevlar.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 37.0
+  re_ohm: 7.0
+  z_nom_ohm: 8
+  qts: 0.21
+  qes: 0.23
+  qms: 3.17
+  vas_liters: 22.09
+  cms_m_per_n: 0.00173
+  xmax_mm: 6.0
+  xmech_mm: null
+  le_mh: 0.67
+  bl_tm: 9.1
+  mms_g: 12.4
+  mmd_g: null
+  sd_cm2: 95.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 89.0
+  pe_max_watts: 150.0
+  pe_peak_watts: 225.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

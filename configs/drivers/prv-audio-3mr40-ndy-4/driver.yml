@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-3mr40-ndy-4
+  manufacturer: PRV Audio
+  model: 3MR40-NDY-4
+  driver_type: midrange
+  nominal_diameter_in: 3.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 19.05
+  weight_kg: 0.25
+  mounting:
+    cutout_diameter_mm: 70.87
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 40.39
+    flange_diameter_mm: 82.55
+  datasheet_url: https://www.parts-express.com/PRV-Audio-3MR40-NDY-4-3-Neodymium-Midrange-Speaker-4-Ohms-294-3400
+  datasheet_file: data/294-3400--prv-audio-3mr40-ndy-4-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-3400.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 153.2
+  re_ohm: 3.4
+  z_nom_ohm: 4
+  qts: 0.77
+  qes: 0.99
+  qms: 3.41
+  vas_liters: 0.62
+  cms_m_per_n: 0.000443
+  xmax_mm: 1.4
+  xmech_mm: null
+  le_mh: 0.01
+  bl_tm: 2.93
+  mms_g: 2.62
+  mmd_g: null
+  sd_cm2: 33.2
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 89.3
+  pe_max_watts: 40.0
+  pe_peak_watts: 80.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

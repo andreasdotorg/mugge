@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: peerless-by-tymphany-pmt-37n28al01-04
+  manufacturer: Peerless by Tymphany
+  model: PMT-37N28AL01-04
+  driver_type: null
+  nominal_diameter_in: 1.5
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: aluminum
+  surround_material: rubber
+  voice_coil_diameter_mm: 27.94
+  weight_kg: 0.05
+  mounting:
+    cutout_diameter_mm: 36.83
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 11.81
+    flange_diameter_mm: 40.89
+  datasheet_url: https://www.parts-express.com/Peerless-PMT-37N28AL01-04-37mm-Aluminum-Cone-Transducer-4-Ohm-264-1560
+  datasheet_file: data/264-1560--tymphany-pmt-37n28al01-04-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-1560.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 167.6
+  re_ohm: 3.58
+  z_nom_ohm: 4
+  qts: 0.36
+  qes: 0.5
+  qms: 1.28
+  vas_liters: 0.07
+  cms_m_per_n: 0.00077
+  xmax_mm: 0.1
+  xmech_mm: null
+  le_mh: 0.06
+  bl_tm: 3.0
+  mms_g: null
+  mmd_g: null
+  sd_cm2: 7.997
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 84.25
+  pe_max_watts: 5.0
+  pe_peak_watts: 10.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

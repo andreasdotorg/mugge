@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: scan-speak-12w-8524g00
+  manufacturer: Scan-Speak
+  model: 12W/8524G00
+  driver_type: woofer
+  nominal_diameter_in: 4.5
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 24.89
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: null
+    flange_diameter_mm: null
+  datasheet_url: https://www.soundimports.eu/en/scan-speak-12w-8524g00.html
+  datasheet_file: pdf_Scan-Speak_12W-8524G00_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 52.0
+  re_ohm: 5.7
+  z_nom_ohm: 8
+  qts: 0.32
+  qes: 0.35
+  qms: 3.42
+  vas_liters: 7.93
+  cms_m_per_n: 0.00167
+  xmax_mm: 3.0
+  xmech_mm: null
+  le_mh: 0.6
+  bl_tm: 5.4
+  mms_g: 5.6
+  mmd_g: null
+  sd_cm2: 59.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 85.8
+  pe_max_watts: 40.0
+  pe_peak_watts: 70.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

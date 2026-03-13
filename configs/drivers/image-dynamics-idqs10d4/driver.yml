@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: image-dynamics-idqs10d4
+  manufacturer: Image Dynamics
+  model: IDQS10D4
+  driver_type: subwoofer
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: 223.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 1.216
+  mounting:
+    cutout_diameter_mm: 243.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 89.0
+    flange_diameter_mm: null
+  datasheet_url: https://www.loudspeakerdatabase.com/ImageDynamics/IDQS10D4
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 50.0
+  re_ohm: 7.6
+  z_nom_ohm: 2.0
+  qts: 1.02
+  qes: 1.22
+  qms: 6.23
+  vas_liters: 14.2
+  cms_m_per_n: 6.57e-05
+  xmax_mm: 7.5
+  xmech_mm: null
+  le_mh: 1.36
+  bl_tm: 17.554
+  mms_g: 160.0
+  mmd_g: 155.0
+  sd_cm2: 391.0
+  sensitivity_db_1w1m: 84.7
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 200.0
+  pe_peak_watts: 350.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 293.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: coast-buyouts-1206pb22wa
+  manufacturer: Coast Buyouts
+  model: 1206PB22WA
+  driver_type: full-range
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 12.7
+  weight_kg: 0.23
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 53.97
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/Sharp-1206PB22WA-2-5-16-x-5-1-8-Full-Range-Replacement-Speaker-16-Ohm-299-4135
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 299-4135.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 248.2
+  re_ohm: 14.77
+  z_nom_ohm: 16
+  qts: 3.696
+  qes: 8.6
+  qms: 6.481
+  vas_liters: 0.77
+  cms_m_per_n: null
+  xmax_mm: 0.5
+  xmech_mm: null
+  le_mh: null
+  bl_tm: null
+  mms_g: 1.469
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 83.24
+  pe_max_watts: 2.5
+  pe_peak_watts: 5.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

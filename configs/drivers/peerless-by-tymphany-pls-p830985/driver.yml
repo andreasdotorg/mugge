@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: peerless-by-tymphany-pls-p830985
+  manufacturer: Peerless by Tymphany
+  model: PLS-P830985
+  driver_type: full-range
+  nominal_diameter_in: 2.5
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: aluminum
+  surround_material: rubber
+  voice_coil_diameter_mm: 25.4
+  weight_kg: 0.14
+  mounting:
+    cutout_diameter_mm: 61.47
+    bolt_circle_diameter_mm: 73.91
+    bolt_count: 4
+    overall_depth_mm: 54.61
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/Peerless-830985-2-1-2-Full-Range-Woofer-264-1050
+  datasheet_file: data/264-1050--tymphany-pls-p830985-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-1050.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 101.2
+  re_ohm: 3.7
+  z_nom_ohm: 4
+  qts: 0.54
+  qes: 0.64
+  qms: 3.46
+  vas_liters: 0.57
+  cms_m_per_n: 0.00127
+  xmax_mm: 2.0
+  xmech_mm: null
+  le_mh: 0.3
+  bl_tm: 2.7
+  mms_g: 1.9
+  mmd_g: null
+  sd_cm2: 22.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 86.5
+  pe_max_watts: 7.0
+  pe_peak_watts: 70.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

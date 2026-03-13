@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: image-dynamics-idq8d2-v4
+  manufacturer: Image Dynamics
+  model: IDQ8D2 V4
+  driver_type: subwoofer
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: 165.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 5.67
+  mounting:
+    cutout_diameter_mm: 184.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 125.0
+    flange_diameter_mm: 212.0
+  datasheet_url: https://www.loudspeakerdatabase.com/ImageDynamics/IDQ8D2_V4
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 51.0
+  re_ohm: 3.76
+  z_nom_ohm: 2.0
+  qts: 0.81
+  qes: 0.92
+  qms: 6.7
+  vas_liters: 6.66
+  cms_m_per_n: 0.000103
+  xmax_mm: 14.5
+  xmech_mm: null
+  le_mh: 3.16
+  bl_tm: 11.05
+  mms_g: 94.8
+  mmd_g: 92.4
+  sd_cm2: 214.0
+  sensitivity_db_1w1m: 83.4
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 125.0
+  pe_peak_watts: 250.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 310.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

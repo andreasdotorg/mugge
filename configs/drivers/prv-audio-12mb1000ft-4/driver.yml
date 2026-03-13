@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-12mb1000ft-4
+  manufacturer: PRV Audio
+  model: 12MB1000FT-4
+  driver_type: null
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 76.2
+  weight_kg: 8.28
+  mounting:
+    cutout_diameter_mm: 281.94
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 132.08
+    flange_diameter_mm: 314.96
+  datasheet_url: https://www.parts-express.com/PRV-Audio-12MB1000FT-4-12-Forte-Series-Speaker-4-Ohm-294-3416
+  datasheet_file: data/294-3416--prv-audio-12mb1000ft-4-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-3416.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 45.67
+  re_ohm: 3.5
+  z_nom_ohm: 4
+  qts: 0.27
+  qes: 0.28
+  qms: 8.55
+  vas_liters: 95.43
+  cms_m_per_n: 0.000209
+  xmax_mm: 6.13
+  xmech_mm: null
+  le_mh: 0.71
+  bl_tm: 14.52
+  mms_g: 58.23
+  mmd_g: null
+  sd_cm2: 573.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 97.5
+  pe_max_watts: 1000.0
+  pe_peak_watts: 2000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

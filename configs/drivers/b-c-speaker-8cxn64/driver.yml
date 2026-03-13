@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: b-c-speaker-8cxn64
+  manufacturer: B&C Speaker
+  model: 8CXN64
+  driver_type: coaxial
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: 167.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 64.0
+  weight_kg: 2.6
+  mounting:
+    cutout_diameter_mm: 187.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 114.0
+    flange_diameter_mm: 225.0
+  datasheet_url: https://www.loudspeakerdatabase.com/BC/8CXN64
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 71.0
+  re_ohm: 5.8
+  z_nom_ohm: 8.0
+  qts: 0.33
+  qes: 0.35
+  qms: 8.5
+  vas_liters: 10.5
+  cms_m_per_n: 0.000155
+  xmax_mm: 5.5
+  xmech_mm: null
+  le_mh: 1.1
+  bl_tm: 15.5
+  mms_g: 32.0
+  mmd_g: 29.5
+  sd_cm2: 220.0
+  sensitivity_db_1w1m: 92.1
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 300.0
+  pe_peak_watts: 600.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 121.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

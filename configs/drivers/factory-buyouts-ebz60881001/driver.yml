@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: factory-buyouts-ebz60881001
+  manufacturer: Factory Buyouts
+  model: EBZ60881001
+  driver_type: full-range
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: paper
+  surround_material: rubber
+  voice_coil_diameter_mm: null
+  weight_kg: 0.02
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 18.29
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/LG-60881001-5-8-x-3-5-8-Paper-Cone-Dual-Motor-Full-Range-Speaker-62-64-289-2078
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 289-2078.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 479.1
+  re_ohm: 7.11
+  z_nom_ohm: 8
+  qts: 3.209
+  qes: 9.23
+  qms: 4.92
+  vas_liters: null
+  cms_m_per_n: null
+  xmax_mm: null
+  xmech_mm: null
+  le_mh: 0.1332
+  bl_tm: null
+  mms_g: null
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 79.5
+  pe_max_watts: 5.0
+  pe_peak_watts: 7.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

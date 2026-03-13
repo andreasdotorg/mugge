@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-ds90-pr
+  manufacturer: Dayton Audio
+  model: DS90-PR
+  driver_type: null
+  nominal_diameter_in: 3.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: paper
+  surround_material: rubber
+  voice_coil_diameter_mm: null
+  weight_kg: 0.09
+  mounting:
+    cutout_diameter_mm: 70.1
+    bolt_circle_diameter_mm: 83.06
+    bolt_count: 4
+    overall_depth_mm: 21.84
+    flange_diameter_mm: 92.2
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-DS90-PR-3-Designer-Series-Passive-Radiator-295-491
+  datasheet_file: data/295-491--dayton-audio-ds90-pr-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-491.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 42.4
+  re_ohm: null
+  z_nom_ohm: null
+  qts: null
+  qes: null
+  qms: 5.9
+  vas_liters: 3.51
+  cms_m_per_n: 0.00255
+  xmax_mm: 4.0
+  xmech_mm: null
+  le_mh: null
+  bl_tm: null
+  mms_g: 5.5
+  mmd_g: null
+  sd_cm2: 31.2
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: null
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

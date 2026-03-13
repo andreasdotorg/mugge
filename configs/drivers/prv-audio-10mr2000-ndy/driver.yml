@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-10mr2000-ndy
+  manufacturer: PRV Audio
+  model: 10MR2000-NDY
+  driver_type: midrange
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 101.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 237.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 139.5
+    flange_diameter_mm: 265.0
+  datasheet_url: https://www.soundimports.eu/en/prv-audio-10mr2000-ndy.html
+  datasheet_file: 10MR2000-NDY-Datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 54.48
+  re_ohm: 5.0
+  z_nom_ohm: null
+  qts: 0.21
+  qes: 0.21
+  qms: 1.54
+  vas_liters: 27.98
+  cms_m_per_n: null
+  xmax_mm: 5.0
+  xmech_mm: null
+  le_mh: 0.5
+  bl_tm: 21.73
+  mms_g: 39.33
+  mmd_g: null
+  sd_cm2: 373.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 99.0
+  pe_max_watts: 2000.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

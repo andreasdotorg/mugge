@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: tang-band-w8-1808
+  manufacturer: Tang Band
+  model: W8-1808
+  driver_type: full-range
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 38.1
+  weight_kg: 3.38
+  mounting:
+    cutout_diameter_mm: 189.99
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 115.06
+    flange_diameter_mm: 223.77
+  datasheet_url: https://www.parts-express.com/Tang-Band-W8-1808-8-Neodymium-Full-Range-Driver-264-894
+  datasheet_file: data/264-894-tang-band-w8-1808-specifications-46404.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-894.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 45.0
+  re_ohm: 6.8
+  z_nom_ohm: 8
+  qts: 0.44
+  qes: 0.66
+  qms: 1.33
+  vas_liters: 88.07
+  cms_m_per_n: 0.00128
+  xmax_mm: 5.0
+  xmech_mm: null
+  le_mh: 0.04
+  bl_tm: 5.28
+  mms_g: 9.43
+  mmd_g: null
+  sd_cm2: 220.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 93.0
+  pe_max_watts: 30.0
+  pe_peak_watts: 60.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

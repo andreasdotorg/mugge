@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: redcatt-10find
+  manufacturer: REDCATT
+  model: 10FIND
+  driver_type: null
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: 210.0
+  magnet_type: null
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 63.5
+  weight_kg: 4.55
+  mounting:
+    cutout_diameter_mm: 230.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 109.0
+    flange_diameter_mm: 262.0
+  datasheet_url: https://www.loudspeakerdatabase.com/REDCATT/10FIND
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 66.0
+  re_ohm: 5.5
+  z_nom_ohm: 8.0
+  qts: 0.39
+  qes: 0.41
+  qms: 13.13
+  vas_liters: 23.5
+  cms_m_per_n: 0.000135
+  xmax_mm: 7.7
+  xmech_mm: null
+  le_mh: 0.68
+  bl_tm: 15.5
+  mms_g: 41.3
+  mmd_g: 36.6
+  sd_cm2: 346.0
+  sensitivity_db_1w1m: 94.0
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 250.0
+  pe_peak_watts: 500.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 266.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: sica-12-sr-4-cp
+  manufacturer: SICA
+  model: 12 SR 4 CP
+  driver_type: subwoofer
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: 250.0
+  magnet_type: null
+  cone_material: paper
+  surround_material: rubber
+  voice_coil_diameter_mm: 100.0
+  weight_kg: 12.0
+  mounting:
+    cutout_diameter_mm: 284.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 154.0
+    flange_diameter_mm: 320.0
+  datasheet_url: https://www.loudspeakerdatabase.com/SICA/12SR4CP
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 38.0
+  re_ohm: 5.2
+  z_nom_ohm: 8.0
+  qts: 0.3
+  qes: 0.31
+  qms: 4.78
+  vas_liters: 41.7
+  cms_m_per_n: 0.000122
+  xmax_mm: 9.0
+  xmech_mm: null
+  le_mh: 1.77
+  bl_tm: 24.0
+  mms_g: 145.0
+  mmd_g: 137.0
+  sd_cm2: 491.0
+  sensitivity_db_1w1m: 90.2
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 1000.0
+  pe_peak_watts: 2000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 442.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

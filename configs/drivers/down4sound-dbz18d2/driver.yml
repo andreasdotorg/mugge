@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: down4sound-dbz18d2
+  manufacturer: Down4Sound
+  model: DBz18D2
+  driver_type: subwoofer
+  nominal_diameter_in: 18.0
+  actual_diameter_mm: 392.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 69.9
+  weight_kg: 15.5
+  mounting:
+    cutout_diameter_mm: 427.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 253.0
+    flange_diameter_mm: 469.0
+  datasheet_url: https://www.loudspeakerdatabase.com/Down4Sound/DBz18D2
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 31.1
+  re_ohm: 3.96
+  z_nom_ohm: 2.0
+  qts: 0.47
+  qes: 0.57
+  qms: 2.51
+  vas_liters: 89.8
+  cms_m_per_n: 4.8799999999999994e-05
+  xmax_mm: 30.0
+  xmech_mm: null
+  le_mh: 6.22
+  bl_tm: 28.525
+  mms_g: 602.0
+  mmd_g: 572.0
+  sd_cm2: 1209.0
+  sensitivity_db_1w1m: 89.7
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 1300.0
+  pe_peak_watts: 2600.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 3627.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

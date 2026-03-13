@@ -1,0 +1,73 @@
+schema_version: 1
+metadata:
+  id: faitalpro-6fe300
+  manufacturer: FaitalPRO
+  model: 6FE300
+  driver_type: midrange
+  nominal_diameter_in: 6.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 52.07
+  weight_kg: 2.97
+  mounting:
+    cutout_diameter_mm: 146.05
+    bolt_circle_diameter_mm: 154.94
+    bolt_count: 4
+    overall_depth_mm: 81.03
+    flange_diameter_mm: 166.62
+  datasheet_url: https://www.parts-express.com/FaitalPRO-6FE300-6-Professional-Midrange-8-Ohm-294-1158
+  datasheet_file: data/294-1158--faitalpro-6fe300-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-1158. Unmapped materials (raw): cone=Treated Paper, surround=Treated
+    Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 100.0
+  re_ohm: 5.3
+  z_nom_ohm: 8
+  qts: 0.46
+  qes: 0.48
+  qms: 10.5
+  vas_liters: 4.81
+  cms_m_per_n: 0.00018
+  xmax_mm: 3.9
+  xmech_mm: null
+  le_mh: 0.4
+  bl_tm: 10.0
+  mms_g: 14.2
+  mmd_g: null
+  sd_cm2: 138.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 94.0
+  pe_max_watts: 175.0
+  pe_peak_watts: 350.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

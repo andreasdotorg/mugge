@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: wavecor-sw280wa01
+  manufacturer: Wavecor
+  model: SW280WA01
+  driver_type: subwoofer
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 39.12
+  weight_kg: 5.08
+  mounting:
+    cutout_diameter_mm: 254.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 75.95
+    flange_diameter_mm: 279.91
+  datasheet_url: https://www.parts-express.com/Wavecor-SW280WA01-11-Shallow-Glass-Fiber-PMI-Foam-Sandwich-Cone-Subwoofer-4-Ohm-298-1078
+  datasheet_file: data/298-1078--wavecor-sw280wa01-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 298-1078. Unmapped materials (raw): cone=Fiberglass.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 26.0
+  re_ohm: 3.4
+  z_nom_ohm: 4
+  qts: 0.4
+  qes: 0.43
+  qms: 6.0
+  vas_liters: 43.04
+  cms_m_per_n: 0.00027
+  xmax_mm: 6.0
+  xmech_mm: null
+  le_mh: 1.4
+  bl_tm: 13.4
+  mms_g: 138.0
+  mmd_g: null
+  sd_cm2: 335.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 86.0
+  pe_max_watts: 200.0
+  pe_peak_watts: 400.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

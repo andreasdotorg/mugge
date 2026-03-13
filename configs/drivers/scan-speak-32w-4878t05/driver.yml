@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: scan-speak-32w-4878t05
+  manufacturer: Scan-Speak
+  model: 32W/4878T05
+  driver_type: subwoofer
+  nominal_diameter_in: 260.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: aluminum
+  surround_material: null
+  voice_coil_diameter_mm: 75.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 290.5
+    bolt_circle_diameter_mm: null
+    bolt_count: 9
+    overall_depth_mm: 156.1
+    flange_diameter_mm: 320.0
+  datasheet_url: https://www.soundimports.eu/en/scan-speak-32w4878t05.html
+  datasheet_file: 32W-4878T05.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 17.0
+  re_ohm: 3.1
+  z_nom_ohm: 4
+  qts: 0.32
+  qes: 0.33
+  qms: 7.0
+  vas_liters: null
+  cms_m_per_n: 0.00052
+  xmax_mm: 28.0
+  xmech_mm: null
+  le_mh: 0.5
+  bl_tm: 12.5
+  mms_g: 165.0
+  mmd_g: null
+  sd_cm2: 526.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 89.0
+  pe_max_watts: 200.0
+  pe_peak_watts: 550.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: sb-acoustics-sb16frpc25-7
+  manufacturer: SB Acoustics
+  model: SB16FRPC25-7
+  driver_type: full-range
+  nominal_diameter_in: 6.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 25.4
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 144.5
+    bolt_circle_diameter_mm: 165.0
+    bolt_count: 4
+    overall_depth_mm: 84.3
+    flange_diameter_mm: 176.0
+  datasheet_url: https://www.soundimports.eu/en/sb-acoustics-sb16frpc25-7.html
+  datasheet_file: SB16FRPC25-7-datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 44.0
+  re_ohm: 5.2
+  z_nom_ohm: 7
+  qts: 0.46
+  qes: 0.48
+  qms: 9.0
+  vas_liters: 31.0
+  cms_m_per_n: 0.00133
+  xmax_mm: 6.1
+  xmech_mm: null
+  le_mh: 0.22
+  bl_tm: 5.4
+  mms_g: 9.8
+  mmd_g: null
+  sd_cm2: 128.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 91.0
+  pe_max_watts: 30.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

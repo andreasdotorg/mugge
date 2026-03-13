@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: morel-mw-1075
+  manufacturer: Morel
+  model: MW 1075
+  driver_type: woofer
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: polypropylene
+  surround_material: rubber
+  voice_coil_diameter_mm: 76.2
+  weight_kg: 1.8
+  mounting:
+    cutout_diameter_mm: 228.6
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 79.38
+    flange_diameter_mm: 262.89
+  datasheet_url: https://www.parts-express.com/Morel-MW-1075-10-Woofer-297-045
+  datasheet_file: data/297-045-morel-mw-1075-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 297-045.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 29.0
+  re_ohm: 6.3
+  z_nom_ohm: 8
+  qts: 0.62
+  qes: 0.83
+  qms: 2.48
+  vas_liters: 122.9
+  cms_m_per_n: 0.00084
+  xmax_mm: 4.3
+  xmech_mm: null
+  le_mh: 0.63
+  bl_tm: 6.3
+  mms_g: 32.6
+  mmd_g: null
+  sd_cm2: 324.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 89.0
+  pe_max_watts: 180.0
+  pe_peak_watts: 1000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-8fr250
+  manufacturer: PRV Audio
+  model: 8FR250
+  driver_type: full-range
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 38.1
+  weight_kg: 1.79
+  mounting:
+    cutout_diameter_mm: 180.97
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 92.07
+    flange_diameter_mm: 209.55
+  datasheet_url: https://www.parts-express.com/PRV-Audio-8FR250-8-Full-Range-Speaker-294-2898
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-2898.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 75.6
+  re_ohm: 6.6
+  z_nom_ohm: 8
+  qts: 1.02
+  qes: 1.1
+  qms: 14.07
+  vas_liters: 21.21
+  cms_m_per_n: 0.000294
+  xmax_mm: 2.0
+  xmech_mm: null
+  le_mh: 0.275
+  bl_tm: 6.53
+  mms_g: 15.0
+  mmd_g: null
+  sd_cm2: 227.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 93.0
+  pe_max_watts: 125.0
+  pe_peak_watts: 250.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

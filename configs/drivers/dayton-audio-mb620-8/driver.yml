@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-mb620-8
+  manufacturer: Dayton Audio
+  model: MB620-8
+  driver_type: null
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 2.86
+  mounting:
+    cutout_diameter_mm: 147.32
+    bolt_circle_diameter_mm: 156.21
+    bolt_count: 4
+    overall_depth_mm: 80.01
+    flange_diameter_mm: 166.88
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-MB620-8-6.5-Professional-High-Power-Midbass-Driver-8-Ohm-295-635
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-635.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 104.0
+  re_ohm: 5.47
+  z_nom_ohm: 8
+  qts: 0.55
+  qes: 0.69
+  qms: 4.26
+  vas_liters: 6.8
+  cms_m_per_n: 0.000273
+  xmax_mm: 2.0
+  xmech_mm: null
+  le_mh: 0.93
+  bl_tm: 6.67
+  mms_g: 8.59
+  mmd_g: null
+  sd_cm2: 132.2
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 94.0
+  pe_max_watts: 200.0
+  pe_peak_watts: 400.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

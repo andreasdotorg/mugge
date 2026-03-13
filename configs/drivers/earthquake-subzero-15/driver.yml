@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: earthquake-subzero-15
+  manufacturer: Earthquake
+  model: Subzero-15
+  driver_type: subwoofer
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: 337.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: null
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 369.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 220.0
+    flange_diameter_mm: null
+  datasheet_url: https://www.loudspeakerdatabase.com/Earthquake/Subzero-15
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 24.5
+  re_ohm: 7.8
+  z_nom_ohm: 2.0
+  qts: 0.3
+  qes: 0.31
+  qms: 12.66
+  vas_liters: 130.0
+  cms_m_per_n: 0.00011499999999999999
+  xmax_mm: 31.8
+  xmech_mm: null
+  le_mh: 12.4
+  bl_tm: 37.8262
+  mms_g: 369.0
+  mmd_g: 352.0
+  sd_cm2: 890.0
+  sensitivity_db_1w1m: 89.8
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 1000.0
+  pe_peak_watts: 2500.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 2826.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

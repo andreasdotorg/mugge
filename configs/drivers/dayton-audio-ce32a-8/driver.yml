@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-ce32a-8
+  manufacturer: Dayton Audio
+  model: CE32A-8
+  driver_type: null
+  nominal_diameter_in: 1.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: aluminum
+  surround_material: rubber
+  voice_coil_diameter_mm: 12.7
+  weight_kg: 0.03
+  mounting:
+    cutout_diameter_mm: 31.5
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 14.48
+    flange_diameter_mm: 32.0
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-CE32A-8-1-1-4-Mini-Speaker-8-Ohm-285-101
+  datasheet_file: data/285-101-dayton-audio-ce32a-8-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 285-101.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 274.0
+  re_ohm: 7.18
+  z_nom_ohm: 8
+  qts: 0.87
+  qes: 1.25
+  qms: 2.84
+  vas_liters: 0.0
+  cms_m_per_n: 0.00069
+  xmax_mm: 0.7
+  xmech_mm: null
+  le_mh: 0.29
+  bl_tm: 2.2
+  mms_g: null
+  mmd_g: null
+  sd_cm2: 3.92
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 77.9
+  pe_max_watts: 2.0
+  pe_peak_watts: 4.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

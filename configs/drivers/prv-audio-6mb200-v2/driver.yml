@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-6mb200-v2
+  manufacturer: PRV Audio
+  model: 6MB200 V2
+  driver_type: woofer
+  nominal_diameter_in: 6.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 38.1
+  weight_kg: 1.68
+  mounting:
+    cutout_diameter_mm: 143.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 66.04
+    flange_diameter_mm: 165.86
+  datasheet_url: https://www.parts-express.com/PRV-Audio-6MB200-V2-6-Midbass-Woofer-8-Ohm-294-3057
+  datasheet_file: data/294-3057--prv-audio-6mb200-v2-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-3057.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 123.28
+  re_ohm: 6.7
+  z_nom_ohm: 8
+  qts: 1.13
+  qes: 1.2
+  qms: 20.81
+  vas_liters: 4.25
+  cms_m_per_n: 0.000144
+  xmax_mm: 4.8
+  xmech_mm: null
+  le_mh: 0.25
+  bl_tm: 7.05
+  mms_g: 11.57
+  mmd_g: null
+  sd_cm2: 154.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 93.5
+  pe_max_watts: 100.0
+  pe_peak_watts: 200.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

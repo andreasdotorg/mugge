@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: peerless-by-tymphany-tc5fc07-04
+  manufacturer: Peerless by Tymphany
+  model: TC5FC07-04
+  driver_type: full-range
+  nominal_diameter_in: 1.5
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 16.26
+  weight_kg: 0.07
+  mounting:
+    cutout_diameter_mm: 36.32
+    bolt_circle_diameter_mm: 45.72
+    bolt_count: 4
+    overall_depth_mm: 27.94
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/Peerless-TC5FC07-04-1-1-2-Paper-Cone-Full-Range-Driver-4-Ohm-264-1626
+  datasheet_file: data/264-1626--tymphany-tc5fc07-04-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-1626. Unmapped materials (raw): surround=Polyurethane.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 145.7
+  re_ohm: 3.52
+  z_nom_ohm: 4
+  qts: 0.45
+  qes: 0.51
+  qms: 4.41
+  vas_liters: 0.15
+  cms_m_per_n: 0.001756
+  xmax_mm: 2.0
+  xmech_mm: null
+  le_mh: 0.08
+  bl_tm: 2.07
+  mms_g: null
+  mmd_g: null
+  sd_cm2: 7.8
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 86.22
+  pe_max_watts: 5.0
+  pe_peak_watts: 10.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

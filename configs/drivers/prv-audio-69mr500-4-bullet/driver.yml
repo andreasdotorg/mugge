@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-69mr500-4-bullet
+  manufacturer: PRV Audio
+  model: 69MR500-4 BULLET
+  driver_type: midrange
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 38.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 98.0
+    flange_diameter_mm: null
+  datasheet_url: https://www.soundimports.eu/en/prv-audio-69mr500-4-bullet.html
+  datasheet_file: 69MR500-4 BULLET-Datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 148.9
+  re_ohm: 3.3
+  z_nom_ohm: null
+  qts: 1.12
+  qes: 1.2
+  qms: 16.8
+  vas_liters: 5.21
+  cms_m_per_n: null
+  xmax_mm: 3.25
+  xmech_mm: null
+  le_mh: 0.13
+  bl_tm: 5.86
+  mms_g: 13.11
+  mmd_g: null
+  sd_cm2: 216.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.0
+  pe_max_watts: 500.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

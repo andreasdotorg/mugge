@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: ciare-cmi320nd
+  manufacturer: Ciare
+  model: CMI320ND
+  driver_type: null
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: cloth
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 3.38
+  mounting:
+    cutout_diameter_mm: 281.94
+    bolt_circle_diameter_mm: 294.89
+    bolt_count: 8
+    overall_depth_mm: 134.87
+    flange_diameter_mm: 314.96
+  datasheet_url: https://www.parts-express.com/Ciare-CMI320ND-12-Neodymium-Midbass-4-Ohm-293-134
+  datasheet_file: data/293-134--ciare-cmi320nd-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 293-134. Unmapped materials (raw): cone=Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 53.0
+  re_ohm: 2.8
+  z_nom_ohm: 4
+  qts: 0.43
+  qes: 0.44
+  qms: 13.5
+  vas_liters: 69.94
+  cms_m_per_n: null
+  xmax_mm: 5.0
+  xmech_mm: null
+  le_mh: 0.6
+  bl_tm: 10.6
+  mms_g: 54.0
+  mmd_g: null
+  sd_cm2: 547.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 100.5
+  pe_max_watts: 220.0
+  pe_peak_watts: 450.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

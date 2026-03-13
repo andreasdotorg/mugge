@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-dc160s-4
+  manufacturer: Dayton Audio
+  model: DC160S-4
+  driver_type: woofer
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: rubber
+  voice_coil_diameter_mm: 35.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 144.6
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 95.0
+    flange_diameter_mm: 165.0
+  datasheet_url: https://www.soundimports.eu/en/dayton-audio-dc160s-4.html
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 30.9
+  re_ohm: 3.5
+  z_nom_ohm: 4
+  qts: 0.3
+  qes: 0.34
+  qms: 2.61
+  vas_liters: 23.2
+  cms_m_per_n: 0.00088
+  xmax_mm: 3.4
+  xmech_mm: null
+  le_mh: 0.89
+  bl_tm: 7.68
+  mms_g: 30.0
+  mmd_g: null
+  sd_cm2: 136.8
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 88.5
+  pe_max_watts: 50.0
+  pe_peak_watts: 100.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

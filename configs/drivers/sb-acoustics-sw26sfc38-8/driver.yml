@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: sb-acoustics-sw26sfc38-8
+  manufacturer: SB Acoustics
+  model: SW26SFC38-8
+  driver_type: subwoofer
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: null
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: null
+    flange_diameter_mm: null
+  datasheet_url: https://www.soundimports.eu/en/sb-acoustics-sw26sfc38-8.html
+  datasheet_file: SW26SFC38-8-sb-acoustics.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 28.5
+  re_ohm: 6.0
+  z_nom_ohm: null
+  qts: 0.35
+  qes: 0.38
+  qms: 5.18
+  vas_liters: 80.0
+  cms_m_per_n: 0.00049
+  xmax_mm: 3.5
+  xmech_mm: null
+  le_mh: 1.38
+  bl_tm: null
+  mms_g: 63.7
+  mmd_g: null
+  sd_cm2: 340.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 80.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

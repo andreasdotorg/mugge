@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: grs-15pt-8
+  manufacturer: GRS
+  model: 15PT-8
+  driver_type: woofer
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 76.2
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 349.76
+    bolt_circle_diameter_mm: 372.11
+    bolt_count: 8
+    overall_depth_mm: 149.86
+    flange_diameter_mm: 384.05
+  datasheet_url: https://www.soundimports.eu/en/grs-15pt-8.html
+  datasheet_file: grs-15pt-8-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 28.0
+  re_ohm: 7.4
+  z_nom_ohm: 8
+  qts: 0.41
+  qes: 0.43
+  qms: 11.7
+  vas_liters: 242.11
+  cms_m_per_n: 0.00024
+  xmax_mm: 7.8
+  xmech_mm: null
+  le_mh: 2.1
+  bl_tm: 20.2
+  mms_g: 137.0
+  mmd_g: null
+  sd_cm2: 829.6
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 93.0
+  pe_max_watts: 350.0
+  pe_peak_watts: 700.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

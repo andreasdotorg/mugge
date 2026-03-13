@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-4mr60-4
+  manufacturer: PRV Audio
+  model: 4MR60-4
+  driver_type: full-range
+  nominal_diameter_in: 4.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 19.81
+  weight_kg: 0.59
+  mounting:
+    cutout_diameter_mm: 102.11
+    bolt_circle_diameter_mm: 115.01
+    bolt_count: 4
+    overall_depth_mm: 55.88
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/PRV-Audio-4MR60-4-4-Full-Range-4-Ohm-294-2760
+  datasheet_file: data/294-2760--prv-audio-4mr60-4-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-2760. Unmapped materials (raw): cone=Fiberglass.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 89.88
+  re_ohm: 3.6
+  z_nom_ohm: 4
+  qts: 0.68
+  qes: 0.75
+  qms: 7.34
+  vas_liters: 3.4
+  cms_m_per_n: 0.000725
+  xmax_mm: 2.87
+  xmech_mm: null
+  le_mh: 0.2
+  bl_tm: 3.42
+  mms_g: 4.32
+  mmd_g: null
+  sd_cm2: 57.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.0
+  pe_max_watts: 30.0
+  pe_peak_watts: 60.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

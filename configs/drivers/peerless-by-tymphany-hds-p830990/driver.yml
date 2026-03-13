@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: peerless-by-tymphany-hds-p830990
+  manufacturer: Peerless by Tymphany
+  model: HDS-P830990
+  driver_type: woofer
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 32.4
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 146.0
+    bolt_circle_diameter_mm: 170.0
+    bolt_count: 6
+    overall_depth_mm: 87.0
+    flange_diameter_mm: null
+  datasheet_url: https://www.soundimports.eu/en/peerless-by-tymphany-hds-p830990.html
+  datasheet_file: HDS-P830990.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 56.0
+  re_ohm: 6.3
+  z_nom_ohm: 8
+  qts: 0.43
+  qes: 0.516
+  qms: 2.45
+  vas_liters: 13.5
+  cms_m_per_n: null
+  xmax_mm: 10.2
+  xmech_mm: null
+  le_mh: 0.467
+  bl_tm: 8.62
+  mms_g: 17.5
+  mmd_g: null
+  sd_cm2: 143.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 87.6
+  pe_max_watts: 50.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-8mc500nd
+  manufacturer: Beyma
+  model: 8MC500Nd
+  driver_type: woofer
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 63.5
+  weight_kg: 3.08
+  mounting:
+    cutout_diameter_mm: 182.88
+    bolt_circle_diameter_mm: 195.58
+    bolt_count: 8
+    overall_depth_mm: 99.06
+    flange_diameter_mm: 210.82
+  datasheet_url: https://www.parts-express.com/Beyma-8MC500Nd-MC-Series-8-Neo-Woofer-8-ohm-253-011
+  datasheet_file: data/253-011--8mc500nd-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 253-011. Unmapped materials (raw): cone=Paper-Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 69.0
+  re_ohm: 5.3
+  z_nom_ohm: 8
+  qts: 0.18
+  qes: 0.19
+  qms: 2.6
+  vas_liters: 15.86
+  cms_m_per_n: 0.231
+  xmax_mm: 5.0
+  xmech_mm: null
+  le_mh: 0.5
+  bl_tm: 16.7
+  mms_g: 0.023
+  mmd_g: null
+  sd_cm2: 0.022
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 98.0
+  pe_max_watts: 500.0
+  pe_peak_watts: 1000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

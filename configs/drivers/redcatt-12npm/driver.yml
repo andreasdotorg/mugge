@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: redcatt-12npm
+  manufacturer: REDCATT
+  model: 12NPM
+  driver_type: null
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: 260.0
+  magnet_type: null
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 76.2
+  weight_kg: 4.1
+  mounting:
+    cutout_diameter_mm: 285.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 143.0
+    flange_diameter_mm: 315.0
+  datasheet_url: https://www.loudspeakerdatabase.com/REDCATT/12NPM
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 49.0
+  re_ohm: 4.7
+  z_nom_ohm: 8.0
+  qts: 0.31
+  qes: 0.32
+  qms: 9.95
+  vas_liters: 63.6
+  cms_m_per_n: 0.000159
+  xmax_mm: 9.1
+  xmech_mm: null
+  le_mh: 0.65
+  bl_tm: 17.3
+  mms_g: 65.6
+  mmd_g: 56.8
+  sd_cm2: 531.0
+  sensitivity_db_1w1m: 95.2
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 450.0
+  pe_peak_watts: 900.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 483.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

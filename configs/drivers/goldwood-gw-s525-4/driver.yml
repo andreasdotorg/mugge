@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: goldwood-gw-s525-4
+  manufacturer: Goldwood
+  model: GW-S525/4
+  driver_type: woofer
+  nominal_diameter_in: 5.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: polypropylene
+  surround_material: rubber
+  voice_coil_diameter_mm: 25.4
+  weight_kg: 0.73
+  mounting:
+    cutout_diameter_mm: 112.71
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 57.15
+    flange_diameter_mm: 144.46
+  datasheet_url: https://www.parts-express.com/Goldwood-GW-S525-4-5-1-4-Poly-Cone-Woofer-4-Ohm-290-301
+  datasheet_file: data/290-301-goldwood-gw-s5254-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 290-301.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 72.9
+  re_ohm: 3.6
+  z_nom_ohm: 4
+  qts: 0.88
+  qes: 1.15
+  qms: 3.79
+  vas_liters: 4.25
+  cms_m_per_n: 0.00045
+  xmax_mm: 2.0
+  xmech_mm: null
+  le_mh: 0.3
+  bl_tm: 3.9
+  mms_g: 10.5
+  mmd_g: null
+  sd_cm2: 82.29
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 86.9
+  pe_max_watts: 70.0
+  pe_peak_watts: 130.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

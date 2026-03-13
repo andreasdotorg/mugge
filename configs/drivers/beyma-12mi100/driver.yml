@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-12mi100
+  manufacturer: Beyma
+  model: 12MI100
+  driver_type: midrange
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 76.2
+  weight_kg: 7.55
+  mounting:
+    cutout_diameter_mm: 276.86
+    bolt_circle_diameter_mm: 294.64
+    bolt_count: 8
+    overall_depth_mm: 137.16
+    flange_diameter_mm: 312.42
+  datasheet_url: https://www.parts-express.com/Beyma-12MI100-MI100-Series-12-Midrange-Speaker-8-Ohm-253-040
+  datasheet_file: data/253-040--12mi100-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 253-040.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 58.0
+  re_ohm: 6.3
+  z_nom_ohm: 8
+  qts: 0.22
+  qes: 0.23
+  qms: 5.5
+  vas_liters: 64.0
+  cms_m_per_n: 0.163
+  xmax_mm: 3.0
+  xmech_mm: null
+  le_mh: 1.0
+  bl_tm: 21.6
+  mms_g: 0.047
+  mmd_g: null
+  sd_cm2: 0.053
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 100.0
+  pe_max_watts: 450.0
+  pe_peak_watts: 900.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: hivi-dm-7500
+  manufacturer: HiVi
+  model: DM-7500
+  driver_type: midrange
+  nominal_diameter_in: 3.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 74.93
+  weight_kg: 0.91
+  mounting:
+    cutout_diameter_mm: 120.65
+    bolt_circle_diameter_mm: 142.88
+    bolt_count: 4
+    overall_depth_mm: 63.5
+    flange_diameter_mm: 155.57
+  datasheet_url: https://www.parts-express.com/HiVi-DM-7500-3-Soft-Dome-Midrange-Driver-6-Ohms-297-470
+  datasheet_file: data/297-470--hi-vi-dm-7500-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 297-470. Unmapped materials (raw): cone=Soft Dome.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 300.0
+  re_ohm: 4.1
+  z_nom_ohm: 5
+  qts: null
+  qes: null
+  qms: null
+  vas_liters: null
+  cms_m_per_n: null
+  xmax_mm: null
+  xmech_mm: null
+  le_mh: null
+  bl_tm: null
+  mms_g: null
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 92.0
+  pe_max_watts: 20.0
+  pe_peak_watts: 120.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

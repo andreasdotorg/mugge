@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-18sw2400
+  manufacturer: PRV Audio
+  model: 18SW2400
+  driver_type: subwoofer
+  nominal_diameter_in: 18.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: cloth
+  voice_coil_diameter_mm: 101.6
+  weight_kg: 14.36
+  mounting:
+    cutout_diameter_mm: 422.91
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 209.04
+    flange_diameter_mm: 466.85
+  datasheet_url: https://www.parts-express.com/PRV-Audio-18SW2400-18-Subwoofer-8-Ohm-294-3420
+  datasheet_file: data/294-3420--prv-audio-18sw2400-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-3420.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 36.3
+  re_ohm: 5.6
+  z_nom_ohm: 8
+  qts: 0.56
+  qes: 0.58
+  qms: 15.57
+  vas_liters: 192.55
+  cms_m_per_n: 8.3e-05
+  xmax_mm: 12.5
+  xmech_mm: null
+  le_mh: 1.54
+  bl_tm: 22.5
+  mms_g: 231.2
+  mmd_g: null
+  sd_cm2: 1290.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.0
+  pe_max_watts: 1200.0
+  pe_peak_watts: 2400.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

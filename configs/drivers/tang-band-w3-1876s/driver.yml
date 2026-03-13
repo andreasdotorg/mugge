@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: tang-band-w3-1876s
+  manufacturer: Tang Band
+  model: W3-1876S
+  driver_type: subwoofer
+  nominal_diameter_in: 3.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: polypropylene
+  surround_material: null
+  voice_coil_diameter_mm: 20.32
+  weight_kg: 0.25
+  mounting:
+    cutout_diameter_mm: 74.42
+    bolt_circle_diameter_mm: null
+    bolt_count: 6
+    overall_depth_mm: 65.79
+    flange_diameter_mm: 93.22
+  datasheet_url: https://www.parts-express.com/Tang-Band-W3-1876S-3-Mini-Subwoofer-264-909
+  datasheet_file: data/264-909--tang-band-w3-1876s-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-909. Unmapped materials (raw): surround=Santoprene®.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 55.0
+  re_ohm: 3.6
+  z_nom_ohm: 4
+  qts: 0.43
+  qes: 0.5
+  qms: 3.17
+  vas_liters: 0.85
+  cms_m_per_n: 0.00074
+  xmax_mm: 5.0
+  xmech_mm: null
+  le_mh: 0.19
+  bl_tm: 5.28
+  mms_g: 9.98
+  mmd_g: null
+  sd_cm2: 27.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 76.0
+  pe_max_watts: 15.0
+  pe_peak_watts: 30.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

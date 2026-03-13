@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: seas-l12re-xfc
+  manufacturer: SEAS
+  model: L12RE/XFC
+  driver_type: coaxial
+  nominal_diameter_in: 5.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 38.86
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 95.76
+    bolt_circle_diameter_mm: 110.74
+    bolt_count: 6
+    overall_depth_mm: 73.91
+    flange_diameter_mm: 119.89
+  datasheet_url: https://www.soundimports.eu/en/seas-l12re-xfc.html
+  datasheet_file: pdf_Seas_L12REXFC_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 55.0
+  re_ohm: 3.1
+  z_nom_ohm: 4
+  qts: 0.3
+  qes: 0.33
+  qms: 2.99
+  vas_liters: 2.83
+  cms_m_per_n: 0.0009
+  xmax_mm: 3.0
+  xmech_mm: null
+  le_mh: 0.48
+  bl_tm: null
+  mms_g: 0.19
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 86.0
+  pe_max_watts: 80.0
+  pe_peak_watts: 250.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-5mr450-ndy-4
+  manufacturer: PRV Audio
+  model: 5MR450-NDY-4
+  driver_type: midrange
+  nominal_diameter_in: 5.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 38.1
+  weight_kg: 1.32
+  mounting:
+    cutout_diameter_mm: 119.89
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 66.04
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/PRV-Audio-5MR450-NDY-4-5-Midrange-Neodymium-Woofer-4-Ohm-294-2704
+  datasheet_file: data/294-2704--prv-audio-5mr450-ndy-4-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-2704.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 149.5
+  re_ohm: 3.7
+  z_nom_ohm: 4
+  qts: 0.49
+  qes: 0.5
+  qms: 20.74
+  vas_liters: 15.86
+  cms_m_per_n: 0.000123
+  xmax_mm: 3.3
+  xmech_mm: null
+  le_mh: 0.02
+  bl_tm: 7.94
+  mms_g: 9.14
+  mmd_g: null
+  sd_cm2: 95.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 94.0
+  pe_max_watts: 225.0
+  pe_peak_watts: 450.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

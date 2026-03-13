@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-10mb250n-8
+  manufacturer: Dayton Audio
+  model: 10MB250N-8
+  driver_type: woofer
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 63.5
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 238.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 125.98
+    flange_diameter_mm: 265.94
+  datasheet_url: https://www.soundimports.eu/en/dayton-audio-10mb250n-8.html
+  datasheet_file: dayton-audio-apollo-10n.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 54.0
+  re_ohm: 7.4
+  z_nom_ohm: 8
+  qts: 0.22
+  qes: 0.23
+  qms: 6.73
+  vas_liters: 43.32
+  cms_m_per_n: 0.00025
+  xmax_mm: 5.79
+  xmech_mm: null
+  le_mh: 1.12
+  bl_tm: 19.2
+  mms_g: 34.2
+  mmd_g: null
+  sd_cm2: 333.12
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.5
+  pe_max_watts: 250.0
+  pe_peak_watts: 500.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

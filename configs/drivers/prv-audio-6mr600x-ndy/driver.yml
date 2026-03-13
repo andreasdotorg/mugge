@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-6mr600x-ndy
+  manufacturer: PRV Audio
+  model: 6MR600X-NDY
+  driver_type: midrange
+  nominal_diameter_in: 6.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 2.27
+  mounting:
+    cutout_diameter_mm: 143.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 78.49
+    flange_diameter_mm: 164.59
+  datasheet_url: https://www.parts-express.com/PRV-Audio-6MR600X-NDY-6.5-Neodymium-Midrange-Speaker-294-3502
+  datasheet_file: data/294-3502--prv-audio-6mr600x-ndy-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-3502.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 95.2
+  re_ohm: 6.5
+  z_nom_ohm: 8
+  qts: 0.22
+  qes: 0.22
+  qms: 15.64
+  vas_liters: 5.55
+  cms_m_per_n: 0.000195
+  xmax_mm: 3.5
+  xmech_mm: null
+  le_mh: 0.023
+  bl_tm: 15.84
+  mms_g: 15.84
+  mmd_g: null
+  sd_cm2: 143.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 97.5
+  pe_max_watts: 600.0
+  pe_peak_watts: 1200.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

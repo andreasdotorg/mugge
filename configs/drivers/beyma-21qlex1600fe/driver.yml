@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-21qlex1600fe
+  manufacturer: Beyma
+  model: 21QLEX1600FE
+  driver_type: subwoofer
+  nominal_diameter_in: 21.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 101.6
+  weight_kg: 19.37
+  mounting:
+    cutout_diameter_mm: 492.76
+    bolt_circle_diameter_mm: 523.24
+    bolt_count: 8
+    overall_depth_mm: 266.7
+    flange_diameter_mm: 546.1
+  datasheet_url: https://www.parts-express.com/Beyma-21QLEX1600Fe-QLEX-Series-21-Subwoofer-8-Ohm-253-057
+  datasheet_file: data/253-057--21qlex1600fe-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 253-057. Unmapped materials (raw): cone=Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 30.0
+  re_ohm: 5.4
+  z_nom_ohm: 8
+  qts: 0.28
+  qes: 0.3
+  qms: 4.5
+  vas_liters: 308.94
+  cms_m_per_n: 0.072
+  xmax_mm: 13.0
+  xmech_mm: null
+  le_mh: 4.0
+  bl_tm: 36.4
+  mms_g: 0.388
+  mmd_g: null
+  sd_cm2: 0.1734
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 98.0
+  pe_max_watts: 1600.0
+  pe_peak_watts: 3200.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

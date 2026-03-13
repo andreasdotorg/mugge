@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: visaton-frs-5-8
+  manufacturer: Visaton
+  model: FRS 5-8
+  driver_type: full-range
+  nominal_diameter_in: 2.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: paper
+  surround_material: foam
+  voice_coil_diameter_mm: 13.97
+  weight_kg: 0.13
+  mounting:
+    cutout_diameter_mm: 45.97
+    bolt_circle_diameter_mm: 59.94
+    bolt_count: 2
+    overall_depth_mm: 31.5
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/Visaton-FRS5-8-2-Full-Range-Speaker-8-Ohm-292-536
+  datasheet_file: data/292-536--visaton-frs5-8-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 292-536.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 270.0
+  re_ohm: 7.2
+  z_nom_ohm: 8
+  qts: 1.15
+  qes: 1.81
+  qms: 3.19
+  vas_liters: 0.16
+  cms_m_per_n: null
+  xmax_mm: 0.6
+  xmech_mm: null
+  le_mh: 0.2
+  bl_tm: 1.6
+  mms_g: null
+  mmd_g: null
+  sd_cm2: 12.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 84.0
+  pe_max_watts: 5.0
+  pe_peak_watts: 8.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

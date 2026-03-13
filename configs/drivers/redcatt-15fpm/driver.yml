@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: redcatt-15fpm
+  manufacturer: REDCATT
+  model: 15FPM
+  driver_type: null
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: 340.0
+  magnet_type: null
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 101.6
+  weight_kg: 12.0
+  mounting:
+    cutout_diameter_mm: 360.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 150.0
+    flange_diameter_mm: 392.0
+  datasheet_url: https://www.loudspeakerdatabase.com/REDCATT/15FPM
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 41.0
+  re_ohm: 5.2
+  z_nom_ohm: 8.0
+  qts: 0.36
+  qes: 0.38
+  qms: 8.07
+  vas_liters: 135.0
+  cms_m_per_n: 0.000117
+  xmax_mm: 7.7
+  xmech_mm: null
+  le_mh: 1.17
+  bl_tm: 21.3
+  mms_g: 127.0
+  mmd_g: 108.0
+  sd_cm2: 908.0
+  sensitivity_db_1w1m: 95.3
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 1000.0
+  pe_peak_watts: 2000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 699.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

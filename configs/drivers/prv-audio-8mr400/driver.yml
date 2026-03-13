@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-8mr400
+  manufacturer: PRV Audio
+  model: 8MR400
+  driver_type: midrange
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 38.1
+  weight_kg: 11.79
+  mounting:
+    cutout_diameter_mm: 177.04
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 83.06
+    flange_diameter_mm: 210.06
+  datasheet_url: https://www.parts-express.com/PRV-Audio-8MR400-8-Midrange-Woofer-294-3532
+  datasheet_file: data/294-3532--prv-audio-8mr400-8-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-3532.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 78.2
+  re_ohm: 5.4
+  z_nom_ohm: 8
+  qts: 0.52
+  qes: 0.56
+  qms: 8.52
+  vas_liters: 20.22
+  cms_m_per_n: 0.000295
+  xmax_mm: 4.0
+  xmech_mm: null
+  le_mh: 0.42
+  bl_tm: 8.15
+  mms_g: 14.05
+  mmd_g: null
+  sd_cm2: 222.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.0
+  pe_max_watts: 400.0
+  pe_peak_watts: 800.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

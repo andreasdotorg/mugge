@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: peerless-by-tymphany-tc9fd18-08
+  manufacturer: Peerless by Tymphany
+  model: TC9FD18-08
+  driver_type: full-range
+  nominal_diameter_in: 3.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: rubber
+  voice_coil_diameter_mm: 19.05
+  weight_kg: 0.32
+  mounting:
+    cutout_diameter_mm: 76.2
+    bolt_circle_diameter_mm: 88.9
+    bolt_count: 4
+    overall_depth_mm: 42.93
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/Peerless-TC9FD18-08-3-1-2-Full-Range-Paper-Cone-Woofer-264-1062
+  datasheet_file: data/264-1062--tymphany-tc9fd18-08-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-1062.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 125.0
+  re_ohm: 6.3
+  z_nom_ohm: 8
+  qts: 0.89
+  qes: 1.33
+  qms: 2.7
+  vas_liters: 1.13
+  cms_m_per_n: 0.00067
+  xmax_mm: 2.55
+  xmech_mm: null
+  le_mh: 0.05
+  bl_tm: 3.01
+  mms_g: 2.43
+  mmd_g: null
+  sd_cm2: 36.3
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 83.5
+  pe_max_watts: 30.0
+  pe_peak_watts: 60.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

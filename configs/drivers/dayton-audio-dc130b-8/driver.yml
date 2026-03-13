@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-dc130b-8
+  manufacturer: Dayton Audio
+  model: DC130B-8
+  driver_type: woofer
+  nominal_diameter_in: 5.25
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 25.4
+  weight_kg: 0.93
+  mounting:
+    cutout_diameter_mm: 119.89
+    bolt_circle_diameter_mm: 133.1
+    bolt_count: 4
+    overall_depth_mm: 67.82
+    flange_diameter_mm: 145.03
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-DC130B-8-5-1-4-Classic-Woofer-Speaker-295-304
+  datasheet_file: data/295-304-dayton-audio-dc130b-8-specifications-9385.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-304. Unmapped materials (raw): cone=Coated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 52.5
+  re_ohm: 5.7
+  z_nom_ohm: 8
+  qts: 0.38
+  qes: 0.48
+  qms: 1.85
+  vas_liters: 12.18
+  cms_m_per_n: 0.00101
+  xmax_mm: 2.5
+  xmech_mm: null
+  le_mh: 0.77
+  bl_tm: 5.94
+  mms_g: 9.1
+  mmd_g: null
+  sd_cm2: 91.6
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 89.1
+  pe_max_watts: 40.0
+  pe_peak_watts: 80.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

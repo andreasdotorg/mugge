@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: eton-8-212-c8-37-hex
+  manufacturer: ETON
+  model: 8-212/C8/37 HEX
+  driver_type: woofer
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 37.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 190.0
+    bolt_circle_diameter_mm: 210.0
+    bolt_count: 6
+    overall_depth_mm: 108.3
+    flange_diameter_mm: 223.0
+  datasheet_url: https://www.soundimports.eu/en/eton-8-212-c8-37-hex.html
+  datasheet_file: 8-212_C8_37_Hex_SymphonyII.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 28.0
+  re_ohm: 5.5
+  z_nom_ohm: 8
+  qts: 0.31
+  qes: 0.32
+  qms: 9.31
+  vas_liters: 80.0
+  cms_m_per_n: 0.00115
+  xmax_mm: 4.0
+  xmech_mm: null
+  le_mh: 0.78
+  bl_tm: 9.0
+  mms_g: 30.7
+  mmd_g: null
+  sd_cm2: 222.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 91.0
+  pe_max_watts: 120.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

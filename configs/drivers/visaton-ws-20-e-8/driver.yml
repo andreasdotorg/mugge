@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: visaton-ws-20-e-8
+  manufacturer: Visaton
+  model: WS 20 E - 8
+  driver_type: woofer
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: polypropylene
+  surround_material: rubber
+  voice_coil_diameter_mm: 30.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 186.0
+    bolt_circle_diameter_mm: 219.0
+    bolt_count: 4
+    overall_depth_mm: 85.9
+    flange_diameter_mm: 207.0
+  datasheet_url: https://www.soundimports.eu/en/visaton-ws-20-e-8.html
+  datasheet_file: pdf_Visaton_WS 20 E - 8_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 47.0
+  re_ohm: 6.8
+  z_nom_ohm: 8
+  qts: 1.23
+  qes: 1.59
+  qms: 5.36
+  vas_liters: 44.0
+  cms_m_per_n: 0.000539
+  xmax_mm: 3.0
+  xmech_mm: null
+  le_mh: 1.0
+  bl_tm: null
+  mms_g: 21.0
+  mmd_g: null
+  sd_cm2: 240.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 88.0
+  pe_max_watts: 80.0
+  pe_peak_watts: 120.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

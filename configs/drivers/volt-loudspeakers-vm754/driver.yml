@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: volt-loudspeakers-vm754
+  manufacturer: Volt Loudspeakers
+  model: VM754
+  driver_type: midrange
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 75.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 155.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 81.0
+    flange_diameter_mm: 164.0
+  datasheet_url: https://www.soundimports.eu/en/volt-loudspeakers-vm754.html
+  datasheet_file: VM754-Datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 400.0
+  re_ohm: 7.0
+  z_nom_ohm: 8
+  qts: null
+  qes: null
+  qms: null
+  vas_liters: 0.04
+  cms_m_per_n: 1.0e-05
+  xmax_mm: 4.0
+  xmech_mm: null
+  le_mh: 0.19
+  bl_tm: null
+  mms_g: 16.0
+  mmd_g: null
+  sd_cm2: 57.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 92.0
+  pe_max_watts: 100.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

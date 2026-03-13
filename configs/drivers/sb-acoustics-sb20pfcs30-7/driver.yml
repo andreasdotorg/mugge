@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: sb-acoustics-sb20pfcs30-7
+  manufacturer: SB Acoustics
+  model: SB20PFCS30-7
+  driver_type: woofer
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: foam
+  voice_coil_diameter_mm: 30.5
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: null
+    flange_diameter_mm: null
+  datasheet_url: https://www.soundimports.eu/en/sb-acoustics-sb20pfcs30-7.html
+  datasheet_file: SB20PFCS30-7-datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 39.0
+  re_ohm: 5.0
+  z_nom_ohm: 7
+  qts: 0.66
+  qes: 0.77
+  qms: 4.5
+  vas_liters: 59.5
+  cms_m_per_n: 0.00085
+  xmax_mm: 5.5
+  xmech_mm: null
+  le_mh: 0.95
+  bl_tm: null
+  mms_g: 19.6
+  mmd_g: null
+  sd_cm2: 222.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 88.0
+  pe_max_watts: 40.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

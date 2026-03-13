@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-12mc500
+  manufacturer: Beyma
+  model: 12MC500
+  driver_type: subwoofer
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 63.5
+  weight_kg: 6.49
+  mounting:
+    cutout_diameter_mm: 276.86
+    bolt_circle_diameter_mm: 294.64
+    bolt_count: 8
+    overall_depth_mm: 139.7
+    flange_diameter_mm: 312.42
+  datasheet_url: https://www.parts-express.com/Beyma-12MC500-MC-Series-12-Subwoofer-8-Ohm-253-014
+  datasheet_file: data/253-014--12mc500-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 253-014. Unmapped materials (raw): cone=Paper-Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 57.0
+  re_ohm: 5.6
+  z_nom_ohm: 8
+  qts: 0.34
+  qes: 0.35
+  qms: 7.8
+  vas_liters: 56.92
+  cms_m_per_n: 0.132
+  xmax_mm: 8.0
+  xmech_mm: null
+  le_mh: 0.7
+  bl_tm: 18.3
+  mms_g: 0.059
+  mmd_g: null
+  sd_cm2: 0.055
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 98.0
+  pe_max_watts: 500.0
+  pe_peak_watts: 1000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

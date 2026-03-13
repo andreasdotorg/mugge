@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-6mr500-ndy-4
+  manufacturer: PRV Audio
+  model: 6MR500-NDY-4
+  driver_type: midrange
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 1.66
+  mounting:
+    cutout_diameter_mm: 145.03
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 74.93
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/PRV-Audio-6MR500-NDY-4-6-1-2-Neodymium-Midrange-Woofer-4-Oh-294-2706
+  datasheet_file: data/294-2706--prv-audio-6mr500-ndy-4-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-2706.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 99.8
+  re_ohm: 3.8
+  z_nom_ohm: 4
+  qts: 0.43
+  qes: 0.47
+  qms: 23.1
+  vas_liters: 5.1
+  cms_m_per_n: 0.00018
+  xmax_mm: 4.42
+  xmech_mm: null
+  le_mh: 0.05
+  bl_tm: 8.77
+  mms_g: 14.14
+  mmd_g: null
+  sd_cm2: 143.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.0
+  pe_max_watts: 250.0
+  pe_peak_watts: 500.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

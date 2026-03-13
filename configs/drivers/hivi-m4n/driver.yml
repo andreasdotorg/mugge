@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: hivi-m4n
+  manufacturer: HiVi
+  model: M4N
+  driver_type: null
+  nominal_diameter_in: 4.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 22.22
+  weight_kg: 0.6
+  mounting:
+    cutout_diameter_mm: 100.03
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 64.77
+    flange_diameter_mm: 115.57
+  datasheet_url: https://www.parts-express.com/HiVi-M4N-4-Aluminum-Magnesium-Midbass-297-434
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 297-434. Unmapped materials (raw): cone=Aluminum / Magnesium.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 69.0
+  re_ohm: 6.5
+  z_nom_ohm: 8
+  qts: 1.08
+  qes: 1.35
+  qms: 5.9
+  vas_liters: 4.53
+  cms_m_per_n: 0.00128
+  xmax_mm: 3.0
+  xmech_mm: null
+  le_mh: null
+  bl_tm: 3.1
+  mms_g: 4.8
+  mmd_g: null
+  sd_cm2: 53.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 82.0
+  pe_max_watts: 15.0
+  pe_peak_watts: 30.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

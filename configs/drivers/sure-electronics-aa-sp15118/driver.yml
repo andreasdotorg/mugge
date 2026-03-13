@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: sure-electronics-aa-sp15118
+  manufacturer: Sure Electronics
+  model: AA-SP15118
+  driver_type: full-range
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 12.7
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: null
+    flange_diameter_mm: null
+  datasheet_url: https://www.soundimports.eu/en/sure-electronics-aa-sp15118.html
+  datasheet_file: AA-SP15118.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 300.0
+  re_ohm: null
+  z_nom_ohm: null
+  qts: 2.79
+  qes: 6.97
+  qms: 4.66
+  vas_liters: 0.85
+  cms_m_per_n: null
+  xmax_mm: 0.5
+  xmech_mm: null
+  le_mh: 0.05
+  bl_tm: 1.2
+  mms_g: 0.7
+  mmd_g: null
+  sd_cm2: 11.51
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 81.0
+  pe_max_watts: 2.0
+  pe_peak_watts: 5.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

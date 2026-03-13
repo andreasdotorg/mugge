@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: seas-c16nx001-f
+  manufacturer: SEAS
+  model: C16NX001/F
+  driver_type: coaxial
+  nominal_diameter_in: 5.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 39.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 127.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 6
+    overall_depth_mm: 89.0
+    flange_diameter_mm: 146.0
+  datasheet_url: https://www.soundimports.eu/en/seas-c16nx001-f.html
+  datasheet_file: pdf_Seas_C16NX001F_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 35.0
+  re_ohm: 3.0
+  z_nom_ohm: 4
+  qts: 0.31
+  qes: 0.33
+  qms: 4.85
+  vas_liters: 16.0
+  cms_m_per_n: 0.00126
+  xmax_mm: 7.0
+  xmech_mm: null
+  le_mh: 0.23
+  bl_tm: null
+  mms_g: 16.2
+  mmd_g: null
+  sd_cm2: 94.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 88.5
+  pe_max_watts: 150.0
+  pe_peak_watts: 250.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

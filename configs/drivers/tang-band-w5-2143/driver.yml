@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: tang-band-w5-2143
+  manufacturer: Tang Band
+  model: W5-2143
+  driver_type: full-range
+  nominal_diameter_in: 5.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 25.4
+  weight_kg: 1.81
+  mounting:
+    cutout_diameter_mm: 122.94
+    bolt_circle_diameter_mm: 144.78
+    bolt_count: 4
+    overall_depth_mm: 84.84
+    flange_diameter_mm: 155.57
+  datasheet_url: https://www.parts-express.com/Tang-Band-W5-2143-5-Paper-Cone-Full-Range-Driver-8-Ohm-264-958
+  datasheet_file: data/264-958--tang-band-w5-2143-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-958. Unmapped materials (raw): cone=Bamboo Fiber / Paper, surround=Santoprene®.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 55.0
+  re_ohm: 6.3
+  z_nom_ohm: 8
+  qts: 0.38
+  qes: 0.43
+  qms: 3.21
+  vas_liters: 18.97
+  cms_m_per_n: 0.0014
+  xmax_mm: 2.5
+  xmech_mm: null
+  le_mh: 0.02
+  bl_tm: 5.43
+  mms_g: 5.99
+  mmd_g: null
+  sd_cm2: 97.83
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.0
+  pe_max_watts: 30.0
+  pe_peak_watts: 60.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

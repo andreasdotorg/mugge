@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: tang-band-t0-2008s
+  manufacturer: Tang Band
+  model: T0-2008S
+  driver_type: null
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: null
+  weight_kg: 0.02
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: 2
+    overall_depth_mm: 8.64
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/Tang-Band-T0-2008S-Speaker-Module-2-5-32-x-1-264-943
+  datasheet_file: data/264-928s.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-943. Unmapped materials (raw): cone=Poly Composite.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 200.0
+  re_ohm: null
+  z_nom_ohm: 4
+  qts: null
+  qes: null
+  qms: null
+  vas_liters: null
+  cms_m_per_n: null
+  xmax_mm: null
+  xmech_mm: null
+  le_mh: null
+  bl_tm: null
+  mms_g: null
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 73.0
+  pe_max_watts: 0.5
+  pe_peak_watts: 1.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

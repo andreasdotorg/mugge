@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-umii18-22
+  manufacturer: Dayton Audio
+  model: UMII18-22
+  driver_type: subwoofer
+  nominal_diameter_in: 18.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: carbon-fiber
+  surround_material: rubber
+  voice_coil_diameter_mm: 76.2
+  weight_kg: 21.59
+  mounting:
+    cutout_diameter_mm: 426.72
+    bolt_circle_diameter_mm: 447.04
+    bolt_count: 8
+    overall_depth_mm: 218.44
+    flange_diameter_mm: 469.9
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-UMII18-22-ULTIMAX-II-18-1100W-RMS-DVC-Subwoofer-2-Ohm-Per-Coil-295-718
+  datasheet_file: data/295-718--dayton-audio-UMII18-22-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-718.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 22.0
+  re_ohm: 4.2
+  z_nom_ohm: 4
+  qts: 0.53
+  qes: 0.67
+  qms: 2.53
+  vas_liters: 248.34
+  cms_m_per_n: 0.000124
+  xmax_mm: 28.0
+  xmech_mm: null
+  le_mh: 1.15
+  bl_tm: 19.2
+  mms_g: 420.0
+  mmd_g: null
+  sd_cm2: 1184.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.7
+  pe_max_watts: 1200.0
+  pe_peak_watts: 2400.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

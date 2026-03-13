@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: ds18-slc10s
+  manufacturer: DS18
+  model: SLC10S
+  driver_type: subwoofer
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: foam
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 3.97
+  mounting:
+    cutout_diameter_mm: 231.9
+    bolt_circle_diameter_mm: 245.87
+    bolt_count: 8
+    overall_depth_mm: 113.03
+    flange_diameter_mm: 259.84
+  datasheet_url: https://www.parts-express.com/DS18-SLC10S-Selelct-10-Paper-Cone-Subwoofer-4-Ohm-294-8076
+  datasheet_file: data/294-8076--ds18-slc10s-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-8076. Unmapped materials (raw): cone=Paper / Glass Fiber.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 40.0
+  re_ohm: 3.6
+  z_nom_ohm: 4
+  qts: 0.774
+  qes: 0.89
+  qms: 5.88
+  vas_liters: 36.81
+  cms_m_per_n: null
+  xmax_mm: 8.5
+  xmech_mm: null
+  le_mh: null
+  bl_tm: null
+  mms_g: null
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 88.0
+  pe_max_watts: 220.0
+  pe_peak_watts: 440.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-dma70-8
+  manufacturer: Dayton Audio
+  model: DMA70-8
+  driver_type: full-range
+  nominal_diameter_in: 2.5
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: aluminum
+  surround_material: rubber
+  voice_coil_diameter_mm: 25.4
+  weight_kg: 0.16
+  mounting:
+    cutout_diameter_mm: 63.75
+    bolt_circle_diameter_mm: 83.82
+    bolt_count: 4
+    overall_depth_mm: 38.35
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-DMA70-8-2-1-2-Dual-Magnet-Aluminum-Cone-Full-Range-Driver-8-Ohm-295-585
+  datasheet_file: data/295-585--dayton-audio-dma70-8-specification-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-585.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 113.7
+  re_ohm: 7.5
+  z_nom_ohm: 8
+  qts: 0.5
+  qes: 0.66
+  qms: 2.06
+  vas_liters: 0.57
+  cms_m_per_n: 0.00073
+  xmax_mm: 2.0
+  xmech_mm: null
+  le_mh: 0.47
+  bl_tm: 4.7
+  mms_g: 2.6
+  mmd_g: null
+  sd_cm2: 22.9
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 82.9
+  pe_max_watts: 20.0
+  pe_peak_watts: 40.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

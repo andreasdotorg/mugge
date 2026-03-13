@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: morel-mw-1058
+  manufacturer: Morel
+  model: MW 1058
+  driver_type: subwoofer
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 129.54
+  weight_kg: 7.26
+  mounting:
+    cutout_diameter_mm: 225.04
+    bolt_circle_diameter_mm: 252.98
+    bolt_count: 6
+    overall_depth_mm: 136.65
+    flange_diameter_mm: 262.89
+  datasheet_url: https://www.parts-express.com/Morel-MW-1058-Classic-Series-10-Paper-Carbon-Fiber-Cone-Subwoofer-297-136
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 297-136. Unmapped materials (raw): cone=Paper / Carbon Fiber.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 33.0
+  re_ohm: 5.9
+  z_nom_ohm: 8
+  qts: 0.47
+  qes: 0.61
+  qms: 2.02
+  vas_liters: 32.56
+  cms_m_per_n: 0.000202
+  xmax_mm: 10.0
+  xmech_mm: null
+  le_mh: 1.98
+  bl_tm: 15.18
+  mms_g: 115.5
+  mmd_g: null
+  sd_cm2: 337.1
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 84.7
+  pe_max_watts: 500.0
+  pe_peak_watts: 1500.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

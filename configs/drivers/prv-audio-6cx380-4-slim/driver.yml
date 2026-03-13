@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-6cx380-4-slim
+  manufacturer: PRV Audio
+  model: 6CX380-4 SLIM
+  driver_type: coaxial
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 38.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 185.5
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 98.0
+    flange_diameter_mm: 172.0
+  datasheet_url: https://www.soundimports.eu/en/prv-audio-6cx380-4-slim.html
+  datasheet_file: 6CX380-4 SLIM-Datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 111.7
+  re_ohm: 3.6
+  z_nom_ohm: null
+  qts: 0.77
+  qes: 0.84
+  qms: 8.6
+  vas_liters: 6.61
+  cms_m_per_n: null
+  xmax_mm: 2.75
+  xmech_mm: null
+  le_mh: 0.113
+  bl_tm: 5.11
+  mms_g: 8.77
+  mmd_g: null
+  sd_cm2: 143.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.0
+  pe_max_watts: 380.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: ciare-hmb165
+  manufacturer: Ciare
+  model: HMB165
+  driver_type: midrange
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: 131.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 32.0
+  weight_kg: 1.69
+  mounting:
+    cutout_diameter_mm: 146.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 73.0
+    flange_diameter_mm: 174.0
+  datasheet_url: https://www.loudspeakerdatabase.com/Ciare/HMB165
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 86.0
+  re_ohm: 5.7
+  z_nom_ohm: 8.0
+  qts: 0.53
+  qes: 0.63
+  qms: 3.19
+  vas_liters: 8.6
+  cms_m_per_n: 0.00034199999999999996
+  xmax_mm: 3.5
+  xmech_mm: null
+  le_mh: 0.49
+  bl_tm: 7.0
+  mms_g: 10.0
+  mmd_g: 8.8
+  sd_cm2: 135.0
+  sensitivity_db_1w1m: 91.0
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 90.0
+  pe_peak_watts: 180.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 47.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

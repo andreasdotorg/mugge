@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: visaton-ti-100
+  manufacturer: Visaton
+  model: TI 100
+  driver_type: woofer
+  nominal_diameter_in: 4.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 21.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 101.0
+    bolt_circle_diameter_mm: 111.0
+    bolt_count: 4
+    overall_depth_mm: 76.0
+    flange_diameter_mm: 121.5
+  datasheet_url: https://www.soundimports.eu/en/visaton-ti-100.html
+  datasheet_file: pdf_visaton_TI 100_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 62.0
+  re_ohm: 6.4
+  z_nom_ohm: 8
+  qts: 0.41
+  qes: 0.44
+  qms: 5.95
+  vas_liters: 5.68
+  cms_m_per_n: 0.00137
+  xmax_mm: 4.0
+  xmech_mm: null
+  le_mh: 0.7
+  bl_tm: 4.98
+  mms_g: 4.0
+  mmd_g: null
+  sd_cm2: 54.4
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 86.0
+  pe_max_watts: 40.0
+  pe_peak_watts: 60.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

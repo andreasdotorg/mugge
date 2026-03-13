@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: grs-12smp-4
+  manufacturer: GRS
+  model: 12SMP-4
+  driver_type: woofer
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 50.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 284.0
+    bolt_circle_diameter_mm: 319.0
+    bolt_count: 6
+    overall_depth_mm: 136.0
+    flange_diameter_mm: 332.0
+  datasheet_url: https://www.soundimports.eu/en/grs-12smp-4.html
+  datasheet_file: GRS-12SMP-4-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 28.0
+  re_ohm: 3.9
+  z_nom_ohm: 4
+  qts: 0.51
+  qes: 0.61
+  qms: 3.1
+  vas_liters: 132.0
+  cms_m_per_n: 0.00035
+  xmax_mm: 5.5
+  xmech_mm: null
+  le_mh: 0.41
+  bl_tm: 10.2
+  mms_g: 93.0
+  mmd_g: null
+  sd_cm2: 516.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 91.9
+  pe_max_watts: 90.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

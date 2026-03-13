@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-sd315a-88
+  manufacturer: Dayton Audio
+  model: SD315A-88
+  driver_type: subwoofer
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 4.67
+  mounting:
+    cutout_diameter_mm: 272.03
+    bolt_circle_diameter_mm: 303.78
+    bolt_count: 5
+    overall_depth_mm: 130.05
+    flange_diameter_mm: 313.94
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-SD315A-88-12-DVC-Subwoofer-295-488
+  datasheet_file: data/295-488-dayton-audio-sd315a-88-specifications-47086.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-488. Unmapped materials (raw): cone=Coated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 24.2
+  re_ohm: 3.1
+  z_nom_ohm: 4
+  qts: 0.33
+  qes: 0.37
+  qms: 3.54
+  vas_liters: 151.78
+  cms_m_per_n: 0.0004
+  xmax_mm: 7.0
+  xmech_mm: null
+  le_mh: 1.5
+  bl_tm: 11.86
+  mms_g: 109.2
+  mmd_g: null
+  sd_cm2: 522.8
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 93.75
+  pe_max_watts: 120.0
+  pe_peak_watts: 240.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

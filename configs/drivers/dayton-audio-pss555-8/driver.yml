@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-pss555-8
+  manufacturer: Dayton Audio
+  model: PSS555-8
+  driver_type: subwoofer
+  nominal_diameter_in: 21.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: cloth
+  voice_coil_diameter_mm: 114.3
+  weight_kg: 27.4
+  mounting:
+    cutout_diameter_mm: 510.54
+    bolt_circle_diameter_mm: 530.23
+    bolt_count: 8
+    overall_depth_mm: 254.0
+    flange_diameter_mm: 549.91
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-PSS555-8-21-Pro-Subwoofer-with-4.5-Voice-Coil-8-Ohm-295-050
+  datasheet_file: data/295-050--dayton-audio-pss555-8-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-050. Unmapped materials (raw): cone=Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 27.6
+  re_ohm: 5.4
+  z_nom_ohm: 8
+  qts: 0.33
+  qes: 0.34
+  qms: 10.7
+  vas_liters: 444.01
+  cms_m_per_n: 0.00011
+  xmax_mm: 11.0
+  xmech_mm: null
+  le_mh: 1.8
+  bl_tm: 29.7
+  mms_g: 316.0
+  mmd_g: null
+  sd_cm2: 1735.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.3
+  pe_max_watts: 1000.0
+  pe_peak_watts: 2000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

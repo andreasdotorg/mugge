@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: morel-integra-624
+  manufacturer: Morel
+  model: Integra 624
+  driver_type: full-range
+  nominal_diameter_in: 6.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 54.1
+  weight_kg: 1.07
+  mounting:
+    cutout_diameter_mm: 139.95
+    bolt_circle_diameter_mm: 151.89
+    bolt_count: 6
+    overall_depth_mm: 62.99
+    flange_diameter_mm: 160.27
+  datasheet_url: https://www.parts-express.com/Morel-Integra-624-Hybrid-Series-6-Point-Source-Coaxial-Full-Range-297-028
+  datasheet_file: data/297-028--morel-integra-624-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 297-028. Unmapped materials (raw): cone=Soft Dome.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 58.0
+  re_ohm: 3.68
+  z_nom_ohm: 4
+  qts: 0.35
+  qes: 0.43
+  qms: 1.84
+  vas_liters: 15.29
+  cms_m_per_n: 0.00077
+  xmax_mm: 3.0
+  xmech_mm: null
+  le_mh: 0.53
+  bl_tm: 5.4
+  mms_g: 9.62
+  mmd_g: null
+  sd_cm2: 119.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.3
+  pe_max_watts: 80.0
+  pe_peak_watts: 200.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

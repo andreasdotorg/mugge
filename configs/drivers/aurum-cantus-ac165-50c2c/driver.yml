@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: aurum-cantus-ac165-50c2c
+  manufacturer: Aurum Cantus
+  model: AC165/50C2C
+  driver_type: woofer
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: carbon-fiber
+  surround_material: null
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 2.4
+  mounting:
+    cutout_diameter_mm: 145.8
+    bolt_circle_diameter_mm: 168.02
+    bolt_count: 4
+    overall_depth_mm: 88.9
+    flange_diameter_mm: 177.04
+  datasheet_url: https://www.parts-express.com/Aurum-Cantus-AC165-50C2C-6-1-2-Midwoofer-296-446
+  datasheet_file: data/296-446-aurum-cantus-ac16550c2c-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 296-446.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 37.0
+  re_ohm: 7.0
+  z_nom_ohm: 8
+  qts: 0.19
+  qes: 0.2
+  qms: 4.22
+  vas_liters: 32.0
+  cms_m_per_n: 0.00129
+  xmax_mm: 6.0
+  xmech_mm: null
+  le_mh: 0.67
+  bl_tm: 10.8
+  mms_g: 14.3
+  mmd_g: null
+  sd_cm2: 133.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.0
+  pe_max_watts: 150.0
+  pe_peak_watts: 225.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

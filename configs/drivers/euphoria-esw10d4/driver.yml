@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: euphoria-esw10d4
+  manufacturer: EUPHORIA
+  model: ESW10D4
+  driver_type: subwoofer
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: 205.0
+  magnet_type: null
+  cone_material: polypropylene
+  surround_material: foam
+  voice_coil_diameter_mm: null
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 230.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 125.0
+    flange_diameter_mm: 260.0
+  datasheet_url: https://www.loudspeakerdatabase.com/EUPHORIA/ESW10D4
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 33.2
+  re_ohm: 6.65
+  z_nom_ohm: 2.0
+  qts: 0.57
+  qes: 0.64
+  qms: 5.26
+  vas_liters: 27.3
+  cms_m_per_n: 0.000176
+  xmax_mm: null
+  xmech_mm: null
+  le_mh: 3.77
+  bl_tm: 16.845
+  mms_g: 130.0
+  mmd_g: 126.0
+  sd_cm2: 330.0
+  sensitivity_db_1w1m: 84.1
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 500.0
+  pe_peak_watts: 1000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

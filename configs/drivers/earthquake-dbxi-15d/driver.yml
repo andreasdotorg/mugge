@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: earthquake-dbxi-15d
+  manufacturer: Earthquake
+  model: DBXi-15D
+  driver_type: subwoofer
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: 340.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: null
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 360.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 202.0
+    flange_diameter_mm: 395.0
+  datasheet_url: https://www.loudspeakerdatabase.com/Earthquake/DBXI-15D
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 20.0
+  re_ohm: 8.0
+  z_nom_ohm: 2.0
+  qts: 0.45
+  qes: 1.14
+  qms: 5.99
+  vas_liters: 91.1
+  cms_m_per_n: 7.8e-05
+  xmax_mm: null
+  xmech_mm: 44.5
+  le_mh: 15.3
+  bl_tm: 26.8
+  mms_g: 812.0
+  mmd_g: 793.0
+  sd_cm2: 907.0
+  sensitivity_db_1w1m: 82.1
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 750.0
+  pe_peak_watts: 2000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

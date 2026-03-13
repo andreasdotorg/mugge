@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-5p200fe
+  manufacturer: Beyma
+  model: 5P200Fe
+  driver_type: woofer
+  nominal_diameter_in: 6.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 38.1
+  weight_kg: 2.31
+  mounting:
+    cutout_diameter_mm: 119.38
+    bolt_circle_diameter_mm: 142.24
+    bolt_count: 4
+    overall_depth_mm: 78.74
+    flange_diameter_mm: 154.94
+  datasheet_url: https://www.parts-express.com/Beyma-5P200Fe-P200-Series-5-Midbass-Woofer-8-Ohm-253-031
+  datasheet_file: data/253-031--5p200fe-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 253-031. Unmapped materials (raw): cone=Paper-Treated Paper, surround=Santoprene®.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 72.0
+  re_ohm: 5.2
+  z_nom_ohm: 8
+  qts: 0.33
+  qes: 0.35
+  qms: 7.5
+  vas_liters: 5.66
+  cms_m_per_n: 0.451
+  xmax_mm: 5.7
+  xmech_mm: null
+  le_mh: 0.6
+  bl_tm: 8.5
+  mms_g: 10.0
+  mmd_g: null
+  sd_cm2: 0.0095
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 92.0
+  pe_max_watts: 150.0
+  pe_peak_watts: 300.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

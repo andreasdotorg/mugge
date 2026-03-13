@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: celestion-ftx1025
+  manufacturer: Celestion
+  model: FTX1025
+  driver_type: full-range
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: cloth
+  voice_coil_diameter_mm: 63.5
+  weight_kg: 5.17
+  mounting:
+    cutout_diameter_mm: 234.95
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 122.94
+    flange_diameter_mm: 260.1
+  datasheet_url: https://www.parts-express.com/Celestion-FTX1025-10-Coaxial-Full-Range-Professional-Driver-294-2510
+  datasheet_file: data/294-2510--celestion-ftx1025-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-2510. Unmapped materials (raw): cone=Paper / Kevlar.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 71.5
+  re_ohm: 5.42
+  z_nom_ohm: 8
+  qts: 0.44
+  qes: 0.523
+  qms: 2.788
+  vas_liters: 25.77
+  cms_m_per_n: 0.00015
+  xmax_mm: 5.0
+  xmech_mm: null
+  le_mh: 0.48
+  bl_tm: 12.3
+  mms_g: 32.55
+  mmd_g: null
+  sd_cm2: 346.36
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.0
+  pe_max_watts: 300.0
+  pe_peak_watts: 600.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

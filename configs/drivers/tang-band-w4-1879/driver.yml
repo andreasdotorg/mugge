@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: tang-band-w4-1879
+  manufacturer: Tang Band
+  model: W4-1879
+  driver_type: full-range
+  nominal_diameter_in: 4.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 25.4
+  weight_kg: 1.66
+  mounting:
+    cutout_diameter_mm: 95.5
+    bolt_circle_diameter_mm: 115.06
+    bolt_count: 4
+    overall_depth_mm: 80.77
+    flange_diameter_mm: 125.48
+  datasheet_url: https://www.parts-express.com/Tang-Band-W4-1879-4-Full-Range-Driver-264-903
+  datasheet_file: data/264-903--tang-band-w4-1879-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-903. Unmapped materials (raw): cone=Wood Fiber.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 55.0
+  re_ohm: 6.3
+  z_nom_ohm: 8
+  qts: 0.43
+  qes: 0.51
+  qms: 2.68
+  vas_liters: 9.06
+  cms_m_per_n: null
+  xmax_mm: 5.0
+  xmech_mm: null
+  le_mh: 0.025
+  bl_tm: 4.19
+  mms_g: 4.0
+  mmd_g: null
+  sd_cm2: 57.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 87.0
+  pe_max_watts: 25.0
+  pe_peak_watts: 50.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

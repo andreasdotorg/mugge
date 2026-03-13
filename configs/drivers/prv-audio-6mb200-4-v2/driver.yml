@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-6mb200-4-v2
+  manufacturer: PRV Audio
+  model: 6MB200-4 V2
+  driver_type: woofer
+  nominal_diameter_in: 6.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 38.1
+  weight_kg: 1.7
+  mounting:
+    cutout_diameter_mm: 143.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 66.04
+    flange_diameter_mm: 165.86
+  datasheet_url: https://www.parts-express.com/PRV-Audio-6MB200-4-V2-6-Midbass-Woofer-4-Ohm-294-3055
+  datasheet_file: data/294-3055--prv-audio-6mb200-4-v2-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-3055.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 123.79
+  re_ohm: 3.7
+  z_nom_ohm: 4
+  qts: 0.97
+  qes: 1.02
+  qms: 20.84
+  vas_liters: 3.96
+  cms_m_per_n: 0.000139
+  xmax_mm: 4.8
+  xmech_mm: null
+  le_mh: 0.18
+  bl_tm: 5.79
+  mms_g: 11.89
+  mmd_g: null
+  sd_cm2: 154.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 93.5
+  pe_max_watts: 100.0
+  pe_peak_watts: 200.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: down4sound-dbz12d4
+  manufacturer: Down4Sound
+  model: DBz12D4
+  driver_type: subwoofer
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: 274.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 69.9
+  weight_kg: 14.878
+  mounting:
+    cutout_diameter_mm: 286.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 195.0
+    flange_diameter_mm: 316.0
+  datasheet_url: https://www.loudspeakerdatabase.com/Down4Sound/DBz12D4
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 39.7
+  re_ohm: 6.05
+  z_nom_ohm: 2.0
+  qts: 0.45
+  qes: 0.56
+  qms: 2.43
+  vas_liters: 18.4
+  cms_m_per_n: 4.59e-05
+  xmax_mm: 28.0
+  xmech_mm: null
+  le_mh: 6.62
+  bl_tm: 30.757
+  mms_g: 350.0
+  mmd_g: 340.0
+  sd_cm2: 591.0
+  sensitivity_db_1w1m: 87.1
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 1300.0
+  pe_peak_watts: 2600.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 1655.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

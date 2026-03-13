@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: visaton-gf-200
+  manufacturer: Visaton
+  model: GF 200
+  driver_type: subwoofer
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 38.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 190.0
+    bolt_circle_diameter_mm: 210.0
+    bolt_count: 6
+    overall_depth_mm: 96.0
+    flange_diameter_mm: 222.0
+  datasheet_url: https://www.soundimports.eu/en/visaton-gf-200.html
+  datasheet_file: pdf_visaton_GF 200_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 30.0
+  re_ohm: null
+  z_nom_ohm: null
+  qts: 0.77
+  qes: null
+  qms: null
+  vas_liters: null
+  cms_m_per_n: 0.001047
+  xmax_mm: 6.0
+  xmech_mm: null
+  le_mh: null
+  bl_tm: null
+  mms_g: 25.0
+  mmd_g: null
+  sd_cm2: 214.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 88.0
+  pe_max_watts: 120.0
+  pe_peak_watts: 180.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

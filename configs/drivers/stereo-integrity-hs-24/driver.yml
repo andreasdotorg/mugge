@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: stereo-integrity-hs-24
+  manufacturer: Stereo Integrity
+  model: HS-24
+  driver_type: subwoofer
+  nominal_diameter_in: 24.0
+  actual_diameter_mm: 515.0
+  magnet_type: null
+  cone_material: kevlar
+  surround_material: null
+  voice_coil_diameter_mm: null
+  weight_kg: 65.77
+  mounting:
+    cutout_diameter_mm: 568.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 324.0
+    flange_diameter_mm: 618.0
+  datasheet_url: https://www.loudspeakerdatabase.com/StereoIntegrity/HS-24
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 16.2
+  re_ohm: 3.5
+  z_nom_ohm: 2.0
+  qts: 0.47
+  qes: 0.52
+  qms: 5.36
+  vas_liters: 564.0
+  cms_m_per_n: 9.27e-05
+  xmax_mm: 40.0
+  xmech_mm: 60.0
+  le_mh: 2.1
+  bl_tm: 26.32
+  mms_g: 1067.0
+  mmd_g: 1000.0
+  sd_cm2: 2083.0
+  sensitivity_db_1w1m: 88.1
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 3000.0
+  pe_peak_watts: 6000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 8330.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

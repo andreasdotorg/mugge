@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-rss210hf-4
+  manufacturer: Dayton Audio
+  model: RSS210HF-4
+  driver_type: subwoofer
+  nominal_diameter_in: 8.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: aluminum
+  surround_material: rubber
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 3.99
+  mounting:
+    cutout_diameter_mm: 184.91
+    bolt_circle_diameter_mm: null
+    bolt_count: 6
+    overall_depth_mm: 123.95
+    flange_diameter_mm: 213.11
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-RSS210HF-4-8-Reference-Series-HF-Subwoofer-4-Ohm-295-456
+  datasheet_file: data/295-456-dayton-audio-rss210hf-4-specifications-46171.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-456.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 29.6
+  re_ohm: 3.1
+  z_nom_ohm: 4
+  qts: 0.57
+  qes: 0.69
+  qms: 3.25
+  vas_liters: 23.79
+  cms_m_per_n: 0.00037
+  xmax_mm: 9.0
+  xmech_mm: null
+  le_mh: 0.7
+  bl_tm: 8.12
+  mms_g: 78.4
+  mmd_g: null
+  sd_cm2: 219.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 85.6
+  pe_max_watts: 280.0
+  pe_peak_watts: 560.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

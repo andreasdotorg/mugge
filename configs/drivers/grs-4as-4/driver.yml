@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: grs-4as-4
+  manufacturer: GRS
+  model: 4AS-4
+  driver_type: woofer
+  nominal_diameter_in: 4.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: null
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 102.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 47.0
+    flange_diameter_mm: 116.0
+  datasheet_url: https://www.soundimports.eu/en/grs-4as-4.html
+  datasheet_file: 4AS-4-Datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 131.0
+  re_ohm: 3.6
+  z_nom_ohm: 4
+  qts: 1.48
+  qes: 1.95
+  qms: 6.09
+  vas_liters: 1.4
+  cms_m_per_n: 0.00033
+  xmax_mm: null
+  xmech_mm: null
+  le_mh: 0.3
+  bl_tm: 2.6
+  mms_g: 4.5
+  mmd_g: null
+  sd_cm2: 55.1
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.0
+  pe_max_watts: 25.0
+  pe_peak_watts: 50.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

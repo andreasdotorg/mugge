@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-um10-22
+  manufacturer: Dayton Audio
+  model: UM10-22
+  driver_type: subwoofer
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 63.5
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 236.7
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 178.0
+    flange_diameter_mm: 273.5
+  datasheet_url: https://www.soundimports.eu/en/dayton-audio-um10-22.html
+  datasheet_file: pdf_dayton audio_UM10-22_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 32.0
+  re_ohm: 3.7
+  z_nom_ohm: null
+  qts: 0.72
+  qes: 0.94
+  qms: 3.02
+  vas_liters: 19.5
+  cms_m_per_n: 0.00013
+  xmax_mm: 19.0
+  xmech_mm: null
+  le_mh: 0.77
+  bl_tm: 12.3
+  mms_g: 192.0
+  mmd_g: null
+  sd_cm2: 327.8
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 84.8
+  pe_max_watts: 500.0
+  pe_peak_watts: 1000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

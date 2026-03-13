@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-ce48-4
+  manufacturer: Dayton Audio
+  model: CE48-4
+  driver_type: full-range
+  nominal_diameter_in: 2.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 16.0
+  weight_kg: 0.18
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: 50.8
+    bolt_count: 4
+    overall_depth_mm: 35.56
+    flange_diameter_mm: 64.77
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-CE48-4-2-Full-Range-8W-4-ohm-285-163
+  datasheet_file: data/285-163--dayton-audio-ce48-4-specification-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 285-163.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 151.0
+  re_ohm: 3.5
+  z_nom_ohm: 4
+  qts: 0.95
+  qes: 1.04
+  qms: 11.03
+  vas_liters: 0.06
+  cms_m_per_n: 0.00059
+  xmax_mm: 1.2
+  xmech_mm: null
+  le_mh: 0.37
+  bl_tm: 2.48
+  mms_g: 1.9
+  mmd_g: null
+  sd_cm2: 9.1
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 79.0
+  pe_max_watts: 5.0
+  pe_peak_watts: 10.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

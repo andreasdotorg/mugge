@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-dc380-8
+  manufacturer: Dayton Audio
+  model: DC380-8
+  driver_type: woofer
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: rubber
+  voice_coil_diameter_mm: 51.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 349.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 162.0
+    flange_diameter_mm: 385.0
+  datasheet_url: https://www.soundimports.eu/en/dayton-audio-dc380-8.html
+  datasheet_file: pdf_dayton audio_DC380-8_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 18.8
+  re_ohm: 6.4
+  z_nom_ohm: 8
+  qts: 0.3
+  qes: 0.34
+  qms: 2.87
+  vas_liters: 391.4
+  cms_m_per_n: 0.00039
+  xmax_mm: 4.35
+  xmech_mm: null
+  le_mh: 3.09
+  bl_tm: 20.4
+  mms_g: 182.9
+  mmd_g: null
+  sd_cm2: 834.7
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 91.8
+  pe_max_watts: 100.0
+  pe_peak_watts: 200.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

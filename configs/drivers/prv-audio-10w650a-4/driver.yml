@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: prv-audio-10w650a-4
+  manufacturer: PRV Audio
+  model: 10W650A-4
+  driver_type: woofer
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 63.5
+  weight_kg: 5.76
+  mounting:
+    cutout_diameter_mm: 234.95
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 119.89
+    flange_diameter_mm: 256.54
+  datasheet_url: https://www.parts-express.com/PRV-Audio-10W650A-4-10-Alto-Series-Professional-Woofer-4-Ohm-294-2894
+  datasheet_file: data/294-2894--prv-audio-10w650a-4-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-2894.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 66.88
+  re_ohm: 3.7
+  z_nom_ohm: 4
+  qts: 0.39
+  qes: 0.4
+  qms: 16.07
+  vas_liters: 41.34
+  cms_m_per_n: 0.00017
+  xmax_mm: 4.0
+  xmech_mm: null
+  le_mh: 0.57
+  bl_tm: 11.23
+  mms_g: 33.1
+  mmd_g: null
+  sd_cm2: 415.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 97.0
+  pe_max_watts: 325.0
+  pe_peak_watts: 650.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: faitalpro-12pr320
+  manufacturer: FaitalPRO
+  model: 12PR320
+  driver_type: woofer
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: cloth
+  voice_coil_diameter_mm: 65.02
+  weight_kg: 3.56
+  mounting:
+    cutout_diameter_mm: 281.94
+    bolt_circle_diameter_mm: 298.45
+    bolt_count: 8
+    overall_depth_mm: 119.89
+    flange_diameter_mm: 315.98
+  datasheet_url: https://www.parts-express.com/FaitalPRO-12PR320-12-Professional-Neodymium-Woofer-8-Ohm-294-1326
+  datasheet_file: data/294-1326--faitalpro-12pr320-spec sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-1326. Unmapped materials (raw): cone=Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 42.0
+  re_ohm: 5.3
+  z_nom_ohm: 8
+  qts: 0.37
+  qes: 0.39
+  qms: 7.8
+  vas_liters: 113.27
+  cms_m_per_n: 0.00028
+  xmax_mm: 7.37
+  xmech_mm: null
+  le_mh: 0.67
+  bl_tm: 13.5
+  mms_g: 51.4
+  mmd_g: null
+  sd_cm2: 539.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 97.0
+  pe_max_watts: 300.0
+  pe_peak_watts: 600.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

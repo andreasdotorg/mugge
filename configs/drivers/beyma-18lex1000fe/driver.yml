@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-18lex1000fe
+  manufacturer: Beyma
+  model: 18LEX1000Fe
+  driver_type: subwoofer
+  nominal_diameter_in: 18.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 88.9
+  weight_kg: 12.97
+  mounting:
+    cutout_diameter_mm: 414.02
+    bolt_circle_diameter_mm: 439.42
+    bolt_count: 8
+    overall_depth_mm: 223.52
+    flange_diameter_mm: 462.28
+  datasheet_url: https://www.parts-express.com/Beyma-18LEX1000Fe-LEX-Series-18-Subwoofer-8-Ohm-253-047
+  datasheet_file: data/253-047--18lex1000fe-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 253-047. Unmapped materials (raw): cone=Paper-Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 34.0
+  re_ohm: 5.4
+  z_nom_ohm: 8
+  qts: 0.38
+  qes: 0.39
+  qms: 7.3
+  vas_liters: 250.04
+  cms_m_per_n: 0.0057
+  xmax_mm: 11.0
+  xmech_mm: null
+  le_mh: 1.9
+  bl_tm: 23.8
+  mms_g: 0.196
+  mmd_g: null
+  sd_cm2: 0.1255
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 98.0
+  pe_max_watts: 1000.0
+  pe_peak_watts: 2000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

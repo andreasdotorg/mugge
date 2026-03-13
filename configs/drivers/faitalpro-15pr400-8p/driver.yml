@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: faitalpro-15pr400-8p
+  manufacturer: FaitalPRO
+  model: 15PR400-8P
+  driver_type: subwoofer
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 77.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 356.0
+    bolt_circle_diameter_mm: 374.0
+    bolt_count: 8
+    overall_depth_mm: 165.0
+    flange_diameter_mm: 393.0
+  datasheet_url: https://www.soundimports.eu/en/faitalpro-15pr400-8p.html
+  datasheet_file: 15pr400-4-datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 35.0
+  re_ohm: null
+  z_nom_ohm: 8
+  qts: 0.32
+  qes: 0.34
+  qms: 6.0
+  vas_liters: null
+  cms_m_per_n: 0.00024
+  xmax_mm: 5.75
+  xmech_mm: null
+  le_mh: 0.72
+  bl_tm: null
+  mms_g: 85.2
+  mmd_g: null
+  sd_cm2: 857.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 99.0
+  pe_max_watts: 400.0
+  pe_peak_watts: 800.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

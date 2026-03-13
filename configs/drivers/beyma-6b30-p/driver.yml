@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-6b30-p
+  manufacturer: Beyma
+  model: 6B30/P
+  driver_type: woofer
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 25.4
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 141.0
+    bolt_circle_diameter_mm: 156.0
+    bolt_count: 4
+    overall_depth_mm: 76.0
+    flange_diameter_mm: 167.0
+  datasheet_url: https://www.soundimports.eu/en/beyma-6b30p.html
+  datasheet_file: 6B30P-datasheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 56.0
+  re_ohm: 5.5
+  z_nom_ohm: 8
+  qts: 0.5
+  qes: 0.6
+  qms: 3.0
+  vas_liters: 15.6
+  cms_m_per_n: null
+  xmax_mm: 5.5
+  xmech_mm: null
+  le_mh: 0.3
+  bl_tm: null
+  mms_g: 0.014
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.0
+  pe_max_watts: 50.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

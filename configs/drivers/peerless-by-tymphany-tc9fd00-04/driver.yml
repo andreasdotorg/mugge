@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: peerless-by-tymphany-tc9fd00-04
+  manufacturer: Peerless by Tymphany
+  model: TC9FD00-04
+  driver_type: full-range
+  nominal_diameter_in: 3.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: paper
+  surround_material: cloth
+  voice_coil_diameter_mm: 19.3
+  weight_kg: 0.39
+  mounting:
+    cutout_diameter_mm: 76.2
+    bolt_circle_diameter_mm: 89.41
+    bolt_count: 4
+    overall_depth_mm: 46.99
+    flange_diameter_mm: 83.82
+  datasheet_url: https://www.parts-express.com/Peerless-TC9FD00-04-3-1-2-Full-Range-Line-Array-Driver-4-Oh-264-1358
+  datasheet_file: data/264-1358--Tymphany-TC9FD00-04-Spec-Sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 264-1358.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 175.0
+  re_ohm: 3.0
+  z_nom_ohm: 4
+  qts: 1.01
+  qes: 1.28
+  qms: 4.8
+  vas_liters: 0.85
+  cms_m_per_n: 0.000398
+  xmax_mm: 1.6
+  xmech_mm: null
+  le_mh: 0.02
+  bl_tm: 2.33
+  mms_g: 2.09
+  mmd_g: null
+  sd_cm2: 36.3
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.3
+  pe_max_watts: 25.0
+  pe_peak_watts: 50.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

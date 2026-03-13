@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-15mlex1000nd
+  manufacturer: Beyma
+  model: 15MLEX1000Nd
+  driver_type: subwoofer
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: 335.0
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 101.6
+  weight_kg: 9.4
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 189.0
+    flange_diameter_mm: 393.0
+  datasheet_url: https://www.loudspeakerdatabase.com/Beyma/15MLEX1000Nd
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 38.0
+  re_ohm: 5.3
+  z_nom_ohm: 8.0
+  qts: 0.2
+  qes: 0.21
+  qms: 7.2
+  vas_liters: 167.0
+  cms_m_per_n: 0.00015199999999999998
+  xmax_mm: 11.0
+  xmech_mm: 60.0
+  le_mh: 1.3
+  bl_tm: 26.0
+  mms_g: 111.0
+  mmd_g: 92.8
+  sd_cm2: 880.0
+  sensitivity_db_1w1m: 97.6
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 1000.0
+  pe_peak_watts: 2000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 968.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

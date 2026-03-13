@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: accuton-c90-6-078
+  manufacturer: Accuton
+  model: C90-6-078
+  driver_type: midrange
+  nominal_diameter_in: 5.0
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 38.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 102.0
+    bolt_circle_diameter_mm: 110.0
+    bolt_count: 4
+    overall_depth_mm: 64.5
+    flange_diameter_mm: 130.0
+  datasheet_url: https://www.soundimports.eu/en/accuton-c90-6-078.html
+  datasheet_file: Datasheet C90-6-078.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 100.0
+  re_ohm: 6.4
+  z_nom_ohm: null
+  qts: 0.92
+  qes: 1.52
+  qms: 2.4
+  vas_liters: 3.9
+  cms_m_per_n: 0.00036
+  xmax_mm: null
+  xmech_mm: null
+  le_mh: 0.18
+  bl_tm: 4.3
+  mms_g: 6.96
+  mmd_g: null
+  sd_cm2: 86.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 88.0
+  pe_max_watts: 120.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

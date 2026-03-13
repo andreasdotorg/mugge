@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: redcatt-5fhw
+  manufacturer: REDCATT
+  model: 5FHW
+  driver_type: woofer
+  nominal_diameter_in: 5.0
+  actual_diameter_mm: 105.0
+  magnet_type: null
+  cone_material: polypropylene
+  surround_material: rubber
+  voice_coil_diameter_mm: 25.4
+  weight_kg: 1.23
+  mounting:
+    cutout_diameter_mm: 112.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 60.0
+    flange_diameter_mm: 131.0
+  datasheet_url: https://www.loudspeakerdatabase.com/REDCATT/5FHW
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 50.0
+  re_ohm: 3.2
+  z_nom_ohm: 4.0
+  qts: 0.35
+  qes: 0.38
+  qms: 4.94
+  vas_liters: 6.55
+  cms_m_per_n: 0.000625
+  xmax_mm: 5.6
+  xmech_mm: null
+  le_mh: 0.66
+  bl_tm: 6.55
+  mms_g: 15.8
+  mmd_g: 15.2
+  sd_cm2: 86.6
+  sensitivity_db_1w1m: 85.4
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 30.0
+  pe_peak_watts: 60.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 49.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: redcatt-121find
+  manufacturer: REDCATT
+  model: 121FIND
+  driver_type: null
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: 260.0
+  magnet_type: null
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 50.8
+  weight_kg: 4.6
+  mounting:
+    cutout_diameter_mm: 282.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 124.0
+    flange_diameter_mm: 320.0
+  datasheet_url: https://www.loudspeakerdatabase.com/REDCATT/121FIND
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 59.0
+  re_ohm: 3.1
+  z_nom_ohm: 4.0
+  qts: 0.52
+  qes: 0.56
+  qms: 7.34
+  vas_liters: 59.1
+  cms_m_per_n: 0.00023099999999999998
+  xmax_mm: 6.5
+  xmech_mm: null
+  le_mh: 0.32
+  bl_tm: 10.2
+  mms_g: 49.1
+  mmd_g: 43.2
+  sd_cm2: 531.0
+  sensitivity_db_1w1m: 94.7
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 250.0
+  pe_peak_watts: 500.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 345.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

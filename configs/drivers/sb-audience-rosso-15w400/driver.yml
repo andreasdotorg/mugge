@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: sb-audience-rosso-15w400
+  manufacturer: SB Audience
+  model: ROSSO-15W400
+  driver_type: woofer
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 75.5
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 359.4
+    bolt_circle_diameter_mm: 378.0
+    bolt_count: 8
+    overall_depth_mm: 170.4
+    flange_diameter_mm: 394.0
+  datasheet_url: https://www.soundimports.eu/en/sb-audience-rosso-15w400.html
+  datasheet_file: Rosso-15W400.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 44.0
+  re_ohm: 5.2
+  z_nom_ohm: 8
+  qts: 0.33
+  qes: 0.34
+  qms: 11.15
+  vas_liters: 140.1
+  cms_m_per_n: 0.00012
+  xmax_mm: 8.26
+  xmech_mm: null
+  le_mh: 1.0
+  bl_tm: 21.5
+  mms_g: null
+  mmd_g: null
+  sd_cm2: 907.9
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 102.0
+  pe_max_watts: 400.0
+  pe_peak_watts: 800.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

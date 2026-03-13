@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: redcatt-183find
+  manufacturer: REDCATT
+  model: 183FIND
+  driver_type: woofer
+  nominal_diameter_in: 18.0
+  actual_diameter_mm: 395.0
+  magnet_type: null
+  cone_material: paper
+  surround_material: null
+  voice_coil_diameter_mm: 76.2
+  weight_kg: 8.8
+  mounting:
+    cutout_diameter_mm: 422.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 184.0
+    flange_diameter_mm: 461.0
+  datasheet_url: https://www.loudspeakerdatabase.com/REDCATT/183FIND
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 32.0
+  re_ohm: 5.9
+  z_nom_ohm: 8.0
+  qts: 0.42
+  qes: 0.43
+  qms: 13.2
+  vas_liters: 330.0
+  cms_m_per_n: 0.000153
+  xmax_mm: 8.4
+  xmech_mm: null
+  le_mh: 0.73
+  bl_tm: 21.1
+  mms_g: 165.0
+  mmd_g: 135.0
+  sd_cm2: 1225.0
+  sensitivity_db_1w1m: 95.9
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 600.0
+  pe_peak_watts: 1200.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 1029.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

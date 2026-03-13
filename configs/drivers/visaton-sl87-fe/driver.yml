@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: visaton-sl87-fe
+  manufacturer: Visaton
+  model: SL87 FE
+  driver_type: full-range
+  nominal_diameter_in: 3.5
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: polypropylene
+  surround_material: rubber
+  voice_coil_diameter_mm: 20.07
+  weight_kg: 0.5
+  mounting:
+    cutout_diameter_mm: 80.01
+    bolt_circle_diameter_mm: 98.04
+    bolt_count: 4
+    overall_depth_mm: 49.02
+    flange_diameter_mm: null
+  datasheet_url: https://www.parts-express.com/Visaton-SL87-FE-8-Ohm-3.4-Full-Range-Speaker-8-Ohm-292-614
+  datasheet_file: data/292-614--visaton-sl87-fe-8-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 292-614.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 120.0
+  re_ohm: 7.2
+  z_nom_ohm: 8
+  qts: 0.65
+  qes: 0.82
+  qms: 3.3
+  vas_liters: 1.42
+  cms_m_per_n: null
+  xmax_mm: 1.75
+  xmech_mm: null
+  le_mh: null
+  bl_tm: 3.95
+  mms_g: 2.4
+  mmd_g: null
+  sd_cm2: 37.3
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 87.0
+  pe_max_watts: 10.0
+  pe_peak_watts: 15.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

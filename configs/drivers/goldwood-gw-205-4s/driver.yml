@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: goldwood-gw-205-4s
+  manufacturer: Goldwood
+  model: GW-205/4S
+  driver_type: woofer
+  nominal_diameter_in: 5.25
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: foam
+  voice_coil_diameter_mm: 25.4
+  weight_kg: 1.36
+  mounting:
+    cutout_diameter_mm: 120.65
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 79.38
+    flange_diameter_mm: 133.35
+  datasheet_url: https://www.parts-express.com/Goldwood-GW-205-4S-5-1-4-Shielded-Poly-Woofer-4-Ohm-290-374
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 290-374. Unmapped materials (raw): cone=Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 83.1
+  re_ohm: 3.6
+  z_nom_ohm: 4
+  qts: 0.68
+  qes: 0.87
+  qms: 3.18
+  vas_liters: 5.38
+  cms_m_per_n: 0.0004
+  xmax_mm: 2.0
+  xmech_mm: null
+  le_mh: 0.2
+  bl_tm: 4.44
+  mms_g: 9.1
+  mmd_g: null
+  sd_cm2: 96.77
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 87.0
+  pe_max_watts: 70.0
+  pe_peak_watts: 130.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: sica-6-h-1-5-cp
+  manufacturer: SICA
+  model: 6 H 1,5 CP
+  driver_type: null
+  nominal_diameter_in: 6.5
+  actual_diameter_mm: 125.0
+  magnet_type: null
+  cone_material: paper
+  surround_material: rubber
+  voice_coil_diameter_mm: 38.0
+  weight_kg: 1.6
+  mounting:
+    cutout_diameter_mm: 143.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 79.0
+    flange_diameter_mm: 166.0
+  datasheet_url: https://www.loudspeakerdatabase.com/SICA/6H1,5CP
+  datasheet_file: null
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from loudspeakerdatabase.com on 2026-03-12
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 46.0
+  re_ohm: 6.1
+  z_nom_ohm: 8.0
+  qts: 0.35
+  qes: 0.38
+  qms: 3.68
+  vas_liters: 16.6
+  cms_m_per_n: 0.000776
+  xmax_mm: 6.0
+  xmech_mm: null
+  le_mh: 0.95
+  bl_tm: 8.39
+  mms_g: 15.4
+  mmd_g: 14.4
+  sd_cm2: 123.0
+  sensitivity_db_1w1m: 87.8
+  sensitivity_db_2v83_1m: null
+  pe_max_watts: 120.0
+  pe_peak_watts: 240.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: 74.0
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

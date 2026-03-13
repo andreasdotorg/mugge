@@ -25,3 +25,6 @@ result-*
 # Project-specific
 data/US-003/T3e/cyclictest_output.txt
 scripts/room-correction/output/
+
+# Driver datasheets (referenced by URL, not stored in git)
+configs/drivers/**/data/*.pdf

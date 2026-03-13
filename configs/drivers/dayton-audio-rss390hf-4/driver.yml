@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-rss390hf-4
+  manufacturer: Dayton Audio
+  model: RSS390HF-4
+  driver_type: subwoofer
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: aluminum
+  surround_material: rubber
+  voice_coil_diameter_mm: 63.5
+  weight_kg: 13.61
+  mounting:
+    cutout_diameter_mm: 355.85
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 178.05
+    flange_diameter_mm: 388.37
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-RSS390HF-4-15-Reference-Series-HF-Subwoofer-4-Ohm-295-468
+  datasheet_file: data/295-468-dayton-audio-rss390hf-4-specifications-46176.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 295-468.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 19.5
+  re_ohm: 3.0
+  z_nom_ohm: 4
+  qts: 0.43
+  qes: 0.5
+  qms: 3.02
+  vas_liters: 212.09
+  cms_m_per_n: 0.00022
+  xmax_mm: 14.0
+  xmech_mm: null
+  le_mh: 0.92
+  bl_tm: 15.0
+  mms_g: 306.0
+  mmd_g: null
+  sd_cm2: 829.6
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 91.2
+  pe_max_watts: 500.0
+  pe_peak_watts: 1000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

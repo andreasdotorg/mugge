@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: dayton-audio-amt2-4
+  manufacturer: Dayton Audio
+  model: AMT2-4
+  driver_type: tweeter
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: null
+  weight_kg: 0.34
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 28.45
+    flange_diameter_mm: 89.92
+  datasheet_url: https://www.parts-express.com/Dayton-Audio-AMT2-4-Air-Motion-Transformer-Tweeter-275-092
+  datasheet_file: data/275-092s.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 275-092.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 2300.0
+  re_ohm: 3.5
+  z_nom_ohm: 4
+  qts: 2.86
+  qes: null
+  qms: 2.92
+  vas_liters: null
+  cms_m_per_n: null
+  xmax_mm: null
+  xmech_mm: null
+  le_mh: null
+  bl_tm: null
+  mms_g: null
+  mmd_g: null
+  sd_cm2: null
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 92.5
+  pe_max_watts: 15.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: eton-12-212-c8-62-hex
+  manufacturer: ETON
+  model: 12-212/C8/62 HEX
+  driver_type: subwoofer
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 62.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 282.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 150.0
+    flange_diameter_mm: 330.5
+  datasheet_url: https://www.soundimports.eu/en/eton-12-212-c8-62-hex.html
+  datasheet_file: 12-212_C8_62_Hex_SymphonyII.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 24.0
+  re_ohm: 6.2
+  z_nom_ohm: 8
+  qts: 0.31
+  qes: 0.32
+  qms: 7.15
+  vas_liters: 176.0
+  cms_m_per_n: 0.00047
+  xmax_mm: 8.5
+  xmech_mm: null
+  le_mh: 1.57
+  bl_tm: 15.7
+  mms_g: 92.7
+  mmd_g: null
+  sd_cm2: 515.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 92.0
+  pe_max_watts: 200.0
+  pe_peak_watts: 400.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

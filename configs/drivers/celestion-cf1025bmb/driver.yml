@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: celestion-cf1025bmb
+  manufacturer: Celestion
+  model: CF1025BMB
+  driver_type: midrange
+  nominal_diameter_in: 10.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: rubber
+  voice_coil_diameter_mm: 63.5
+  weight_kg: 5.08
+  mounting:
+    cutout_diameter_mm: null
+    bolt_circle_diameter_mm: null
+    bolt_count: 8
+    overall_depth_mm: 124.46
+    flange_diameter_mm: 264.92
+  datasheet_url: https://www.parts-express.com/Celestion-CF1025BMB-8-Professional-Midrange-Driver-8-Ohm-294-1970
+  datasheet_file: data/294-1970--cf1025bmb-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 294-1970. Unmapped materials (raw): cone=Paper / Glass Fiber.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 40.9
+  re_ohm: 6.04
+  z_nom_ohm: 8
+  qts: 0.355
+  qes: 0.371
+  qms: 7.952
+  vas_liters: 46.16
+  cms_m_per_n: null
+  xmax_mm: 4.65
+  xmech_mm: null
+  le_mh: 1.15
+  bl_tm: 15.28
+  mms_g: 55.865
+  mmd_g: null
+  sd_cm2: 346.36
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 92.5
+  pe_max_watts: 300.0
+  pe_peak_watts: 600.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

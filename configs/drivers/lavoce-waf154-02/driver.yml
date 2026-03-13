@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: lavoce-waf154-02
+  manufacturer: Lavoce
+  model: WAF154.02
+  driver_type: subwoofer
+  nominal_diameter_in: 15.0
+  actual_diameter_mm: null
+  magnet_type: ferrite
+  cone_material: null
+  surround_material: cloth
+  voice_coil_diameter_mm: 101.6
+  weight_kg: 12.56
+  mounting:
+    cutout_diameter_mm: 353.82
+    bolt_circle_diameter_mm: 373.13
+    bolt_count: 8
+    overall_depth_mm: 172.72
+    flange_diameter_mm: 392.94
+  datasheet_url: https://www.parts-express.com/LaVoce-WAF154.02-15-Subwoofer-8-Ohm-293-722
+  datasheet_file: data/293-722--lavoce-waf154.02-specifications.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 293-722. Unmapped materials (raw): cone=Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 40.0
+  re_ohm: 6.0
+  z_nom_ohm: 8
+  qts: 0.39
+  qes: 0.42
+  qms: 7.2
+  vas_liters: 131.11
+  cms_m_per_n: 0.0001
+  xmax_mm: 7.9
+  xmech_mm: null
+  le_mh: 1.7
+  bl_tm: 23.1
+  mms_g: 148.8
+  mmd_g: null
+  sd_cm2: 830.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.0
+  pe_max_watts: 1000.0
+  pe_peak_watts: 2000.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: accuton-s220-6-222
+  manufacturer: Accuton
+  model: S220-6-222
+  driver_type: subwoofer
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: null
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: null
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 191.0
+    bolt_circle_diameter_mm: null
+    bolt_count: null
+    overall_depth_mm: 112.5
+    flange_diameter_mm: 220.0
+  datasheet_url: https://www.soundimports.eu/en/accuton-s220-6-222.html
+  datasheet_file: S220-6-222.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 25.0
+  re_ohm: 6.52
+  z_nom_ohm: null
+  qts: 0.26
+  qes: 0.27
+  qms: 3.83
+  vas_liters: null
+  cms_m_per_n: 0.00126
+  xmax_mm: 5.25
+  xmech_mm: null
+  le_mh: 0.36
+  bl_tm: null
+  mms_g: 32.15
+  mmd_g: null
+  sd_cm2: 224.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 91.5
+  pe_max_watts: 150.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

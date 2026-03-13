@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: beyma-12lex1300nd
+  manufacturer: Beyma
+  model: 12LEX1300Nd
+  driver_type: subwoofer
+  nominal_diameter_in: 12.0
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: null
+  surround_material: null
+  voice_coil_diameter_mm: 101.6
+  weight_kg: 8.98
+  mounting:
+    cutout_diameter_mm: 281.94
+    bolt_circle_diameter_mm: 297.18
+    bolt_count: 8
+    overall_depth_mm: 175.26
+    flange_diameter_mm: 314.96
+  datasheet_url: https://www.parts-express.com/Beyma-12LEX1300Nd-LEX-Series-12-Neo-Subwoofer-8-Ohm-253-042
+  datasheet_file: data/253-042--12lex1000nd-spec-sheet.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: 'Scraped from parts-express.com. Part number: 253-042. Unmapped materials (raw): cone=Paper-Treated Paper.'
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 45.0
+  re_ohm: 5.0
+  z_nom_ohm: 8
+  qts: 0.24
+  qes: 0.25
+  qms: 4.2
+  vas_liters: 43.04
+  cms_m_per_n: 0.1
+  xmax_mm: 11.0
+  xmech_mm: null
+  le_mh: 1.3
+  bl_tm: 26.4
+  mms_g: 0.125
+  mmd_g: null
+  sd_cm2: 0.055
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 96.0
+  pe_max_watts: 1300.0
+  pe_peak_watts: 2600.0
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []

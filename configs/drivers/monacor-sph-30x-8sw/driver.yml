@@ -1,0 +1,72 @@
+schema_version: 1
+metadata:
+  id: monacor-sph-30x-8sw
+  manufacturer: Monacor
+  model: SPH-30X/8SW
+  driver_type: full-range
+  nominal_diameter_in: null
+  actual_diameter_mm: null
+  magnet_type: neodymium
+  cone_material: kevlar
+  surround_material: rubber
+  voice_coil_diameter_mm: 21.0
+  weight_kg: null
+  mounting:
+    cutout_diameter_mm: 73.0
+    bolt_circle_diameter_mm: null
+    bolt_count: 4
+    overall_depth_mm: 42.0
+    flange_diameter_mm: null
+  datasheet_url: https://www.soundimports.eu/en/monacor-sph-30x-8sw.html
+  datasheet_file: pdf_monacor_SPH-30X8SW_1.pdf
+  ts_parameter_source: manufacturer
+  ts_measurement_date: null
+  ts_measurement_notes: ''
+  notes: Scraped from soundimports.eu.
+  quantity_owned: null
+  serial_numbers: []
+  purchase_date: null
+  condition: null
+thiele_small:
+  fs_hz: 105.0
+  re_ohm: 5.7
+  z_nom_ohm: 8
+  qts: 0.49
+  qes: 0.49
+  qms: 8.59
+  vas_liters: 1.3
+  cms_m_per_n: 0.0009
+  xmax_mm: 2.0
+  xmech_mm: null
+  le_mh: 0.5
+  bl_tm: 4.48
+  mms_g: 2.65
+  mmd_g: null
+  sd_cm2: 30.0
+  sensitivity_db_1w1m: null
+  sensitivity_db_2v83_1m: 90.0
+  pe_max_watts: 20.0
+  pe_peak_watts: null
+  power_handling_note: ''
+  eta0_percent: null
+  vd_cm3: null
+measurements:
+  impedance_curve:
+    source: null
+    date: null
+    conditions: ''
+    data_file: null
+  frequency_response:
+    source: null
+    date: null
+    conditions: ''
+    reference_distance_m: null
+    data_file: null
+  nearfield_response:
+    source: null
+    date: null
+    data_file: null
+  distortion:
+    data_file: null
+    test_level_db_spl: null
+application_notes: []
