@@ -40,7 +40,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | Room correction pipeline | done (TK-071) | `scripts/room-correction/` — 13 modules (sweep, deconvolution, correction, crossover, combine, export, verify), mock room simulator, CLI runner, spatial averaging. Bose FIR generator (`generate_bose_filters.py`). All verification tests pass (D-009 compliant). |
 | Documentation suite | not started | Stories US-014 through US-016 defined |
 | Web UI platform | Stage 1+2 deployed | D-020 production dashboard deployed with 4 real backend collectors (CamillaDSP, PCM, System, PipeWire). HTTPS via self-signed cert (D-032). Spectrum analyzer via browser FFT. 24-channel meter layout. Lab notes: `D-020-poc-validation.md`, `webui-real-data-deployment.md`. |
-| Speaker profiles (Bose) | measured | PS28 III sub: port tuning measured (58/88 Hz dual-port), type changed to ported. Jewel Double Cube satellite: near-field measured (peak 339.8 Hz, usable 200Hz-6kHz), crossover moved 155->200 Hz. Lab notes written. |
+| Speaker profiles (Bose) | measured | PS28 III sub: port tuning measured (58/88 Hz dual-port), type changed to ported. Temporary bass shelf: LowShelf 70 Hz +6 dB Q=0.7 on sub ch [2,3] (D-034, temporary until Path A). Jewel Double Cube satellite: near-field measured (peak 339.8 Hz, usable 200Hz-6kHz), crossover moved 155->200 Hz. Lab notes written. |
 | Core software (CamillaDSP, Mixxx, Reaper) | installed | CamillaDSP 3.0.1, Mixxx 2.5.0, Reaper 7.64, wayvnc, Python venv. 7.5G/117G disk. RustDesk removed per D-018. |
 | Platform security | partial | US-000a: firewall active, SSH hardened, services disabled. CamillaDSP systemd service with `-a 127.0.0.1` (F-002 resolved). nfs-blkmap masked (F-011). wayvnc password auth (F-013 partially resolved — TLS needed before US-018 guest devices). RustDesk purged, firewall cleaned (F-014 resolved). |
 | Desktop trimming (US-000b) | done | lightdm disabled, labwc user service, RTKit installed, PipeWire FIFO rtprio 83-88. RAM: 397→302Mi. USBStreamer path fixed (hw:USBStreamer,0). |
@@ -117,6 +117,8 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - D-033 Stage 1 COMPLETE: Multi-user Nix 2.34.1 installed on Pi (S-011). All 5 checks pass. TK-139 unblocked.
 - S-010 near-miss reclassified: PA was off, no speaker damage. Defense-in-depth fixes implemented.
 - US-044 filed: CamillaDSP bypass protection (safety story). OS-level protections against accidental circumvention of CamillaDSP gain staging. Relates to D-014, S-010.
+- D-034 filed: Temporary bass shelf on Bose sub — LowShelf 70 Hz +6 dB Q=0.7 on sub ch [2,3]. Owner approved ("Much better"). AE Rule 13 safe (0.69W vs 62W). Temporary — remove when Path A FIR corrections deployed.
+- TK-150 DONE (`6394ab7`): Bass shelf deployed via pycamilladsp, persisted to disk and pushed.
 
 ### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.
@@ -272,3 +274,5 @@ See `docs/project/defects.md` for full details.
 - D-029: D-009 amendment — per-speaker-identity boost budget with compensating global attenuation (2026-03-11)
 - D-031: Mandatory subsonic driver protection in all speaker configurations (2026-03-11)
 - D-032: Web UI requires HTTPS for AudioWorklet secure context — self-signed cert on LAN (2026-03-12)
+- D-033: Incremental Nix adoption — staged path from Trixie to reproducible builds (2026-03-12)
+- D-034: Temporary bass shelf on Bose sub — LowShelf 70 Hz +6 dB Q=0.7, owner approved, remove when Path A FIR corrections deployed (2026-03-13)

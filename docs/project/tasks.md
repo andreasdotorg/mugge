@@ -208,6 +208,7 @@ current and future tasks.
 | TK-147 | atexit cleanup handler for quantum restoration in measurement script | unassigned | open | TK-141, US-008 | Review follow-up, 2026-03-13 | **Filed (LOW).** Ensure PipeWire quantum is restored to original value even on unclean exit (Ctrl+C, crash). Pure software. |
 | TK-148 | Clock sync warning in measurement output metadata | unassigned | open | TK-141, US-008 | Review follow-up, 2026-03-13 | **Filed (LOW).** Detect and warn about potential clock sync issues between USB audio interface and system clock. Include warning in output metadata. Pure software + Pi validation. |
 | TK-149 | Reproducibility check: dual sweep comparison in measurement script | unassigned | open | TK-141, US-008 | Review follow-up, 2026-03-13 | **Filed (LOW).** Run two identical sweeps and compare results to verify measurement reproducibility. Flag if deviation exceeds threshold. Pure software + Pi validation. |
+| TK-150 | Deploy temporary bass shelf on Bose sub (D-034) | worker-measurement | done | D-034 | Owner request + AE Option C, 2026-03-13 | **DONE** (`6394ab7`). LowShelf 70 Hz, +6 dB, Q=0.7 on sub channels [2,3]. Runtime-applied via pycamilladsp, persisted to disk and pushed. Owner approved: "Much better." Temporary — remove when Path A FIR corrections deployed. Rule 13 safe: 0.69W vs 62W limit. |
 
 ---
 

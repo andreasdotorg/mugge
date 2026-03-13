@@ -599,3 +599,34 @@ flake.nix) and immediately unblocks the Mixxx upgrade.
 
 **Related:** TK-138 (Stage 1 flake.nix change), TK-139 (Stage 1 Pi validation).
 Supersedes the implicit "Trixie for now" status quo for application packaging.
+
+## D-034: Temporary bass shelf on Bose sub — LowShelf 70 Hz +6 dB Q=0.7 (2026-03-13)
+
+**Context:** Owner reported Bose PS28 III sub output sounded thin during DJ
+session. AE provided three options: (A) analog trim only, (B) Path A
+listening-position measurement for proper FIR correction, (C) temporary IIR
+LowShelf filter via pycamilladsp runtime injection. Owner selected Option C
+for immediate improvement while Path A measurement is pending.
+
+**Decision:** Deploy a temporary IIR LowShelf filter on CamillaDSP sub
+channels [2, 3]: frequency 70 Hz, gain +6 dB, Q 0.7. This filter is
+explicitly temporary and will be removed when Path A FIR corrections (US-010)
+are generated from listening-position measurements.
+
+**Rationale:** (1) Owner feedback after deployment: "Much better. Needs
+adjustment by actual measurements, but sounds much more integrated now."
+(2) Power-safe: AE Rule 13 analysis confirmed 0.69W thermal load vs 62W
+driver limit — well within safe operating range. (3) Immediate quality-of-life
+improvement for active DJ sessions while proper measurement workflow is
+pending.
+
+**Constraints:** This is a D-009 exception — D-009 mandates cut-only
+correction, but this is a +6 dB boost. Acceptable because: (a) it is
+temporary and explicitly flagged for removal, (b) power analysis confirms
+safety, (c) the alternative (no correction) results in a subjectively poor
+listening experience that undermines owner confidence in the system.
+
+**Impact:** CamillaDSP production config for Bose profile gains two IIR
+LowShelf filters (one per sub channel). Must be removed when Path A FIR
+corrections are deployed. Related: D-009 (cut-only), D-029 (boost budget),
+US-010 (correction filter generation).
