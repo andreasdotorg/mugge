@@ -20,7 +20,7 @@
 #   Global: -10.5dB (D-029: max_boost across all identities + 0.5)
 #   Satellite: -10.5 global -> -7dB headroom -> FIR (no boost) -> -22dB power limit
 #     CHN-50P: 7W thermal limit.
-#   Sub: -10.5 global -> -13dB headroom -> FIR (up to +10dB) -> -22dB power limit
+#   Sub: -10.5 global -> -13dB headroom -> bass shelf (+6dB@70Hz) -> FIR (up to +10dB) -> -19dB power limit
 #     Bose PS28 III: 62W thermal limit (after boost).
 #
 # CAUTION: Sub driver 2 (ch 3) is phase-inverted for isobaric clamshell.
@@ -138,7 +138,7 @@ filters:
   sub_speaker_trim:
     type: Gain
     parameters:
-      gain: -22.0
+      gain: -19.0
 
   # --- Subsonic HPF (satellite protection) ---
   # ButterworthHighpass at 80Hz, order 4 (24dB/oct).
@@ -161,6 +161,19 @@ filters:
       type: ButterworthHighpass
       freq: 42
       order: 4
+
+  # --- Bass shelf (sub boost, temporary) ---
+  # LowShelf at 70Hz, +6dB, Q=0.7. Boosts sub output below crossover.
+  # Within D-029 max_boost_db budget (10dB limit, 6dB used, 4dB remains).
+  # Temporary: remove when Path A FIR corrections are generated.
+  # AE Rule 13 approved 2026-03-13.
+  sub_bass_shelf:
+    type: Biquad
+    parameters:
+      type: Lowshelf
+      freq: 70
+      gain: 6.0
+      q: 0.7
 
   # --- FIR convolution (crossover-only, no room correction yet) ---
   # Combined minimum-phase FIR filters:
@@ -216,6 +229,11 @@ pipeline:
     channels: [2, 3]
     names:
       - sub_hpf
+  # Sub bass shelf (temporary, before FIR)
+  - type: Filter
+    channels: [2, 3]
+    names:
+      - sub_bass_shelf
   # 5. FIR convolution (crossover + room correction + speaker EQ)
   - type: Filter
     channels: [0]
