@@ -26,7 +26,7 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-MEASUREMENT_CONFIG_MARKER = "__pi4audio_measurement__"
+from ..mode_manager import MEASUREMENT_CONFIG_MARKER
 
 # Path to room-correction scripts (resolved once at import time)
 _RC_DIR = os.path.normpath(os.path.join(
@@ -309,7 +309,6 @@ class MeasurementSession:
                 self._state = MeasurementState.ERROR
             self._finished_at = datetime.now()
             await self._broadcast_state({"error": str(exc)})
-            await self._restore_production_config()
         finally:
             await self._cleanup()
 
@@ -385,6 +384,13 @@ class MeasurementSession:
     # -- MEASURING -----------------------------------------------------------
 
     async def _run_measuring(self) -> None:
+        # Validate sweep level does not exceed any channel's thermal ceiling.
+        max_thermal = max(ch.thermal_ceiling_dbfs for ch in self._config.channels)
+        if self._config.sweep_level_dbfs > max_thermal:
+            raise RuntimeError(
+                f"sweep_level_dbfs ({self._config.sweep_level_dbfs}) exceeds "
+                f"thermal ceiling ({max_thermal})")
+
         self._transition(MeasurementState.MEASURING)
         await self._broadcast_state()
 
@@ -506,13 +512,14 @@ class MeasurementSession:
 
         if abort_task in done:
             log.info("CP-0: abort during playrec")
-            self._sd_abort()
-            if playrec_task in pending:
+            await asyncio.to_thread(self._sd_abort)
+            try:
+                await asyncio.wait_for(playrec_task, timeout=2.0)
+            except asyncio.TimeoutError:
+                log.error("CP-0: playrec thread did not exit within 2s after sd.abort()")
                 playrec_task.cancel()
-                try:
-                    await playrec_task
-                except (asyncio.CancelledError, Exception):
-                    pass
+            except Exception:
+                pass  # playrec may raise after abort — that's expected
             raise _AbortError(self._abort_reason or "abort during playrec")
 
         if abort_task in pending:
@@ -523,6 +530,8 @@ class MeasurementSession:
                 pass
 
         result = playrec_task.result()
+        # play_and_record() returns (trimmed_recording, pre_roll) tuple;
+        # MockSoundDevice.playrec() returns ndarray directly.
         return result[0] if isinstance(result, tuple) else result
 
     # -- Helpers -------------------------------------------------------------
@@ -548,7 +557,6 @@ class MeasurementSession:
         except RuntimeError:
             self._state = MeasurementState.ABORTED
         self._finished_at = datetime.now()
-        await self._restore_production_config()
         await self._broadcast_state({"abort_reason": reason})
         log.info("Session aborted: %s", reason)
 
@@ -611,7 +619,8 @@ class MeasurementSession:
 
     def _on_watchdog_timeout(self) -> None:
         self.request_abort("watchdog timeout")
-        self._sd_abort()
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, self._sd_abort)
 
     # -- Status snapshot -----------------------------------------------------
 

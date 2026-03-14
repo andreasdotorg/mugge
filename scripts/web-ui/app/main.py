@@ -62,9 +62,12 @@ def _sd_notify(state: str) -> bool:
         return False
     if addr[0] == "@":
         addr = "\0" + addr[1:]
-    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
-        sock.sendto(state.encode(), addr)
-    return True
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+            sock.sendto(state.encode(), addr)
+        return True
+    except OSError:
+        return False
 
 
 async def _watchdog_loop() -> None:

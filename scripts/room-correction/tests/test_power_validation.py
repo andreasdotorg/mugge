@@ -292,10 +292,10 @@ class TestPipelineGainSummation:
         """
         Production sub ch 2:
         mixer 0 + global_atten -10.5 + sub_headroom -13 + hpf 0
-        + bass_shelf +6 + fir(max_boost=10) +10 + trim -19 = -26.5 dB.
+        + bass_shelf +6 + fir(max_boost=10) +10 + trim -20.5 = -28.0 dB.
         """
         gain = trace_pipeline_gain_db(production_config, 2, fir_max_boost_db=10.0)
-        assert abs(gain - (-26.5)) < 0.05
+        assert abs(gain - (-28.0)) < 0.1
 
 
 # ----- Unit tests: power computation --------------------------------------

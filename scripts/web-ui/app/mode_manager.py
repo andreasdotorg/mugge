@@ -27,8 +27,10 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# Marker embedded in CamillaDSP config titles by the measurement session
-# via SetConfigJson.  Presence means a measurement session set the config.
+# Marker embedded in CamillaDSP config titles by the measurement session.
+# Future: measurement session will embed this via set_active_raw() (SetConfigJson).
+# Restoration uses set_config_file_path() + reload() (reads from disk).
+# Presence in the active config title means a measurement session set the config.
 MEASUREMENT_CONFIG_MARKER = "__pi4audio_measurement__"
 
 
