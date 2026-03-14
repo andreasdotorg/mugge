@@ -62,6 +62,9 @@ Measure tab states:
     |                                     v
     |                                 [RESULTS]
     |                                     |
+    |                                     v  (generate + deploy)
+    |                                 [VERIFY]
+    |                                     |
     └──── Done / New Session ────────────-┘
 ```
 
@@ -71,7 +74,8 @@ Measure tab states:
 - **SETUP:** Speaker/profile selection, mic check, pre-flight verification.
 - **GAIN CAL:** Automated gain calibration ramp with live SPL feedback.
 - **MEASURING:** Per-channel sweeps across multiple mic positions.
-- **RESULTS:** Post-measurement summary, before/after comparison, deploy decision.
+- **RESULTS:** Post-measurement summary, filter generation, deploy decision.
+- **VERIFY:** Post-deployment verification sweep, before/after comparison, final verdict.
 
 The wizard advances automatically between sub-steps but requires explicit operator
 confirmation at each major gate (setup -> gain cal -> measuring -> results).
@@ -105,6 +109,24 @@ confirmation at each major gate (setup -> gain cal -> measuring -> results).
 The "Start New Measurement" button is large (full-width, 64px height) and clearly
 the primary action. "Review Previous Sessions" is a text link — secondary action.
 
+**CamillaDSP config verification (AD-UX-8):** On every page load and at a 10-second
+poll interval, the IDLE state checks that CamillaDSP is running its production config
+(not a measurement config left over from a crashed session). If CamillaDSP is in a
+non-production state, a persistent warning banner appears at the top:
+
+```
++------------------------------------------------------------------+
+|  !! CamillaDSP is NOT in production config !!                    |
+|  Current: /tmp/measurement-config-20260314.yml                    |
+|  Expected: /etc/camilladsp/bose-home.yml                          |
+|  [Restore Production Config]                                      |
++------------------------------------------------------------------+
+```
+
+The "Restore Production Config" button sends a hot-reload command to switch back.
+This catches the case where a measurement script crashed without its try/finally
+restoration running (e.g., OOM kill, power loss).
+
 ---
 
 ## 4. SETUP State
@@ -113,7 +135,7 @@ the primary action. "Review Previous Sessions" is a text link — secondary acti
 
 ```
 +------------------------------------------------------------------+
-| MEASUREMENT SETUP                              Step 1 of 4       |
+| MEASUREMENT SETUP                              Step 1 of 5       |
 +------------------------------------------------------------------+
 |                                                                   |
 |   SELECT SPEAKER PROFILE                                         |
@@ -148,13 +170,17 @@ the primary action. "Review Previous Sessions" is a text link — secondary acti
   pre-created via CLI).
 - Measurement parameters have sensible defaults. The "estimated time" updates
   live as the operator changes position count and sweep duration.
-- Time estimate formula: `(channels * 36s gain_cal) + (channels * positions * (sweep_s + 5s_transition)) + 60s_overhead`. Displayed as "~N min" rounded up.
+- Time estimate formula accounts for mixed position counts:
+  `(channels * 36s gain_cal) + (sat_channels * sat_positions + sub_channels * sub_positions) * (sweep_s + 5s_transition) + 15s_reproducibility_check + 60s_overhead`.
+  For the Bose system with 5 sat positions, 3 sub positions, 10s sweeps:
+  `(4 * 36s) + (2*5 + 2*3) * 15s + 15s + 60s = 144 + 240 + 15 + 60 = 459s = ~8 min`.
+  Displayed as "~N min" rounded up.
 
 ### 4.2 Pre-Flight Check
 
 ```
 +------------------------------------------------------------------+
-| PRE-FLIGHT CHECK                               Step 2 of 4       |
+| PRE-FLIGHT CHECK                               Step 2 of 5       |
 +------------------------------------------------------------------+
 |                                                                   |
 |   The system is checking measurement prerequisites.               |
@@ -170,6 +196,7 @@ the primary action. "Review Previous Sessions" is a text link — secondary acti
 |   [OK]  ALSA Loopback configured                                 |
 |   [OK]  ada8200-in capture adapter stopped                        |
 |   [OK]  CPU temperature: 58C (< 70C)                             |
+|   [OK]  PipeWire xrun baseline: 0 (reset counter)               |
 |                                                                   |
 |   ALL CHECKS PASSED                                              |
 |                                                                   |
@@ -197,6 +224,13 @@ the primary action. "Review Previous Sessions" is a text link — secondary acti
 - Checks 5 (web UI audio streams) and 9 (ada8200-in) are auto-remediated: the
   web UI stops its own audio streams as part of entering measurement mode. The
   operator does not need to do this manually.
+- **Outcome verification (AD-UX-4):** Auto-remediation is not fire-and-forget.
+  After stopping audio streams, the pre-flight re-queries PipeWire (`pw-cli ls`)
+  to verify the JACK client / capture adapter nodes are actually gone. If the
+  node persists after 5 seconds, the check shows `[FAIL]` with: "Audio streams
+  stopped but PipeWire node still present. Manual intervention needed." This
+  prevents the case where the stop command succeeds but PipeWire hasn't released
+  the node yet.
 
 ---
 
@@ -205,17 +239,23 @@ the primary action. "Review Previous Sessions" is a text link — secondary acti
 The gain calibration ramp (US-012 amended) is the first audio-producing phase.
 It establishes safe operating levels for each speaker channel individually.
 
+**Channel order: subs first, satellites last** (Sub1, Sub2, SatL, SatR). Subs are
+calibrated first because their acoustic behavior is harder to predict (room
+coupling, boundary reinforcement) and they set the baseline SPL that satellites
+must match. If a sub cannot reach target SPL due to thermal ceiling, the operator
+knows before wasting time on satellites.
+
 ### 5.1 Gain Calibration — Per Channel
 
 ```
 +------------------------------------------------------------------+
-| GAIN CALIBRATION                               Step 3 of 4       |
+| GAIN CALIBRATION                               Step 3 of 5       |
 +------------------------------------------------------------------+
 |                                                    [ABORT]       |
 |                                                                   |
-|   CALIBRATING: Channel 0 — SatL (Bose Jewel Double Cube)         |
-|   HPF active: 200 Hz (4th-order Butterworth)                     |
-|   Thermal ceiling: -11.8 dBFS (from driver T/S params)           |
+|   CALIBRATING: Channel 2 — Sub1 (Bose PS28 III)                  |
+|   HPF active: 42 Hz (4th-order Butterworth)                      |
+|   Thermal ceiling: -14.2 dBFS (from Pe_max=62W, Z=2.33 ohm)     |
 |                                                                   |
 |   +------------------------------------------------------+       |
 |   |                                                      |       |
@@ -224,7 +264,7 @@ It establishes safe operating levels for each speaker channel individually.
 |   |      63 dB           75 dB                           |       |
 |   |      ████░░░░░░      ──────────|                     |       |
 |   |                                                      |       |
-|   |   Digital level: -48 dBFS                            |       |
+|   |   Digital level: -48 dBFS       Xruns: 0             |       |
 |   |   Step: 4 of ~12  (+3 dB coarse)                    |       |
 |   |                                                      |       |
 |   +------------------------------------------------------+       |
@@ -232,7 +272,7 @@ It establishes safe operating levels for each speaker channel individually.
 |   Ramp progress:  ████████░░░░░░░░░░░░  33%                     |
 |   Estimated remaining: ~24s for this channel                     |
 |                                                                   |
-|   Channel progress: [*SatL*] [SatR] [Sub1] [Sub2]               |
+|   Channel progress: [*Sub1*] [Sub2] [SatL] [SatR]               |
 |   Overall: 1 of 4 channels                                      |
 |                                                                   |
 +------------------------------------------------------------------+
@@ -243,14 +283,24 @@ It establishes safe operating levels for each speaker channel individually.
   unless an alert fires. The primary role is monitoring.
 - The SPL bar is a large horizontal meter (the dominant visual element). Current SPL
   is displayed as a large number (36px+ font). Target is marked with a vertical line.
-- The bar color transitions: green (safe) -> amber (approaching target) -> red (at
-  or above hard limit of 84 dB).
+- The bar color transitions: green (safe) -> amber (within 6 dB of target) -> red
+  (within 3 dB of hard limit at 84 dB).
+- **Overshoot protection (AD-UX-2):** The ramp transitions from coarse (+3 dB) to
+  fine (+1 dB) steps at `(limit - coarse_step_size)` = 81 dB, not at the limit
+  itself. If any step causes SPL to EXCEED the 84 dB limit, the ramp immediately
+  reverts to the previous step's level and freezes — it never stays above the limit.
+  The freeze-then-revert sequence is: (1) detect overshoot, (2) mute, (3) restore
+  previous level, (4) display SPL LIMIT alert.
 - "Step N of ~M" shows progress within the ramp. The `~` indicates the estimate is
   approximate (the ramp terminates early if target is reached).
 - Channel progress tabs at the bottom show which channel is active and which are
   done (checkmark) or pending (gray).
-- If the mic signal drops below -80 dBFS during the ramp (mic failure), the display
-  immediately shows:
+- **Mic signal monitoring (AD-UX-6):** During gain cal, mic dropout is detected at
+  an absolute threshold (-80 dBFS) since no calibrated level exists yet. During
+  sweeps, the threshold is relative: mic signal must stay within 20 dB of the
+  calibrated level established during gain cal. This catches a partially
+  disconnected mic (signal present but attenuated) that the absolute threshold
+  would miss. If the mic signal drops below the threshold, the display shows:
 
 ```
    +------------------------------------------------------+
@@ -272,16 +322,16 @@ After all channels complete:
 
 ```
 +------------------------------------------------------------------+
-| GAIN CALIBRATION COMPLETE                      Step 3 of 4       |
+| GAIN CALIBRATION COMPLETE                      Step 3 of 5       |
 +------------------------------------------------------------------+
 |                                                                   |
 |   CALIBRATED LEVELS                                              |
 |                                                                   |
 |   Channel    Target   Achieved   Digital Level   Status           |
-|   SatL       75 dB    74.8 dB    -20.2 dBFS     OK              |
-|   SatR       75 dB    75.1 dB    -19.8 dBFS     OK              |
 |   Sub1       75 dB    74.5 dB    -21.5 dBFS     OK              |
 |   Sub2       75 dB    74.9 dB    -20.1 dBFS     OK              |
+|   SatL       75 dB    74.8 dB    -20.2 dBFS     OK              |
+|   SatR       75 dB    75.1 dB    -19.8 dBFS     OK              |
 |                                                                   |
 |   Total calibration time: 2 min 24s                              |
 |                                                                   |
@@ -310,7 +360,7 @@ Before each mic position (including position 1):
 
 ```
 +------------------------------------------------------------------+
-| MEASUREMENT                                    Step 4 of 4       |
+| MEASUREMENT                                    Step 4 of 5       |
 +------------------------------------------------------------------+
 |                                                    [ABORT]       |
 |                                                                   |
@@ -320,9 +370,12 @@ Before each mic position (including position 1):
 |   - Height: ~1.2m (ear height, standing)                         |
 |   - Point the capsule toward the ceiling                         |
 |   - Use a mic stand — do not hand-hold                           |
+|   - Aim for roughly equal distance from L and R speakers         |
+|   - Typical: 2-4m from the nearest speaker                       |
 |                                                                   |
 |   Position 1 is the REFERENCE position.                          |
 |   Time alignment will be calculated from this position.          |
+|   A reproducibility check sweep will run first on ch 0.         |
 |                                                                   |
 |   +------------------------------------------------------+       |
 |   |                                                      |       |
@@ -353,6 +406,13 @@ For positions 2+, the prompt changes:
 - The "READY TO MEASURE" button is the only actionable element. Large (full-width,
   64px), green background. Single tap starts the sweep sequence for this position.
 - The position guidance text is brief and actionable. No theory — just instructions.
+- **Reproducibility check (QE-4):** At Position 1 only, the first channel (Sub1)
+  is measured twice. The two sweeps are compared: if the frequency response
+  deviates by more than 1 dB across the 100 Hz-10 kHz band, a warning appears:
+  "Reproducibility check failed: X dB deviation. Possible causes: mic moved,
+  environmental noise change, system instability. Re-measure?" This catches
+  measurement setup problems before investing time in the full position matrix.
+  The reproducibility sweep adds ~15s to the measurement (one extra sweep + dwell).
 - For sub positions (when position count differs from satellite count), the prompt
   clarifies: "Sub channels only — 3 positions total for subs."
 
@@ -366,12 +426,13 @@ During active sweeps:
 +------------------------------------------------------------------+
 |                                                    [ABORT]       |
 |                                                                   |
-|   SWEEP: Channel 0 — SatL                                        |
+|   SWEEP: Channel 2 — Sub1                                        |
 |                                                                   |
 |   +------------------------------------------------------+       |
 |   |                                                      |       |
-|   |   ▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇░░░░░░░░░░  62%              |       |
-|   |   6.2s / 10.0s                                       |       |
+|   |   ░░▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇░░░░░░░░░░  62%              |       |
+|   |   ^silence  ^sweep               ^silence            |       |
+|   |   6.2s / 10.0s (+ 1s pre + 1s post silence)         |       |
 |   |                                                      |       |
 |   +------------------------------------------------------+       |
 |                                                                   |
@@ -379,7 +440,7 @@ During active sweeps:
 |   Peak: -18.3 dBFS    RMS: -24.1 dBFS    SNR: ~42 dB           |
 |   ████████████████████░░░░░░░░░░                                 |
 |                                                                   |
-|   OUTPUT LEVEL                                                   |
+|   OUTPUT LEVEL                      XRUNS: 0                    |
 |   -20.2 dBFS (calibrated)                                       |
 |                                                                   |
 |   +------------------------------------------------------+       |
@@ -396,42 +457,59 @@ During active sweeps:
 **Interaction notes:**
 - The sweep progress bar is the dominant visual element. It updates in real-time
   via the websocket feed from the measurement script (US-049).
+- The progress bar shows three phases: pre-sweep silence (gray, ~1s, for noise
+  floor measurement), sweep (colored, main duration), and post-sweep silence
+  (gray, ~1s, for tail capture). The pre-sweep silence is when the SNR baseline
+  is established — the operator sees this explicitly so they understand why there's
+  a brief pause before audio starts.
 - Mic level meters provide real-time confidence: if the mic signal is healthy,
   the operator knows the sweep is working without needing to hear it.
 - The "DO NOT MOVE / DO NOT MAKE NOISE" warning is persistent and high-contrast
   (amber background, black text). It appears ONLY during active sweeps and disappears
   between sweeps.
 - SNR estimate is computed from the mic signal vs noise floor (measured during the
-  pre-sweep silence period). If SNR drops below 20 dB, the bar turns amber with a
-  warning: "Low SNR — noisy environment. Consider re-measuring this channel."
+  pre-sweep silence period). Thresholds: GOOD >= 35 dB (green), OK 25-35 dB (amber,
+  with note: "Low-frequency accuracy may be reduced"), POOR < 25 dB (red, warning:
+  "Noisy environment. Re-measure recommended for usable correction filters").
 - Overall progress shows two counters: sweeps within this position and total sweeps
   across all positions. This answers "how much longer" at both granularities.
+- **Xrun counter (AD-UX-5, QE-3):** Displayed persistently during sweeps. If xrun
+  count increments during a sweep, the counter turns red and the sweep is auto-
+  invalidated: the between-sweep result shows `XRUN` (red) instead of a quality
+  rating, and "Re-measure" is pre-selected. The operator can still accept the sweep
+  but the default action is to re-run it. Xruns during the pre-sweep silence period
+  are tolerated (no audio was being captured); xruns during the sweep itself corrupt
+  the deconvolution and the measurement must be repeated.
 
 ### 6.3 Between Sweeps (Same Position)
 
 ```
-|   SWEEP COMPLETE: SatL at Position 1                             |
+|   SWEEP COMPLETE: Sub1 at Position 1                             |
 |                                                                   |
-|   Peak: -16.2 dBFS   RMS: -22.8 dBFS   SNR: 44 dB   OK        |
+|   Peak: -16.2 dBFS   RMS: -22.8 dBFS   SNR: 44 dB   GOOD      |
 |                                                                   |
-|   Next: Channel 1 — SatR                                        |
-|   Starting in 3s...  [Start Now]  [Skip Channel]                |
+|   Next: Channel 3 — Sub2                                        |
+|   Starting in 3s...  [Start Now]  [Re-measure]  [Mark Noisy]    |
 ```
 
 **Interaction notes:**
 - Brief pause (3s countdown) between sweeps at the same position. Allows the
   operator to check the result and the room to settle.
-- "Start Now" skips the countdown. "Skip Channel" omits this channel at this
-  position (use case: known-bad channel, don't waste time).
-- The per-sweep result line provides immediate feedback: OK (green), LOW SNR
-  (amber), CLIP (red, re-measure recommended).
+- "Start Now" skips the countdown. "Re-measure" re-runs the sweep for the just-
+  completed channel (use case: noise intrusion during sweep, mic bumped). "Mark
+  Noisy" flags this sweep as potentially compromised — the pipeline will still
+  include it in spatial averaging but can down-weight it or the operator can
+  exclude it during review.
+- The per-sweep result line provides immediate feedback: GOOD (green, SNR >= 35 dB),
+  OK (amber, SNR 25-35 dB — low-frequency accuracy note), POOR (red, SNR < 25 dB —
+  re-measure recommended), CLIP (red, re-measure required).
 
 ### 6.4 Per-Sweep Result Visualization (US-048)
 
 After each sweep completes, the frequency response appears below the progress area:
 
 ```
-|   FREQUENCY RESPONSE: SatL — Position 1                         |
+|   FREQUENCY RESPONSE: Sub1 — Position 1                         |
 |                                                                   |
 |    dB                                                            |
 |   +10|                                                           |
@@ -450,6 +528,11 @@ After each sweep completes, the frequency response appears below the progress ar
   data (US-048 approach — file-based, not from the audio stream).
 - Plot updates appear ~2-3s after sweep completion (time for deconvolution +
   file save + web UI file poll).
+- **Auto-zoom by channel role:** Sub channels display 20-500 Hz (focuses on the
+  operating range where room modes dominate — the operator immediately sees if
+  there's a problematic null or peak). Satellite channels display the full
+  20 Hz-20 kHz range. The channel's role (sub vs satellite) is determined from
+  the speaker profile. A "Full Range" toggle allows the operator to override.
 - The plot is informational — the operator cannot modify it. Its purpose is
   confidence: "does this look reasonable?" Major anomalies (e.g., huge null at
   a frequency, no signal, excessive noise) are immediately visible.
@@ -476,17 +559,18 @@ After each sweep completes, the frequency response appears below the progress ar
 |                                                                   |
 |   Channel   Positions   Avg SNR   Quality   Notes                |
 |   SatL      5/5         42 dB     GOOD                           |
-|   SatR      5/5         44 dB     GOOD                           |
+|   SatR      4/5         44 dB     GOOD      1 pos marked noisy  |
 |   Sub1      3/3         38 dB     GOOD                           |
 |   Sub2      3/3         36 dB     OK        SNR marginal at LF  |
 |                                                                   |
 |   TIME ALIGNMENT (from Position 1)                               |
+|   Reference: FURTHEST speaker (Sub2, 7.1 ms arrival)            |
 |                                                                   |
-|   Channel   Arrival     Delay     Distance                       |
-|   SatL      4.2 ms      0.0 ms    (reference)                   |
-|   SatR      4.5 ms      0.3 ms    ~0.10 m offset                |
-|   Sub1      6.8 ms      2.6 ms    ~0.89 m offset                |
-|   Sub2      7.1 ms      2.9 ms    ~0.99 m offset                |
+|   Channel   Arrival     Added Delay   Distance                   |
+|   Sub2      7.1 ms      0.0 ms        (furthest — reference)    |
+|   Sub1      6.8 ms      0.3 ms        ~0.10 m closer            |
+|   SatR      4.5 ms      2.6 ms        ~0.89 m closer            |
+|   SatL      4.2 ms      2.9 ms        ~0.99 m closer            |
 |                                                                   |
 |   [View Frequency Responses]  [View Impulse Responses]           |
 |                                                                   |
@@ -503,14 +587,26 @@ After each sweep completes, the frequency response appears below the progress ar
 **Interaction notes:**
 - The summary is a decision point: generate filters, save data for later analysis,
   or discard and re-measure.
-- Quality column uses a 3-tier rating: GOOD (green, SNR > 35 dB), OK (amber,
-  SNR 20-35 dB), POOR (red, SNR < 20 dB). POOR channels get a recommendation:
-  "Consider re-measuring in a quieter environment."
+- Quality column uses a 3-tier rating: GOOD (green, SNR >= 35 dB), OK (amber,
+  SNR 25-35 dB, note: "Low-frequency accuracy may be reduced"), POOR (red,
+  SNR < 25 dB). POOR channels get a recommendation: "Re-measure in a quieter
+  environment for usable correction filters."
 - Time alignment values are displayed with physical distance equivalents (at
-  343 m/s) for operator intuition — "the sub is about 1 meter further away."
+  343 m/s) for operator intuition. The FURTHEST speaker is the reference
+  (delay = 0 ms) because all other speakers receive positive delay to compensate.
+  This matches the physical reality: you can delay a signal but not advance it.
+  The table is sorted by arrival time (furthest first) so the operator reads
+  "Sub2 is the reference, everything else gets delay added."
 - "View Frequency Responses" opens a full-width overlay with all channels
   overlaid on one plot (selectable per-channel toggle). This is the detailed
   analysis view.
+- **Missing position flags (AD-UX-7):** The Positions column shows `N/M` where
+  N is usable sweeps and M is requested positions. If N < M (due to aborted sweeps,
+  xrun invalidations, or "Mark Noisy" flags), the count is shown in amber. If any
+  channel has fewer than 3 usable positions, a warning appears before filter
+  generation: "SatR has only 4 of 5 usable positions. Spatial averaging will use
+  fewer data points. Continue?" Channels with < 2 usable positions block filter
+  generation entirely — the operator must re-measure.
 - "Generate Correction Filters" is the primary action. It triggers the pipeline
   stages 4-7 (correction, crossover, combination, export, verification).
 
@@ -533,8 +629,18 @@ After each sweep completes, the frequency response appears below the progress ar
 |                                                                   |
 |   Estimated remaining: ~15s                                      |
 |                                                                   |
+|   [Cancel Filter Generation]                                     |
+|                                                                   |
 +------------------------------------------------------------------+
 ```
+
+**Interaction notes:**
+- **Cancel option (QE-7):** "Cancel Filter Generation" stops the pipeline and returns
+  to the Results summary. No filters are produced, no CamillaDSP state changes. The
+  raw measurement data is preserved — the operator can re-run filter generation later
+  (e.g., after changing target curve or crossover parameters). The cancel button is
+  small and secondary (text link style, not a large button) to avoid accidental
+  activation during the typically short (~15s) pipeline run.
 
 ### 7.3 Verification Results
 
@@ -577,18 +683,51 @@ After filter generation and mandatory verification:
 
 ### 7.4 Deployment
 
-The "Deploy" action is the most consequential step. It requires explicit
-acknowledgment of the transient risk.
+Deployment uses CamillaDSP hot-reload (`config.reload()`) rather than a full
+service restart, per AE confirmation. Hot-reload is glitch-free: ~5ms transition,
+no USBStreamer reset, no transients. This eliminates the "turn off amps" safety
+gate for filter-only deployments.
+
+**Caveat:** If the device configuration changes (e.g., switching from 4-channel
+to 8-channel, changing sample rate), a full CamillaDSP restart IS required. The
+web UI detects this case and shows the transient warning instead.
 
 ```
 +------------------------------------------------------------------+
 | DEPLOY FILTERS                                                    |
 +------------------------------------------------------------------+
 |                                                                   |
+|   Deployment method: HOT-RELOAD (glitch-free)                    |
+|                                                                   |
+|   Filter files will be copied to /etc/camilladsp/coeffs/         |
+|   and CamillaDSP will reload the active config.                  |
+|                                                                   |
+|   This does NOT restart CamillaDSP. Audio will continue           |
+|   with a brief ~5ms transition. No transient risk.               |
+|                                                                   |
+|   +------------------------------------------------------+       |
+|   |                                                      |       |
+|   |   DEPLOY AND RELOAD                                  |       |
+|   |                                                      |       |
+|   +------------------------------------------------------+       |
+|                                                                   |
+|   [Save Without Deploying]   [Cancel]                            |
+|                                                                   |
++------------------------------------------------------------------+
+```
+
+**Fallback (device config change detected):**
+
+```
++------------------------------------------------------------------+
+| DEPLOY FILTERS — RESTART REQUIRED                                 |
++------------------------------------------------------------------+
+|                                                                   |
 |   +------------------------------------------------------+       |
 |   |  !! WARNING — AUDIO INTERRUPTION !!                  |       |
 |   |                                                      |       |
-|   |  Deploying new filters will restart CamillaDSP.      |       |
+|   |  Device configuration has changed. CamillaDSP must   |       |
+|   |  be RESTARTED (not just reloaded).                   |       |
 |   |  This interrupts the USBStreamer audio stream and     |       |
 |   |  produces TRANSIENTS through the amplifier chain.     |       |
 |   |                                                      |       |
@@ -603,12 +742,103 @@ acknowledgment of the transient risk.
 ```
 
 **Interaction notes:**
-- The checkbox "I have turned off or muted the amplifiers" must be checked before
-  the "DEPLOY NOW" button becomes active. This is the software equivalent of the
-  "turn off amps before restart" safety rule from CLAUDE.md.
-- "DEPLOY NOW" is red (destructive action). It copies filter WAV files, updates
-  CamillaDSP config, and restarts the service.
-- After deployment, the UI returns to the IDLE state with the new session summary.
+- The primary path (hot-reload) uses a green "DEPLOY AND RELOAD" button. No
+  checkbox gate needed — hot-reload is safe. This is the common case. OQ1 is
+  resolved: hot-reload is the default (AD-UX-3, QE-1).
+- The fallback path (restart required) uses the red "DEPLOY NOW" button with
+  the "I have turned off or muted the amplifiers" checkbox gate. **Note
+  (AD-UX-3):** This checkbox is an unverifiable attestation — the software cannot
+  confirm that the amplifiers are actually off. It is documented as a human
+  process gate, not a technical safeguard. The actual protection is the hot-reload
+  primary path, which avoids the transient entirely. The restart fallback is rare
+  (device config changes only) and the checkbox serves as a deliberate pause to
+  remind the operator of the physical step.
+- After deployment, the wizard proceeds to the VERIFICATION step (7.5).
+
+### 7.5 Verification Measurement
+
+Per US-012 and design principle #7, a post-correction verification sweep is
+mandatory — not optional. This is a separate wizard step after deployment.
+
+```
++------------------------------------------------------------------+
+| VERIFICATION MEASUREMENT                                          |
++------------------------------------------------------------------+
+|                                                    [ABORT]       |
+|                                                                   |
+|   Filters deployed. Running verification sweep to confirm        |
+|   correction effectiveness.                                      |
+|                                                                   |
+|   This plays a short sweep (5s) through each channel and         |
+|   compares the measured response to the target curve.             |
+|                                                                   |
+|   VERIFYING: Channel 2 — Sub1                                    |
+|                                                                   |
+|   +------------------------------------------------------+       |
+|   |                                                      |       |
+|   |   ░░▇▇▇▇▇▇▇▇▇▇▇▇░░░░░░░░  45%                     |       |
+|   |   2.3s / 5.0s                                        |       |
+|   |                                                      |       |
+|   +------------------------------------------------------+       |
+|                                                                   |
+|   Channel progress: [*Sub1*] [Sub2] [SatL] [SatR]               |
+|                                                                   |
++------------------------------------------------------------------+
+```
+
+After all verification sweeps complete:
+
+```
++------------------------------------------------------------------+
+| VERIFICATION RESULTS                                              |
++------------------------------------------------------------------+
+|                                                                   |
+|   BEFORE / AFTER COMPARISON                                      |
+|                                                                   |
+|   +------------------------------------------------------+       |
+|   |                                                      |       |
+|   |   (frequency response overlay per channel)           |       |
+|   |   --- Raw (pre-correction, gray)                     |       |
+|   |   --- Corrected (post-deploy verification, green)    |       |
+|   |   --- Target curve (dashed)                          |       |
+|   |                                                      |       |
+|   +------------------------------------------------------+       |
+|                                                                   |
+|   DEVIATION FROM TARGET                                          |
+|                                                                   |
+|   Channel   Avg Dev    Max Dev    Band          Verdict           |
+|   Sub1      1.2 dB     3.1 dB    20-500 Hz     PASS             |
+|   Sub2      1.5 dB     4.2 dB    20-500 Hz     PASS             |
+|   SatL      0.8 dB     2.4 dB    200-20k Hz    PASS             |
+|   SatR      0.9 dB     2.7 dB    200-20k Hz    PASS             |
+|                                                                   |
+|   OVERALL: PASS — correction effective across all channels       |
+|                                                                   |
+|   +------------------------------------------------------+       |
+|   |                                                      |       |
+|   |   MEASUREMENT COMPLETE — RETURN TO DASHBOARD         |       |
+|   |                                                      |       |
+|   +------------------------------------------------------+       |
+|                                                                   |
+|   [Save Session Report]   [Re-measure (discard correction)]      |
+|                                                                   |
++------------------------------------------------------------------+
+```
+
+**Interaction notes:**
+- Verification sweeps are shorter (5s vs 10s) and only at position 1 (reference
+  position). Total verification time: ~30s for a 4-channel system.
+- The before/after plot is the key deliverable — the operator sees immediately
+  whether the correction made things better. A well-corrected response tracks
+  the target curve within +/-3 dB across the operating band.
+- Deviation table uses auto-zoomed frequency bands per channel role (sub: 20-500 Hz,
+  satellite: operating range from profile). Verdict: PASS (avg < 3 dB, max < 6 dB),
+  MARGINAL (avg 3-5 dB or max 6-10 dB), FAIL (avg > 5 dB or max > 10 dB).
+- "MEASUREMENT COMPLETE" returns to the Dashboard tab (not the Measure tab IDLE
+  state) — the operator's next action is to start using the system.
+- "Re-measure" discards the deployed correction and returns to the SETUP state.
+  The filters remain deployed (they're already loaded) but the session is flagged
+  as needing re-measurement.
 
 ---
 
@@ -651,21 +881,30 @@ The ABORT button appears on every screen during GAIN CAL and MEASURING states.
 
 Safety alerts overlay the current screen and require explicit acknowledgment.
 
-### 9.1 SPL Limit Exceeded
+### 9.1 SPL Limit Reached
 
 ```
 +------------------------------------------------------+
-|  !! SPL LIMIT EXCEEDED !!                            |
+|  SPL LIMIT REACHED                                   |
 |                                                      |
-|  Measured SPL: 86.2 dB (limit: 84 dB)               |
-|  Gain ramp FROZEN at current level.                  |
+|  Ramp frozen at 83.4 dB (limit: 84 dB).             |
+|  Reverted to previous step: -22 dBFS = 81.1 dB.     |
 |                                                      |
-|  The calibration target (75 dB) may not be           |
+|  The calibration target (75 dB) was reached before   |
+|  the limit. OR: The target (75 dB) may not be        |
 |  achievable at safe power levels for this driver.    |
 |                                                      |
-|  [Accept Current Level]  [Abort Calibration]         |
+|  [Continue at Frozen Level]  [Abort Calibration]     |
 +------------------------------------------------------+
 ```
+
+**Interaction notes:**
+- The ramp freezes BEFORE exceeding the limit, not after. If a +1 dB fine step
+  causes SPL to exceed 84 dB, the ramp reverts to the previous step's level and
+  freezes there. The alert shows the reverted level, not the overshoot value.
+- The button reads "Continue at Frozen Level" (not "Accept Current Level") to
+  make clear that the level is already determined — the operator is acknowledging
+  a fact, not making a choice about what level to use (AD-UX-1).
 
 ### 9.2 Thermal Ceiling Reached
 
@@ -674,7 +913,7 @@ Safety alerts overlay the current screen and require explicit acknowledgment.
 |  THERMAL CEILING REACHED                             |
 |                                                      |
 |  Channel: Sub1 (Bose PS28 III)                       |
-|  Ceiling: -11.8 dBFS (from Pe_max = 100W, Z = 2.33) |
+|  Ceiling: -14.2 dBFS (from Pe_max = 62W, Z = 2.33)  |
 |  Achieved SPL: 72.1 dB (target: 75 dB)              |
 |                                                      |
 |  The driver's thermal limit prevents reaching the    |
@@ -687,12 +926,20 @@ Safety alerts overlay the current screen and require explicit acknowledgment.
 
 ### 9.3 Mic Disconnected
 
+During gain cal, mic dropout threshold is absolute (-80 dBFS). During sweeps, the
+threshold is relative: mic peak must stay within 20 dB of the calibrated level from
+gain cal (AD-UX-6). This catches partial disconnects where signal is present but
+attenuated.
+
 ```
 +------------------------------------------------------+
 |  !! MIC SIGNAL LOST !!                               |
 |                                                      |
-|  UMIK-1 signal dropped below -80 dBFS during         |
+|  UMIK-1 signal dropped below threshold during        |
 |  active measurement. HARD ABORT.                     |
+|                                                      |
+|  Threshold: -80 dBFS (gain cal) or                   |
+|  calibrated level - 20 dB (sweeps)                   |
 |                                                      |
 |  Output muted. CamillaDSP restored.                  |
 |                                                      |
@@ -759,6 +1006,79 @@ Browser (Measure tab)          FastAPI            Measurement Script
   `GET /api/v1/measurement/sweep/{session_id}/{sweep_id}` returns the
   deconvolved frequency response data as JSON.
 
+### 10.1a Browser Disconnect/Reconnect Protocol (QE-2)
+
+The browser may disconnect during measurement (network drop, phone sleep, browser
+refresh). The measurement script is a separate process and continues running
+regardless of browser state. Reconnection must restore the operator's view to the
+correct wizard step.
+
+**Invariant:** The measurement script's state is the source of truth. The browser
+is a view. Losing the view does not affect the measurement.
+
+**Reconnection flow:**
+1. On any WebSocket disconnect, the browser shows a persistent overlay:
+   ```
+   +------------------------------------------------------+
+   |  CONNECTION LOST                                     |
+   |                                                      |
+   |  Measurement is still running on the Pi.             |
+   |  Reconnecting...  [3s]                               |
+   +------------------------------------------------------+
+   ```
+2. The browser polls `GET /api/v1/measurement/status` every 3 seconds.
+3. On successful reconnect, the response contains the full current state:
+   ```json
+   {
+     "state": "measuring",
+     "wizard_step": "sweep_progress",
+     "session_id": "20260314-1532",
+     "channel": 2,
+     "channel_name": "Sub1",
+     "position": 3,
+     "total_positions": 5,
+     "sweep_progress_pct": 45.0,
+     "completed_sweeps": [
+       {"channel": 2, "position": 1, "quality": "good", "snr_db": 42.0},
+       {"channel": 3, "position": 1, "quality": "good", "snr_db": 38.0}
+     ],
+     "gain_cal_results": {
+       "Sub1": {"achieved_spl": 74.5, "level_dbfs": -21.5, "status": "ok"},
+       "Sub2": {"achieved_spl": 74.9, "level_dbfs": -20.1, "status": "ok"}
+     },
+     "xrun_count": 0
+   }
+   ```
+4. The browser reconstructs the wizard at the correct step. Completed data
+   (gain cal results, per-sweep results) is restored from the status response.
+   The operator sees exactly where the measurement is, as if they'd never
+   disconnected.
+
+**Per-step reconnection behavior:**
+
+| Wizard step | On reconnect |
+|-------------|-------------|
+| IDLE | No measurement running — show IDLE state |
+| SETUP / PRE-FLIGHT | No audio running — show SETUP, re-run pre-flight if needed |
+| GAIN CAL | Restore gain cal view at current channel + step. Completed channels shown as done. |
+| MEASURING (sweep active) | Restore sweep progress view. Missed sweep results appear in completed list. |
+| MEASURING (between sweeps) | Show between-sweep view with countdown or position prompt |
+| MEASURING (position prompt) | Show position prompt for current position |
+| RESULTS | Restore results summary from session data |
+| FILTER GEN | Restore progress view at current pipeline stage |
+| DEPLOY | Show deploy screen (filters not yet deployed) |
+| VERIFY | Restore verification sweep progress or results |
+
+**Browser refresh:** Treated as disconnect + reconnect. The `/api/v1/measurement/status`
+endpoint provides everything needed to reconstruct the wizard state. No browser-local
+state is required except the session token.
+
+**Multiple browsers:** Only one browser can send commands (abort, start sweep, deploy).
+Additional browsers are read-only observers. The first browser to connect after measurement
+start is the "controller." If the controller disconnects and a new browser connects, it
+becomes the new controller after a 10-second grace period (allows the original to reconnect
+without losing control).
+
 ### 10.2 New REST Endpoints
 
 ```
@@ -787,7 +1107,8 @@ The measurement script publishes to its local websocket:
   "level_dbfs": -48.0,
   "spl_db": 63.2,
   "target_spl": 75.0,
-  "state": "ramping"
+  "state": "ramping",
+  "xrun_count": 0
 }
 
 // During sweep
@@ -800,7 +1121,8 @@ The measurement script publishes to its local websocket:
   "total_s": 10.0,
   "mic_peak_dbfs": -18.3,
   "mic_rms_dbfs": -24.1,
-  "snr_db": 42.0
+  "snr_db": 42.0,
+  "xrun_count": 0
 }
 
 // After sweep completion
@@ -811,6 +1133,8 @@ The measurement script publishes to its local websocket:
   "quality": "good",
   "snr_db": 42.0,
   "peak_dbfs": -16.2,
+  "xrun_count": 0,
+  "xrun_during_sweep": false,
   "wav_path": "/tmp/correction-20260314-1532/pos1_ch0_sweep.wav"
 }
 
@@ -857,17 +1181,16 @@ and emergency abort only.
 
 ## 12. Open Questions
 
-1. **Hot-reload vs restart for filter deployment.** TK-143 demonstrated that
-   `config.reload()` is glitch-free for measurement config swaps. Can the same
-   approach deploy production filters (new FIR WAVs) without a CamillaDSP restart?
-   If yes, the deployment step does not require the "turn off amps" warning.
-   Needs architect/AE verification.
+~~1. **Hot-reload vs restart for filter deployment.**~~ **RESOLVED (AE):** Hot-reload
+preferred. `config.reload()` is glitch-free (~5ms transition, no transients). Full
+restart only needed when device config changes (sample rate, channel count). Section
+7.4 updated to reflect this — primary path uses hot-reload without amp warning,
+fallback path for device changes retains the safety gate.
 
-2. **Verification measurement.** US-012 mandates a post-correction verification
-   sweep. Should this be a separate wizard step after deployment (DEPLOY ->
-   VERIFY -> DONE), or integrated into the deploy step? The verification
-   measurement requires CamillaDSP to be running with the new filters, so it
-   must come after deployment.
+~~2. **Verification measurement.**~~ **RESOLVED (AE):** Separate wizard step after
+deployment (DEPLOY -> VERIFY -> DONE). Added as Section 7.5 with verification sweep
+wireframes, before/after comparison plot, and deviation table with PASS/MARGINAL/FAIL
+verdicts.
 
 3. **Resuming interrupted sessions.** If the operator aborts partway through
    (e.g., 3 of 5 positions measured), can they resume later without re-measuring
