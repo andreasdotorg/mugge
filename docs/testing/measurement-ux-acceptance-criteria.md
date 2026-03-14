@@ -222,11 +222,22 @@ and recovery scenario.
 | 6.11 | Consistency guidance | "Same height", "Same capsule orientation" mentioned |
 | 6.12 | No reference note | Reference position text NOT shown for positions > 1 |
 
+### Conditional: Position Transition (Position 2+, G1)
+
+When transitioning from one position to the next, the prompt screen includes a
+summary of the just-completed position before showing the next placement instruction.
+
+| # | Element | Pass criteria |
+|---|---------|---------------|
+| 6.13 | Previous position summary | IF position > 1: shows completion summary for the previous position (e.g., "Position 2 complete: 4 sweeps, avg SNR 41 dB") |
+| 6.14 | Per-channel quality | Previous position summary lists quality rating per channel swept at that position |
+| 6.15 | Visual separation | Clear visual separator between the previous-position summary and the next-position placement instruction |
+
 ### Conditional: Sub-Only Positions
 
 | # | Element | Pass criteria |
 |---|---------|---------------|
-| 6.13 | Sub clarification | IF position exceeds satellite count: text clarifies "Sub channels only -- N positions total for subs" |
+| 6.16 | Sub clarification | IF position exceeds satellite count: text clarifies "Sub channels only -- N positions total for subs" |
 
 ---
 
@@ -241,7 +252,7 @@ and recovery scenario.
 | 7.1 | Header | "MEASURING -- Position N of M" visible |
 | 7.2 | ABORT button | Red ABORT button visible |
 | 7.3 | Channel identifier | "SWEEP: Channel N -- [name]" visible |
-| 7.4 | Progress bar | Three-phase bar showing: pre-silence (gray), sweep (colored), post-silence (gray). Percentage text shown. |
+| 7.4 | Progress bar | Three-phase bar showing: pre-silence (gray), sweep (colored), post-silence (gray). Percentage text shown. Each segment MUST carry a data attribute for Playwright assertion: `data-testid="progress-pre"`, `data-testid="progress-sweep"`, `data-testid="progress-post"`. Container element MUST have `data-testid="sweep-progress-bar"`. |
 | 7.5 | Time counter | "Ns / Ns (+ 1s pre + 1s post silence)" format |
 | 7.6 | Mic level meters | Peak dBFS, RMS dBFS, and SNR dB all displayed |
 | 7.7 | Mic level bar | Visual bar meter for mic level |
@@ -299,7 +310,7 @@ and recovery scenario.
 | 9.1 | Plot title | "FREQUENCY RESPONSE: [channel name] -- Position N" |
 | 9.2 | Frequency axis | Logarithmic, labeled with Hz units, showing at minimum 20 Hz to 20 kHz tick marks |
 | 9.3 | Amplitude axis | dB scale, labeled |
-| 9.4 | Response curve | At least one trace visible (the measured response) |
+| 9.4 | Response curve | At least one trace visible (the measured response). Plot container MUST carry `data-trace-count="N"` attribute reflecting the number of rendered traces, for DOM-based assertion without pixel inspection. |
 | 9.5 | Impulse info | "Impulse response: clean onset, T60 = Ns" or equivalent |
 
 ### Conditional: Auto-Zoom (R2)

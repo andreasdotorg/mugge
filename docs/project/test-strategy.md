@@ -121,6 +121,8 @@ CamillaDSP by `MockCamillaClient`. Uses FastAPI `TestClient` for HTTP/WS.
 | I-08 | Xrun during gain cal | MockSoundDevice sets xrun flag after burst N | Burst N is retried. After MAX_XRUN_RETRIES, gain cal aborts with `abort_reason: xrun_limit`. WS messages include xrun count. |
 | I-09 | Concurrent REST calls | POST /start, then immediately POST /abort, then POST /start | First start succeeds. Abort succeeds. Second start succeeds (new session). State machine handles rapid transitions correctly. |
 | I-10 | Watchdog timeout | Inject blocking MockSoundDevice.playrec (60s delay) | Software watchdog detects heartbeat timeout. Session aborted. CamillaDSP restored. (Requires injectable watchdog callback.) |
+| I-11 | Mic signal loss | MockSoundDevice returns near-zero signal after burst N | Session detects mic loss (peak < -80 dBFS during gain cal, or < calibrated - 20 dB during sweep). Hard abort. CamillaDSP restored. WS message `type: error, reason: mic_signal_lost`. |
+| I-12 | Muting verification failure | MockCamillaClient reports non-zero signal on muted channel | Session detects unexpected channel activity. Abort with `reason: muting_verification_failed`. CamillaDSP restored. |
 
 ### 3.3 Tooling
 
@@ -135,7 +137,7 @@ CamillaDSP by `MockCamillaClient`. Uses FastAPI `TestClient` for HTTP/WS.
 
 ### 3.4 Pass/Fail Criteria
 
-- All 10 scenarios pass.
+- All 12 scenarios pass.
 - No scenario takes longer than 60 seconds (mark with `@pytest.mark.slow`).
 - CamillaDSP state is verified after every scenario: must be in production
   config. Any leaked measurement config is a test failure.
@@ -249,7 +251,13 @@ baseline.
 | S-25 | VERIFY - marginal | `verify-marginal.png` | MARGINAL verdict |
 | S-26 | VERIFY - fail | `verify-fail.png` | FAIL verdict with recommendation |
 
-**Error/abort states (5 screens):**
+**Per-sweep visualization (1 screen):**
+
+| ID | State | Screenshot name | Description |
+|----|-------|----------------|-------------|
+| S-32 | MEASURING - freq response | `measure-freq-response.png` | Per-sweep frequency response plot (US-048, AC Sec 9) |
+
+**Error/abort states (8 screens):**
 
 | ID | State | Screenshot name | Description |
 |----|-------|----------------|-------------|
@@ -258,6 +266,8 @@ baseline.
 | S-29 | CONNECTION LOST | `error-disconnect.png` | WebSocket disconnect overlay |
 | S-30 | CONNECTION RESTORED | `error-reconnect.png` | Reconnected, state restored |
 | S-31 | UNEXPECTED CHANNEL | `error-channel.png` | Muting verification failed |
+| S-33 | CONFIG RESTORE FAILED | `error-restore-failed.png` | CamillaDSP restoration failure, high-urgency PA warning (AC Sec 17.2) |
+| S-34 | AUDIO INSTABILITY | `error-xrun-instability.png` | 3 consecutive xrun failures during gain cal (AC Sec 17.7, QE-5) |
 
 ### 5.4 Execution
 
@@ -276,12 +286,12 @@ PI_AUDIO_URL=https://192.168.178.185:8080 \
 
 ### 5.5 Pass/Fail Criteria
 
-- All 31 screenshots captured successfully.
+- All 34 screenshots captured successfully.
 - Each screenshot shows the expected UI state (verified by test assertions on
   DOM elements, not pixel comparison).
 - Visual regression: new screenshots match baseline within acceptable tolerance
   (pixel diff < 5% of image area). Failures flagged for manual review.
-- Owner reviews and approves all 31 screenshots before first deployment.
+- Owner reviews and approves all 34 screenshots before first deployment.
 
 ---
 
@@ -338,9 +348,9 @@ PI_AUDIO_URL=https://192.168.178.185:8080 \
 | WP-C (mode manager) | TK-167 | `test_mode_manager.py` | T1 | ~20 |
 | WP-D (session) | TK-168 | `test_session.py` | T1 | ~35 |
 | WP-E (routes) | TK-169 | `test_measurement_routes.py` | T1 | ~25 |
-| WP-F (frontend) | TK-170 | `test_measurement_wizard.py` (e2e) | T4 | ~31 (screenshot scenarios) |
+| WP-F (frontend) | TK-170 | `test_measurement_wizard.py` (e2e) | T4 | ~34 (screenshot scenarios) |
 | WP-G (watchdog) | TK-171 | `test_watchdog.py` | T1 | ~5 |
-| WP-H (integration) | TK-172 | `test_measurement_integration.py` | T2 | 10 scenarios |
+| WP-H (integration) | TK-172 | `test_measurement_integration.py` | T2 | 12 scenarios |
 | (existing) | TK-173 | Fixture fixes | T1 | 2 fixes |
 | (new) | TBD | T3 hardware scripts | T3 | 8 scenarios |
 
