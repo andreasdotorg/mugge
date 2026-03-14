@@ -2539,9 +2539,10 @@ that represents the actual listening experience rather than a single-point
 snapshot.
 
 **Status:** selected
-**Depends on:** US-046 (thermal ceiling for safe power limits), US-012 amended gain calibration, TK-143 (CamillaDSP hot-swap)
+**Depends on:** US-046 (thermal ceiling for safe power limits), US-012 amended gain calibration, TK-143 (CamillaDSP hot-swap), US-050 (mock backend for local testing)
 **Blocks:** US-010 (correction filter generation needs measured impulse responses)
 **Decisions:** D-035 (measurement safety), D-008 (per-venue measurement)
+**Process gate:** Implementation blocked until measurement UI design validated (TK-160 -> TK-161 -> TK-162). See "Process Gate: Measurement UI Development Cycle" above.
 
 **Note:** Extends the near-field measurement infrastructure (TK-141, TK-143).
 Key differences from near-field: longer IR window (500ms-2s vs 50ms), longer
@@ -2583,6 +2584,7 @@ identify problems before completing the full session.
 **Depends on:** US-047 (Path A measurement produces WAV files)
 **Blocks:** none
 **Decisions:** D-035 (measurement safety — web UI must NOT participate in audio graph during measurement)
+**Process gate:** Implementation blocked until measurement UI design validated (TK-160 -> TK-161 -> TK-162). See "Process Gate: Measurement UI Development Cycle" above.
 
 **Note:** This is the MVP visualization approach (AD Option C). The web UI
 does NOT open any PipeWire/ALSA audio streams during measurement. Instead, it
@@ -2616,6 +2618,7 @@ participating in the audio graph.
 **Depends on:** US-047 (Path A measurement script), US-048 (MVP visualization provides the display framework)
 **Blocks:** none
 **Decisions:** D-035 (measurement safety)
+**Process gate:** Implementation blocked until measurement UI design validated (TK-160 -> TK-161 -> TK-162). See "Process Gate: Measurement UI Development Cycle" above.
 
 **Note:** This is the enhanced visualization approach (AE Option A). The
 measurement script is the sole owner of both output and input audio streams.
@@ -2638,6 +2641,75 @@ visualization (though F-030 fix is still needed for DJ mode web UI).
 - [ ] Measurement integrity test: with/without web UI comparison documented in lab note
 - [ ] AE sign-off on data feed content and update rate
 - [ ] AD sign-off on measurement integrity validation results
+
+---
+
+## US-050: Measurement Pipeline Mock Backend / Test Harness
+
+**As** the developer and QE,
+**I want** a local mock backend that simulates the Pi's audio environment
+(PipeWire, CamillaDSP, UMIK-1, speakers) on the development Mac,
+**so that** the measurement workflow (US-047), visualization (US-048/US-049),
+and gain calibration (US-012) can be tested end-to-end without requiring
+physical hardware.
+
+**Status:** selected (architect design delivered, implementation not started)
+**Depends on:** US-045 (hardware config schema provides device definitions)
+**Blocks:** US-047 implementation (owner directive: mock backend required for local testing)
+**Decisions:** D-035 (measurement safety)
+
+**Note:** Owner directive (2026-03-14): measurement UI must follow a UX-driven
+development cycle. Mock backend is an architecture concern — the architect
+designs how to make the measurement pipeline testable without hardware. Must
+support: mocked mic recordings (simulated room impulse responses, noise,
+imperfect speaker responses), simulated audio playback, and the full
+measurement workflow running locally.
+
+**Architect design (2026-03-14):** Mock at measurement script level (not audio
+device level). ~200 lines new code: `MockSoundDevice` + `MockCamillaClient`.
+Existing room simulator already provides synthetic IRs. PipeWire and CamillaDSP
+do NOT need to run on macOS. One worker task to implement.
+
+**Acceptance criteria:**
+- [ ] Mock audio backend: simulates PipeWire graph with configurable channel count, sample rate, quantum
+- [ ] Mock CamillaDSP: responds to pycamilladsp API calls (config hot-swap, levels, signal peaks) with simulated data
+- [ ] Simulated room: generates synthetic room impulse responses with configurable RT60, room modes, speaker/mic positions
+- [ ] Simulated mic recording: convolves test signal with room IR, adds configurable noise floor
+- [ ] Simulated playback: accepts WAV output, verifies signal integrity
+- [ ] Compatible with existing measurement scripts (measure_nearfield.py, future measure_room.py) via dependency injection or environment variable switching
+- [ ] Runs on macOS (development machine) without PipeWire or ALSA
+- [ ] QE can run the full measurement workflow locally and validate results against expected outcomes
+
+**DoD:**
+- [ ] Mock backend implemented and documented
+- [ ] At least one end-to-end test scenario: sweep -> record -> deconvolve -> verify IR matches expected room
+- [ ] Architect sign-off on testability architecture
+- [ ] QE sign-off on test coverage adequacy
+
+---
+
+## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
+
+**GATE:** US-047, US-048, and US-049 implementation is blocked until the
+following 5-phase process completes. No code is written until Phase 3.
+
+1. **Phase 1 — UX Design (TK-160):** UX specialist produces wireframes and
+   interaction flows for the measurement workflow in the web UI. This is the
+   gate — nothing gets built until the design is validated.
+
+2. **Phase 2 — Specialist Validation (TK-161):** Design reviewed by:
+   - AE: audio/measurement domain correctness
+   - AD: safety flow validation (D-035 compliance)
+   - QE: testability (mock backend requirements feed into US-050)
+   - Architect: technical feasibility + integration with existing web UI
+
+3. **Phase 3 — Task Breakdown (TK-162):** Architect decomposes validated design
+   into implementation tasks.
+
+4. **Phase 4 — Implementation:** Workers build per architect's task breakdown.
+
+5. **Phase 5 — Verification:** QE and UX specialist both test the complete
+   design end-to-end (using mock backend from US-050 + Pi hardware validation).
 
 ---
 
@@ -2700,9 +2772,12 @@ US-000a ──> US-044 (CamillaDSP bypass protection — safety)
 
 US-045 (hardware config schema) ──> US-046 (thermal ceiling) ──> US-012 (automation, amended: gain ramp)
                                                                    ↑ also depends on US-010, US-011, US-011b
-US-046 + US-012 (gain cal) ──> US-047 (Path A measurement) ──> US-010 (correction)
-                                                            └──> US-048 (post-measurement viz)
-                                                                   └──> US-049 (real-time viz via websocket)
+US-045 ──> US-050 (measurement mock backend) ──┐
+                                               ├──> US-047 (Path A measurement) ──> US-010 (correction)
+US-046 + US-012 (gain cal) ───────────────────┘                                └──> US-048 (post-measurement viz)
+                                                                                       └──> US-049 (real-time viz via websocket)
+TK-160 (UX design) ──> TK-161 (specialist validation) ──> TK-162 (architect task breakdown)
+   └── PROCESS GATE: US-047/048/049 implementation blocked until TK-162 complete
 
 TK-139 (nixGL Mixxx) — independent, gates CPU budget for DJ mode web UI viability
 F-030 fix (TK-151) — independent, gates runtime power monitoring + DJ mode web UI

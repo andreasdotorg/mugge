@@ -34,7 +34,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
-| User stories | active | 53 stories (US-000 through US-049 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039-043): driver database. US-044: bypass protection. US-045-049: measurement safety + Path A + visualization (owner planning brief 2026-03-13). US-011b and US-012 amended with power budget validation and automated gain calibration. |
+| User stories | active | 54 stories (US-000 through US-050 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039-043): driver database. US-044: bypass protection. US-045-049: measurement safety + Path A + visualization (owner planning brief 2026-03-13). US-050: measurement mock backend (owner directive 2026-03-14). US-011b and US-012 amended with power budget validation and automated gain calibration. US-047/048/049 implementation gated on UX design validation (TK-160 -> TK-161 -> TK-162). |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | done (TK-071) | `scripts/room-correction/` — 13 modules (sweep, deconvolution, correction, crossover, combine, export, verify), mock room simulator, CLI runner, spatial averaging. Bose FIR generator (`generate_bose_filters.py`). All verification tests pass (D-009 compliant). |
@@ -131,6 +131,14 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - PO gaps addressed: US-011b 3 dB margin deferred per AE, TK-154 DoD updated (AE Rule 13 + power revalidation), US-044 phase flag for owner.
 - TK-159 filed: Bose sub profile power_limit_db mismatch (-22.0 vs -19.0 in production config).
 - L-039: Task tool `isolation: "worktree"` is broken. Do not use.
+- AE detailed margin analysis: Option A (sub_speaker_trim -19.0 -> -20.5) recommended for 3 dB margin. PO decision pending.
+- Owner directive (2026-03-14): measurement UI must follow UX-driven development cycle. 5-phase process gate on US-047/048/049. US-050 filed (measurement mock backend). TK-160 (UX design, GATE), TK-161 (specialist validation), TK-162 (architect task breakdown) filed. Story count 53->54.
+- TK-159 DONE (`6c00446`): AE Option A applied — sub_speaker_trim -19.0 -> -20.5 dB, profile power_limit_db aligned to -20.5. 3.0 dB margin achieved.
+- WP-3 DONE: TK-163 (`c902c40`) — automated gain calibration ramp. 437 lines Python + 460 lines tests. 4-layer safety, 20 unit tests. Needs Pi validation.
+- WP-4 code written: TK-151 — Rust pcm-bridge in `tools/pcm-bridge/` (281 lines). Architect reviewed favorably. Pending CM commit + Pi deployment test.
+- TK-160 DONE (`7e5b127` + uncommitted updates): UX measurement workflow design (1040+ lines). AE 3 must-fix + 5 recs all applied by UX specialist.
+- TK-161 IN PROGRESS: All 4 specialist reviews complete (AE 3F+5R, AD 11 findings, QE 10 findings, architect feasibility + mock backend design). UX specialist incorporating AD+QE feedback.
+- US-050 mock backend: architect design delivered (mock at measurement script level, ~200 lines, room simulator reuse). Implementation not started.
 
 ### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.
