@@ -107,6 +107,11 @@ from config_generator import load_profile_with_identities, MAX_CHANNELS
 
 SAMPLE_RATE = dsp_utils.SAMPLE_RATE  # 48000
 
+# Module-level sounddevice reference. Set to a MockSoundDevice instance in
+# mock mode (--mock), or left as None for real sounddevice (imported locally
+# in each function that needs it).
+_sd_override = None
+
 # Pre-flight check thresholds
 WEBUI_SERVICE_NAME = "pi4-audio-webui.service"
 
@@ -173,7 +178,9 @@ def find_device(name_substring, kind=None):
     int or None
         Device index, or None if not found.
     """
-    import sounddevice as sd
+    sd = _sd_override
+    if sd is None:
+        import sounddevice as sd
     devices = sd.query_devices()
     for idx, dev in enumerate(devices):
         if name_substring.lower() in dev['name'].lower():
@@ -187,7 +194,9 @@ def find_device(name_substring, kind=None):
 
 def list_audio_devices():
     """Print all available audio devices."""
-    import sounddevice as sd
+    sd = _sd_override
+    if sd is None:
+        import sounddevice as sd
     print("\nAvailable audio devices:")
     print(sd.query_devices())
     print()
@@ -995,7 +1004,9 @@ def play_and_record(output_signal, output_channel, output_device_idx,
         - trimmed_recording: aligned so index 0 = start of output signal
         - pre_roll: the silent pre-roll portion (for noise floor estimation)
     """
-    import sounddevice as sd
+    sd = _sd_override
+    if sd is None:
+        import sounddevice as sd
 
     out_info = sd.query_devices(output_device_idx)
     n_out_channels = out_info['max_output_channels']
@@ -1280,7 +1291,9 @@ def phase1_calibration(output_channel, output_device_idx, input_device_idx,
     bool
         True if mic levels are within the target range (PASS).
     """
-    import sounddevice as sd
+    sd = _sd_override
+    if sd is None:
+        import sounddevice as sd
 
     out_info = sd.query_devices(output_device_idx)
     n_out_channels = out_info['max_output_channels']
@@ -1783,24 +1796,47 @@ def main():
         "--camilladsp-port", type=int, default=CAMILLADSP_DEFAULT_PORT,
         help=f"CamillaDSP websocket port (default: {CAMILLADSP_DEFAULT_PORT})",
     )
+    parser.add_argument(
+        "--mock", action="store_true",
+        help=(
+            "Run in mock mode: replace sounddevice and CamillaDSP with mock "
+            "backends that simulate audio I/O using a synthetic room model. "
+            "Enables testing the full pipeline on macOS without audio hardware."
+        ),
+    )
+    parser.add_argument(
+        "--mock-room-config", type=str, default=None,
+        help=(
+            "Path to a mock room configuration YAML file (only used with "
+            "--mock). Defaults to scripts/room-correction/mock/room_config.yml."
+        ),
+    )
 
     args = parser.parse_args()
     sr = args.sample_rate
 
-    # Check dependencies
-    try:
-        import sounddevice as sd
-    except ImportError:
-        print("ERROR: sounddevice not installed.")
-        print("Install with: pip3 install sounddevice")
-        sys.exit(1)
+    # Check dependencies (mock mode substitutes real modules)
+    global _sd_override
+    if args.mock:
+        from mock.mock_audio import MockSoundDevice
+        _sd_override = MockSoundDevice(room_config_path=args.mock_room_config)
+        sd = _sd_override
+        print("MOCK MODE: using MockSoundDevice (no real audio I/O)")
+    else:
+        try:
+            import sounddevice as sd
+        except ImportError:
+            print("ERROR: sounddevice not installed.")
+            print("Install with: pip3 install sounddevice")
+            sys.exit(1)
 
-    try:
-        import camilladsp  # noqa: F401
-    except ImportError:
-        print("ERROR: pycamilladsp not installed.")
-        print("Install with: pip3 install camilladsp")
-        sys.exit(1)
+    if not args.mock:
+        try:
+            import camilladsp  # noqa: F401
+        except ImportError:
+            print("ERROR: pycamilladsp not installed.")
+            print("Install with: pip3 install camilladsp")
+            sys.exit(1)
 
     if args.list_devices:
         list_audio_devices()
@@ -1865,8 +1901,10 @@ def main():
     else:
         print("  Calibration: NONE (raw UMIK-1 response)")
 
-    # Pre-flight checks
-    if not args.skip_preflight:
+    # Pre-flight checks (skipped in mock mode — no real services to check)
+    if args.mock:
+        print("\nMOCK MODE: skipping pre-flight checks")
+    elif not args.skip_preflight:
         preflight_ok = run_preflight_checks()
         if not preflight_ok:
             print("\nAborting: pre-flight checks failed.")
@@ -1905,18 +1943,28 @@ def main():
           f"on channel {args.channel}")
     print(f"  All other channels muted at {MEASUREMENT_MUTE_DB}dB")
 
-    print("\nSwapping CamillaDSP to measurement config...")
     client = None
     original_config_path = None
     temp_config_path = None
     success = False
 
+    if args.mock:
+        from mock.mock_camilladsp import MockCamillaClient
+        client = MockCamillaClient()
+        client.connect()
+        original_config_path = client.config.file_path()
+        temp_config_path = None
+        print("MOCK MODE: using MockCamillaClient (no real CamillaDSP)")
+    else:
+        print("\nSwapping CamillaDSP to measurement config...")
+
     try:
-        client, original_config_path, temp_config_path = swap_camilladsp_config(
-            meas_config,
-            host=args.camilladsp_host,
-            port=args.camilladsp_port,
-        )
+        if not args.mock:
+            client, original_config_path, temp_config_path = swap_camilladsp_config(
+                meas_config,
+                host=args.camilladsp_host,
+                port=args.camilladsp_port,
+            )
 
         # Phase 1: Calibration (non-interactive, fixed duration)
         cal_pass = True
@@ -1951,13 +1999,15 @@ def main():
         print("\n\nMeasurement interrupted by user.")
     except Exception as e:
         print(f"\nERROR: {e}")
-        if client is None:
+        if client is None and not args.mock:
             # swap_camilladsp_config() failed before returning a client
             print("Is CamillaDSP running? Check: systemctl status camilladsp")
             print("Is pycamilladsp installed? Check: pip3 list | grep camilladsp")
     finally:
         restore_ok = True
-        if client is not None and original_config_path is not None:
+        if args.mock:
+            pass  # Nothing to restore in mock mode
+        elif client is not None and original_config_path is not None:
             # Swap succeeded (at least partially) — restore production config
             print("\nRestoring CamillaDSP production config...")
             restore_ok = restore_camilladsp_config(

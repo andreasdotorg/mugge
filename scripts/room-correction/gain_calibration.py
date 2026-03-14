@@ -77,6 +77,22 @@ PINK_NOISE_F_HIGH = 10000.0
 
 SAMPLE_RATE = 48000
 
+# Module-level sounddevice reference. Set to a MockSoundDevice instance in
+# mock mode, or left as None for real sounddevice (imported locally).
+_sd_override = None
+
+
+def set_mock_sd(mock_sd):
+    """Set a mock sounddevice object for testing without audio hardware.
+
+    Parameters
+    ----------
+    mock_sd : MockSoundDevice or None
+        The mock sounddevice instance. Pass None to revert to real sounddevice.
+    """
+    global _sd_override
+    _sd_override = mock_sd
+
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -219,7 +235,9 @@ def _play_burst(noise_signal, channel_index, output_device, input_device,
     np.ndarray
         Mono recording from the mic (float64).
     """
-    import sounddevice as sd
+    sd = _sd_override
+    if sd is None:
+        import sounddevice as sd
 
     out_info = sd.query_devices(output_device)
     n_out_channels = out_info['max_output_channels']
