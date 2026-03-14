@@ -142,7 +142,11 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - US-050 mock backend: architect design delivered (mock at measurement script level, ~200 lines, room simulator reuse). Implementation as TK-165.
 - QE non-blocking residual: Section 5.1 gain cal xrun behavior specification (invalidate + retry). Routed to UX specialist.
 - OQ1 resolved: `config.reload()` glitch-free for FIR deployment. Caveat: versioned filenames needed (TK-166).
-- TK-162 DONE: Architect delivered 8 work packages (WP-A through WP-H) across 4 phases. Critical path: WP-A(TK-165) -> WP-C(TK-167) -> WP-D(TK-168) -> WP-E(TK-169) -> WP-F(TK-170) -> WP-H(TK-172). Filed as TK-165 through TK-172. Phase 1 (TK-165 mock backend, TK-166 versioned filenames, TK-164 gain cal fixes) can start immediately in parallel.
+- TK-162 DONE: Architect delivered 8 work packages (WP-A through WP-H) across 4 phases. Filed as TK-165 through TK-172. Phase 1 complete (TK-164, TK-165, TK-166 all done). TK-167 (WP-C) completed but SUPERSEDED by D-036.
+- Implementation phase 1 COMPLETE: TK-164 (gain cal fixes), TK-165 (mock backend), TK-166 (versioned FIR filenames, `6459f32`). TK-167 (WP-C ws_server) completed but superseded.
+- **D-036 filed (2026-03-14): Central daemon architecture for measurement workflow.** Subprocess model rejected. FastAPI backend becomes unified control system. Decision count 35->36.
+- **D-036 revised breakdown filed (2026-03-14).** TK-167-172 reused with new scope. Critical path: TK-167 -> TK-168 -> TK-169 -> TK-170 -> TK-172.
+- **D-036 architecture review COMPLETE (2026-03-14).** All 4 sign-offs: AE APPROVED (non-negotiables met), AD APPROVED (6 findings resolved, 0 residuals), QE APPROVED (testability confirmed, 5 additional test scenarios), architect accepted all corrections. Key refinements: two CamillaDSP connections, `sd.abort()` for mid-playrec interrupt (CP-0), two-tier watchdog (10s software + 30s systemd), startup recovery blocks API/WS via FastAPI lifespan, pcm-bridge in WP-C, 8 cancellation points (CP-0-7) as explicit API contract, 10 test scenarios in WP-H. **TK-167 UNBLOCKED for implementation.**
 
 ### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.
@@ -301,3 +305,4 @@ See `docs/project/defects.md` for full details.
 - D-033: Incremental Nix adoption — staged path from Trixie to reproducible builds (2026-03-12)
 - D-034: Temporary bass shelf on Bose sub — LowShelf 70 Hz +6 dB Q=0.7, owner approved, remove when Path A FIR corrections deployed (2026-03-13)
 - D-035: Measurement safety is software-only (4-layer architecture); production safety remains D-014 scope (2026-03-13)
+- D-036: Central daemon architecture for measurement workflow — FastAPI backend as unified controller, subprocess model rejected (2026-03-14)

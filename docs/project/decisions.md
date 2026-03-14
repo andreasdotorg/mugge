@@ -669,3 +669,39 @@ governed by D-014 (hardware limiter deferred), D-029 (boost budget), D-031
 (bypass protection). AD challenge: wrong mandatory_hpf_hz is undetectable by
 mic — HPF is a safety-critical parameter that must be validated at config
 generation time (US-011b).
+
+## D-036: Measurement workflow uses central daemon architecture (2026-03-14)
+
+**Context:** The TK-162 architect breakdown originally specified a subprocess
+model: FastAPI backend spawns the measurement script as a separate process, the
+script owns all audio I/O, and communicates via a local websocket
+(`ws://localhost:8081/measurement`). TK-167 (WP-C) implemented this as
+`ws_server.py`. During review, the architect proposed an alternative: a central
+daemon model where the FastAPI backend is the unified control system managing
+CamillaDSP, PipeWire, audio devices, and measurement state directly.
+
+**Decision:** The measurement workflow uses the central daemon architecture.
+The subprocess model is rejected. The FastAPI backend manages all measurement
+state, CamillaDSP interaction, and audio device coordination directly.
+
+**Rationale:** The daemon model eliminates the complexity of inter-process
+communication (websocket proxying, subprocess lifecycle, abort signaling across
+process boundaries). The FastAPI backend already has CamillaDSP integration
+via pycamilladsp. A unified process simplifies state management, error handling,
+and testing (mock backend can inject at function level, not subprocess level).
+
+**Implications:**
+- TK-167 (WP-C, `ws_server.py`) is **superseded** — the separate websocket
+  server module will be replaced by direct integration in the daemon.
+- WP-D, WP-E, WP-F from the original TK-162 breakdown will be revised.
+- WP-A (TK-165, mock backend), WP-B (TK-166, versioned filenames), and TK-164
+  (gain cal fixes) remain valid.
+- AE non-negotiables: threaded audio I/O (audio must not block the event loop),
+  startup recovery check (verify CamillaDSP state on daemon start).
+- AD recommendation: systemd watchdog integration for the daemon process.
+
+**Supersedes:** Subprocess model from TK-162 original breakdown (Sections 10.1,
+10.2 of `measurement-workflow-ux.md`). TK-167 committed code (`1509010`) will
+be replaced.
+
+**Related:** D-035 (measurement safety), D-020 (web UI architecture), TK-162.

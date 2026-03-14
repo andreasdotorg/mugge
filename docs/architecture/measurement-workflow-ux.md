@@ -975,7 +975,14 @@ attenuated.
 
 ## 10. Backend Architecture
 
-### 10.1 Communication Flow
+> **NOTE (D-036):** This section describes the original subprocess model.
+> It has been **superseded** by the central daemon architecture documented
+> in [`measurement-daemon.md`](measurement-daemon.md). The FastAPI backend
+> is now the measurement controller directly, not a proxy for a subprocess.
+> The UX design (Sections 1-9) remains valid -- only the backend
+> communication model has changed.
+
+### 10.1 Communication Flow (SUPERSEDED — see measurement-daemon.md)
 
 ```
 Browser (Measure tab)          FastAPI            Measurement Script
