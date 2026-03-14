@@ -356,7 +356,10 @@ def _play_burst(noise_signal, channel_index, output_device, input_device,
     if sd is None:
         import sounddevice as sd
 
-    out_info = sd.query_devices(output_device)
+    if output_device is None:
+        out_info = sd.query_devices(kind='output')
+    else:
+        out_info = sd.query_devices(output_device)
     n_out_channels = out_info['max_output_channels']
 
     if channel_index >= n_out_channels:
