@@ -222,6 +222,14 @@ async def measurement_status(request: Request):
         if mode_manager.recovery_warning:
             d["recovery_warning"] = mode_manager.recovery_warning
         return d
+    # Check last completed session for terminal state results.
+    last = mode_manager.last_completed_session
+    if last is not None:
+        d = last.to_status_dict()
+        d["mode"] = mode_manager.mode.value
+        if mode_manager.recovery_warning:
+            d["recovery_warning"] = mode_manager.recovery_warning
+        return d
     return {
         "state": "idle",
         "mode": mode_manager.mode.value,
@@ -288,11 +296,18 @@ async def ws_measurement(ws: WebSocket):
                     **session.to_status_dict(),
                 }))
             else:
-                await ws.send_text(json.dumps({
-                    "type": "state_snapshot",
-                    "state": "idle",
-                    "mode": mode_manager.mode.value,
-                }))
+                last = mode_manager.last_completed_session
+                if last is not None:
+                    await ws.send_text(json.dumps({
+                        "type": "state_snapshot",
+                        **last.to_status_dict(),
+                    }))
+                else:
+                    await ws.send_text(json.dumps({
+                        "type": "state_snapshot",
+                        "state": "idle",
+                        "mode": mode_manager.mode.value,
+                    }))
 
         # Listen for client commands.
         while True:

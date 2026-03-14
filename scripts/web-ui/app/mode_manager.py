@@ -65,6 +65,7 @@ class ModeManager:
     ) -> None:
         self._mode = DaemonMode.MONITORING
         self._measurement_session: Any | None = None
+        self._last_completed_session: Any | None = None
         self._production_config_path = production_config_path
         self._ws_broadcast = ws_broadcast
         self._cdsp_host = cdsp_host
@@ -87,6 +88,11 @@ class ModeManager:
         """Active measurement session, or ``None`` in MONITORING mode."""
         return self._measurement_session
 
+    @property
+    def last_completed_session(self) -> Any | None:
+        """Last completed/aborted/error session, preserved for status queries."""
+        return self._last_completed_session
+
     # -- Mode transitions ----------------------------------------------------
 
     async def enter_measurement_mode(self, session: Any) -> None:
@@ -100,6 +106,7 @@ class ModeManager:
             )
         self._mode = DaemonMode.MEASUREMENT
         self._measurement_session = session
+        self._last_completed_session = None
         log.info("Mode transition: MONITORING -> MEASUREMENT")
         await self._ws_broadcast({
             "type": "mode_change",
@@ -115,6 +122,8 @@ class ModeManager:
         """
         if restore_cdsp and self.cdsp_available:
             await self._restore_production_config()
+        if self._measurement_session is not None:
+            self._last_completed_session = self._measurement_session
         self._measurement_session = None
         self._mode = DaemonMode.MONITORING
         log.info("Mode transition: MEASUREMENT -> MONITORING")
