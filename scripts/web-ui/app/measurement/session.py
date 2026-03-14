@@ -17,6 +17,7 @@ import enum
 import logging
 import os
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -40,6 +41,14 @@ def _ensure_rc_path() -> None:
     """Add room-correction dir to sys.path if needed."""
     if _RC_DIR not in sys.path:
         sys.path.insert(0, _RC_DIR)
+
+
+# ---------------------------------------------------------------------------
+# Measurement config constants
+# ---------------------------------------------------------------------------
+
+_MEASUREMENT_ATTENUATION_DB = -20.0
+_MEASUREMENT_MUTE_DB = -100.0
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +166,7 @@ class ChannelConfig:
     name: str
     target_spl_db: float = 75.0
     thermal_ceiling_dbfs: float = -20.0
+    mandatory_hpf_hz: Optional[float] = None
 
 
 @dataclass
@@ -227,6 +237,8 @@ class MeasurementSession:
             timeout_s=10.0, on_timeout=self._on_watchdog_timeout)
         self._cdsp_client: Any = None
         self._pump_task: Optional[asyncio.Task] = None
+        self._is_mock: bool = False
+        self._temp_config_path: Optional[str] = None
 
     # -- Properties ----------------------------------------------------------
 
@@ -322,13 +334,207 @@ class MeasurementSession:
         finally:
             await self._cleanup()
 
+    # -- Measurement config swap ---------------------------------------------
+
+    def _build_measurement_config(self, test_channel: int,
+                                  mandatory_hpf_hz: Optional[float] = None) -> dict:
+        """Build a CamillaDSP measurement config dict for *test_channel*.
+
+        Copies the devices section from the active CamillaDSP config,
+        creates a 1:1 passthrough mixer, applies -20 dB on the test
+        channel and -100 dB (mute) on all others.  Optionally adds a
+        4th-order Butterworth HPF for excursion protection.
+        """
+        if mandatory_hpf_hz is None:
+            ch_name = next(
+                (c.name for c in self._config.channels if c.index == test_channel),
+                str(test_channel),
+            )
+            log.warning("Channel %s has no mandatory_hpf_hz -- proceeding "
+                        "without excursion protection HPF", ch_name)
+
+        # Read active config to get devices section.
+        active_cfg: Optional[dict] = None
+        if self._cdsp_client is not None:
+            try:
+                active_cfg = self._cdsp_client.config.active()
+            except Exception as exc:
+                log.warning("Could not read active CamillaDSP config: %s", exc)
+
+        if active_cfg and "devices" in active_cfg:
+            devices = dict(active_cfg["devices"])
+        else:
+            devices = {
+                "samplerate": 48000,
+                "chunksize": 2048,
+                "capture": {
+                    "type": "Alsa", "channels": 8,
+                    "device": "hw:Loopback,1,0", "format": "S32LE",
+                },
+                "playback": {
+                    "type": "Alsa", "channels": 8,
+                    "device": "hw:USBStreamer,0", "format": "S32LE",
+                },
+            }
+
+        n_playback = devices.get("playback", {}).get("channels", 8)
+        n_capture = devices.get("capture", {}).get("channels", 8)
+        n_channels = max(n_playback, n_capture)
+
+        # 1:1 passthrough mixer
+        mixer_mapping = []
+        for ch in range(n_channels):
+            mixer_mapping.append({
+                "dest": ch,
+                "sources": [{"channel": ch, "gain": 0, "inverted": False}],
+            })
+        mixers = {
+            "passthrough": {
+                "channels": {"in": n_channels, "out": n_channels},
+                "mapping": mixer_mapping,
+            },
+        }
+
+        # Filters: gain per channel + optional HPF
+        filters: dict = {}
+        for ch in range(n_channels):
+            if ch == test_channel:
+                filters[f"ch{ch}_gain"] = {
+                    "type": "Gain",
+                    "parameters": {"gain": float(_MEASUREMENT_ATTENUATION_DB)},
+                }
+            else:
+                filters[f"ch{ch}_mute"] = {
+                    "type": "Gain",
+                    "parameters": {"gain": float(_MEASUREMENT_MUTE_DB)},
+                }
+
+        if mandatory_hpf_hz is not None:
+            filters[f"ch{test_channel}_hpf"] = {
+                "type": "BiquadCombo",
+                "parameters": {
+                    "type": "ButterworthHighpass",
+                    "order": 4,
+                    "freq": mandatory_hpf_hz,
+                },
+            }
+
+        # Pipeline: mixer -> HPF (if any) -> gain/mute
+        pipeline: list = [{"type": "Mixer", "name": "passthrough"}]
+
+        if mandatory_hpf_hz is not None:
+            pipeline.append({
+                "type": "Filter",
+                "channels": [test_channel],
+                "names": [f"ch{test_channel}_hpf"],
+            })
+
+        pipeline.append({
+            "type": "Filter",
+            "channels": [test_channel],
+            "names": [f"ch{test_channel}_gain"],
+        })
+        for ch in range(n_channels):
+            if ch != test_channel:
+                pipeline.append({
+                    "type": "Filter",
+                    "channels": [ch],
+                    "names": [f"ch{ch}_mute"],
+                })
+
+        return {
+            "title": MEASUREMENT_CONFIG_MARKER,
+            "devices": devices,
+            "mixers": mixers,
+            "filters": filters,
+            "pipeline": pipeline,
+        }
+
+    async def _swap_to_measurement_config(self, test_channel: int,
+                                          mandatory_hpf_hz: Optional[float] = None) -> None:
+        """Build a measurement config and hot-swap CamillaDSP to it.
+
+        In mock mode, skips file write and reload.
+        """
+        if self._cdsp_client is None:
+            log.warning("No CamillaDSP client — skipping config swap")
+            return
+
+        config_dict = self._build_measurement_config(test_channel, mandatory_hpf_hz)
+
+        if mandatory_hpf_hz is None:
+            ch_name = next(
+                (c.name for c in self._config.channels if c.index == test_channel),
+                str(test_channel),
+            )
+            await self._broadcast({
+                "type": "setup_warning",
+                "warning": f"No excursion protection HPF active on channel "
+                           f"{ch_name}. Safe at current power level but not "
+                           f"recommended for production use.",
+            })
+
+        if self._is_mock:
+            log.info("Mock mode — skipping measurement config file write/reload "
+                     "for channel %d", test_channel)
+            return
+
+        import yaml
+
+        # Clean up previous temp config if any.
+        if self._temp_config_path is not None:
+            try:
+                os.unlink(self._temp_config_path)
+            except OSError:
+                pass
+            self._temp_config_path = None
+
+        tmp_fd, self._temp_config_path = tempfile.mkstemp(
+            suffix=".yml", prefix="camilladsp_measurement_")
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                yaml.dump(config_dict, f, default_flow_style=False,
+                          sort_keys=False)
+            log.info("Measurement config written to: %s", self._temp_config_path)
+
+            await asyncio.to_thread(
+                self._cdsp_client.config.set_config_file_path,
+                self._temp_config_path)
+            await asyncio.to_thread(self._cdsp_client.general.reload)
+
+            # Verify CamillaDSP is RUNNING after reload.
+            await asyncio.sleep(0.5)
+            state = await asyncio.to_thread(self._cdsp_client.general.state)
+            state_name = getattr(state, "name", str(state))
+            if state_name != "RUNNING":
+                raise RuntimeError(
+                    f"CamillaDSP is not RUNNING after loading measurement "
+                    f"config (state: {state_name}). Aborting for safety.")
+            log.info("CamillaDSP reloaded with measurement config for "
+                     "channel %d (state: %s)", test_channel, state_name)
+        except Exception:
+            # On failure, try to restore production config.
+            try:
+                await asyncio.to_thread(
+                    self._cdsp_client.config.set_config_file_path,
+                    self._config.production_config_path)
+                await asyncio.to_thread(self._cdsp_client.general.reload)
+            except Exception:
+                pass
+            if self._temp_config_path is not None:
+                try:
+                    os.unlink(self._temp_config_path)
+                except OSError:
+                    pass
+                self._temp_config_path = None
+            raise
+
     # -- SETUP ---------------------------------------------------------------
 
     async def _run_setup(self) -> None:
         self._transition(MeasurementState.SETUP)
         await self._broadcast_state()
         await self._connect_cdsp()
-        # TODO: Swap CamillaDSP to measurement config.
         if self._cdsp_client is not None:
             try:
                 st = await asyncio.to_thread(self._cdsp_client.general.state)
@@ -352,6 +558,7 @@ class MeasurementSession:
         for i, ch in enumerate(self._config.channels):
             self._check_abort("CP-2")  # between channels
             self._current_channel_idx = i
+            await self._swap_to_measurement_config(ch.index, ch.mandatory_hpf_hz)
             await self._broadcast({
                 "type": "gain_cal_start", "channel": ch.index,
                 "channel_name": ch.name,
@@ -393,6 +600,84 @@ class MeasurementSession:
 
     # -- MEASURING -----------------------------------------------------------
 
+    async def _verify_measurement_config_active(self) -> None:
+        """Check that CamillaDSP is still running the measurement config.
+
+        Reads the active config title and verifies it contains
+        MEASUREMENT_CONFIG_MARKER.  In mock mode, skips the check.
+        """
+        if self._is_mock or self._cdsp_client is None:
+            return
+        try:
+            active_cfg = await asyncio.to_thread(
+                self._cdsp_client.config.active)
+            if active_cfg is None:
+                raise RuntimeError(
+                    "CamillaDSP returned no active config during sweep phase")
+            title = active_cfg.get("title", "")
+            if MEASUREMENT_CONFIG_MARKER not in title:
+                raise RuntimeError(
+                    "CamillaDSP config changed unexpectedly "
+                    f"(title={title!r}, expected {MEASUREMENT_CONFIG_MARKER!r})")
+            log.info("CamillaDSP measurement config verified (title=%r)", title)
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            log.warning("CamillaDSP config verification failed: %s", exc)
+
+    @staticmethod
+    def _check_recording_integrity(recording: np.ndarray,
+                                   channel_name: str) -> None:
+        """Validate recording integrity after a sweep.
+
+        Checks peak level, clipping, DC offset, and SNR.  Raises
+        ``RuntimeError`` on any failure.
+        """
+        peak = float(np.max(np.abs(recording)))
+        peak_dbfs = 20.0 * np.log10(max(peak, 1e-10))
+
+        rms = float(np.sqrt(np.mean(recording ** 2)))
+        rms_dbfs = 20.0 * np.log10(max(rms, 1e-10))
+
+        dc_offset = float(abs(np.mean(recording)))
+
+        # Estimate noise floor from last 10% of recording (post-sweep decay).
+        tail_len = max(int(len(recording) * 0.1), 1)
+        tail = recording[-tail_len:]
+        noise_rms = float(np.sqrt(np.mean(tail ** 2)))
+        noise_dbfs = 20.0 * np.log10(max(noise_rms, 1e-10))
+        snr_db = rms_dbfs - noise_dbfs if noise_rms > 0 else float("inf")
+
+        issues: list[str] = []
+
+        if peak_dbfs < -40.0:
+            issues.append(
+                f"Peak too low: {peak_dbfs:.1f} dBFS < -40 dBFS "
+                f"(mic not receiving signal?)")
+
+        if peak_dbfs > -1.0:
+            issues.append(
+                f"Peak too high: {peak_dbfs:.1f} dBFS > -1 dBFS "
+                f"(likely clipping)")
+
+        if dc_offset > 0.01:
+            issues.append(
+                f"DC offset: {dc_offset:.4f} (>0.01, possible ADC issue)")
+
+        if snr_db < 20.0:
+            issues.append(
+                f"SNR too low: {snr_db:.1f} dB < 20 dB "
+                f"(noisy environment or mic too far)")
+
+        if issues:
+            raise RuntimeError(
+                f"Recording integrity check failed for {channel_name}: "
+                + "; ".join(issues))
+
+        log.info("Recording integrity OK for %s (peak=%.1f dBFS, "
+                 "SNR=%.1f dB, DC=%.4f)",
+                 channel_name, peak_dbfs, snr_db, dc_offset)
+
     async def _run_measuring(self) -> None:
         # Validate sweep level does not exceed any channel's thermal ceiling.
         max_thermal = max(ch.thermal_ceiling_dbfs for ch in self._config.channels)
@@ -403,6 +688,9 @@ class MeasurementSession:
 
         self._transition(MeasurementState.MEASURING)
         await self._broadcast_state()
+
+        # M-2: Re-verify CamillaDSP is still in measurement config.
+        await self._verify_measurement_config_active()
 
         _ensure_rc_path()
         import measure_nearfield as mn
@@ -419,6 +707,9 @@ class MeasurementSession:
                 self._check_abort("CP-3")  # before each sweep
                 if pos > 0:
                     self._check_abort("CP-4")  # between positions
+                # Swap to measurement config before each channel's first sweep.
+                if pos == 0:
+                    await self._swap_to_measurement_config(ch.index, ch.mandatory_hpf_hz)
                 self._current_channel_idx = ch.index
                 self._current_position = pos
                 count += 1
@@ -443,6 +734,9 @@ class MeasurementSession:
                     mn.play_and_record, sweep, ch.index,
                     self._config.output_device, self._config.input_device,
                     sr=self._config.sample_rate)
+                # M-1: Recording integrity checks (skip in mock mode).
+                if not self._is_mock:
+                    self._check_recording_integrity(recording, ch.name)
                 key = f"ch{ch.index}_pos{pos}"
                 peak_dbfs = float(
                     20 * np.log10(max(np.max(np.abs(recording)), 1e-10)))
@@ -585,7 +879,7 @@ class MeasurementSession:
 
     async def _connect_cdsp(self) -> None:
         """Create the session's own CamillaDSP connection (#2)."""
-        _is_mock = False
+        self._is_mock = False
         try:
             from camilladsp import CamillaClient
         except ImportError:
@@ -594,13 +888,13 @@ class MeasurementSession:
                 if mock_dir not in sys.path:
                     sys.path.insert(0, mock_dir)
                 from mock_camilladsp import MockCamillaClient as CamillaClient  # type: ignore[no-redef]
-                _is_mock = True
+                self._is_mock = True
                 log.info("Using MockCamillaClient")
             except ImportError:
                 log.warning("No CamillaClient available")
                 self._cdsp_client = None
                 return
-        if _is_mock:
+        if self._is_mock:
             client = CamillaClient(self._cdsp_host, self._cdsp_port, measurement_mode=True)
             # Ensure set_config_file_path exists (mock may only have set_file_path)
             if hasattr(client, 'config') and not hasattr(client.config, 'set_config_file_path'):
@@ -632,6 +926,14 @@ class MeasurementSession:
                 await self._pump_task
             except asyncio.CancelledError:
                 pass
+        # Delete temp measurement config file.
+        if self._temp_config_path is not None:
+            try:
+                os.unlink(self._temp_config_path)
+                log.info("Deleted temp config: %s", self._temp_config_path)
+            except OSError:
+                pass
+            self._temp_config_path = None
         await self._disconnect_cdsp()
         log.info("Session cleanup complete")
 

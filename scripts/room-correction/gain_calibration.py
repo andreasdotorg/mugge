@@ -5,12 +5,13 @@ noise bursts, with mic-based safety gating. This is run before each
 measurement to find the correct digital output level for the desired SPL at
 the mic position.
 
-Safety architecture (4-layer defense-in-depth):
+Safety architecture (5-layer defense-in-depth):
   Layer 1: Digital hard cap from thermal_ceiling module (never exceed thermal
            ceiling regardless of target SPL)
   Layer 2: CamillaDSP measurement config attenuation (-20 dB)
-  Layer 3: Mic SPL gate (abort if measured SPL > hard_limit_spl_db)
-  Layer 4: Slow ramp + operator presence (3 dB max step, 2s bursts)
+  Layer 3: Mic input near-clipping detection (abort if peak >= -3.0 dBFS)
+  Layer 4: Mic SPL gate (abort if measured SPL > hard_limit_spl_db)
+  Layer 5: Slow ramp + operator presence (3 dB max step, 2s bursts)
 
 Design decisions (from Architect + AD safety review):
   - Open-loop ramp: step at fixed dB increments. The mic is a SAFETY GATE
@@ -611,7 +612,20 @@ def calibrate_channel(
 
             # --- Safety gate checks ---
 
-            # Check 1: Mic silence (cable disconnected, wrong device)
+            # Check 1: Mic input near clipping (ADC saturation, -3 dB threshold per AE)
+            if peak_dbfs >= -3.0:
+                reason = "mic input near clipping"
+                print(f"\n  ABORT: {reason} (peak {peak_dbfs:.1f} dBFS >= -3.0 dBFS)")
+                _ws_broadcast_gain_cal(step_num, measured_spl, "mic_clipping")
+                return CalibrationResult(
+                    passed=False,
+                    calibrated_level_dbfs=current_level_dbfs,
+                    measured_spl_db=measured_spl,
+                    steps_taken=step_num,
+                    abort_reason=reason,
+                )
+
+            # Check 2: Mic silence (cable disconnected, wrong device)
             if peak_dbfs < MIC_SILENCE_PEAK_DBFS:
                 reason = (f"mic not detecting signal (peak {peak_dbfs:.1f} dBFS "
                           f"< {MIC_SILENCE_PEAK_DBFS:.0f} dBFS threshold)")
@@ -625,7 +639,7 @@ def calibrate_channel(
                     abort_reason=reason,
                 )
 
-            # Check 2: Hard SPL limit exceeded
+            # Check 3: Hard SPL limit exceeded
             if measured_spl >= hard_limit_spl_db:
                 reason = (f"measured SPL {measured_spl:.1f} dB >= hard limit "
                           f"{hard_limit_spl_db:.1f} dB")
@@ -639,7 +653,7 @@ def calibrate_channel(
                     abort_reason=reason,
                 )
 
-            # Check 3: At target (within tolerance)?
+            # Check 4: At target (within tolerance)?
             if abs(measured_spl - target_spl_db) <= SPL_TOLERANCE_DB:
                 print(f"\n  TARGET REACHED: {measured_spl:.1f} dB SPL "
                       f"(target {target_spl_db:.1f} +/- {SPL_TOLERANCE_DB:.0f})")
@@ -651,7 +665,7 @@ def calibrate_channel(
                     steps_taken=step_num,
                 )
 
-            # Check 4: Overshot target (above target + tolerance but below
+            # Check 5: Overshot target (above target + tolerance but below
             # hard limit). GC-01: verify the backed-off level before accepting.
             if measured_spl > target_spl_db + SPL_TOLERANCE_DB:
                 backed_off = current_level_dbfs - FINE_STEP_DB

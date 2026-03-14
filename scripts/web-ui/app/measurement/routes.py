@@ -41,6 +41,7 @@ class ChannelIn(BaseModel):
     name: str
     target_spl_db: float = 75.0
     thermal_ceiling_dbfs: float = -20.0
+    mandatory_hpf_hz: Optional[float] = None
 
 
 class StartRequest(BaseModel):
@@ -133,6 +134,7 @@ async def start_measurement(body: StartRequest, request: Request):
             name=ch.name,
             target_spl_db=ch.target_spl_db,
             thermal_ceiling_dbfs=ch.thermal_ceiling_dbfs,
+            mandatory_hpf_hz=ch.mandatory_hpf_hz,
         )
         for ch in body.channels
     ]

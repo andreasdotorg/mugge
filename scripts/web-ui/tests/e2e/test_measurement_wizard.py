@@ -277,13 +277,60 @@ def test_abort_flow(page):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="Triggering a backend error requires patching; "
-                         "deferred to a future test harness enhancement")
-def test_error_screen(page):
-    """Verify error screen display when a session fails."""
+def test_error_screen(page, mock_server):
+    """Verify error screen display when a session fails.
+
+    Triggers an error by starting a measurement with a sweep_level_dbfs
+    that exceeds the thermal ceiling, which causes a RuntimeError in
+    _run_measuring().
+    """
+    import json
+    import urllib.request
+
     _navigate_to_measure(page)
-    # Would need to patch the backend to inject an error condition.
-    # Placeholder for future implementation.
+
+    # Start a measurement via REST with sweep_level_dbfs > thermal_ceiling_dbfs.
+    # thermal_ceiling_dbfs=-30, sweep_level_dbfs=-20 => error in _run_measuring.
+    body = json.dumps({
+        "channels": [
+            {"index": 0, "name": "Left", "target_spl_db": 75.0,
+             "thermal_ceiling_dbfs": -30.0},
+        ],
+        "positions": 1,
+        "sweep_duration_s": 0.5,
+        "sweep_level_dbfs": -20.0,
+        "hard_limit_spl_db": 84.0,
+        "umik_sensitivity_dbfs_to_spl": 121.4,
+        "output_dir": "/tmp/pi4audio-test-measurement",
+    }).encode()
+
+    req = urllib.request.Request(
+        f"{mock_server}/api/v1/measurement/start",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    urllib.request.urlopen(req, timeout=10)
+
+    # Wait for the ERROR screen to appear.
+    error_screen = page.locator("#mw-error")
+    expect(error_screen).not_to_have_class(
+        re.compile(r".*\bhidden\b.*"), timeout=STATE_TIMEOUT)
+
+    # Verify error message is displayed.
+    error_msg = page.locator("#mw-error-message")
+    expect(error_msg).to_be_visible()
+    expect(error_msg).to_contain_text("sweep_level_dbfs")
+
+    # Verify RETURN button.
+    return_btn = error_screen.locator(".mw-return-btn")
+    expect(return_btn).to_be_visible()
+    expect(return_btn).to_have_text("RETURN")
+
+    # State badge should show ERROR.
+    badge = page.locator('[data-testid="measurement-state"]')
+    expect(badge).to_have_text("ERROR")
+
     _screenshot(page, "mw-06-error.png")
 
 
