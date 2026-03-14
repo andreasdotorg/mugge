@@ -20,8 +20,8 @@
 #
 #   Satellite: -7dB headroom → FIR (up to +4dB baffle step) → -13.5dB power limit
 #     Worst case: 0 - 7 + 4 - 13.5 = -16.5dBFS → 10.1W into 4 ohm (20W limit)
-#   Sub: -13dB headroom → FIR (up to +10dB enclosure comp) → -8.6dB power limit
-#     Worst case: 0 - 6 - 13 + 10 - 8.6 = -17.6dBFS → 7.8W into 2.33 ohm (62W limit)
+#   Sub: -13dB headroom → FIR (up to +10dB enclosure comp) → -20.5dB power limit
+#     Worst case: 0 - 6 - 13 + 10 - 20.5 = -29.5dBFS → 0.5W into 2.33 ohm (62W limit)
 #
 # CAUTION: Sub driver 2 (ch 3) is phase-inverted for isobaric clamshell.
 # Do NOT use this config with other speaker systems.
@@ -151,7 +151,7 @@ filters:
   # Protects drivers from exceeding thermal limits.
   # Values calculated from D-009 worst case (-0.5dBFS after FIR):
   #   sat: 20W into 4 ohm → need -14.0dBFS → power limit = -13.5dB
-  #   sub: 62W into 2.33 ohm → need -9.1dBFS → power limit = -8.6dB
+  #   sub: 62W into 2.33 ohm → need -21.0dBFS → power limit = -20.5dB
   sat_power_limit:
     type: Gain
     parameters:
@@ -159,7 +159,7 @@ filters:
   sub_power_limit:
     type: Gain
     parameters:
-      gain: -8.6
+      gain: -20.5
 
 pipeline:
   # 1. Route stereo input to 8 output channels

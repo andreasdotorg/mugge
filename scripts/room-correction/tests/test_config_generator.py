@@ -117,7 +117,7 @@ class TestLoadProfile(unittest.TestCase):
         self.assertAlmostEqual(gs["satellite"]["headroom_db"], -7.0)
         self.assertAlmostEqual(gs["satellite"]["power_limit_db"], -13.5)
         self.assertAlmostEqual(gs["subwoofer"]["headroom_db"], -13.0)
-        self.assertAlmostEqual(gs["subwoofer"]["power_limit_db"], -8.6)
+        self.assertAlmostEqual(gs["subwoofer"]["power_limit_db"], -20.5)
 
 
 class TestValidation(unittest.TestCase):
@@ -320,7 +320,7 @@ class TestGenerateConfig(unittest.TestCase):
             filters["sat_power_limit"]["parameters"]["gain"], -13.5
         )
         self.assertAlmostEqual(
-            filters["sub_power_limit"]["parameters"]["gain"], -8.6
+            filters["sub_power_limit"]["parameters"]["gain"], -20.5
         )
 
     def test_bose_home_sub_inversion(self):

@@ -432,10 +432,16 @@ class TestOvershootHandling(unittest.TestCase):
 
     @patch.object(gain_calibration, '_play_burst')
     def test_overshoot_backs_off(self, mock_play):
-        """If SPL overshoots target by > tolerance, back off one fine step."""
-        # Set offset so after a few coarse steps we overshoot
-        # At -60 + 121.4 + 16 = 77.4, target=75, overshoots on first
-        # step above that transitions to overshoot territory
+        """If SPL overshoots target by > tolerance, back off and verify (GC-01).
+
+        TK-164 added verification bursts: after overshoot, the ramp backs off
+        by FINE_STEP_DB and plays up to MAX_OVERSHOOT_RETRIES verification
+        bursts. If still too high, it backs off further each retry.
+        """
+        # At -60 dBFS + 121.4 sensitivity + 16.0 offset = 77.4 dB SPL
+        # Target = 75.0, tolerance = 1.0 → overshoot on first step (77.4 > 76.0)
+        # Back-off to -61: SPL = 76.4 → still > 76.0, back off to -62
+        # Verification at -62: SPL = 75.4 → within tolerance → pass
         mock_play_impl = MockPlayBurst(sensitivity=121.4, acoustic_offset_db=16.0)
         mock_play.side_effect = mock_play_impl
 
@@ -449,11 +455,14 @@ class TestOvershootHandling(unittest.TestCase):
         )
 
         self.assertTrue(result.passed)
-        # The calibrated level should be backed off by FINE_STEP_DB from the
-        # overshoot level
+        # Verification bursts should have been played after the overshoot
+        # (1 ramp burst + up to MAX_OVERSHOOT_RETRIES verification bursts)
+        self.assertGreater(mock_play_impl.call_count, 1)
+        # The calibrated level should be the verified backed-off level,
+        # which equals the last verification burst level
         last_played = mock_play_impl.levels_played[-1]
         self.assertAlmostEqual(
-            result.calibrated_level_dbfs, last_played - FINE_STEP_DB, delta=0.5)
+            result.calibrated_level_dbfs, last_played, delta=0.5)
 
 
 if __name__ == "__main__":
