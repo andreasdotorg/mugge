@@ -766,6 +766,7 @@ speaker identities.
 - [ ] Subsonic driver protection validation (D-031): every speaker identity MUST declare `mandatory_hpf_hz`. The config generator MUST include an IIR safety-net HPF on every speaker channel (applied before FIR convolution) using the speaker identity's `mandatory_hpf_hz` value. Config validation MUST reject any configuration where a speaker channel lacks subsonic protection. This protects drivers even when dirac placeholder FIR filters are in use
 - [ ] 3-way mode constraint: when topology is "3way", validator warns that live mode is unsupported (no IEM channels available) and requires DJ-mode-only flag
 - [ ] **Power budget validation (D-035):** config generator computes worst-case power per speaker channel from: driver T/S data (Pe_max, impedance from identity -> driver), maximum possible digital level (0dBFS + max FIR boost from D-029 headroom), and hardware gain chain (amp voltage gain, DAC 0dBFS level from `configs/hardware/`). Rejects configurations where worst-case power exceeds any driver's Pe_max. This is Belt 1 of the safety model.
+- [ ] **Minimum power margin (PO requirement):** all channels must have >= 3 dB margin between computed worst-case power and Pe_max. Configs with margin < 3 dB are rejected with a clear message identifying the offending channel and its margin. This ensures safety headroom even with T/S parameter tolerances.
 - [ ] CamillaDSP config YAML generator: takes a speaker profile + venue measurement results (delay values, filter WAV paths) and produces a complete, deployable CamillaDSP config
 - [ ] Generated config includes: device settings (chunksize per mode), filters (referencing combined WAV files), pipeline with per-channel delay and gain, mixer routing
 - [ ] Config generator parameterized by operating mode (DJ/Live) — chunksize and monitoring routing differ per D-002
@@ -2426,7 +2427,7 @@ from writing audio directly to the USBStreamer hardware device,
 without CamillaDSP's gain staging, crossover filters, and driver protection
 HPFs in the signal path.
 
-**Status:** selected
+**Status:** selected (**PO gap: no phase assignment. Owner decision needed — production safety, arguably more urgent than measurement safety. Independent of measurement pipeline, could run in parallel.**)
 **Depends on:** US-000a (security hardening baseline)
 **Blocks:** none (but should be addressed before production gig use)
 **Decisions:** relates to D-014 (hardware limiter, deferred), D-029 (per-speaker HPF), D-031 (mandatory subsonic protection)
@@ -2464,7 +2465,7 @@ the signal chain (amplifier, DAC/interface, measurement microphone),
 calibration, and thermal ceilings from actual hardware specifications instead
 of hardcoded constants.
 
-**Status:** selected
+**Status:** in-review (TK-155, `45ea67e` — code + tests done, DoD sign-offs pending)
 **Depends on:** none
 **Blocks:** US-046 (thermal ceiling needs hardware specs), US-012 (gain calibration needs mic sensitivity)
 **Decisions:** D-035 (measurement safety)
@@ -2500,7 +2501,7 @@ impedance combined with the hardware gain chain,
 **so that** the system enforces a hard power limit that prevents thermal
 damage to speakers regardless of CamillaDSP state or operator error.
 
-**Status:** selected
+**Status:** in-review (TK-155, `45ea67e` — code + tests done, DoD sign-offs pending)
 **Depends on:** US-045 (hardware config), US-039 (driver schema with Pe_max, impedance)
 **Blocks:** US-012 amended gain calibration (uses thermal ceiling as hard cap)
 **Decisions:** D-035 (measurement safety, Layer 1: digital hard cap)

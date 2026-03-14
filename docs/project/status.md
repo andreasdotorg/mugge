@@ -121,6 +121,13 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - TK-150 DONE (`6394ab7`): Bass shelf deployed via pycamilladsp, persisted to disk and pushed.
 - D-035 filed: Measurement safety is software-only (4-layer architecture). Production safety remains D-014 scope. AD recommended, owner approved.
 - Owner planning brief work packages filed: US-045 (hardware config schema), US-046 (thermal ceiling), US-047 (Path A measurement), US-048 (post-measurement viz), US-049 (real-time viz websocket). US-011b amended (power budget validation). US-012 amended (automated gain calibration ramp). TK-151-154 filed (F-030 fix, JACK CPU investigation, runtime power monitoring, D-034 removal tracker). Story count 48->53. Dependency graph updated.
+- Phase 1 completed (WP-1, WP-2, WP-8):
+  - TK-155 DONE (`45ea67e`): Hardware config schema + thermal ceiling computation. 18 tests. Covers US-045 + US-046.
+  - TK-156 DONE: nixGL Mixxx 2.5.4 wrapper in flake. Needs Pi hardware test (TK-139).
+  - TK-157 DONE (`c2c44f6`): Config power budget validator. 29 tests. Sub margin +1.7 dB — AE review needed.
+- TK-158 DONE (`a148190`): Safety + architecture doc restructure by TW. New `docs/operations/safety.md`, `rt-audio-stack.md` restructured.
+- TK-152 SUBSUMED by TK-151: architect root cause analysis identified JACK client as active RT graph node problem.
+- L-039: Task tool `isolation: "worktree"` is broken. Do not use.
 
 ### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.
