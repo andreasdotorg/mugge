@@ -4,15 +4,18 @@ After=pipewire.service
 Wants=pipewire.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
 WorkingDirectory=/home/ela/web-ui
 ExecStart=/home/ela/audio-workstation-venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1 --ssl-keyfile /home/ela/web-ui/key.pem --ssl-certfile /home/ela/web-ui/cert.pem
 Environment=PI_AUDIO_MOCK=0
+Environment=PI4AUDIO_PRODUCTION_CONFIG=/etc/camilladsp/active.yml
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=JACK_NO_START_SERVER=1
 Environment=LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/pipewire-0.3/jack
+WatchdogSec=30
 Restart=on-failure
-RestartSec=5
+RestartSec=2
 # Web UI must not compete with RT audio
 Nice=10
 

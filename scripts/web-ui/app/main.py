@@ -21,8 +21,10 @@ URL parameters (passed through to WebSocket):
     ?scenario=A   Select mock data scenario (A-E, default A)
 """
 
+import asyncio
 import logging
 import os
+import socket
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -44,6 +46,32 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 MOCK_MODE = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
+
+
+# -- Systemd watchdog (D-036 / WP-G) ---------------------------------------
+
+def _sd_notify(state: str) -> bool:
+    """Send a notification to systemd via $NOTIFY_SOCKET."""
+    try:
+        import systemd.daemon  # type: ignore[import-untyped]
+        return systemd.daemon.notify(state)
+    except ImportError:
+        pass
+    addr = os.environ.get("NOTIFY_SOCKET")
+    if not addr:
+        return False
+    if addr[0] == "@":
+        addr = "\0" + addr[1:]
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+        sock.sendto(state.encode(), addr)
+    return True
+
+
+async def _watchdog_loop() -> None:
+    """Send WATCHDOG=1 every 10 s while the event loop is responsive."""
+    while True:
+        _sd_notify("WATCHDOG=1")
+        await asyncio.sleep(10)
 
 
 # -- Lifespan ---------------------------------------------------------------
@@ -92,9 +120,21 @@ async def lifespan(app: FastAPI):
     else:
         log.info("Mock mode enabled (PI_AUDIO_MOCK=1) — real collectors not started")
 
+    # 3b. Start systemd watchdog heartbeat (D-036 / WP-G).
+    wd_task: asyncio.Task | None = None
+    if os.environ.get("NOTIFY_SOCKET") or _sd_notify("STATUS=starting"):
+        wd_task = asyncio.create_task(_watchdog_loop())
+        _sd_notify("READY=1")
+        log.info("Systemd watchdog heartbeat started (10 s interval)")
+    else:
+        log.debug("No systemd notify socket — watchdog heartbeat skipped")
+
     yield
 
-    # 4. Shutdown: stop collectors, cleanup.
+    # 4. Shutdown: cancel watchdog, stop collectors, cleanup.
+    if wd_task is not None:
+        wd_task.cancel()
+        _sd_notify("STOPPING=1")
     if not MOCK_MODE:
         log.info("Stopping collectors...")
         for name in ("cdsp", "pcm", "system_collector", "pw"):
