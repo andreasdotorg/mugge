@@ -434,3 +434,100 @@ silently falls back to the main working directory without error.
 3. Workers must never commit directly — always coordinate through CM
 
 See global L-039 for full analysis.
+
+---
+
+## L-016: Mock compatibility shims can mask real API mismatches
+
+**Date:** 2026-03-14
+**Context:** D-036 measurement daemon — MockCamillaClient in test fixtures
+
+The `conftest.py` compatibility patch added a `set_config_file_path` method
+to `MockCamillaClient` to make tests pass. This shim masked the fact that the
+real `pycamilladsp` client uses a different method name for the same operation.
+All 23 integration tests passed with the mock, but the code would have failed
+against the real CamillaDSP WebSocket API.
+
+The bug was only discovered during the owner's review of the TK-177 config
+swap implementation, not by any automated test.
+
+**Root cause:** Mocks that add methods to match call sites (rather than
+faithfully reproducing the real API surface) create a false contract. The mock
+becomes a compatibility layer that absorbs API mismatches instead of
+surfacing them.
+
+**Fix:**
+1. **Prefer real dependencies with safe backends over mocks.** CamillaDSP can
+   run with a null/file I/O backend — use that for integration tests instead
+   of MockCamillaClient. This exercises the actual WebSocket protocol and
+   catches method name mismatches automatically (TK-189, escalated to HIGH).
+2. **If mocking is unavoidable:** generate mock classes from the real interface
+   (e.g., `unittest.mock.create_autospec`) rather than hand-writing stubs.
+   `create_autospec` raises `AttributeError` if the call site uses a method
+   that doesn't exist on the real class.
+3. **Never add shim methods to mocks to "fix" test failures.** If a test fails
+   because the mock lacks a method, the correct response is to investigate
+   whether the production code is calling the right API — not to add the
+   missing method to the mock.
+
+---
+
+## L-017: Don't deploy without DoD — passing mock tests is not DoD
+
+**Date:** 2026-03-14
+**Context:** D-036 measurement daemon — first Pi deployment attempt
+
+The measurement daemon was deployed to the Pi after all mock/integration tests
+passed (23/23 integration, 14/1skip Playwright e2e, 263/263 room-correction).
+The PM delivered a deployment readiness assessment. The deployment proceeded
+without a formal DoD review by the AE, architect, or QE checking the real
+signal path. Four bugs hit within the first 10 minutes on real hardware:
+
+1. **`set_config_file_path` vs `set_file_path`** — mock compatibility shim
+   masked a pycamilladsp API mismatch (L-016, TK-189).
+2. **`device=None` picks wrong audio devices** — `sounddevice` defaults to
+   system default, not USBStreamer/UMIK-1. Never tested with real hardware
+   because all tests use MockSoundDevice (TK-199).
+3. **No ambient noise baseline** — gain calibration converges on ambient room
+   noise instead of speaker output when the room is noisy. No silence
+   baseline captured before first burst (TK-200).
+4. **No visual feedback during gain cal** — WebSocket broadcast wiring between
+   `calibrate_channel()` and the frontend was not connected correctly. Mock
+   mode masked it because MockSoundDevice returns instantly (TK-201).
+
+All four bugs share the same root cause: **the entire test suite runs against
+mocks that bypass the real hardware interface.** Passing mock tests validates
+the state machine logic, the REST API contract, and the frontend rendering —
+but it says nothing about whether the code works with real audio hardware,
+real CamillaDSP, or real acoustic environments.
+
+**The DoD (tasks.md, "Task Definition of Done") requires:**
+- Criterion 1: "Code written, all tests pass" — this was met (mock tests)
+- Criterion 5: "Advisory review" — AE, architect, QE reviews were done for
+  individual work packages, but **no reviewer checked the integrated real
+  signal path end-to-end before deployment**
+
+The gap: our DoD review process treated individual WP sign-offs as sufficient
+for the integrated system. It wasn't. The integration of 6 work packages onto
+real hardware is a distinct validation step that no WP-level review covers.
+
+**Process fix (mandatory before any further Pi deployment):**
+1. **Pre-deployment DoD checklist** — before any deploy to Pi, the PM
+   explicitly runs a DoD review meeting with AE + architect + QE present.
+   The checklist includes:
+   - AE: real signal path walkthrough (devices, gain, safety layers)
+   - Architect: integration points (CamillaDSP connection, sys.path, env vars)
+   - QE: test coverage gap analysis (what can't mocks test?)
+2. **"Mock tests pass" is a prerequisite, not the DoD.** Mock tests validate
+   logic. Hardware deployment requires hardware validation — even supervised
+   single-channel with PA off.
+3. **File gaps before deploying, not after.** The ambient noise baseline,
+   device selection, and WS wiring issues were all knowable from code review.
+   The DoD review should surface them as "must-fix before Pi" items, not as
+   production bugs.
+
+This is the project's second instance of premature deployment (the first was
+the premature D-036 COMPLETE declaration that was reverted twice). The pattern:
+pressure to show progress on real hardware leads to skipping the formal review
+gate. The fix is mechanical — the PM blocks deployment until the DoD checklist
+is signed off, regardless of schedule pressure.
