@@ -188,6 +188,11 @@
             return;
         }
 
+        if (type === "setup_warning") {
+            showSetupWarning(msg.warning);
+            return;
+        }
+
         if (type === "error") {
             showError(msg.detail || "Unknown error");
             return;
@@ -598,6 +603,21 @@
 
     function showError(detail) {
         setText("mw-error-message", detail);
+    }
+
+    function showSetupWarning(text) {
+        var banner = $("mw-setup-warning-banner");
+        if (!banner) {
+            // Create the banner dynamically and insert it at the top of the
+            // currently visible wizard screen.
+            banner = document.createElement("div");
+            banner.id = "mw-setup-warning-banner";
+            banner.className = "mw-setup-warning-banner";
+            var body = document.querySelector(".mw-body");
+            if (body) body.insertBefore(banner, body.firstChild);
+        }
+        banner.textContent = text;
+        show(banner);
     }
 
     // -- Actions --

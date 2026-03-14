@@ -470,5 +470,142 @@ class TestOvershootHandling(unittest.TestCase):
             result.calibrated_level_dbfs, last_played, delta=0.5)
 
 
+class TestAmbientNoiseBaseline(unittest.TestCase):
+    """Tests for the TK-200 ambient noise baseline feature."""
+
+    @patch.object(gain_calibration, '_play_burst')
+    def test_high_ambient_aborts(self, mock_play):
+        """Ambient noise > 81 dB SPL should abort with 'ambient noise too high'."""
+        # The first call to _play_burst is the ambient baseline recording.
+        # We need it to return a recording whose SPL > 81 dB.
+        # SPL = RMS_dBFS + sensitivity. For SPL=82:
+        #   RMS_dBFS = 82 - 121.4 = -39.4
+        #   RMS_linear = 10^(-39.4/20) ~= 0.01072
+        ambient_recording = _make_recording_at_spl(82.0)
+
+        # The ambient call is first, then ramp calls follow.
+        # Since we abort on ambient, only 1 call should happen.
+        mock_play.side_effect = [ambient_recording]
+
+        result = calibrate_channel(
+            channel_index=0,
+            target_spl_db=75.0,
+            hard_limit_spl_db=84.0,
+            thermal_ceiling_dbfs=0.0,
+            output_device=0,
+            input_device=0,
+        )
+
+        self.assertFalse(result.passed)
+        self.assertIn("ambient noise too high", result.abort_reason)
+        self.assertEqual(result.steps_taken, 0)
+
+    @patch.object(gain_calibration, '_play_burst')
+    def test_warning_ambient_continues(self, mock_play):
+        """Ambient noise > 60 dB SPL should warn but continue calibration."""
+        # First call: ambient at 65 dB SPL (warning range, not abort)
+        ambient_recording = _make_recording_at_spl(65.0)
+
+        # After ambient, the ramp starts. Set up MockPlayBurst for the
+        # ramp bursts (acoustic offset such that target is reached quickly).
+        mock_ramp = MockPlayBurst(sensitivity=121.4, acoustic_offset_db=16.0)
+
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return ambient_recording
+            return mock_ramp(*args, **kwargs)
+
+        mock_play.side_effect = side_effect
+
+        result = calibrate_channel(
+            channel_index=0,
+            target_spl_db=75.0,
+            hard_limit_spl_db=84.0,
+            thermal_ceiling_dbfs=0.0,
+            output_device=0,
+            input_device=0,
+        )
+
+        # Should continue (not abort due to ambient warning)
+        self.assertTrue(result.passed)
+        self.assertGreater(call_count[0], 1)
+
+    @patch.object(gain_calibration, '_play_burst')
+    def test_normal_ambient_proceeds(self, mock_play):
+        """Ambient noise below warning threshold should proceed without issues."""
+        # First call: quiet ambient at 40 dB SPL
+        ambient_recording = _make_recording_at_spl(40.0)
+
+        mock_ramp = MockPlayBurst(sensitivity=121.4, acoustic_offset_db=16.0)
+
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return ambient_recording
+            return mock_ramp(*args, **kwargs)
+
+        mock_play.side_effect = side_effect
+
+        result = calibrate_channel(
+            channel_index=0,
+            target_spl_db=75.0,
+            hard_limit_spl_db=84.0,
+            thermal_ceiling_dbfs=0.0,
+            output_device=0,
+            input_device=0,
+        )
+
+        self.assertTrue(result.passed)
+
+    @patch.object(gain_calibration, '_play_burst')
+    def test_burst_snr_below_ambient_aborts(self, mock_play):
+        """Burst < 10 dB above ambient at output > -40 dBFS should abort.
+
+        When the speaker output is not detected above ambient noise at a
+        level where it should be audible, the system aborts with
+        'Speaker output not detected'.
+        """
+        # Ambient at 70 dB SPL -> ambient_rms_dbfs = 70 - 121.4 = -51.4
+        ambient_recording = _make_recording_at_spl(70.0)
+
+        # For the burst SNR check to trigger, the burst recording must have
+        # SNR < 10 dB above ambient AND output level > -40 dBFS.
+        # We simulate this by making the ramp recording return the same
+        # level as ambient (SNR ~0 dB), but at a high output level.
+        burst_recording = _make_recording_at_spl(71.0)  # barely above ambient
+
+        call_count = [0]
+
+        def side_effect(noise_signal, channel_index, output_device,
+                        input_device, sr=SAMPLE_RATE):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return ambient_recording
+            # Return a recording that is barely above ambient regardless
+            # of the output level. The ramp will eventually reach > -40 dBFS.
+            return burst_recording
+
+        mock_play.side_effect = side_effect
+
+        # Use high thermal ceiling so the ramp can reach > -40 dBFS.
+        # Start at -60, coarse steps of 3 dB: after ~7 steps reaches -39.
+        result = calibrate_channel(
+            channel_index=0,
+            target_spl_db=75.0,
+            hard_limit_spl_db=84.0,
+            thermal_ceiling_dbfs=0.0,
+            output_device=0,
+            input_device=0,
+        )
+
+        self.assertFalse(result.passed)
+        self.assertIn("Speaker output not detected", result.abort_reason)
+
+
 if __name__ == "__main__":
     unittest.main()

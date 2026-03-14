@@ -934,6 +934,12 @@ class MeasurementSession:
         try:
             from camilladsp import CamillaClient
         except ImportError:
+            if not _MOCK_MODE:
+                raise RuntimeError(
+                    "pycamilladsp is required in production mode "
+                    "(PI_AUDIO_MOCK != 1) but could not be imported. "
+                    "Install it: pip install camilladsp"
+                )
             try:
                 mock_dir = os.path.join(_RC_DIR, "mock")
                 if mock_dir not in sys.path:

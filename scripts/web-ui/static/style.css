@@ -1186,6 +1186,18 @@ html, body {
     max-width: 400px;
 }
 
+.mw-setup-warning-banner {
+    padding: 10px 16px;
+    margin-bottom: 10px;
+    background: rgba(226, 152, 40, 0.15);
+    border: 1px solid rgba(226, 152, 40, 0.5);
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--yellow);
+    text-align: center;
+}
+
 /* Setup screen */
 
 .mw-setup-form {
