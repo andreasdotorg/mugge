@@ -248,9 +248,11 @@ class TestAbortOnHardLimit(unittest.TestCase):
 
     @patch.object(gain_calibration, '_play_burst')
     def test_abort_at_exact_hard_limit(self, mock_play):
-        """SPL exactly at hard limit should still trigger abort."""
-        # SPL at -60 = -60 + 121.4 + offset = 84 -> offset = 22.6
-        mock_play_impl = MockPlayBurst(sensitivity=121.4, acoustic_offset_db=22.6)
+        """SPL at or slightly above hard limit should still trigger abort."""
+        # SPL at -60 = -60 + 121.4 + offset ~= 84. Use offset=22.7 to
+        # ensure SPL clearly exceeds 84.0 despite sub-dB RMS variation
+        # from pre-generated noise scaling (TK-224).
+        mock_play_impl = MockPlayBurst(sensitivity=121.4, acoustic_offset_db=22.7)
         mock_play.side_effect = mock_play_impl
 
         result = calibrate_channel(
