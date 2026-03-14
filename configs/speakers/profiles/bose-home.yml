@@ -55,7 +55,7 @@ gain_staging:
     power_limit_db: -13.5
   subwoofer:
     headroom_db: -13.0
-    power_limit_db: -8.6
+    power_limit_db: -20.5
 
 target_curve: flat
 filter_taps: 16384

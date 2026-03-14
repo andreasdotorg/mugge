@@ -138,7 +138,7 @@ filters:
   sub_speaker_trim:
     type: Gain
     parameters:
-      gain: -19.0
+      gain: -20.5
 
   # --- Subsonic HPF (satellite protection) ---
   # ButterworthHighpass at 80Hz, order 4 (24dB/oct).
