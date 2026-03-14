@@ -232,6 +232,14 @@ Pi: `ela@192.168.178.185` (hostname: mugge), key-based auth, passwordless sudo.
 
 ### Safety Rules (2026-03-10)
 
+**Comprehensive safety documentation:** `docs/operations/safety.md`
+
+That document covers: USBStreamer transient risk, driver protection filters
+(D-031), measurement safety (S-010 lessons), gain staging limits (D-009),
+pre-flight checklists, and PREEMPT_RT as a safety requirement (D-013).
+
+**Quick reference (always applies):**
+
 - **WARN BEFORE REBOOTS.** Resetting the USBStreamer produces transients through
   the amplifier chain that can damage speakers. The owner MUST be warned before any
   reboot, `systemctl restart camilladsp`, or any action that causes the USBStreamer
@@ -243,6 +251,11 @@ Pi: `ela@192.168.178.185` (hostname: mugge), key-based auth, passwordless sudo.
 - `SETUP-MANUAL.md` — The comprehensive setup manual (2200 lines). This is the primary
   deliverable so far. Covers everything from OS setup through CamillaDSP configuration,
   Mixxx, Reaper, MIDI controllers, headless operation, and troubleshooting.
+- `docs/operations/safety.md` — Safety operations manual. All safety constraints in one
+  place: transient risk, driver protection, measurement safety, gain staging, pre-flight
+  checklists. **Read this before any audio-producing operation.**
+- `docs/architecture/rt-audio-stack.md` — RT audio stack architecture. Executive summary
+  with key performance numbers, Mermaid pipeline diagram, detailed configuration.
 - **Automated room correction pipeline** — NOT YET WRITTEN. This is the next major
   deliverable. See "Next Steps" below.
 

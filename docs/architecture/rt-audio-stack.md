@@ -9,57 +9,78 @@ All configuration files referenced here are version-controlled under
 `configs/` in this repository. The ground truth hierarchy for the Pi's
 state is: CLAUDE.md > Pi itself > `configs/` directory > `docs/project/`.
 
+**Safety:** All operational safety constraints (transient risk, driver
+protection, measurement safety, gain staging) are in
+[`docs/operations/safety.md`](../operations/safety.md). This document covers
+architecture and configuration only.
+
 ---
 
-## SAFETY: Reboot and Restart Transient Risk
+## Executive Summary
 
-**The USBStreamer produces full-scale transients when its audio stream is
-interrupted.** These transients pass through the 4x450W amplifier chain
-and can damage speakers and risk hearing.
+The RT audio stack delivers deterministic, low-latency audio processing on a
+Raspberry Pi 4B driving a PA system through 4x450W amplifiers. The design
+prioritizes scheduling determinism as a safety requirement (D-013).
 
-The following actions cause the USBStreamer to lose its audio stream:
+### Key Performance Numbers
 
-- Rebooting the Pi
-- `systemctl restart camilladsp`
-- `systemctl --user restart pipewire.service`
-- Any action that causes PipeWire or CamillaDSP to drop the USBStreamer
-  ALSA playback stream
+| Metric | DJ/PA Mode | Live Mode | Evidence |
+|--------|-----------|-----------|----------|
+| CamillaDSP CPU (16k taps, 4ch FIR) | 5.23% at chunksize 2048 | 19.25% at chunksize 256 | [US-001](../lab-notes/US-001-camilladsp-benchmarks.md) T1a, T1c |
+| CamillaDSP latency (2 chunks) | 85.3ms | 10.7ms | [US-002](../lab-notes/US-002-latency-measurement.md) T2a, T2b |
+| Estimated PA path (one-way) | ~120ms | ~22ms (projected) | [US-002](../lab-notes/US-002-latency-measurement.md) analysis |
+| PipeWire quantum | 1024 (21.3ms) | 256 (5.3ms) | D-011 |
+| Mixxx CPU (hardware V3D GL) | ~85% | N/A | [F-012/F-017](../lab-notes/F-012-F-017-rt-gpu-lockups.md) Test 5 |
+| Mixxx CPU (llvmpipe, obsolete) | 142-166% | N/A | [F-012/F-017](../lab-notes/F-012-F-017-rt-gpu-lockups.md) Test 1 |
+| Xruns (30-min DJ stability) | 0 [citation needed -- T3d aborted] | Not yet tested | [TK-039-T3d](../lab-notes/TK-039-T3d-dj-stability.md) |
+| Mixxx at quantum 256 | 175% CPU, ~24 xruns/min | -- | [S-003](../lab-notes/change-S-003-dj-mode-quantum.md) |
 
-**Before performing any of these actions, the owner MUST be warned and
-must explicitly approve.** The owner decides when it is safe to proceed
-(e.g., after turning off amplifiers or lowering volume to zero). There
-are no exceptions to this rule.
+### Architecture at a Glance
 
-This is an operational safety constraint recorded in CLAUDE.md under
-"Safety Rules (2026-03-10)".
+```mermaid
+flowchart LR
+    subgraph Sources
+        MX["Mixxx<br/>(DJ mode)"]
+        RE["Reaper<br/>(Live mode)"]
+    end
 
-## SAFETY: Driver Protection Filters in Production Configs
+    subgraph PW["PipeWire<br/>SCHED_FIFO 88"]
+        PWR["8ch Routing<br/>quantum 1024 (DJ)<br/>quantum 256 (Live)"]
+    end
 
-**All production CamillaDSP configs MUST include driver protection filters
-for every speaker channel.** This is a safety requirement to prevent
-mechanical damage from out-of-band content.
+    subgraph LB["ALSA Loopback<br/>period-size=256, period-num=8"]
+        LBD["8ch virtual<br/>device"]
+    end
 
-The critical scenario is **dirac placeholder FIR filters** (used before room
-measurement). A dirac filter passes all frequencies with unity gain -- no
-crossover, no subsonic protection. Sub drivers receive full-bandwidth signal
-including subsonic content that can cause over-excursion damage.
+    subgraph CDSP["CamillaDSP<br/>SCHED_FIFO 80"]
+        direction TB
+        MIX["8→8 Mixer"]
+        FIR["FIR Convolution<br/>16,384 taps<br/>(ch 0-3: crossover +<br/>room correction)"]
+        PT["Passthrough<br/>(ch 4-5: headphones<br/>ch 6-7: IEM)"]
+        DLY["Per-channel<br/>delay + gain"]
+        MIX --> FIR
+        MIX --> PT
+        FIR --> DLY
+        PT --> DLY
+    end
 
-**The Bose PS28 III deployment exposed this gap:** The 5.25" sealed isobaric
-sub drivers (`mandatory_hpf_hz: 42`) were receiving unfiltered signal through
-dirac placeholders. The room correction pipeline only generated subsonic
-protection for ported enclosures, not sealed ones -- but small sealed drivers
-need protection too.
+    subgraph Output["USBStreamer → ADA8200"]
+        direction TB
+        CH01["ch 0-1: Main L/R"]
+        CH23["ch 2-3: Sub 1 / Sub 2"]
+        CH45["ch 4-5: Engineer HP"]
+        CH67["ch 6-7: Singer IEM"]
+    end
 
-**Requirement:** Any speaker identity declaring `mandatory_hpf_hz` MUST have
-an IIR Butterworth HPF in the CamillaDSP pipeline as a safety net,
-regardless of enclosure type. This IIR filter is present from first deploy
-and remains until replaced by the combined FIR (which embeds the HPF).
-Satellites similarly need an HPF at or above the crossover frequency to
-prevent bass-induced damage.
-
-See `docs/theory/design-rationale.md` "Driver Protection Filters" for the
-full design principle. See D-031 for the formal decision and D-029 for the
-gain staging framework.
+    MX -->|"pw-jack<br/>(D-027)"| PWR
+    RE --> PWR
+    PWR --> LBD
+    LBD --> MIX
+    DLY --> CH01
+    DLY --> CH23
+    DLY --> CH45
+    DLY --> CH67
+```
 
 ---
 
@@ -79,6 +100,8 @@ from "empirically adequate" to "provably adequate" for hard real-time audio
 at PA power levels.
 
 **Classification:** Hard real-time with human safety implications (D-013).
+See [`docs/operations/safety.md`](../operations/safety.md) Section 6 for the
+safety rationale.
 
 ### Kernel Version
 
@@ -107,7 +130,7 @@ spinlock that was converted to a sleeping `rt_mutex` under PREEMPT_RT.
 This created a preemption window that enabled an ABBA deadlock between the
 compositor thread and the V3D IRQ handler, manifesting as hard system
 lockups within minutes of starting a GPU-intensive application like Mixxx
-(F-012, F-017).
+([F-012, F-017](../lab-notes/F-012-F-017-rt-gpu-lockups.md)).
 
 **Upstream fix:** Commit `09fb2c6f4093` (Melissa Wen / Igalia, merged by
 Phil Elwell, 2025-10-28, `raspberrypi/linux#7035`). The fix creates a
@@ -117,7 +140,8 @@ lock ordering.
 **Impact:** The fix is included in `6.12.62+rpt-rpi-v8-rt`. With this
 kernel, hardware V3D GL works on PREEMPT_RT. No V3D blacklist, no pixman
 compositor fallback, no llvmpipe software rendering. Mixxx CPU usage
-dropped from 142-166% (llvmpipe) to ~85% (hardware GL).
+dropped from 142-166% (llvmpipe) to ~85% (hardware GL)
+([F-012/F-017](../lab-notes/F-012-F-017-rt-gpu-lockups.md) Test 1 vs Test 5).
 
 D-022 supersedes D-021's software rendering requirement. The system now
 runs a single kernel for both DJ and live modes with hardware GL.
@@ -128,7 +152,8 @@ runs a single kernel for both DJ and live modes with hardware GL.
 
 The RT audio stack uses a strict priority hierarchy enforced via
 SCHED_FIFO. Higher priority threads preempt lower priority threads
-deterministically. Verified empirically on the Pi (S-011).
+deterministically. Verified empirically on the Pi
+([TK-039-T3d](../lab-notes/TK-039-T3d-dj-stability.md) Phase 0).
 
 ```
 FIFO/88  PipeWire (graph clock)
@@ -185,7 +210,8 @@ priority.
 ### Quantum 256 Is Not Viable for DJ Mode
 
 Even with FIFO/83 audio threads, quantum 256 is not viable for DJ mode.
-Testing showed Mixxx at 175% CPU with ~24 xruns/min at quantum 256. The
+Testing showed Mixxx at 175% CPU with ~24 xruns/min at quantum 256
+([S-003](../lab-notes/change-S-003-dj-mode-quantum.md)). The
 bottleneck is CPU throughput at the 5.3ms callback period, not scheduling
 priority -- Mixxx's audio decode and effects processing simply cannot
 complete within 5.3ms on the Pi 4B. DJ mode stays at quantum 1024 /
@@ -277,6 +303,19 @@ them. If CamillaDSP preempted PipeWire, PipeWire could miss its scheduling
 deadline and fail to deliver buffers on time -- causing the very underruns
 the RT stack exists to prevent.
 
+### CPU Budget
+
+CamillaDSP's measured CPU consumption with 16,384-tap FIR filters on 4
+speaker channels ([US-001](../lab-notes/US-001-camilladsp-benchmarks.md)):
+
+| Configuration | CPU % | Lab Note |
+|---------------|-------|----------|
+| Chunksize 2048 (DJ mode) | 5.23% | US-001 T1a |
+| Chunksize 512 | 10.42% | US-001 T1b |
+| Chunksize 256 (live mode) | 19.25% | US-001 T1c |
+| 8,192-tap fallback @ 2048 | 2.63% | US-001 T1d |
+| 8,192-tap fallback @ 512 | 5.32% | US-001 T1e |
+
 ---
 
 ## 5. Quantum and Buffer Sizing
@@ -295,7 +334,8 @@ quantum, CamillaDSP chunksize, and the ALSA Loopback buffer.
 | ALSA Loopback period-num | 8 | 8 |
 | ALSA Loopback total buffer | 2048 samples | 2048 samples |
 
-All values assume a 48kHz sample rate.
+All values assume a 48kHz sample rate. Latency values are computed as
+samples / sample_rate (e.g., 1024 / 48000 = 21.3ms).
 
 ### PipeWire Quantum
 
@@ -336,7 +376,10 @@ latency for the singer's monitoring path (D-011).
 CamillaDSP adds exactly two chunks of latency (capture buffer fill +
 playback buffer drain; the FIR convolution completes within the same
 processing cycle). At chunksize 256, that is 10.7ms. At chunksize 2048,
-that is 85.3ms.
+that is 85.3ms. This was confirmed by
+[US-002](../lab-notes/US-002-latency-measurement.md) (T2a measured 139ms
+round-trip at chunksize 2048, consistent with 2-chunk CamillaDSP model
+plus PipeWire buffering on both sides).
 
 Production configs:
 - `configs/camilladsp/production/dj-pa.yml` -- chunksize 2048
@@ -409,7 +452,7 @@ PipeWire (SCHED_FIFO 88)
   |
   | writes quantum-sized blocks
   v
-ALSA Loopback hw:Loopback,0,0  (period-size=1024, period-num=3)
+ALSA Loopback hw:Loopback,0,0  (period-size=256, period-num=8)
   |
   | kernel virtual sound device
   v
@@ -439,6 +482,25 @@ implementation before the dynamic linker resolves the system
 three sessions (S-005, S-006, S-007) demonstrated that
 `update-alternatives` is fundamentally incompatible with `ldconfig` soname
 management for shared libraries.
+
+### Latency Budget
+
+Measured end-to-end latency
+([US-002](../lab-notes/US-002-latency-measurement.md)):
+
+| Segment | DJ Mode (chunksize 2048) | Live Mode (projected, chunksize 256) |
+|---------|-------------------------|--------------------------------------|
+| PipeWire output adapter | ~21.3ms (1 quantum) | ~5.3ms |
+| ALSA Loopback | <1ms | <1ms |
+| CamillaDSP (2 chunks) | ~85.3ms | ~10.7ms |
+| USB + ADAT | ~1ms | ~1ms |
+| **Estimated PA path** | **~120ms** | **~22ms** (D-011 target) |
+
+The live mode projection assumes PipeWire quantum 256. The DJ mode number
+is derived from US-002 T2a round-trip measurement (139ms) minus the
+capture-side PipeWire buffering (measurement artifact). The live mode
+estimate at chunksize 256 + quantum 256 has not been directly measured
+yet -- it is projected from the component latencies validated in US-002.
 
 ---
 
@@ -523,8 +585,8 @@ pw-cli info loopback-8ch-sink | grep -E 'period|buffer'
 # Or check directly:
 cat ~/.config/pipewire/pipewire.conf.d/25-loopback-8ch.conf | grep period
 # Expected:
-#   api.alsa.period-size   = 1024
-#   api.alsa.period-num    = 3
+#   api.alsa.period-size   = 256
+#   api.alsa.period-num    = 8
 ```
 
 ### CamillaDSP Active Config
@@ -579,6 +641,8 @@ ps -eLo pid,tid,cls,rtprio,comm -p $(pgrep -x mixxx) | grep FF
 
 ## References
 
+### Decisions and Defects
+
 | ID | Document | Relevance |
 |----|----------|-----------|
 | D-011 | `docs/project/decisions.md` | Live mode chunksize 256 + quantum 256 |
@@ -586,10 +650,31 @@ ps -eLo pid,tid,cls,rtprio,comm -p $(pgrep -x mixxx) | grep FF
 | D-022 | `docs/project/decisions.md` | V3D fix, hardware GL on PREEMPT_RT |
 | D-027 | `docs/project/decisions.md` | pw-jack permanent solution |
 | F-020 | `docs/project/defects.md` | PipeWire RT self-promotion failure |
+| F-028 | `docs/project/defects.md` | ALSA period-size mismatch |
 | TK-064 | `docs/project/tasks.md` | Loopback buffer discovery |
+
+### Configuration Files
+
+| File | Location | Purpose |
+|------|----------|---------|
 | `f020-pipewire-fifo.conf` | `configs/pipewire/workarounds/` | PipeWire FIFO override |
 | `override.conf` | `configs/systemd/camilladsp.service.d/` | CamillaDSP FIFO override |
 | `10-audio-settings.conf` | `configs/pipewire/` | PipeWire quantum settings |
 | `25-loopback-8ch.conf` | `configs/pipewire/` | ALSA Loopback buffer config |
 | `dj-pa.yml` | `configs/camilladsp/production/` | DJ mode CamillaDSP config |
 | `live.yml` | `configs/camilladsp/production/` | Live mode CamillaDSP config |
+
+### Lab Notes (evidence for quoted numbers)
+
+| Lab Note | Key Numbers |
+|----------|-------------|
+| [US-001](../lab-notes/US-001-camilladsp-benchmarks.md) | CamillaDSP CPU: 5.23% (chunksize 2048), 10.42% (512), 19.25% (256) |
+| [US-002](../lab-notes/US-002-latency-measurement.md) | Round-trip latency: 139ms (chunksize 2048), 80.8ms (512). CamillaDSP = 2 chunks. |
+| [US-003](../lab-notes/US-003-stability-tests.md) | Peak CamillaDSP CPU: 28% (pidstat) |
+| [F-012/F-017](../lab-notes/F-012-F-017-rt-gpu-lockups.md) | Mixxx CPU: 142-166% (llvmpipe), ~85% (hardware GL) |
+| [TK-039-T3d](../lab-notes/TK-039-T3d-dj-stability.md) | DJ stability test (aborted Phase 1 -- F-021/F-022) |
+| [S-003](../lab-notes/change-S-003-dj-mode-quantum.md) | Quantum 256 not viable for DJ: 175% CPU, ~24 xruns/min |
+
+### Safety
+
+All safety constraints are in [`docs/operations/safety.md`](../operations/safety.md).
