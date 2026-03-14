@@ -1,3 +1,3 @@
-"""Measurement session package for the daemon architecture (WP-D)."""
+"""Measurement session package for the daemon architecture (WP-D, WP-E)."""
 
-from .session import MeasurementSession, MeasurementState
+from .session import MeasurementSession, MeasurementState, SessionConfig, ChannelConfig

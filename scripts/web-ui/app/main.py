@@ -4,9 +4,10 @@ Unified SPA serving four views: Monitor, Measure, System, MIDI.
 Stage 1 implements Monitor and System; Measure and MIDI are frontend stubs.
 
 WebSocket endpoints:
-    /ws/monitoring  — Level meters + CamillaDSP status at ~10 Hz
-    /ws/system      — Full system health at ~1 Hz
-    /ws/pcm         — Binary PCM stream (3-channel interleaved float32)
+    /ws/monitoring   — Level meters + CamillaDSP status at ~10 Hz
+    /ws/system       — Full system health at ~1 Hz
+    /ws/pcm          — Binary PCM stream (3-channel interleaved float32)
+    /ws/measurement  — Real-time measurement progress feed (WP-E)
 
 Mock mode (PI_AUDIO_MOCK=1):
     Real collectors are not started; MockDataGenerator is used instead.
@@ -22,12 +23,15 @@ URL parameters (passed through to WebSocket):
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .mode_manager import ModeManager
+from .measurement.routes import router as measurement_router, ws_broadcast, ws_measurement
 from .ws_monitoring import ws_monitoring
 from .ws_system import ws_system
 
@@ -41,51 +45,105 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 MOCK_MODE = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
 
-app = FastAPI(title="Pi Audio Workstation", version="0.1.0")
 
+# -- Lifespan ---------------------------------------------------------------
 
-# -- Lifecycle events --
-
-@app.on_event("startup")
-async def startup():
-    if MOCK_MODE:
-        log.info("Mock mode enabled (PI_AUDIO_MOCK=1) — real collectors not started")
-        return
-
-    log.info("Starting real data collectors...")
-    from .collectors import (
-        CamillaDSPCollector,
-        PcmStreamCollector,
-        PipeWireCollector,
-        SystemCollector,
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: startup and shutdown logic."""
+    # 1. Create ModeManager.
+    production_config_path = os.environ.get(
+        "PI4AUDIO_PRODUCTION_CONFIG", "/etc/camilladsp/active.yml")
+    mode_manager = ModeManager(
+        production_config_path=production_config_path,
+        ws_broadcast=ws_broadcast,
     )
+    app.state.mode_manager = mode_manager
+    app.state.measurement_task = None
 
-    app.state.cdsp = CamillaDSPCollector()
-    await app.state.cdsp.start()
+    # 2. Startup recovery check (blocks until complete).
+    if not MOCK_MODE:
+        log.info("Running startup recovery check...")
+        await mode_manager.check_and_recover_cdsp_config()
+        if mode_manager.recovery_warning:
+            log.warning("Recovery warning: %s", mode_manager.recovery_warning)
+        log.info("Startup recovery check complete")
+    else:
+        log.info("Mock mode — skipping CamillaDSP recovery check")
 
-    app.state.pcm = PcmStreamCollector()
-    await app.state.pcm.start()
+    # 3. Start collectors (production only).
+    if not MOCK_MODE:
+        log.info("Starting real data collectors...")
+        from .collectors import (
+            CamillaDSPCollector,
+            PcmStreamCollector,
+            PipeWireCollector,
+            SystemCollector,
+        )
+        app.state.cdsp = CamillaDSPCollector()
+        await app.state.cdsp.start()
+        app.state.pcm = PcmStreamCollector()
+        await app.state.pcm.start()
+        app.state.system_collector = SystemCollector()
+        await app.state.system_collector.start()
+        app.state.pw = PipeWireCollector()
+        await app.state.pw.start()
+        log.info("All collectors started")
+    else:
+        log.info("Mock mode enabled (PI_AUDIO_MOCK=1) — real collectors not started")
 
-    app.state.system_collector = SystemCollector()
-    await app.state.system_collector.start()
+    yield
 
-    app.state.pw = PipeWireCollector()
-    await app.state.pw.start()
+    # 4. Shutdown: stop collectors, cleanup.
+    if not MOCK_MODE:
+        log.info("Stopping collectors...")
+        for name in ("cdsp", "pcm", "system_collector", "pw"):
+            collector = getattr(app.state, name, None)
+            if collector is not None:
+                await collector.stop()
+        log.info("All collectors stopped")
 
-    log.info("All collectors started")
+    # Cancel active measurement session if any.
+    task = getattr(app.state, "measurement_task", None)
+    if task is not None and not task.done():
+        session = mode_manager.measurement_session
+        if session is not None:
+            session.request_abort("server shutdown")
+        task.cancel()
+        try:
+            await task
+        except Exception:
+            pass
+    log.info("Shutdown complete")
 
 
-@app.on_event("shutdown")
-async def shutdown():
-    if MOCK_MODE:
-        return
+app = FastAPI(
+    title="Pi Audio Workstation",
+    version="0.2.0",
+    lifespan=lifespan,
+)
 
-    log.info("Stopping collectors...")
-    for name in ("cdsp", "pcm", "system_collector", "pw"):
-        collector = getattr(app.state, name, None)
-        if collector is not None:
-            await collector.stop()
-    log.info("All collectors stopped")
+
+# -- Recovery middleware -----------------------------------------------------
+
+@app.middleware("http")
+async def recovery_guard(request: Request, call_next):
+    """Return 503 while startup recovery is in progress."""
+    mode_manager = getattr(request.app.state, "mode_manager", None)
+    if mode_manager and getattr(mode_manager, "recovery_in_progress", False):
+        return JSONResponse(
+            status_code=503,
+            content={"error": "recovery_in_progress",
+                     "detail": "Startup recovery is in progress. "
+                               "Please retry shortly."},
+            headers={"Retry-After": "5"},
+        )
+    return await call_next(request)
+
+
+# -- Include measurement router ---------------------------------------------
+
+app.include_router(measurement_router)
 
 
 # -- Routes --
@@ -100,6 +158,7 @@ async def index():
 
 app.websocket("/ws/monitoring")(ws_monitoring)
 app.websocket("/ws/system")(ws_system)
+app.websocket("/ws/measurement")(ws_measurement)
 
 
 @app.websocket("/ws/pcm")
