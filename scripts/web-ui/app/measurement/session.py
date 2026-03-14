@@ -244,6 +244,7 @@ class MeasurementSession:
         self._pump_task: Optional[asyncio.Task] = None
         self._is_mock: bool = False
         self._temp_config_path: Optional[str] = None
+        self._quantum_overridden: bool = False
 
     # -- Properties ----------------------------------------------------------
 
@@ -592,6 +593,23 @@ class MeasurementSession:
                 log.info("CamillaDSP state: %s", st)
             except Exception as exc:
                 log.warning("CamillaDSP state check failed: %s", exc)
+
+        # Set PipeWire quantum to match CamillaDSP chunksize (2048) to prevent
+        # reblocking glitches during measurement playback.
+        if not self._is_mock:
+            import subprocess
+            try:
+                subprocess.run(
+                    ["pw-metadata", "-n", "settings", "0",
+                     "clock.force-quantum", "2048"],
+                    check=True, capture_output=True, timeout=5,
+                )
+                log.info("PipeWire quantum set to 2048 for measurement")
+                self._quantum_overridden = True
+            except Exception as e:
+                log.warning("Failed to set PipeWire quantum: %s", e)
+                self._quantum_overridden = False
+
         await self._broadcast({"type": "setup_complete"})
 
     # -- GAIN_CAL ------------------------------------------------------------
@@ -973,6 +991,19 @@ class MeasurementSession:
             self._cdsp_client = None
 
     async def _cleanup(self) -> None:
+        # Restore PipeWire quantum to default if we overrode it.
+        if getattr(self, '_quantum_overridden', False) and not self._is_mock:
+            import subprocess
+            try:
+                subprocess.run(
+                    ["pw-metadata", "-n", "settings", "0",
+                     "clock.force-quantum", "0"],
+                    check=True, capture_output=True, timeout=5,
+                )
+                log.info("PipeWire quantum restored to default")
+            except Exception as e:
+                log.warning("Failed to restore PipeWire quantum: %s", e)
+
         await self._watchdog.stop()
         if self._pump_task and not self._pump_task.done():
             self._pump_task.cancel()

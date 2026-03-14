@@ -190,6 +190,14 @@ def _generate_pink_noise(duration_s, sr=SAMPLE_RATE, level_dbfs=-40.0,
         target_rms = 10.0 ** (level_dbfs / 20.0)
         pink *= target_rms / rms
 
+    # 10ms cosine taper fade-in/fade-out to avoid click transients at buffer edges
+    fade_samples = int(0.01 * sr)  # 10ms
+    if fade_samples > 0 and len(pink) > 2 * fade_samples:
+        fade_in = np.cos(np.linspace(np.pi, 2 * np.pi, fade_samples)) * 0.5 + 0.5
+        fade_out = fade_in[::-1]
+        pink[:fade_samples] *= fade_in
+        pink[-fade_samples:] *= fade_out
+
     # Hard-clip to prevent any sample exceeding 0 dBFS
     pink = np.clip(pink, -1.0, 1.0)
 
@@ -599,6 +607,15 @@ def calibrate_channel(
                 "ambient_spl": ambient_spl,
             })
 
+    # Pre-generate reference pink noise buffer at a safe level, then scale per step.
+    # This avoids CPU-expensive FFT + Butterworth filter per ramp step on the Pi.
+    # Use -20 dBFS to avoid clipping (pink noise crest factor ~12 dB).
+    _REFERENCE_LEVEL_DBFS = -20.0
+    reference_noise = _generate_pink_noise(burst_duration_s, sr=sample_rate,
+                                           level_dbfs=_REFERENCE_LEVEL_DBFS,
+                                           f_low=PINK_NOISE_F_LOW,
+                                           f_high=PINK_NOISE_F_HIGH)
+
     # GC-07/11: Wrap in try/finally for cleanup on abort
     try:
         for step_num in range(1, MAX_RAMP_STEPS + 1):
@@ -622,10 +639,9 @@ def calibrate_channel(
             print(f"  Step {step_num}: playing at {current_level_dbfs:.1f} dBFS ...",
                   end="", flush=True)
 
-            # Generate pink noise burst for this level
-            noise = _generate_pink_noise(
-                burst_duration_s, sr=sample_rate, level_dbfs=current_level_dbfs,
-                f_low=PINK_NOISE_F_LOW, f_high=PINK_NOISE_F_HIGH)
+            # Scale pre-generated reference noise to this level
+            scale = 10.0 ** ((current_level_dbfs - _REFERENCE_LEVEL_DBFS) / 20.0)
+            noise = np.clip(reference_noise * scale, -1.0, 1.0)
 
             # GC-02: Play burst with xrun detection and retry
             recording = _play_burst_with_xrun_check(
@@ -750,10 +766,8 @@ def calibrate_channel(
                     print(f"  Verification burst {verify_attempt}/{MAX_OVERSHOOT_RETRIES} "
                           f"at {backed_off:.1f} dBFS ...", end="", flush=True)
 
-                    verify_noise = _generate_pink_noise(
-                        burst_duration_s, sr=sample_rate,
-                        level_dbfs=backed_off,
-                        f_low=PINK_NOISE_F_LOW, f_high=PINK_NOISE_F_HIGH)
+                    verify_scale = 10.0 ** ((backed_off - _REFERENCE_LEVEL_DBFS) / 20.0)
+                    verify_noise = np.clip(reference_noise * verify_scale, -1.0, 1.0)
 
                     verify_rec = _play_burst_with_xrun_check(
                         verify_noise, channel_index, output_device,
