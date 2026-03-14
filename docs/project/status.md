@@ -137,8 +137,10 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - WP-3 DONE: TK-163 (`c902c40`) — automated gain calibration ramp. 437 lines Python + 460 lines tests. 4-layer safety, 20 unit tests. Needs Pi validation.
 - WP-4 code written: TK-151 — Rust pcm-bridge in `tools/pcm-bridge/` (281 lines). Architect reviewed favorably. Pending CM commit + Pi deployment test.
 - TK-160 DONE (`7e5b127` + uncommitted updates): UX measurement workflow design (1040+ lines). AE 3 must-fix + 5 recs all applied by UX specialist.
-- TK-161 IN PROGRESS: All 4 specialist reviews complete (AE 3F+5R, AD 11 findings, QE 10 findings, architect feasibility + mock backend design). UX specialist incorporating AD+QE feedback.
+- TK-161 DONE: All 4 specialist reviews complete with sign-off (AE all accepted, AD all 11 resolved, QE 9/10 resolved + 1 non-blocking residual, architect feasibility confirmed). TK-162 UNBLOCKED for architect task breakdown.
+- TK-164 filed (HIGH): 3 required gain cal fixes (GC-01 verification burst, GC-02 xrun detection, GC-07/11 CamillaDSP config verification). Gates TK-163 field deployment.
 - US-050 mock backend: architect design delivered (mock at measurement script level, ~200 lines, room simulator reuse). Implementation not started.
+- QE non-blocking residual: Section 5.1 gain cal xrun behavior specification (invalidate + retry). Routed to UX specialist.
 
 ### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.

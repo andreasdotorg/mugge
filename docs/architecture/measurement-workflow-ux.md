@@ -295,6 +295,10 @@ knows before wasting time on satellites.
   approximate (the ramp terminates early if target is reached).
 - Channel progress tabs at the bottom show which channel is active and which are
   done (checkmark) or pending (gray).
+- **Gain cal xrun behavior (QE-5):** If an xrun occurs during a gain cal burst,
+  the burst is invalidated and retried at the same level (not the next step). The
+  xrun counter turns red. After 3 consecutive xrun failures on the same channel,
+  calibration aborts with "Audio system instability" error.
 - **Mic signal monitoring (AD-UX-6):** During gain cal, mic dropout is detected at
   an absolute threshold (-80 dBFS) since no calibrated level exists yet. During
   sweeps, the threshold is relative: mic signal must stay within 20 dB of the
