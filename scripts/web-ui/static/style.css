@@ -1317,7 +1317,7 @@ html, body {
     background: var(--cyan);
     border-radius: 3px;
     transition: width 0.4s ease;
-    min-width: 0;
+    min-width: 2px;
 }
 
 .mw-progress-text {

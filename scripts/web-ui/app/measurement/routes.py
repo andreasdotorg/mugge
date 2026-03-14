@@ -237,6 +237,46 @@ async def measurement_status(request: Request):
     }
 
 
+@router.post("/reset", responses={403: {"model": ErrorResponse}})
+async def reset_measurement_state(request: Request):
+    """Abort any running session and return to clean IDLE state.
+
+    Only available in mock mode (PI_AUDIO_MOCK=1).  Used by e2e tests to
+    ensure each test starts from a clean IDLE state when the mock server
+    is session-scoped.
+    """
+    if os.environ.get("PI_AUDIO_MOCK", "1") != "1":
+        return JSONResponse(
+            status_code=403,
+            content={"error": "forbidden",
+                     "detail": "Reset endpoint only available in mock mode"},
+        )
+    mode_manager = request.app.state.mode_manager
+
+    # Abort any active measurement session.
+    session = mode_manager.measurement_session
+    if session is not None:
+        session.request_abort("e2e test reset")
+        # Wait briefly for the session task to finish.
+        task = getattr(request.app.state, "measurement_task", None)
+        if task is not None:
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=5.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
+
+    # Force mode back to monitoring if still in measurement mode.
+    from ..mode_manager import DaemonMode
+    if mode_manager.mode is DaemonMode.MEASUREMENT:
+        mode_manager._measurement_session = None
+        mode_manager._mode = DaemonMode.MONITORING
+
+    mode_manager._last_completed_session = None
+    request.app.state.measurement_task = None
+    log.info("Measurement state fully reset for e2e tests")
+    return {"status": "reset"}
+
+
 @router.post("/generate-filters",
              responses={501: {"model": ErrorResponse}})
 async def generate_filters(request: Request):

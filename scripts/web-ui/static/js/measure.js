@@ -639,8 +639,7 @@
         var startBtn = $("mw-start-btn");
         if (startBtn) startBtn.disabled = false;
         hide($("mw-idle-warning"));
-        // Re-fetch status
-        pollStatus();
+        lastStatus = null;
     }
 
     // -- Utility --

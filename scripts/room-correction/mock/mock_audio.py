@@ -18,6 +18,7 @@ are provided: ``query_devices``, ``playrec``, and ``wait``.
 """
 
 import os
+import time
 
 import numpy as np
 import yaml
@@ -184,6 +185,11 @@ class MockSoundDevice:
 
         # Return as (N, 1) array in the requested dtype
         result = recording[:, np.newaxis].astype(dtype)
+
+        # Simulate realistic audio I/O timing.  Without this delay, the mock
+        # runs so fast that e2e tests cannot observe intermediate states
+        # (GAIN_CAL, MEASURING) before the session completes.
+        time.sleep(0.05)
 
         # Store for wait() — playrec is synchronous in mock mode, so the
         # result is immediately available.

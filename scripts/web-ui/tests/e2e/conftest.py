@@ -115,8 +115,22 @@ def page(browser, mock_server):
     """Create a fresh browser context and page, navigated to the mock server.
 
     Overrides pytest-playwright's page fixture to add console error capture
-    and auto-navigate to the mock server.
+    and auto-navigate to the mock server.  Resets measurement state before
+    each test so the wizard always starts from IDLE.
     """
+    import urllib.request
+
+    # Reset measurement state so each test starts from clean IDLE.
+    # The session-scoped mock server retains _last_completed_session across
+    # tests; this endpoint clears it (mock mode only).
+    try:
+        req = urllib.request.Request(
+            f"{mock_server}/api/v1/measurement/reset", method="POST",
+            headers={"Content-Length": "0"})
+        urllib.request.urlopen(req, timeout=10)
+    except Exception:
+        pass  # Server may not have the endpoint yet; non-fatal
+
     context = browser.new_context()
     pg = context.new_page()
     console_errors = []
