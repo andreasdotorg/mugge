@@ -33,8 +33,8 @@ _MOCK_MODE = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
 from ..mode_manager import MEASUREMENT_CONFIG_MARKER
 
 # Path to room-correction scripts (resolved once at import time)
-_RC_DIR = os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "..", "room-correction"))
+_RC_DIR = os.environ.get("PI4AUDIO_RC_DIR", os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "..", "room-correction")))
 
 
 def _ensure_rc_path() -> None:

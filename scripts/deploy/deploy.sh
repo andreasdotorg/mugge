@@ -409,6 +409,20 @@ else
         "$PI:~/web-ui/"
     file_count=$((file_count + 1))
 fi
+
+echo "  scripts/room-correction/ -> ~/room-correction/"
+if $DRY_RUN; then
+    echo "  [dry-run] rsync -a --delete --exclude __pycache__ --exclude .pytest_cache --exclude tests --exclude mock $REPO_ROOT/scripts/room-correction/ $PI:~/room-correction/"
+else
+    rsync -a --delete \
+        --exclude __pycache__ \
+        --exclude .pytest_cache \
+        --exclude tests \
+        --exclude mock \
+        "$REPO_ROOT/scripts/room-correction/" \
+        "$PI:~/room-correction/"
+    file_count=$((file_count + 1))
+fi
 echo ""
 
 # --- Section 8: Verify deployment -------------------------------------------
