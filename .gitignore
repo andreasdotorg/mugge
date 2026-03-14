@@ -11,6 +11,9 @@ __pycache__/
 # macOS
 .DS_Store
 
+# Rust
+target/
+
 # Nix
 result
 result-*
