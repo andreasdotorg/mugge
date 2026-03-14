@@ -765,6 +765,7 @@ speaker identities.
 - [ ] Crossover consistency validation: crossover points must be monotonically increasing, bandpass ranges must not overlap, every speaker must have a matching crossover filter type
 - [ ] Subsonic driver protection validation (D-031): every speaker identity MUST declare `mandatory_hpf_hz`. The config generator MUST include an IIR safety-net HPF on every speaker channel (applied before FIR convolution) using the speaker identity's `mandatory_hpf_hz` value. Config validation MUST reject any configuration where a speaker channel lacks subsonic protection. This protects drivers even when dirac placeholder FIR filters are in use
 - [ ] 3-way mode constraint: when topology is "3way", validator warns that live mode is unsupported (no IEM channels available) and requires DJ-mode-only flag
+- [ ] **Power budget validation (D-035):** config generator computes worst-case power per speaker channel from: driver T/S data (Pe_max, impedance from identity -> driver), maximum possible digital level (0dBFS + max FIR boost from D-029 headroom), and hardware gain chain (amp voltage gain, DAC 0dBFS level from `configs/hardware/`). Rejects configurations where worst-case power exceeds any driver's Pe_max. This is Belt 1 of the safety model.
 - [ ] CamillaDSP config YAML generator: takes a speaker profile + venue measurement results (delay values, filter WAV paths) and produces a complete, deployable CamillaDSP config
 - [ ] Generated config includes: device settings (chunksize per mode), filters (referencing combined WAV files), pipeline with per-channel delay and gain, mixer routing
 - [ ] Config generator parameterized by operating mode (DJ/Live) — chunksize and monitoring routing differ per D-002
@@ -808,12 +809,17 @@ target curves, and crossover settings are the version-controlled source.
 
 **Acceptance criteria:**
 - [ ] Platform self-diagnostic: loopback self-test runs before measurement to detect system-level drift (USB timing, driver changes) per D-008
-- [ ] **Gain structure calibration phase** (runs before any measurement, primary safety mechanism per D-014):
-  - Plays -18dBFS pink noise per speaker channel individually
-  - Engineer adjusts analog amp gain to achieve 75dB SPL per speaker at measurement position (measured via UMIK-1)
-  - Combined system max: 99dB SPL (all speakers at 75dB each) — safe operating level
+- [ ] **Automated gain calibration phase (D-035)** (runs before any measurement, primary safety mechanism per D-014):
+  - Automated stepped ramp from -60dBFS to 75dB SPL target, per speaker channel individually
+  - Coarse steps: +3dB when >6dB below target; fine steps: +1dB when within 6dB of target
+  - Each step: 2s pink noise burst (100Hz-10kHz), 1s dwell for SPL computation. ~36s total per channel
+  - UMIK-1 closed-loop SPL monitoring using calibrated sensitivity (serial 7161942, -1.378dB correction, 0dBFS = 121.4dB SPL)
+  - Hard limit: 84dB SPL (target + 9dB). Enforced as digital ceiling computed from driver T/S parameters (Pe_max, impedance) and hardware gain chain (`configs/hardware/`)
+  - **Mic failure abort (AD requirement):** if mic peak drops below -80dBFS during active ramp, HARD ABORT — do not proceed blind. Mic signal must CORRELATE with output (not just be non-zero)
+  - Auto-mute safety: if UMIK-1 measures >84dB during calibration, script freezes gain and alerts engineer
   - IEM max: 100dB SPL (engineer sets IEM amp gain during this phase)
-  - Auto-mute safety: if UMIK-1 measures >100dB during calibration, script mutes all outputs immediately and alerts engineer
+  - Calibrated gain factor stored as part of venue calibration record (closes gain-chain knowledge loop)
+  - Fallback: `--manual-gain` flag for manual analog gain adjustment (original Phase 1 approach)
   - Gain settings documented per venue (part of the archived calibration data per D-008)
   - This procedure ensures that even a full-scale digital transient (0dBFS) produces a bounded SPL through the calibrated analog gain — D-009 cut-only filters provide an additional 0.5dB digital margin
 - [ ] Interactive guided workflow: prompts user for mic placement, confirms before proceeding to each phase
@@ -2449,6 +2455,191 @@ near-field measurement) demonstrated this risk in practice. AE analysis shows
 
 ---
 
+## US-045: Hardware Signal Chain Configuration Schema
+
+**As** the sound engineer,
+**I want** a machine-readable YAML configuration for each hardware device in
+the signal chain (amplifier, DAC/interface, measurement microphone),
+**so that** the measurement pipeline can compute safe power limits, SPL
+calibration, and thermal ceilings from actual hardware specifications instead
+of hardcoded constants.
+
+**Status:** selected
+**Depends on:** none
+**Blocks:** US-046 (thermal ceiling needs hardware specs), US-012 (gain calibration needs mic sensitivity)
+**Decisions:** D-035 (measurement safety)
+
+**Note:** This schema makes the system portable to different amp/DAC/mic
+combinations. Currently, hardware specs (amp voltage gain 42.4x, ADA8200
+0dBFS = +16dBu, UMIK-1 sensitivity) are scattered across code comments and
+session history. This story centralizes them.
+
+**Acceptance criteria:**
+- [ ] Directory `configs/hardware/` created alongside existing `configs/speakers/` and `configs/drivers/`
+- [ ] YAML schema for amplifier: name, type, channels, rated_power_watts_per_channel, rated_load_ohm, input_sensitivity_vrms, voltage_gain, voltage_gain_db
+- [ ] YAML schema for DAC/interface: name, type, output_level_0dbfs_dbu, output_level_0dbfs_vrms
+- [ ] YAML schema for measurement mic: name, type, serial, sensitivity_dbfs_per_pa, sensitivity_correction_db, calibration_file, spl_at_0dbfs
+- [ ] Initial hardware configs created: `amp-mcgrey-pa4504.yml`, `dac-behringer-ada8200.yml`, `mic-umik1-7161942.yml`
+- [ ] Python loader function that reads hardware configs and provides typed access to parameters
+- [ ] Schema validation: rejects configs with missing required fields
+
+**DoD:**
+- [ ] All three hardware configs created and validated
+- [ ] Loader function written and syntax-validated
+- [ ] Architect review of schema for consistency with existing config architecture
+- [ ] AE review of parameter values for accuracy
+
+---
+
+## US-046: T/S-Parameter-Based Thermal Ceiling Computation
+
+**As** the system owner,
+**I want** the measurement pipeline to automatically compute the maximum safe
+digital output level for each speaker channel from the driver's Pe_max and
+impedance combined with the hardware gain chain,
+**so that** the system enforces a hard power limit that prevents thermal
+damage to speakers regardless of CamillaDSP state or operator error.
+
+**Status:** selected
+**Depends on:** US-045 (hardware config), US-039 (driver schema with Pe_max, impedance)
+**Blocks:** US-012 amended gain calibration (uses thermal ceiling as hard cap)
+**Decisions:** D-035 (measurement safety, Layer 1: digital hard cap)
+
+**Background:** AE formula: `v_max = sqrt(Pe_max * impedance)`,
+`v_at_dac = v_max / amp_voltage_gain`,
+`dbfs_at_dac = 20 * log10(v_at_dac / ada8200_0dbfs_vrms)`,
+`ceiling = dbfs_at_dac - camilladsp_attenuation_db`.
+For CHN-50P with measurement config: ceiling = -11.8 dBFS.
+For production config: ceiling = +7.7 dBFS (cannot be reached — intrinsically safe).
+
+**Acceptance criteria:**
+- [ ] Function `compute_thermal_ceiling_dbfs()` reads Pe_max and impedance from driver config, amp gain and DAC level from hardware config
+- [ ] Returns per-channel hard cap in dBFS
+- [ ] Replaces hardcoded `SWEEP_LEVEL_HARD_CAP_DBFS` as the primary cap in the measurement script, with the hardcoded value as fallback if driver/hardware configs are unavailable
+- [ ] Computed ceiling is logged and displayed to the operator before measurement begins
+- [ ] If computed ceiling is above -6 dBFS, warn operator (suspiciously high — possible config error)
+- [ ] Unit tests with known driver + hardware params, verify computed ceiling matches hand-calculated values
+
+**DoD:**
+- [ ] Function written and syntax-validated
+- [ ] Unit tests passing
+- [ ] AE sign-off on formula and parameter handling
+- [ ] AD sign-off on fallback behavior and warning thresholds
+
+---
+
+## US-047: Path A Room Measurement Script
+
+**As** the sound engineer,
+**I want** a room measurement mode that captures listening-position frequency
+responses across multiple mic positions for spatial averaging,
+**so that** the room correction pipeline (US-010) receives measurement data
+that represents the actual listening experience rather than a single-point
+snapshot.
+
+**Status:** selected
+**Depends on:** US-046 (thermal ceiling for safe power limits), US-012 amended gain calibration, TK-143 (CamillaDSP hot-swap)
+**Blocks:** US-010 (correction filter generation needs measured impulse responses)
+**Decisions:** D-035 (measurement safety), D-008 (per-venue measurement)
+
+**Note:** Extends the near-field measurement infrastructure (TK-141, TK-143).
+Key differences from near-field: longer IR window (500ms-2s vs 50ms), longer
+sweeps (10-15s vs 5s for better low-frequency SNR), multiple mic positions
+(3-5), spatial averaging across positions. AE estimates ~7 min measurement
+time for a 4-channel system with 5 mic positions.
+
+**Acceptance criteria:**
+- [ ] Script `measure_room.py` or `--mode room` flag on existing measurement script
+- [ ] Longer sweep duration: 10-15s (configurable), vs 5s for near-field
+- [ ] Multiple mic positions: operator prompted between positions ("Move mic to position N, press Enter")
+- [ ] Efficient workflow: all channels measured at each position before moving mic (4 sweeps per position, 5 positions = 20 sweeps, 5 mic moves)
+- [ ] Satellite channels: 4-5 positions recommended. Sub channels: 2-3 positions (wavelengths >1.7m, less position-dependent)
+- [ ] Spatial averaging: magnitude responses averaged across positions, phase preserved from reference position (position 1)
+- [ ] CamillaDSP measurement config hot-swap (reuses TK-143 infrastructure): IIR HPF active, no FIR, single test channel with attenuation, all others muted
+- [ ] Pre-flight checks: web UI stopped (mandatory, non-bypassable during sweep), hardware sample rate verified, UMIK-1 connected
+- [ ] CamillaDSP muting verification: before each sweep, poll `levels.peaks()` to verify only the test channel is producing output. Abort if unexpected channel activity detected (AD requirement: guards against muting failure corrupting deconvolution)
+- [ ] All raw recordings saved as WAV files (enables post-measurement visualization, US-048)
+- [ ] Target total measurement time: <10 min for 4-channel system including gain calibration
+
+**DoD:**
+- [ ] Script written and syntax-validated
+- [ ] Tested on Pi with real speakers and UMIK-1
+- [ ] Spatial averaging validated: compare averaged response to single-position response, confirm smoother result
+- [ ] AE sign-off on measurement parameters and spatial averaging implementation
+- [ ] Lab note documenting a complete Path A measurement session
+
+---
+
+## US-048: Post-Measurement Visualization (MVP)
+
+**As** the sound engineer,
+**I want** the web UI to display frequency response, impulse response, and
+measurement progress after each sweep completes,
+**so that** I can verify that measurements are proceeding correctly and
+identify problems before completing the full session.
+
+**Status:** selected
+**Depends on:** US-047 (Path A measurement produces WAV files)
+**Blocks:** none
+**Decisions:** D-035 (measurement safety — web UI must NOT participate in audio graph during measurement)
+
+**Note:** This is the MVP visualization approach (AD Option C). The web UI
+does NOT open any PipeWire/ALSA audio streams during measurement. Instead, it
+reads the WAV files that the measurement script already saves after each sweep.
+Safe, simple, and does not require F-030 to be fixed.
+
+**Acceptance criteria:**
+- [ ] Web UI "measurement results" page that reads saved WAV files from the measurement output directory
+- [ ] Displays per-sweep: frequency response (magnitude plot), time-domain waveform, basic statistics (peak level, RMS, SNR estimate)
+- [ ] Auto-refreshes when new WAV files appear (file watcher or periodic poll)
+- [ ] Displays measurement progress: which channel, which position, how many sweeps remaining
+- [ ] Zero audio graph participation: the web UI does NOT open any PipeWire, JACK, or ALSA capture/playback streams while in measurement mode
+- [ ] Compatible with the existing web UI framework (D-020, FastAPI backend)
+
+**DoD:**
+- [ ] Page implemented and functional
+- [ ] Verified: no PipeWire graph nodes created by the web UI during measurement mode
+- [ ] AD sign-off: measurement integrity confirmed (no xruns attributable to web UI)
+
+---
+
+## US-049: Real-Time Measurement Observation via Websocket Feed
+
+**As** the sound engineer,
+**I want** the measurement script to expose a live data feed (levels, spectrum,
+progress) via a local websocket that the web UI can consume,
+**so that** I can monitor the measurement in real-time without the web UI
+participating in the audio graph.
+
+**Status:** selected
+**Depends on:** US-047 (Path A measurement script), US-048 (MVP visualization provides the display framework)
+**Blocks:** none
+**Decisions:** D-035 (measurement safety)
+
+**Note:** This is the enhanced visualization approach (AE Option A). The
+measurement script is the sole owner of both output and input audio streams.
+It computes levels and spectrum from its own recording buffers and publishes
+to a local websocket. The web UI reads from this feed — zero audio graph
+participation. This eliminates F-030 as a dependency for measurement
+visualization (though F-030 fix is still needed for DJ mode web UI).
+
+**Acceptance criteria:**
+- [ ] Measurement script exposes a local websocket (e.g., `ws://localhost:8081/measurement`) during active measurement
+- [ ] Publishes per-block: mic RMS level, mic peak level, estimated SPL, sweep progress (percentage)
+- [ ] Publishes per-sweep (after completion): frequency response magnitude array, IR peak, SNR estimate
+- [ ] Web UI "live measurement" page consumes the websocket feed and displays real-time levels + spectrum
+- [ ] The web UI does NOT open any PipeWire/ALSA streams — all audio data comes from the measurement script's feed
+- [ ] Measurement integrity validation (AD requirement): run a sweep with web UI active (websocket mode), compare deconvolved IR to reference measurement taken with web UI stopped. Must match within 0.5dB across 20Hz-20kHz
+
+**DoD:**
+- [ ] Websocket feed implemented in measurement script
+- [ ] Web UI consumer page implemented
+- [ ] Measurement integrity test: with/without web UI comparison documented in lab note
+- [ ] AE sign-off on data feed content and update rate
+- [ ] AD sign-off on measurement integrity validation results
+
+---
+
 ## Summary — Story Dependency Graph
 
 ```
@@ -2505,4 +2696,13 @@ US-039 (driver schema) ──+──> US-040 (loudspeakerdatabase.com scraper)
                          +──> US-043 (driver CLI) — also needs data from at least one scraper
 
 US-000a ──> US-044 (CamillaDSP bypass protection — safety)
+
+US-045 (hardware config schema) ──> US-046 (thermal ceiling) ──> US-012 (automation, amended: gain ramp)
+                                                                   ↑ also depends on US-010, US-011, US-011b
+US-046 + US-012 (gain cal) ──> US-047 (Path A measurement) ──> US-010 (correction)
+                                                            └──> US-048 (post-measurement viz)
+                                                                   └──> US-049 (real-time viz via websocket)
+
+TK-139 (nixGL Mixxx) — independent, gates CPU budget for DJ mode web UI viability
+F-030 fix (TK-151) — independent, gates runtime power monitoring + DJ mode web UI
 ```

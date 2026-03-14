@@ -630,3 +630,42 @@ listening experience that undermines owner confidence in the system.
 LowShelf filters (one per sub channel). Must be removed when Path A FIR
 corrections are deployed. Related: D-009 (cut-only), D-029 (boost budget),
 US-010 (correction filter generation).
+
+## D-035: Measurement safety is software-only; production safety remains D-014 scope (2026-03-13)
+
+**Context:** S-010 demonstrated that software-based speaker protection can be
+bypassed during measurement. The owner's planning brief requires "at NO point
+shall output power endanger speakers, based on config + T/S data." D-014
+defers hardware limiting for production use (>110dB SPL at audience position).
+
+**Decision:** The measurement pipeline uses a 4-layer software safety
+architecture. No hardware limiter is required for measurement because the risk
+profile is fundamentally different from production PA operation.
+
+The 4 layers:
+1. **Digital hard cap** — computed from driver T/S parameters (Pe_max,
+   impedance) and amp gain. Enforced regardless of CamillaDSP state.
+2. **CamillaDSP attenuation** — measurement config applies -40dB (near-field)
+   or lower attenuation (Path A, TBD by AE) on the test channel.
+3. **Mic SPL gate** — UMIK-1 closed-loop monitoring. Hard abort on mic signal
+   loss or SPL exceeding target + 9dB.
+4. **Operator-supervised ramp** — stepped gain increase (not continuous),
+   operator present throughout.
+
+**Rationale:** (1) Measurement is a short, controlled event with the operator
+present. (2) The 4 layers provide independent failure protection — any single
+layer failing is caught by the others. (3) The digital hard cap (Layer 1) is
+safe even without CamillaDSP — worst-case power at -20 dBFS into a 4-ohm
+CHN-50P via the McGrey PA4504 is ~4.5W (below 7W Pe_max). (4) Production
+safety (D-014) addresses a different risk profile: unattended operation, hours-
+long sets, PA-level SPL, no operator supervision.
+
+**Scope:** This decision applies to the measurement pipeline only (US-008,
+US-010, US-012). Production safety for DJ/PA and live vocal operation remains
+governed by D-014 (hardware limiter deferred), D-029 (boost budget), D-031
+(subsonic protection), and US-044 (CamillaDSP bypass protection).
+
+**Related:** D-014 (production safety, deferred), S-010 (near-miss), US-044
+(bypass protection). AD challenge: wrong mandatory_hpf_hz is undetectable by
+mic — HPF is a safety-critical parameter that must be validated at config
+generation time (US-011b).

@@ -34,7 +34,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
-| User stories | active | 48 stories (US-000 through US-044 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039 through US-043): Speaker driver database — owner selected 2026-03-12. US-044: CamillaDSP bypass protection (safety). |
+| User stories | active | 53 stories (US-000 through US-049 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039-043): driver database. US-044: bypass protection. US-045-049: measurement safety + Path A + visualization (owner planning brief 2026-03-13). US-011b and US-012 amended with power budget validation and automated gain calibration. |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | done (TK-071) | `scripts/room-correction/` — 13 modules (sweep, deconvolution, correction, crossover, combine, export, verify), mock room simulator, CLI runner, spatial averaging. Bose FIR generator (`generate_bose_filters.py`). All verification tests pass (D-009 compliant). |
@@ -119,6 +119,8 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - US-044 filed: CamillaDSP bypass protection (safety story). OS-level protections against accidental circumvention of CamillaDSP gain staging. Relates to D-014, S-010.
 - D-034 filed: Temporary bass shelf on Bose sub — LowShelf 70 Hz +6 dB Q=0.7 on sub ch [2,3]. Owner approved ("Much better"). AE Rule 13 safe (0.69W vs 62W). Temporary — remove when Path A FIR corrections deployed.
 - TK-150 DONE (`6394ab7`): Bass shelf deployed via pycamilladsp, persisted to disk and pushed.
+- D-035 filed: Measurement safety is software-only (4-layer architecture). Production safety remains D-014 scope. AD recommended, owner approved.
+- Owner planning brief work packages filed: US-045 (hardware config schema), US-046 (thermal ceiling), US-047 (Path A measurement), US-048 (post-measurement viz), US-049 (real-time viz websocket). US-011b amended (power budget validation). US-012 amended (automated gain calibration ramp). TK-151-154 filed (F-030 fix, JACK CPU investigation, runtime power monitoring, D-034 removal tracker). Story count 48->53. Dependency graph updated.
 
 ### Completed (previous session, 2026-03-10)
 - TK-055 PASS: Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware V3D GL on PREEMPT_RT (previous kernel: lockup in <2.5 min). Zero lockups.
@@ -276,3 +278,4 @@ See `docs/project/defects.md` for full details.
 - D-032: Web UI requires HTTPS for AudioWorklet secure context — self-signed cert on LAN (2026-03-12)
 - D-033: Incremental Nix adoption — staged path from Trixie to reproducible builds (2026-03-12)
 - D-034: Temporary bass shelf on Bose sub — LowShelf 70 Hz +6 dB Q=0.7, owner approved, remove when Path A FIR corrections deployed (2026-03-13)
+- D-035: Measurement safety is software-only (4-layer architecture); production safety remains D-014 scope (2026-03-13)
