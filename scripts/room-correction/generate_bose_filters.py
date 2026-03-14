@@ -63,9 +63,19 @@ def load_profile(profile_path):
     }
 
 
-def generate_bose_filters(output_dir=OUTPUT_DIR, profile_path=PROFILE_PATH):
+def generate_bose_filters(output_dir=OUTPUT_DIR, profile_path=PROFILE_PATH, timestamp=None):
     """
     Generate all 4 combined FIR filters for the Bose home config.
+
+    Parameters
+    ----------
+    output_dir : str
+        Output directory for generated WAV files.
+    profile_path : str
+        Path to the Bose speaker profile YAML.
+    timestamp : datetime, optional
+        If provided, filenames include this timestamp for cache-busting
+        (TK-166). If None, uses legacy unversioned filenames.
 
     Returns a dict mapping channel names to output file paths.
     """
@@ -81,6 +91,8 @@ def generate_bose_filters(output_dir=OUTPUT_DIR, profile_path=PROFILE_PATH):
     print(f"  Crossover: {crossover_freq}Hz, {slope}dB/oct")
     print(f"  Subsonic HPF: {SUBSONIC_HPF_HZ}Hz, {slope}dB/oct")
     print(f"  Taps: {n_taps}, Sample rate: {SAMPLE_RATE}Hz")
+    if timestamp:
+        print(f"  Timestamp: {timestamp.strftime('%Y%m%d_%H%M%S')}")
     print()
 
     # --- Generate component filters ---
@@ -152,7 +164,9 @@ def generate_bose_filters(output_dir=OUTPUT_DIR, profile_path=PROFILE_PATH):
     }
 
     print(f"\nExporting to {output_dir}/")
-    output_paths = export_all_filters(filters, output_dir, n_taps=n_taps, sr=SAMPLE_RATE)
+    output_paths = export_all_filters(
+        filters, output_dir, n_taps=n_taps, sr=SAMPLE_RATE, timestamp=timestamp,
+    )
 
     return output_paths
 

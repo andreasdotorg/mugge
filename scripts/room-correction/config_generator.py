@@ -15,6 +15,7 @@ boost. The headroom value must be >= max_boost_db + 0.5dB margin.
 """
 
 import os
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -837,3 +838,59 @@ def write_config(
     with open(output_path, "w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
     return output_path
+
+
+# ----- TK-166: Versioned filter path helpers --------------------------------
+
+TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+
+
+def versioned_filter_paths(
+    speaker_keys,
+    coeffs_dir="/etc/camilladsp/coeffs",
+    timestamp=None,
+):
+    """
+    Build a filter_paths dict with versioned (timestamped) filenames.
+
+    CamillaDSP caches FIR coefficient files by filename. Using timestamped
+    filenames ensures config.reload() picks up new coefficients.
+
+    Parameters
+    ----------
+    speaker_keys : list of str
+        Speaker keys from the profile, e.g. ['sat_left', 'sat_right',
+        'sub1', 'sub2'].
+    coeffs_dir : str
+        Directory where coefficient files will be deployed.
+    timestamp : datetime, optional
+        Timestamp to embed. Defaults to datetime.now().
+
+    Returns
+    -------
+    dict
+        Mapping of speaker keys to versioned file paths,
+        e.g. {'sat_left': '/etc/camilladsp/coeffs/combined_left_hp_20260314_143022.wav'}.
+    """
+    if timestamp is None:
+        timestamp = datetime.now()
+    ts_str = timestamp.strftime(TIMESTAMP_FORMAT)
+
+    # Map speaker keys to their channel names for filename generation.
+    # The convention: speaker key 'sat_left' -> channel 'left_hp',
+    # 'sat_right' -> 'right_hp', 'sub1' -> 'sub1_lp', 'sub2' -> 'sub2_lp'.
+    # For keys that don't match this pattern, use the key directly.
+    _KEY_TO_CHANNEL = {
+        "sat_left": "left_hp",
+        "sat_right": "right_hp",
+        "sub1": "sub1_lp",
+        "sub2": "sub2_lp",
+    }
+
+    paths = {}
+    for key in speaker_keys:
+        channel = _KEY_TO_CHANNEL.get(key, key)
+        filename = f"combined_{channel}_{ts_str}.wav"
+        paths[key] = os.path.join(coeffs_dir, filename)
+
+    return paths

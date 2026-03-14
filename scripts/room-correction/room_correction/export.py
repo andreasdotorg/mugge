@@ -5,9 +5,15 @@ Handles final truncation, windowing, format conversion, and file output.
 CamillaDSP reads filter coefficients from WAV files — it supports both
 float32 and S32LE (32-bit signed integer). We use float32 for maximum
 compatibility and dynamic range.
+
+TK-166: Supports versioned (timestamped) filenames to bust CamillaDSP's
+FIR coefficient cache on config.reload(). Without unique filenames,
+CamillaDSP silently keeps old data even after the WAV file is overwritten.
 """
 
 import os
+from datetime import datetime
+
 import numpy as np
 import soundfile as sf
 
@@ -16,6 +22,38 @@ from . import dsp_utils
 
 SAMPLE_RATE = dsp_utils.SAMPLE_RATE
 DEFAULT_TAPS = 16384
+
+TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+
+# Channel names mapped to their unversioned filenames (fallback compatibility)
+CHANNEL_FILENAMES = {
+    'left_hp': 'combined_left_hp.wav',
+    'right_hp': 'combined_right_hp.wav',
+    'sub1_lp': 'combined_sub1_lp.wav',
+    'sub2_lp': 'combined_sub2_lp.wav',
+}
+
+
+def versioned_filename(channel, timestamp=None):
+    """
+    Generate a versioned coefficient filename for a channel.
+
+    Parameters
+    ----------
+    channel : str
+        Channel name, e.g. 'left_hp', 'sub1_lp'.
+    timestamp : datetime, optional
+        Timestamp to embed. Defaults to datetime.now().
+
+    Returns
+    -------
+    str
+        Filename like 'combined_left_hp_20260314_143022.wav'.
+    """
+    if timestamp is None:
+        timestamp = datetime.now()
+    ts_str = timestamp.strftime(TIMESTAMP_FORMAT)
+    return f"combined_{channel}_{ts_str}.wav"
 
 
 def export_filter(fir_filter, output_path, n_taps=DEFAULT_TAPS, sr=SAMPLE_RATE):
@@ -55,7 +93,9 @@ def export_filter(fir_filter, output_path, n_taps=DEFAULT_TAPS, sr=SAMPLE_RATE):
     sf.write(output_path, fir_filter.astype(np.float32), sr, subtype='FLOAT')
 
 
-def export_all_filters(filters, output_dir, n_taps=DEFAULT_TAPS, sr=SAMPLE_RATE):
+def export_all_filters(
+    filters, output_dir, n_taps=DEFAULT_TAPS, sr=SAMPLE_RATE, timestamp=None,
+):
     """
     Export a complete set of combined filters for all output channels.
 
@@ -70,6 +110,9 @@ def export_all_filters(filters, output_dir, n_taps=DEFAULT_TAPS, sr=SAMPLE_RATE)
         Target filter length for all filters.
     sr : int
         Sample rate.
+    timestamp : datetime, optional
+        If provided, filenames include this timestamp for cache-busting
+        (TK-166). If None, uses the legacy unversioned filenames.
 
     Returns
     -------
@@ -78,16 +121,13 @@ def export_all_filters(filters, output_dir, n_taps=DEFAULT_TAPS, sr=SAMPLE_RATE)
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    file_names = {
-        'left_hp': 'combined_left_hp.wav',
-        'right_hp': 'combined_right_hp.wav',
-        'sub1_lp': 'combined_sub1_lp.wav',
-        'sub2_lp': 'combined_sub2_lp.wav',
-    }
-
     output_paths = {}
-    for channel, filename in file_names.items():
+    for channel in CHANNEL_FILENAMES:
         if channel in filters:
+            if timestamp is not None:
+                filename = versioned_filename(channel, timestamp)
+            else:
+                filename = CHANNEL_FILENAMES[channel]
             path = os.path.join(output_dir, filename)
             export_filter(filters[channel], path, n_taps=n_taps, sr=sr)
             output_paths[channel] = path
