@@ -410,3 +410,27 @@ task — the correct response is:
 
 **Rule reference:** Rule 2 (orchestrator never runs implementation commands),
 Rule 9 (git operations through CM). See also L-006, L-008.
+
+---
+
+## L-015: Task tool `isolation: "worktree"` is broken — do not use
+
+**Date:** 2026-03-14
+**Context:** Phase 1 parallel workers (WP-1, WP-2, WP-8) spawned with worktree isolation
+
+Three workers were spawned with `isolation: "worktree"` expecting separate
+git worktrees. The mechanism silently failed — all three wrote to the main
+working directory. Two committed directly (bypassing CM protocol), two left
+uncommitted files. No data loss occurred only because all workers touched
+disjoint file paths by coincidence.
+
+**Root cause:** The Task tool's worktree isolation is non-functional. It
+silently falls back to the main working directory without error.
+
+**Fix:**
+1. Never use `isolation: "worktree"` — it is broken and provides false safety
+2. For parallel workers: verify strictly disjoint file sets before spawning,
+   or (preferred) run sequentially on the same branch
+3. Workers must never commit directly — always coordinate through CM
+
+See global L-039 for full analysis.

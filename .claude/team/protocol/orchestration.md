@@ -176,6 +176,13 @@ Orchestrator (this is you)
 - **Workers rotate.** Spawn workers for specific tasks. When a task completes,
   the worker can take the next task or be shut down. Multiple workers can run
   in parallel on independent tasks.
+- **WARNING: `isolation: "worktree"` is BROKEN (L-039).** The Task tool's
+  worktree isolation silently falls back to the main working directory without
+  creating a worktree. Do NOT use it. For parallel workers writing files:
+  (1) prefer sequential execution on the same branch, or (2) verify strictly
+  disjoint file sets before spawning parallel workers on the same branch.
+  Workers that commit directly (bypassing CM) are a protocol violation
+  regardless of isolation mode.
 - **Story transitions are task changes, not team changes.** If the current
   story finishes and the owner selects the next one, create new tasks and
   assign them to existing or new workers. Do NOT recreate the team.
