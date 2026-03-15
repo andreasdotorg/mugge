@@ -173,7 +173,7 @@ fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<A
 
     let _listener = stream
         .add_local_listener()
-        .process(move |stream: &pipewire::stream::Stream, _: &mut ()| {
+        .process(move |stream: &pipewire::stream::StreamRef, _: &mut ()| {
             unsafe {
                 let raw_buf = pipewire_sys::pw_stream_dequeue_buffer(stream.as_raw_ptr());
                 if raw_buf.is_null() {
