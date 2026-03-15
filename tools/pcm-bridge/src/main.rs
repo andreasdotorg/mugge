@@ -261,5 +261,5 @@ fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<A
     mainloop.run();
     info!("PipeWire main loop exited");
 
-    pipewire::deinit();
+    unsafe { pipewire::deinit(); }
 }
