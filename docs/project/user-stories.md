@@ -2758,7 +2758,7 @@ PipeWire/JACK client at RT priority,
 controllable from the Python measurement daemon without per-burst stream setup
 overhead.
 
-**Status:** selected (owner-authorized 2026-03-15; blocked on TK-151 pcm-bridge Pi validation + D-037 design approval)
+**Status:** selected (owner-authorized 2026-03-15; D-037 APPROVED 2026-03-15, blocked on TK-151 pcm-bridge Pi validation)
 **Depends on:** Architect design (new system component), Rust toolchain on Pi (partially validated via pcm-bridge TK-151; AD-F006 Pi validation must pass first)
 **Blocks:** US-053 (manual test tool), US-047 (amended: uses RT signal gen instead of Python sounddevice), US-012 (amended: gain calibration uses RT signal gen)
 **Decisions:** D-036 (measurement daemon architecture — signal gen becomes a subprocess/sidecar), D-009 (cut-only correction / hard level cap)
