@@ -2665,7 +2665,7 @@ session.
 and gain calibration (US-012) can be tested end-to-end without requiring
 physical hardware.
 
-**Status:** in-review (owner-authorized 2026-03-14; Phase: REVIEW — all 4/4 DoD pass. DEPLOY/VERIFY skipped (mock backend, no Pi component). Architect APPROVED, QE APPROVED. AE review initiated. Pending AE sign-off + owner acceptance.)
+**Status:** in-review (owner-authorized 2026-03-14; Phase: REVIEW — owner NOT ACCEPTED. Scope revision required: current mock backend (MockSoundDevice, MockCamillaClient) is the fast CI path only. Owner requires full E2E test harness with real PipeWire + real CamillaDSP + real signal-gen + real D-036 daemon + real web UI + real pcm-bridge; room simulator is the ONLY mock. Architect designing PipeWire integration approach. Previous advisor sign-offs (Architect, QE, AE) apply to CI-tier only — E2E tier needs fresh review.)
 **Depends on:** US-045 (hardware config schema provides device definitions)
 **Blocks:** US-047 implementation (owner directive: mock backend required for local testing)
 **Decisions:** D-035 (measurement safety)
@@ -2682,21 +2682,46 @@ device level). ~200 lines new code: `MockSoundDevice` + `MockCamillaClient`.
 Existing room simulator already provides synthetic IRs. PipeWire and CamillaDSP
 do NOT need to run on macOS. One worker task to implement.
 
+**Owner feedback (2026-03-15, REVIEW rejection):** The mock backend as built is
+only the first layer (CI-tier). The owner's vision is a **full E2E test harness
+for the entire stack** where the room simulator is the ONLY mock — everything
+else runs for real. Current MockSoundDevice + MockCamillaClient work is
+preserved as the fast CI path (valuable, not wasted). The E2E tier requires
+architect design for PipeWire integration (filter-chain room simulator).
+
 **Acceptance criteria:**
-- [ ] Mock audio backend: simulates PipeWire graph with configurable channel count, sample rate, quantum
-- [ ] Mock CamillaDSP: responds to pycamilladsp API calls (config hot-swap, levels, signal peaks) with simulated data
-- [ ] Simulated room: generates synthetic room impulse responses with configurable RT60, room modes, speaker/mic positions
-- [ ] Simulated mic recording: convolves test signal with room IR, adds configurable noise floor
-- [ ] Simulated playback: accepts WAV output, verifies signal integrity
-- [ ] Compatible with existing measurement scripts (measure_nearfield.py, future measure_room.py) via dependency injection or environment variable switching
-- [ ] Runs on macOS (development machine) without PipeWire or ALSA
-- [ ] QE can run the full measurement workflow locally and validate results against expected outcomes
+
+*Tier 1 — CI path (DONE):*
+- [x] Mock audio backend: simulates PipeWire graph with configurable channel count, sample rate, quantum
+- [x] Mock CamillaDSP: responds to pycamilladsp API calls (config hot-swap, levels, signal peaks) with simulated data
+- [x] Simulated room: generates synthetic room impulse responses with configurable RT60, room modes, speaker/mic positions
+- [x] Simulated mic recording: convolves test signal with room IR, adds configurable noise floor
+- [x] Simulated playback: accepts WAV output, verifies signal integrity
+- [x] Compatible with existing measurement scripts via dependency injection
+- [x] Runs on macOS without PipeWire or ALSA
+- [x] QE can run the full measurement workflow locally and validate results against expected outcomes
+
+*Tier 2 — E2E harness (NEW, required for done):*
+- [ ] Real PipeWire running (full audio graph, routing, streams)
+- [ ] Real CamillaDSP running (DSP processing, config loading, gain staging)
+- [ ] Real pi4audio-signal-gen running (RT signal generator)
+- [ ] Real D-036 measurement daemon running (FastAPI backend)
+- [ ] Real web UI running (dashboard, test tool page, status bar, spectrum)
+- [ ] Real pcm-bridge running (tapping audio for web UI meters)
+- [ ] Room simulator as PipeWire filter-chain node = the ONLY mock (replaces speakers + room + mic)
+- [ ] Playwright E2E tests against real web UI with real audio data flowing
+- [ ] Full measurement workflow test through real stack
+- [ ] Signal generator integration tests with real PipeWire
+- [ ] Dashboard/meter tests with real PCM data
+- [ ] Emergency stop / safety tests with real state machines
 
 **DoD:**
-- [ ] Mock backend implemented and documented
-- [ ] At least one end-to-end test scenario: sweep -> record -> deconvolve -> verify IR matches expected room
-- [ ] Architect sign-off on testability architecture
-- [ ] QE sign-off on test coverage adequacy
+- [x] CI-tier mock backend implemented and documented
+- [x] CI-tier end-to-end test scenario: sweep -> record -> deconvolve -> verify IR matches expected room
+- [x] Architect sign-off on CI-tier testability architecture
+- [x] QE sign-off on CI-tier test coverage adequacy
+- [ ] E2E-tier harness operational with all real components + room simulator mock
+- [ ] E2E Playwright test suite passing against real stack
 
 ---
 
