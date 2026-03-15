@@ -156,8 +156,30 @@ async def start_measurement(body: StartRequest, request: Request):
     )
 
     mock_mode = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
+    siggen_mode = os.environ.get("PI4AUDIO_SIGGEN", "") == "1"
     sd_override: Any = None
-    if mock_mode:
+    if siggen_mode:
+        # Production mode with RT signal generator (SG-11).
+        # SignalGenClient replaces sounddevice for all audio I/O.
+        try:
+            import sys as _sys
+            _measurement_dir = os.path.normpath(os.path.join(
+                os.path.dirname(__file__), "..", "..", "..", "measurement"))
+            if _measurement_dir not in _sys.path:
+                _sys.path.insert(0, _measurement_dir)
+            from signal_gen_client import SignalGenClient
+            siggen_host = os.environ.get("PI4AUDIO_SIGGEN_HOST", "127.0.0.1")
+            siggen_port = int(os.environ.get("PI4AUDIO_SIGGEN_PORT", "4001"))
+            client = SignalGenClient(host=siggen_host, port=siggen_port)
+            client.connect()
+            sd_override = client
+            log.info("Signal generator client connected (%s:%d) — "
+                     "using as audio backend", siggen_host, siggen_port)
+        except Exception as exc:
+            log.error("Failed to connect to signal generator: %s. "
+                      "Falling back to mock mode.", exc)
+            siggen_mode = False
+    if not siggen_mode and mock_mode:
         try:
             from ..mock.mock_sounddevice import MockSoundDevice
             sd_override = MockSoundDevice()
@@ -199,6 +221,14 @@ async def _run_session_lifecycle(app: Any, session: MeasurementSession) -> None:
         if terminal:
             restore_cdsp = session.state is not MeasurementState.COMPLETE
             await mode_manager.enter_monitoring_mode(restore_cdsp=restore_cdsp)
+        # Close SignalGenClient if it was used as sd_override (SG-11).
+        sd = getattr(session, "_sd_override", None)
+        if sd is not None and hasattr(sd, "close"):
+            try:
+                sd.close()
+                log.info("Signal generator client closed")
+            except Exception:
+                pass
         app.state.measurement_task = None
 
 

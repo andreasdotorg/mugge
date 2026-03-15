@@ -295,3 +295,11 @@ class TestWebSocketEndpoints:
         with client.websocket_connect("/ws/monitoring") as ws:
             data = ws.receive_json()
             assert data["camilladsp"]["state"] == "Running"
+
+    def test_siggen_ws_rejected_when_disabled(self, client):
+        """ws/siggen endpoint closes with 1008 when PI4AUDIO_SIGGEN is not set."""
+        with pytest.raises(Exception):
+            # PI4AUDIO_SIGGEN defaults to empty, so the endpoint should
+            # reject the connection immediately with code 1008.
+            with client.websocket_connect("/ws/siggen") as ws:
+                ws.receive_json()

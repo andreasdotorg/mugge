@@ -8,6 +8,7 @@ WebSocket endpoints:
     /ws/system       — Full system health at ~1 Hz
     /ws/pcm          — Binary PCM stream (3-channel interleaved float32)
     /ws/measurement  — Real-time measurement progress feed (WP-E)
+    /ws/siggen       — Signal generator status proxy (SG-11, PI4AUDIO_SIGGEN=1)
 
 Mock mode (PI_AUDIO_MOCK=1):
     Real collectors are not started; MockDataGenerator is used instead.
@@ -22,6 +23,7 @@ URL parameters (passed through to WebSocket):
 """
 
 import asyncio
+import json
 import logging
 import os
 import socket
@@ -227,6 +229,131 @@ async def ws_pcm(ws: WebSocket, scenario: str = "A"):
         log.info("PCM client disconnected")
     except Exception:
         log.exception("PCM websocket error")
+
+
+# -- Signal generator status proxy (SG-11) --
+
+SIGGEN_MODE = os.environ.get("PI4AUDIO_SIGGEN", "") == "1"
+SIGGEN_HOST = os.environ.get("PI4AUDIO_SIGGEN_HOST", "127.0.0.1")
+SIGGEN_PORT = int(os.environ.get("PI4AUDIO_SIGGEN_PORT", "4001"))
+
+
+# D-009: hard level cap enforced server-side before forwarding to signal gen.
+SIGGEN_HARD_CAP_DBFS = -0.5
+
+# Allowed commands from the browser.  Prevents arbitrary JSON injection.
+_SIGGEN_ALLOWED_CMDS = {"play", "stop", "set_level", "set_signal",
+                        "set_channel", "set_freq", "status"}
+
+
+def _siggen_sanitize(msg: dict) -> dict | None:
+    """Validate and clamp a browser command before forwarding to TCP.
+
+    Returns the sanitized message, or None to reject.
+    """
+    cmd = msg.get("cmd")
+    if cmd not in _SIGGEN_ALLOWED_CMDS:
+        return None
+
+    # Enforce D-009 hard cap on any level_dbfs field.
+    if "level_dbfs" in msg:
+        try:
+            level = float(msg["level_dbfs"])
+        except (TypeError, ValueError):
+            return None
+        msg["level_dbfs"] = min(level, SIGGEN_HARD_CAP_DBFS)
+
+    return msg
+
+
+@app.websocket("/ws/siggen")
+async def ws_siggen(ws: WebSocket):
+    """Bidirectional proxy between browser and signal generator.
+
+    - Browser -> server: JSON commands forwarded to TCP after sanitisation
+    - Signal gen -> browser: state/event messages forwarded as JSON frames
+
+    The proxy enforces D-009 (level hard cap at -0.5 dBFS) on all commands
+    that include a ``level_dbfs`` field.
+    """
+    if not SIGGEN_MODE:
+        await ws.close(code=1008, reason="Signal generator not enabled "
+                       "(set PI4AUDIO_SIGGEN=1)")
+        return
+
+    await ws.accept()
+    log.info("Signal generator WS proxy client connected")
+
+    tcp_sock = None
+    try:
+        # Connect to signal generator TCP RPC.
+        tcp_sock = await asyncio.to_thread(
+            _siggen_tcp_connect, SIGGEN_HOST, SIGGEN_PORT)
+
+        # Send initial status request.
+        status_cmd = b'{"cmd":"status"}\n'
+        await asyncio.to_thread(tcp_sock.sendall, status_cmd)
+
+        # Run two concurrent tasks: TCP->WS forwarder and WS->TCP forwarder.
+        async def tcp_to_ws():
+            """Forward signal generator messages to browser."""
+            recv_buf = b""
+            while True:
+                chunk = await asyncio.to_thread(tcp_sock.recv, 65536)
+                if not chunk:
+                    break
+                recv_buf += chunk
+                while b"\n" in recv_buf:
+                    line, recv_buf = recv_buf.split(b"\n", 1)
+                    try:
+                        msg = json.loads(line)
+                        await ws.send_json(msg)
+                    except (json.JSONDecodeError, Exception):
+                        pass
+
+        async def ws_to_tcp():
+            """Forward browser commands to signal generator."""
+            while True:
+                raw = await ws.receive_text()
+                try:
+                    msg = json.loads(raw)
+                except json.JSONDecodeError:
+                    await ws.send_json({"type": "error",
+                                        "detail": "Invalid JSON"})
+                    continue
+                sanitized = _siggen_sanitize(msg)
+                if sanitized is None:
+                    await ws.send_json({"type": "error",
+                                        "detail": f"Rejected command"})
+                    continue
+                line = json.dumps(sanitized, separators=(",", ":")) + "\n"
+                await asyncio.to_thread(tcp_sock.sendall, line.encode())
+
+        # Run both directions concurrently; cancel the other on exit.
+        tcp_task = asyncio.create_task(tcp_to_ws())
+        ws_task = asyncio.create_task(ws_to_tcp())
+        done, pending = await asyncio.wait(
+            {tcp_task, ws_task}, return_when=asyncio.FIRST_COMPLETED)
+        for t in pending:
+            t.cancel()
+
+    except WebSocketDisconnect:
+        log.info("Signal generator WS proxy client disconnected")
+    except Exception:
+        log.exception("Signal generator WS proxy error")
+    finally:
+        if tcp_sock is not None:
+            try:
+                tcp_sock.close()
+            except OSError:
+                pass
+
+
+def _siggen_tcp_connect(host: str, port: int) -> socket.socket:
+    """Open a TCP connection to the signal generator (blocking)."""
+    sock = socket.create_connection((host, port), timeout=5.0)
+    sock.settimeout(2.0)
+    return sock
 
 
 # -- Static files (mounted last so explicit routes take priority) --
