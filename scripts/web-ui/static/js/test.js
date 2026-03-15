@@ -439,6 +439,515 @@
         }
     }
 
+    // -- Capture spectrum analyzer (PCM-MODE-3) --
+
+    // Reuse constants and utilities from PiAudioSpectrum (spectrum.js).
+    var SPEC_SAMPLE_RATE = 48000;
+    var SPEC_FFT_SIZE = 2048;
+    var SPEC_NUM_CHANNELS = 3;
+    var SPEC_DB_MIN = -60;
+    var SPEC_DB_MAX = 0;
+    var SPEC_FREQ_LO = 30;
+    var SPEC_FREQ_HI = 20000;
+    var SPEC_LOG_LO = Math.log10(SPEC_FREQ_LO);
+    var SPEC_LOG_HI = Math.log10(SPEC_FREQ_HI);
+    var SPEC_SMOOTHING = 0.3;
+
+    // State
+    var specCanvas = null;
+    var specCtx = null;
+    var specAnimFrame = null;
+    var specPcmWs = null;
+    var specPcmConnected = false;
+    var specReconnectTimer = null;
+    var specCurrentSource = null;
+    var specActive = false;  // True when Test tab is visible.
+
+    // FFT pipeline buffers
+    var specAccumBuf = new Float32Array(SPEC_FFT_SIZE);
+    var specAccumPos = 0;
+    var specWindowFunc = new Float32Array(SPEC_FFT_SIZE);
+    var specFftReal = new Float32Array(SPEC_FFT_SIZE);
+    var specFftImag = new Float32Array(SPEC_FFT_SIZE);
+    var specWindowed = new Float32Array(SPEC_FFT_SIZE);
+    var specSmoothedDB = null;
+    var specFreqData = null;
+
+    // Layout
+    var specFreqLUT = null;
+    var specCachedW = 0;
+    var specCachedH = 0;
+    var specPlotX = 30;
+    var specPlotY = 0;
+    var specPlotW = 0;
+    var specPlotH = 0;
+
+    // Color LUT (shared with PiAudioSpectrum if available, else built locally)
+    var specColorLUT = null;
+
+    function specInitWindow() {
+        var N = SPEC_FFT_SIZE;
+        var a0 = 0.35875, a1 = 0.48829, a2 = 0.14128, a3 = 0.01168;
+        for (var i = 0; i < N; i++) {
+            specWindowFunc[i] = a0
+                - a1 * Math.cos(2 * Math.PI * i / (N - 1))
+                + a2 * Math.cos(4 * Math.PI * i / (N - 1))
+                - a3 * Math.cos(6 * Math.PI * i / (N - 1));
+        }
+    }
+
+    function specFFT(input) {
+        var N = input.length;
+        var halfN = N / 2;
+        for (var i = 0; i < N; i++) {
+            specFftReal[i] = input[i];
+            specFftImag[i] = 0;
+        }
+        var j = 0;
+        for (var i = 0; i < N - 1; i++) {
+            if (i < j) {
+                var tr = specFftReal[i]; specFftReal[i] = specFftReal[j]; specFftReal[j] = tr;
+                var ti = specFftImag[i]; specFftImag[i] = specFftImag[j]; specFftImag[j] = ti;
+            }
+            var k = halfN;
+            while (k <= j) { j -= k; k >>= 1; }
+            j += k;
+        }
+        for (var step = 1; step < N; step <<= 1) {
+            var halfStep = step;
+            var tableStep = Math.PI / halfStep;
+            for (var group = 0; group < halfStep; group++) {
+                var angle = group * tableStep;
+                var wr = Math.cos(angle);
+                var wi = -Math.sin(angle);
+                for (var pair = group; pair < N; pair += step << 1) {
+                    var match = pair + halfStep;
+                    var tr2 = wr * specFftReal[match] - wi * specFftImag[match];
+                    var ti2 = wr * specFftImag[match] + wi * specFftReal[match];
+                    specFftReal[match] = specFftReal[pair] - tr2;
+                    specFftImag[match] = specFftImag[pair] - ti2;
+                    specFftReal[pair] += tr2;
+                    specFftImag[pair] += ti2;
+                }
+            }
+        }
+    }
+
+    function specProcessFFT() {
+        var i;
+        for (i = 0; i < SPEC_FFT_SIZE; i++) {
+            specWindowed[i] = specAccumBuf[i] * specWindowFunc[i];
+        }
+        specFFT(specWindowed);
+        var binCount = SPEC_FFT_SIZE / 2 + 1;
+        if (!specSmoothedDB) {
+            specSmoothedDB = new Float32Array(binCount);
+            for (i = 0; i < binCount; i++) specSmoothedDB[i] = SPEC_DB_MIN;
+        }
+        for (i = 0; i < binCount; i++) {
+            var re = specFftReal[i];
+            var im = specFftImag[i];
+            var mag = Math.sqrt(re * re + im * im);
+            var db = mag > 0 ? 20 * Math.log10(mag / SPEC_FFT_SIZE) : SPEC_DB_MIN;
+            db = Math.max(SPEC_DB_MIN, Math.min(SPEC_DB_MAX, db));
+            specSmoothedDB[i] = SPEC_SMOOTHING * specSmoothedDB[i] + (1 - SPEC_SMOOTHING) * db;
+        }
+        if (!specFreqData || specFreqData.length !== binCount) {
+            specFreqData = new Float32Array(binCount);
+        }
+        for (i = 0; i < binCount; i++) {
+            specFreqData[i] = specSmoothedDB[i];
+        }
+    }
+
+    function specFreqToNorm(freq) {
+        return (Math.log10(freq) - SPEC_LOG_LO) / (SPEC_LOG_HI - SPEC_LOG_LO);
+    }
+
+    function specFreqToBin(freq) {
+        return freq * SPEC_FFT_SIZE / SPEC_SAMPLE_RATE;
+    }
+
+    function specBuildFreqLUT(width) {
+        specFreqLUT = new Float32Array(width);
+        var binCount = SPEC_FFT_SIZE / 2;
+        for (var x = 0; x < width; x++) {
+            var norm = x / (width - 1);
+            var freq = Math.pow(10, SPEC_LOG_LO + norm * (SPEC_LOG_HI - SPEC_LOG_LO));
+            var bin = specFreqToBin(freq);
+            specFreqLUT[x] = Math.min(Math.max(bin, 0), binCount - 1);
+        }
+    }
+
+    function specBuildColorLUT() {
+        var stops = [
+            { pos: 0.00, r: 30,  g: 20,  b: 60,  a: 0.80 },
+            { pos: 0.15, r: 80,  g: 40,  b: 120, a: 0.80 },
+            { pos: 0.30, r: 140, g: 50,  b: 160, a: 0.80 },
+            { pos: 0.50, r: 220, g: 80,  b: 40,  a: 0.80 },
+            { pos: 0.65, r: 226, g: 166, b: 57,  a: 0.80 },
+            { pos: 0.80, r: 230, g: 210, b: 60,  a: 0.80 },
+            { pos: 0.92, r: 255, g: 240, b: 180, a: 0.90 },
+            { pos: 1.00, r: 255, g: 255, b: 255, a: 0.95 }
+        ];
+        specColorLUT = new Array(256);
+        for (var i = 0; i < 256; i++) {
+            var t = i / 255;
+            var lo = 0;
+            for (var s = 1; s < stops.length; s++) {
+                if (stops[s].pos >= t) { lo = s - 1; break; }
+            }
+            var hi = lo + 1;
+            if (hi >= stops.length) { hi = stops.length - 1; lo = hi - 1; }
+            var range = stops[hi].pos - stops[lo].pos;
+            var frac = range > 0 ? (t - stops[lo].pos) / range : 0;
+            var r = Math.round(stops[lo].r + frac * (stops[hi].r - stops[lo].r));
+            var g = Math.round(stops[lo].g + frac * (stops[hi].g - stops[lo].g));
+            var b = Math.round(stops[lo].b + frac * (stops[hi].b - stops[lo].b));
+            var a = stops[lo].a + frac * (stops[hi].a - stops[lo].a);
+            specColorLUT[i] = "rgba(" + r + "," + g + "," + b + "," + a.toFixed(2) + ")";
+        }
+    }
+
+    function specDbToColor(db) {
+        var clamped = Math.max(SPEC_DB_MIN, Math.min(SPEC_DB_MAX, db));
+        var idx = Math.floor((clamped - SPEC_DB_MIN) / (SPEC_DB_MAX - SPEC_DB_MIN) * 255);
+        if (idx > 255) idx = 255;
+        return specColorLUT[idx];
+    }
+
+    function specDbToY(db) {
+        var clamped = Math.max(SPEC_DB_MIN, Math.min(SPEC_DB_MAX, db));
+        var frac = (clamped - SPEC_DB_MIN) / (SPEC_DB_MAX - SPEC_DB_MIN);
+        return specPlotY + specPlotH - frac * specPlotH;
+    }
+
+    function specInterpolateDB(data, fracBin) {
+        var lo = Math.floor(fracBin);
+        var hi = Math.min(lo + 1, data.length - 1);
+        var t = fracBin - lo;
+        return data[lo] * (1 - t) + data[hi] * t;
+    }
+
+    function specResizeCanvas() {
+        if (!specCanvas) return;
+        var rect = specCanvas.getBoundingClientRect();
+        var dpr = window.devicePixelRatio || 1;
+        var w = Math.floor(rect.width * dpr);
+        var h = Math.floor(rect.height * dpr);
+        if (w === specCachedW && h === specCachedH) return;
+        specCanvas.width = w;
+        specCanvas.height = h;
+        specCtx = specCanvas.getContext("2d");
+        specCtx.scale(dpr, dpr);
+        specCachedW = w;
+        specCachedH = h;
+        var cssW = rect.width;
+        var cssH = rect.height;
+        specPlotX = 30;
+        specPlotY = 0;
+        specPlotW = cssW - 30;
+        specPlotH = cssH - 14;
+        if (specPlotW > 0) {
+            specBuildFreqLUT(Math.floor(specPlotW));
+            if (!specColorLUT) specBuildColorLUT();
+        }
+    }
+
+    function specDrawBackground() {
+        var cssW = specCachedW / (window.devicePixelRatio || 1);
+        var cssH = specCachedH / (window.devicePixelRatio || 1);
+        specCtx.fillStyle = "#0c0e12";
+        specCtx.fillRect(0, 0, cssW, cssH);
+
+        // dB grid lines
+        specCtx.strokeStyle = "rgba(200, 205, 214, 0.08)";
+        specCtx.lineWidth = 1;
+        var gridDB = [-12, -24, -36, -48];
+        for (var i = 0; i < gridDB.length; i++) {
+            var y = specDbToY(gridDB[i]);
+            specCtx.beginPath();
+            specCtx.moveTo(specPlotX, y);
+            specCtx.lineTo(specPlotX + specPlotW, y);
+            specCtx.stroke();
+        }
+
+        // dB labels
+        specCtx.fillStyle = "#6a7280";
+        specCtx.font = "8px monospace";
+        specCtx.textAlign = "right";
+        specCtx.textBaseline = "middle";
+        for (var m = 0; m < gridDB.length; m++) {
+            specCtx.fillText(gridDB[m] + " dB", specPlotX - 3, specDbToY(gridDB[m]));
+        }
+        specCtx.fillText("0 dB", specPlotX - 3, specDbToY(0));
+
+        // Frequency grid
+        var freqMajor = [100, 1000, 10000];
+        specCtx.strokeStyle = "rgba(200, 205, 214, 0.08)";
+        for (var k = 0; k < freqMajor.length; k++) {
+            var norm = specFreqToNorm(freqMajor[k]);
+            if (norm < 0 || norm > 1) continue;
+            var x = specPlotX + norm * specPlotW;
+            specCtx.beginPath();
+            specCtx.moveTo(x, specPlotY);
+            specCtx.lineTo(x, specPlotY + specPlotH);
+            specCtx.stroke();
+        }
+
+        // Frequency labels
+        var fLabels = [
+            { freq: 30, text: "30" }, { freq: 100, text: "100" },
+            { freq: 1000, text: "1k" }, { freq: 10000, text: "10k" },
+            { freq: 20000, text: "20k" }
+        ];
+        specCtx.textAlign = "center";
+        specCtx.textBaseline = "top";
+        for (var j = 0; j < fLabels.length; j++) {
+            var fNorm = specFreqToNorm(fLabels[j].freq);
+            if (fNorm < 0 || fNorm > 1) continue;
+            specCtx.fillText(fLabels[j].text, specPlotX + fNorm * specPlotW,
+                             specPlotY + specPlotH + 2);
+        }
+    }
+
+    function specDrawMountainRange() {
+        if (!specFreqData || !specFreqLUT || !specColorLUT) return;
+        var lutLen = specFreqLUT.length;
+        if (lutLen <= 0) return;
+        var baseline = specPlotY + specPlotH;
+
+        for (var x = 0; x < lutLen; x++) {
+            var db = specInterpolateDB(specFreqData, specFreqLUT[x]);
+            var y = specDbToY(db);
+            var colH = baseline - y;
+            if (colH > 0) {
+                specCtx.fillStyle = specDbToColor(db);
+                specCtx.fillRect(specPlotX + x, y, 1, colH);
+            }
+        }
+
+        // Outline
+        specCtx.beginPath();
+        for (var x2 = 0; x2 < lutLen; x2++) {
+            var db2 = specInterpolateDB(specFreqData, specFreqLUT[x2]);
+            var y2 = specDbToY(db2);
+            if (x2 === 0) specCtx.moveTo(specPlotX + x2, y2);
+            else specCtx.lineTo(specPlotX + x2, y2);
+        }
+        specCtx.strokeStyle = "rgba(220, 220, 240, 0.7)";
+        specCtx.lineWidth = 1.5;
+        specCtx.stroke();
+    }
+
+    function specRender() {
+        if (!specActive) { specAnimFrame = null; return; }
+        if (!specCtx || !specCanvas) {
+            specAnimFrame = requestAnimationFrame(specRender);
+            return;
+        }
+        specResizeCanvas();
+        if (specCachedW === 0 || specCachedH === 0) {
+            specAnimFrame = requestAnimationFrame(specRender);
+            return;
+        }
+        specDrawBackground();
+        if (specFreqData && specPcmConnected) {
+            specDrawMountainRange();
+        } else {
+            var cssW = specCachedW / (window.devicePixelRatio || 1);
+            var cssH = specCachedH / (window.devicePixelRatio || 1);
+            specCtx.fillStyle = "rgba(255, 255, 255, 0.3)";
+            specCtx.font = "16px monospace";
+            specCtx.textAlign = "center";
+            specCtx.textBaseline = "middle";
+            specCtx.fillText("No capture signal", cssW / 2, cssH / 2);
+        }
+        specAnimFrame = requestAnimationFrame(specRender);
+    }
+
+    // -- Capture spectrum WebSocket --
+
+    function specConnectPcm(source) {
+        specDisconnectPcm();
+        specCurrentSource = source;
+
+        var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+        var url = proto + "//" + window.location.host + "/ws/pcm/" + source;
+
+        try {
+            specPcmWs = new WebSocket(url);
+        } catch (e) {
+            specScheduleReconnect();
+            return;
+        }
+        specPcmWs.binaryType = "arraybuffer";
+
+        specPcmWs.onopen = function () {
+            specPcmConnected = true;
+            updateMicStatus("connected", source);
+        };
+
+        specPcmWs.onmessage = function (ev) {
+            var data = ev.data;
+            if (data.byteLength < 4) return;
+            var pcm = new Float32Array(data, 4);
+            var frames = Math.floor(pcm.length / SPEC_NUM_CHANNELS);
+            for (var i = 0; i < frames; i++) {
+                var mono = 0.5 * pcm[i * SPEC_NUM_CHANNELS] +
+                           0.5 * pcm[i * SPEC_NUM_CHANNELS + 1];
+                specAccumBuf[specAccumPos] = mono;
+                specAccumPos++;
+                if (specAccumPos >= SPEC_FFT_SIZE) {
+                    specProcessFFT();
+                    specAccumBuf.copyWithin(0, SPEC_FFT_SIZE / 2);
+                    specAccumPos = SPEC_FFT_SIZE / 2;
+                }
+            }
+        };
+
+        specPcmWs.onclose = function () {
+            specPcmConnected = false;
+            specPcmWs = null;
+            updateMicStatus("disconnected", source);
+            if (specActive) specScheduleReconnect();
+        };
+
+        specPcmWs.onerror = function () {
+            specPcmConnected = false;
+        };
+    }
+
+    function specDisconnectPcm() {
+        if (specReconnectTimer) {
+            clearTimeout(specReconnectTimer);
+            specReconnectTimer = null;
+        }
+        if (specPcmWs) {
+            specPcmWs.onclose = null;
+            specPcmWs.close();
+            specPcmWs = null;
+        }
+        specPcmConnected = false;
+        // Reset FFT state for clean source switch.
+        specAccumPos = 0;
+        specSmoothedDB = null;
+        specFreqData = null;
+    }
+
+    function specScheduleReconnect() {
+        if (specReconnectTimer) return;
+        specReconnectTimer = setTimeout(function () {
+            specReconnectTimer = null;
+            if (specActive && specCurrentSource) {
+                specConnectPcm(specCurrentSource);
+            }
+        }, 3000);
+    }
+
+    function updateMicStatus(status, source) {
+        var el = $("tt-mic-state");
+        if (!el) return;
+        var label = source || "unknown";
+        if (status === "connected") {
+            el.textContent = label + " (streaming)";
+            el.className = "c-green";
+        } else {
+            el.textContent = label + " (not available)";
+            el.className = "c-red";
+        }
+    }
+
+    // -- Source selector --
+
+    function initSourceSelector() {
+        var select = $("tt-spectrum-source");
+        if (!select) return;
+
+        // Populate from /api/v1/pcm-sources if available (PCM-MODE-2).
+        fetchPcmSources(select);
+
+        select.addEventListener("change", function () {
+            var source = this.value;
+            if (specActive) {
+                specConnectPcm(source);
+            }
+        });
+    }
+
+    function fetchPcmSources(select) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "/api/v1/pcm-sources", true);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status !== 200) return;
+            try {
+                var data = JSON.parse(xhr.responseText);
+                if (data.sources && data.sources.length > 0) {
+                    populateSourceOptions(select, data.sources);
+                }
+            } catch (e) { /* Keep static options */ }
+        };
+        xhr.send();
+    }
+
+    function populateSourceOptions(select, sources) {
+        // Map well-known source names to display labels.
+        var labels = {
+            "monitor": "Monitor (Dashboard)",
+            "capture-usb": "UMIK-1 (USB capture)",
+            "capture-adat": "ADAT capture"
+        };
+
+        var currentValue = select.value;
+        select.innerHTML = "";
+
+        for (var i = 0; i < sources.length; i++) {
+            var name = sources[i];
+            var opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = labels[name] || name;
+            select.appendChild(opt);
+        }
+
+        // Restore previous selection if it still exists.
+        if (sources.indexOf(currentValue) >= 0) {
+            select.value = currentValue;
+        }
+    }
+
+    // -- Spectrum init/destroy --
+
+    function initSpectrum() {
+        specCanvas = $("tt-spectrum-canvas");
+        if (!specCanvas) return;
+        specCtx = specCanvas.getContext("2d");
+        specInitWindow();
+        specBuildColorLUT();
+
+        window.addEventListener("resize", function () {
+            specCachedW = 0;
+            specCachedH = 0;
+        });
+
+        specActive = true;
+        specAnimFrame = requestAnimationFrame(specRender);
+
+        // Connect to selected source.
+        var select = $("tt-spectrum-source");
+        var source = select ? select.value : "monitor";
+        specConnectPcm(source);
+    }
+
+    function destroySpectrum() {
+        specActive = false;
+        if (specAnimFrame) {
+            cancelAnimationFrame(specAnimFrame);
+            specAnimFrame = null;
+        }
+        specDisconnectPcm();
+    }
+
     // -- View lifecycle --
 
     PiAudio.registerView("test", {
@@ -450,16 +959,19 @@
             initDuration();
             initPlayStop();
             initEmergencyStop();
+            initSourceSelector();
             // Start with correct frequency section visibility.
             selectSignal("sine");
         },
 
         onShow: function () {
             connectWs();
+            initSpectrum();
         },
 
         onHide: function () {
-            // Keep WS alive so STOP still works from status bar.
+            // Keep siggen WS alive so STOP still works from status bar.
+            destroySpectrum();
         }
     });
 
