@@ -178,6 +178,90 @@ class TestMockSweepRecordDeconvolve(unittest.TestCase):
         )
 
 
+class TestMockCalibrationLevels(unittest.TestCase):
+    """Verify that mock mode produces levels within the calibration safety
+    window so that ``measure_nearfield.py --mock`` works WITHOUT
+    ``--skip-calibration-phase``.
+    """
+
+    def setUp(self):
+        self.sd = MockSoundDevice(room_config_path=_ROOM_CONFIG_PATH)
+
+    def test_mock_calibration_pass(self):
+        """phase1_calibration should PASS with default levels in mock mode."""
+        from measure_nearfield import (
+            phase1_calibration, generate_pink_noise,
+            CAL_TARGET_MIN_PEAK_DBFS, CAL_TARGET_MAX_PEAK_DBFS,
+            _sd_override,
+        )
+        import measure_nearfield
+
+        # Inject mock sd
+        old_override = measure_nearfield._sd_override
+        measure_nearfield._sd_override = self.sd
+        try:
+            cal_pass = phase1_calibration(
+                output_channel=0,
+                output_device_idx=0,
+                input_device_idx=1,
+                level_dbfs=-20.0,
+                duration_s=2.0,
+                sr=SAMPLE_RATE,
+            )
+            self.assertTrue(cal_pass, "Mock calibration should PASS")
+        finally:
+            measure_nearfield._sd_override = old_override
+
+    def test_mock_mic_peak_within_calibration_window(self):
+        """Mock playrec mic peak should be within -40 to -10 dBFS."""
+        from measure_nearfield import (
+            generate_pink_noise,
+            CAL_TARGET_MIN_PEAK_DBFS, CAL_TARGET_MAX_PEAK_DBFS,
+        )
+
+        noise = generate_pink_noise(2.0, sr=SAMPLE_RATE, level_dbfs=-20.0)
+        output_buffer = np.zeros((len(noise), 8), dtype=np.float32)
+        output_buffer[:, 0] = noise.astype(np.float32)
+
+        recording = self.sd.playrec(output_buffer, samplerate=SAMPLE_RATE)
+        mic_peak = np.max(np.abs(recording[:, 0]))
+        peak_dbfs = 20 * np.log10(max(mic_peak, 1e-10))
+
+        self.assertGreaterEqual(
+            peak_dbfs, CAL_TARGET_MIN_PEAK_DBFS,
+            f"Mock mic peak {peak_dbfs:.1f} dBFS below calibration minimum "
+            f"{CAL_TARGET_MIN_PEAK_DBFS:.0f} dBFS"
+        )
+        self.assertLessEqual(
+            peak_dbfs, CAL_TARGET_MAX_PEAK_DBFS,
+            f"Mock mic peak {peak_dbfs:.1f} dBFS above calibration maximum "
+            f"{CAL_TARGET_MAX_PEAK_DBFS:.0f} dBFS"
+        )
+
+    def test_custom_attenuation_disables_default(self):
+        """MockSoundDevice with attenuation_db=0 should produce hot levels."""
+        sd_no_atten = MockSoundDevice(
+            room_config_path=_ROOM_CONFIG_PATH,
+            measurement_attenuation_db=0.0,
+        )
+        from measure_nearfield import generate_pink_noise
+
+        noise = generate_pink_noise(1.0, sr=SAMPLE_RATE, level_dbfs=-20.0)
+        output_buffer = np.zeros((len(noise), 8), dtype=np.float32)
+        output_buffer[:, 0] = noise.astype(np.float32)
+
+        recording = sd_no_atten.playrec(output_buffer, samplerate=SAMPLE_RATE)
+        mic_peak = np.max(np.abs(recording[:, 0]))
+        peak_dbfs = 20 * np.log10(max(mic_peak, 1e-10))
+
+        # Without attenuation, peak should be hotter than -10 dBFS
+        self.assertGreater(
+            peak_dbfs, -10.0,
+            f"Without attenuation, mock mic peak {peak_dbfs:.1f} dBFS "
+            f"should be above -10 dBFS"
+        )
+
+
 class TestMockCamillaClientLevels(unittest.TestCase):
     """Test the MockCamillaClient levels namespace (US-047 muting verification)."""
 

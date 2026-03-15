@@ -86,12 +86,29 @@ class MockSoundDevice:
     Instantiate once and use in place of ``import sounddevice as sd``.  The
     class holds the room configuration so that ``playrec`` can generate
     realistic simulated recordings.
+
+    Parameters
+    ----------
+    room_config_path : str or None
+        Path to room config YAML.  Defaults to ``mock/room_config.yml``.
+    measurement_attenuation_db : float
+        Attenuation applied to the recording to model the -20 dB gain that
+        CamillaDSP applies in the production measurement config.  Without
+        this, mock mic levels are ~-6 dBFS (too hot for the calibration
+        safety window of -40 to -10 dBFS).
     """
 
-    def __init__(self, room_config_path=None):
+    # Production measurement attenuation (CamillaDSP Gain filter on the
+    # test channel).  Matches MEASUREMENT_ATTENUATION_DB in measure_nearfield.py.
+    _DEFAULT_MEASUREMENT_ATTENUATION_DB = -20.0
+
+    def __init__(self, room_config_path=None, measurement_attenuation_db=None):
         if room_config_path is None:
             room_config_path = _DEFAULT_ROOM_CONFIG_PATH
         self._room_config = load_room_config(room_config_path)
+        if measurement_attenuation_db is None:
+            measurement_attenuation_db = self._DEFAULT_MEASUREMENT_ATTENUATION_DB
+        self._measurement_attenuation = 10.0 ** (measurement_attenuation_db / 20.0)
 
         # Extract speaker and mic positions from the room config
         speakers = self._room_config.get("speakers", {})
@@ -178,6 +195,11 @@ class MockSoundDevice:
             recording = recording[:n_samples]
         elif len(recording) < n_samples:
             recording = np.pad(recording, (0, n_samples - len(recording)))
+
+        # Apply measurement attenuation (models CamillaDSP -20 dB gain in
+        # the production measurement config).  Without this, mock mic levels
+        # are too hot for the calibration safety check.
+        recording = recording * self._measurement_attenuation
 
         # Add a subtle noise floor for realism (deterministic)
         noise = _RNG.randn(n_samples) * 1e-5
