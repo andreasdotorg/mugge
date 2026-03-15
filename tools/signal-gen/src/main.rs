@@ -552,6 +552,78 @@ fn dbfs_to_linear(dbfs: f32) -> f32 {
 // PipeWire playback stream
 // ---------------------------------------------------------------------------
 
+/// Build an SPA audio format pod for stream negotiation as raw bytes.
+///
+/// Port count in PipeWire is driven by the format params passed to
+/// `stream.connect()`, not by the `audio.channels` node property.
+/// Without format params, PipeWire never creates ports and WirePlumber
+/// cannot auto-link the stream (BUG-SG12-5 / TK-236).
+///
+/// The pod is constructed directly in the SPA wire format because the
+/// `spa_pod_builder_*` C functions are inline and not exposed by bindgen.
+#[allow(non_upper_case_globals)]
+fn build_audio_format(channels: u32, rate: u32) -> Vec<u8> {
+    // SPA pod wire format (all little-endian, 8-byte aligned):
+    //
+    // Pod header:     size:u32, type:u32
+    // Object body:    body_type:u32, body_id:u32
+    // Property:       key:u32, flags:u32, value_pod(size:u32, type:u32, data...)
+    //
+    // Constants from spa/utils/type.h and spa/param/format.h:
+    const SPA_TYPE_OBJECT_Format: u32 = 0x40002;
+    const SPA_PARAM_EnumFormat: u32 = 3;
+    const SPA_FORMAT_mediaType: u32 = 1;
+    const SPA_FORMAT_mediaSubtype: u32 = 2;
+    const SPA_FORMAT_AUDIO_format: u32 = 0x10001;
+    const SPA_FORMAT_AUDIO_rate: u32 = 0x10004;
+    const SPA_FORMAT_AUDIO_channels: u32 = 0x10005;
+    const SPA_MEDIA_TYPE_audio: u32 = 0;
+    const SPA_MEDIA_SUBTYPE_raw: u32 = 1;
+    const SPA_AUDIO_FORMAT_F32LE: u32 = 3;
+
+    let mut buf = Vec::with_capacity(136);
+
+    // Helper: write a property with an Id value (SPA_TYPE_Id = 4)
+    fn write_prop_id(buf: &mut Vec<u8>, key: u32, val: u32) {
+        buf.extend_from_slice(&key.to_le_bytes());    // property key
+        buf.extend_from_slice(&0u32.to_le_bytes());    // property flags
+        buf.extend_from_slice(&4u32.to_le_bytes());    // pod size
+        buf.extend_from_slice(&4u32.to_le_bytes());    // pod type = SPA_TYPE_Id
+        buf.extend_from_slice(&val.to_le_bytes());     // value
+        buf.extend_from_slice(&[0u8; 4]);              // pad to 8-byte align
+    }
+
+    // Helper: write a property with an Int value (SPA_TYPE_Int = 6)
+    fn write_prop_int(buf: &mut Vec<u8>, key: u32, val: i32) {
+        buf.extend_from_slice(&key.to_le_bytes());
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.extend_from_slice(&4u32.to_le_bytes());    // pod size
+        buf.extend_from_slice(&6u32.to_le_bytes());    // pod type = SPA_TYPE_Int
+        buf.extend_from_slice(&val.to_le_bytes());
+        buf.extend_from_slice(&[0u8; 4]);              // pad to 8-byte align
+    }
+
+    // Object pod header (size filled in at end)
+    let header_pos = buf.len();
+    buf.extend_from_slice(&0u32.to_le_bytes());                        // size placeholder
+    buf.extend_from_slice(&SPA_TYPE_OBJECT_Format.to_le_bytes());      // type
+    buf.extend_from_slice(&SPA_TYPE_OBJECT_Format.to_le_bytes());      // body type
+    buf.extend_from_slice(&SPA_PARAM_EnumFormat.to_le_bytes());        // body id
+
+    // Properties
+    write_prop_id(&mut buf, SPA_FORMAT_mediaType, SPA_MEDIA_TYPE_audio);
+    write_prop_id(&mut buf, SPA_FORMAT_mediaSubtype, SPA_MEDIA_SUBTYPE_raw);
+    write_prop_id(&mut buf, SPA_FORMAT_AUDIO_format, SPA_AUDIO_FORMAT_F32LE);
+    write_prop_int(&mut buf, SPA_FORMAT_AUDIO_rate, rate as i32);
+    write_prop_int(&mut buf, SPA_FORMAT_AUDIO_channels, channels as i32);
+
+    // Fill in object body size
+    let body_size = (buf.len() - header_pos - 8) as u32;
+    buf[header_pos..header_pos + 4].copy_from_slice(&body_size.to_le_bytes());
+
+    buf
+}
+
 /// Run the PipeWire main loop with playback and capture streams.
 ///
 /// This function blocks until the shutdown flag is set.
@@ -584,6 +656,7 @@ fn run_pipewire(
         "media.type" => "Audio",
         "media.category" => "Playback",
         "media.role" => "Production",
+        "media.class" => "Stream/Output/Audio",
         "node.name" => "pi4audio-signal-gen",
         "node.description" => "RT Signal Generator",
         "target.object" => &*args.target,
@@ -595,7 +668,14 @@ fn run_pipewire(
         pipewire::stream::Stream::new(&core, "pi4audio-signal-gen", playback_props)
             .expect("Failed to create PipeWire playback stream");
 
-    let mut playback_params: [&libspa::pod::Pod; 0] = [];
+    // SPA format params: F32LE at configured rate and channel count.
+    // Drives PipeWire port creation — without this, PipeWire never
+    // creates ports and WirePlumber cannot auto-link (BUG-SG12-5).
+    let playback_fmt_bytes = build_audio_format(args.channels, args.rate);
+    let playback_fmt_pod = unsafe {
+        &*(playback_fmt_bytes.as_ptr() as *const libspa::pod::Pod)
+    };
+    let mut playback_params: [&libspa::pod::Pod; 1] = [playback_fmt_pod];
 
     // Process callback state.
     let mut proc_state = ProcessState::new(
@@ -705,6 +785,7 @@ fn run_pipewire(
         "media.type" => "Audio",
         "media.category" => "Capture",
         "media.role" => "Production",
+        "media.class" => "Stream/Input/Audio",
         "node.name" => "pi4audio-signal-gen-capture",
         "node.description" => "RT Signal Generator (UMIK-1 capture)",
         "target.object" => &*args.capture_target,
@@ -716,7 +797,12 @@ fn run_pipewire(
         pipewire::stream::Stream::new(&core, "pi4audio-signal-gen-capture", capture_props)
             .expect("Failed to create PipeWire capture stream");
 
-    let mut capture_params: [&libspa::pod::Pod; 0] = [];
+    // SPA format params: mono F32LE at configured rate (BUG-SG12-5).
+    let capture_fmt_bytes = build_audio_format(1, args.rate);
+    let capture_fmt_pod = unsafe {
+        &*(capture_fmt_bytes.as_ptr() as *const libspa::pod::Pod)
+    };
+    let mut capture_params: [&libspa::pod::Pod; 1] = [capture_fmt_pod];
 
     let cap_buf_for_cb = capture_buf.clone();
 
@@ -867,6 +953,7 @@ fn run_rpc_server(
     state_queue: Arc<StateQueue>,
     capture_buf: Arc<CaptureRingBuffer>,
     event_queue: Arc<DeviceEventQueue>,
+    conn_state: Arc<CaptureConnectionState>,
     shutdown: Arc<AtomicBool>,
     max_level_dbfs: f64,
 ) {
@@ -903,6 +990,7 @@ fn run_rpc_server(
                     &state_queue,
                     &capture_buf,
                     &event_queue,
+                    &conn_state,
                     &shutdown,
                     max_level_dbfs,
                     &mut latest_state,
@@ -930,6 +1018,7 @@ fn handle_client(
     state_queue: &StateQueue,
     capture_buf: &CaptureRingBuffer,
     event_queue: &DeviceEventQueue,
+    conn_state: &CaptureConnectionState,
     shutdown: &AtomicBool,
     max_level_dbfs: f64,
     latest_state: &mut StateSnapshot,
@@ -992,7 +1081,7 @@ fn handle_client(
                 let response = match rpc::parse_line(line) {
                     Ok(req) => {
                         let result =
-                            rpc::handle_request(&req, cmd_queue, max_level_dbfs, latest_state);
+                            rpc::handle_request(&req, cmd_queue, max_level_dbfs, latest_state, conn_state.is_connected());
                         match result {
                             rpc::HandleResult::Ack(cmd) => rpc::format_ack(&cmd),
                             rpc::HandleResult::Error(cmd, msg) => {
@@ -1132,6 +1221,7 @@ fn main() {
     let rpc_state_queue = state_queue.clone();
     let rpc_capture_buf = capture_buf.clone();
     let rpc_event_queue = event_queue.clone();
+    let rpc_conn_state = conn_state.clone();
     let rpc_shutdown = shutdown.clone();
     let max_level_dbfs = args.max_level_dbfs;
     let rpc_thread = std::thread::Builder::new()
@@ -1143,6 +1233,7 @@ fn main() {
                 rpc_state_queue,
                 rpc_capture_buf,
                 rpc_event_queue,
+                rpc_conn_state,
                 rpc_shutdown,
                 max_level_dbfs,
             );
@@ -1734,5 +1825,56 @@ mod tests {
         // Second call fails -- recording consumed.
         let response2 = format_get_recording_response(&capture);
         assert!(response2.contains("no recording available"));
+    }
+
+    // --- BUG-SG12-5: build_audio_format regression tests ---
+
+    #[test]
+    fn build_audio_format_size_and_alignment() {
+        let pod = build_audio_format(8, 48000);
+        assert_eq!(pod.len() % 8, 0, "SPA pod must be 8-byte aligned");
+        // 5 properties * 24 bytes each = 120, plus 16 bytes header = 136.
+        assert_eq!(pod.len(), 136);
+    }
+
+    #[test]
+    fn build_audio_format_header_type() {
+        let pod = build_audio_format(2, 44100);
+        // Bytes 4..8 are the pod type (SPA_TYPE_OBJECT_Format = 0x40002).
+        let pod_type = u32::from_le_bytes(pod[4..8].try_into().unwrap());
+        assert_eq!(pod_type, 0x40002);
+    }
+
+    #[test]
+    fn build_audio_format_body_size() {
+        let pod = build_audio_format(3, 48000);
+        // Bytes 0..4 are the body size (total - 8 byte pod header).
+        let body_size = u32::from_le_bytes(pod[0..4].try_into().unwrap());
+        assert_eq!(body_size as usize, pod.len() - 8);
+    }
+
+    #[test]
+    fn build_audio_format_channels_embedded() {
+        let pod = build_audio_format(8, 48000);
+        // channels property value at: 16 + 4*24 + 16 = 128.
+        let ch_val = u32::from_le_bytes(pod[128..132].try_into().unwrap());
+        assert_eq!(ch_val, 8);
+    }
+
+    #[test]
+    fn build_audio_format_rate_embedded() {
+        let pod = build_audio_format(2, 96000);
+        // rate property value at: 16 + 3*24 + 16 = 104.
+        let rate_val = i32::from_le_bytes(pod[104..108].try_into().unwrap());
+        assert_eq!(rate_val, 96000);
+    }
+
+    #[test]
+    fn build_audio_format_mono_capture() {
+        // Capture stream uses 1 channel -- verify it produces valid pod.
+        let pod = build_audio_format(1, 48000);
+        assert_eq!(pod.len(), 136);
+        let ch_val = u32::from_le_bytes(pod[128..132].try_into().unwrap());
+        assert_eq!(ch_val, 1);
     }
 }

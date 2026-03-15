@@ -232,15 +232,19 @@ pub enum HandleResult {
 ///
 /// `max_level_dbfs` is the immutable hard cap from `--max-level-dbfs`.
 /// `latest_state` is the most recent StateSnapshot from the feedback queue.
+/// `capture_connected` indicates whether the capture device is present
+/// in the PipeWire registry. Used to reject `playrec` when no capture
+/// source is available (BUG-SG12-4).
 pub fn handle_request(
     req: &RpcRequest,
     cmd_queue: &CommandQueue,
     max_level_dbfs: f64,
     latest_state: &StateSnapshot,
+    capture_connected: bool,
 ) -> HandleResult {
     match req.cmd.as_str() {
-        "play" => handle_play(req, cmd_queue, max_level_dbfs, false),
-        "playrec" => handle_play(req, cmd_queue, max_level_dbfs, true),
+        "play" => handle_play(req, cmd_queue, max_level_dbfs, false, capture_connected),
+        "playrec" => handle_play(req, cmd_queue, max_level_dbfs, true, capture_connected),
         "stop" => handle_stop(cmd_queue),
         "set_level" => handle_set_level(req, cmd_queue, max_level_dbfs),
         "set_signal" => handle_set_signal(req, cmd_queue),
@@ -261,8 +265,19 @@ fn handle_play(
     cmd_queue: &CommandQueue,
     max_level_dbfs: f64,
     is_playrec: bool,
+    capture_connected: bool,
 ) -> HandleResult {
     let cmd_name = if is_playrec { "playrec" } else { "play" };
+
+    // BUG-SG12-4: Reject playrec when capture device is not connected.
+    // Without this check, playrec silently records nothing and
+    // get_recording returns "no recording available".
+    if is_playrec && !capture_connected {
+        return HandleResult::Error(
+            cmd_name.to_string(),
+            "capture device not connected".to_string(),
+        );
+    }
 
     // Signal type (required).
     let signal_str = match &req.signal {
@@ -773,7 +788,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_level","level_dbfs":-5.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "set_level");
@@ -789,7 +804,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_level","level_dbfs":-20.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Ack(cmd) => assert_eq!(cmd, "set_level"),
             HandleResult::Error(_, msg) => panic!("Should accept at cap: {}", msg),
@@ -803,7 +818,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_level","level_dbfs":-30.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Ack(cmd) => assert_eq!(cmd, "set_level"),
             _ => panic!("Expected ack"),
@@ -816,7 +831,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"play","signal":"sine","channels":[1],"level_dbfs":-5.0,"freq":1000.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "play");
@@ -836,7 +851,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_freq","freq":10.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "set_freq");
@@ -852,7 +867,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_freq","freq":25000.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "set_freq");
@@ -868,7 +883,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_freq","freq":1000.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Ack(cmd) => assert_eq!(cmd, "set_freq"),
             _ => panic!("Expected ack for valid freq"),
@@ -883,12 +898,12 @@ mod tests {
         // Exactly 20 Hz.
         let json = r#"{"cmd":"set_freq","freq":20.0}"#;
         let req = parse_line(json).unwrap();
-        assert!(matches!(handle_request(&req, &q, -20.0, &state), HandleResult::Ack(_)));
+        assert!(matches!(handle_request(&req, &q, -20.0, &state, true), HandleResult::Ack(_)));
 
         // Exactly 20000 Hz.
         let json = r#"{"cmd":"set_freq","freq":20000.0}"#;
         let req = parse_line(json).unwrap();
-        assert!(matches!(handle_request(&req, &q, -20.0, &state), HandleResult::Ack(_)));
+        assert!(matches!(handle_request(&req, &q, -20.0, &state, true), HandleResult::Ack(_)));
     }
 
     // -----------------------------------------------------------------------
@@ -901,7 +916,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_channel","channels":[9]}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "set_channel");
@@ -917,7 +932,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"play","signal":"sine","channels":[1,3,5],"level_dbfs":-20.0,"freq":1000.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         assert!(matches!(result, HandleResult::Ack(_)));
 
         // Verify the command was pushed with correct bitmask.
@@ -940,7 +955,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"play","signal":"sweep","channels":[1],"level_dbfs":-20.0,"freq":1000.0,"sweep_end":500.0,"duration":1.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Error(_, msg) => {
                 assert!(msg.contains("must be > freq"), "Error: {}", msg);
@@ -959,7 +974,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"playrec","signal":"pink","channels":[1],"level_dbfs":-20.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "playrec");
@@ -992,7 +1007,7 @@ mod tests {
         let q = make_queue();
         let json = r#"{"cmd":"status"}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
 
         match result {
             HandleResult::StatusJson(json_str) => {
@@ -1052,7 +1067,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"stop"}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         assert!(matches!(result, HandleResult::Ack(_)));
 
         let cmd = q.pop().unwrap();
@@ -1069,7 +1084,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"reboot"}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state);
+        let result = handle_request(&req, &q, -20.0, &state, true);
         match result {
             HandleResult::Error(_, msg) => {
                 assert!(msg.contains("unknown command"), "Error: {}", msg);
@@ -1152,5 +1167,67 @@ mod tests {
         assert!(validate_level(-19.9, -20.0).is_err()); // above cap
         assert!(validate_level(-60.0, -20.0).is_ok()); // at minimum
         assert!(validate_level(-61.0, -20.0).is_err()); // below minimum
+    }
+
+    // -----------------------------------------------------------------------
+    // BUG-SG12-4: playrec rejected when capture disconnected
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn playrec_rejected_when_capture_disconnected() {
+        let q = make_queue();
+        let state = default_state();
+        let json = r#"{"cmd":"playrec","signal":"sweep","channels":[1],"level_dbfs":-20.0,"freq":20.0,"sweep_end":20000.0,"duration":10.0}"#;
+        let req = parse_line(json).unwrap();
+        let result = handle_request(&req, &q, -20.0, &state, false);
+        match result {
+            HandleResult::Error(cmd, msg) => {
+                assert_eq!(cmd, "playrec");
+                assert!(
+                    msg.contains("capture device not connected"),
+                    "Error: {}",
+                    msg
+                );
+            }
+            _ => panic!("Expected error for playrec with disconnected capture"),
+        }
+        // Verify no command was pushed to the queue.
+        assert!(q.pop().is_none(), "No command should be queued");
+    }
+
+    #[test]
+    fn playrec_accepted_when_capture_connected() {
+        let q = make_queue();
+        let state = default_state();
+        let json = r#"{"cmd":"playrec","signal":"sweep","channels":[1],"level_dbfs":-20.0,"freq":20.0,"sweep_end":20000.0,"duration":10.0}"#;
+        let req = parse_line(json).unwrap();
+        let result = handle_request(&req, &q, -20.0, &state, true);
+        match result {
+            HandleResult::Ack(cmd) => assert_eq!(cmd, "playrec"),
+            HandleResult::Error(_, msg) => {
+                panic!("playrec should be accepted when capture connected: {}", msg)
+            }
+            _ => panic!("Expected Ack"),
+        }
+        // Verify the command was queued.
+        let cmd = q.pop().unwrap();
+        assert!(matches!(cmd.kind, CommandKind::Playrec { .. }));
+    }
+
+    #[test]
+    fn play_accepted_when_capture_disconnected() {
+        // Regular play (not playrec) should work regardless of capture state.
+        let q = make_queue();
+        let state = default_state();
+        let json = r#"{"cmd":"play","signal":"sine","channels":[1],"level_dbfs":-20.0,"freq":1000.0}"#;
+        let req = parse_line(json).unwrap();
+        let result = handle_request(&req, &q, -20.0, &state, false);
+        match result {
+            HandleResult::Ack(cmd) => assert_eq!(cmd, "play"),
+            HandleResult::Error(_, msg) => {
+                panic!("play should succeed even without capture: {}", msg)
+            }
+            _ => panic!("Expected Ack"),
+        }
     }
 }
