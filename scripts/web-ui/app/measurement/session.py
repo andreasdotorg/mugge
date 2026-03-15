@@ -565,44 +565,6 @@ class MeasurementSession:
             log.info("CamillaDSP reloaded with measurement config for "
                      "channel %d (state: %s)", test_channel, state_name)
 
-            # Set PipeWire quantum to match CamillaDSP chunksize (2048) AFTER
-            # the measurement config is loaded and CamillaDSP is verified
-            # RUNNING.  Doing this earlier (in _run_setup) causes PipeWire to
-            # renegotiate the graph before the config swap, breaking the audio
-            # stream.  Only set once per session (guard on _quantum_overridden).
-            if not self._quantum_overridden:
-                import subprocess
-                try:
-                    subprocess.run(
-                        ["pw-metadata", "-n", "settings", "0",
-                         "clock.force-quantum", "2048"],
-                        check=True, capture_output=True, timeout=5,
-                    )
-                    log.info("PipeWire quantum set to 2048 for measurement")
-                    self._quantum_overridden = True
-                    # Let the PipeWire graph settle after quantum change before
-                    # any sd.playrec() calls.
-                    await asyncio.sleep(2.0)
-                    # Re-check CamillaDSP state — the quantum change can cause
-                    # PipeWire to renegotiate, which may transiently drop CDSP.
-                    state = await asyncio.to_thread(
-                        self._cdsp_client.general.state)
-                    state_name = getattr(state, "name", str(state))
-                    if state_name != "RUNNING":
-                        log.warning(
-                            "CamillaDSP dropped to %s after quantum change, "
-                            "waiting...", state_name)
-                        await asyncio.sleep(2.0)
-                        state = await asyncio.to_thread(
-                            self._cdsp_client.general.state)
-                        state_name = getattr(state, "name", str(state))
-                        if state_name != "RUNNING":
-                            raise RuntimeError(
-                                f"CamillaDSP failed to recover after quantum "
-                                f"change (state: {state_name})")
-                except Exception as e:
-                    log.warning("Failed to set PipeWire quantum: %s", e)
-                    self._quantum_overridden = False
         except Exception:
             # On failure, try to restore production config.
             try:
@@ -1016,19 +978,6 @@ class MeasurementSession:
             self._cdsp_client = None
 
     async def _cleanup(self) -> None:
-        # Restore PipeWire quantum to default if we overrode it.
-        if getattr(self, '_quantum_overridden', False) and not self._is_mock:
-            import subprocess
-            try:
-                subprocess.run(
-                    ["pw-metadata", "-n", "settings", "0",
-                     "clock.force-quantum", "0"],
-                    check=True, capture_output=True, timeout=5,
-                )
-                log.info("PipeWire quantum restored to default")
-            except Exception as e:
-                log.warning("Failed to restore PipeWire quantum: %s", e)
-
         await self._watchdog.stop()
         if self._pump_task and not self._pump_task.done():
             self._pump_task.cancel()
