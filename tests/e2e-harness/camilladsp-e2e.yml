@@ -1,0 +1,148 @@
+# CamillaDSP E2E harness config — PipeWire backend.
+#
+# Used by the E2E test harness (US-050) to run a real CamillaDSP instance
+# connected to PipeWire.  The signal-gen plays into the capture node,
+# CamillaDSP processes with measurement attenuation, and the room
+# simulator reads from the playback node.
+#
+# Node names are prefixed "pi4audio-e2e-" so the port wiring module can
+# locate them without colliding with production nodes.
+#
+# Measurement attenuation pattern matches production:
+#   - Test channel (ch 0): -20 dB gain
+#   - All other channels: -100 dB (muted)
+# The harness can hot-swap the test channel at runtime via
+# CamillaDSP set_config_file_path / reload.
+
+devices:
+  samplerate: 48000
+  chunksize: 2048
+  queuelimit: 4
+  capture:
+    type: PipeWire
+    channels: 8
+    device: "pi4audio-e2e-cdsp-capture"
+  playback:
+    type: PipeWire
+    channels: 8
+    device: "pi4audio-e2e-cdsp-playback"
+
+mixers:
+  passthrough:
+    channels:
+      in: 8
+      out: 8
+    mapping:
+      - dest: 0
+        sources:
+          - channel: 0
+            gain: 0
+            inverted: false
+      - dest: 1
+        sources:
+          - channel: 1
+            gain: 0
+            inverted: false
+      - dest: 2
+        sources:
+          - channel: 2
+            gain: 0
+            inverted: false
+      - dest: 3
+        sources:
+          - channel: 3
+            gain: 0
+            inverted: false
+      - dest: 4
+        sources:
+          - channel: 4
+            gain: 0
+            inverted: false
+      - dest: 5
+        sources:
+          - channel: 5
+            gain: 0
+            inverted: false
+      - dest: 6
+        sources:
+          - channel: 6
+            gain: 0
+            inverted: false
+      - dest: 7
+        sources:
+          - channel: 7
+            gain: 0
+            inverted: false
+
+filters:
+  # Test channel: measurement attenuation (-20 dB, matching production)
+  ch0_gain:
+    type: Gain
+    parameters:
+      gain: -20.0
+
+  # Non-test channels: muted
+  ch1_mute:
+    type: Gain
+    parameters:
+      gain: -100.0
+  ch2_mute:
+    type: Gain
+    parameters:
+      gain: -100.0
+  ch3_mute:
+    type: Gain
+    parameters:
+      gain: -100.0
+  ch4_mute:
+    type: Gain
+    parameters:
+      gain: -100.0
+  ch5_mute:
+    type: Gain
+    parameters:
+      gain: -100.0
+  ch6_mute:
+    type: Gain
+    parameters:
+      gain: -100.0
+  ch7_mute:
+    type: Gain
+    parameters:
+      gain: -100.0
+
+pipeline:
+  - type: Mixer
+    name: passthrough
+  - type: Filter
+    channels: [0]
+    names:
+      - ch0_gain
+  - type: Filter
+    channels: [1]
+    names:
+      - ch1_mute
+  - type: Filter
+    channels: [2]
+    names:
+      - ch2_mute
+  - type: Filter
+    channels: [3]
+    names:
+      - ch3_mute
+  - type: Filter
+    channels: [4]
+    names:
+      - ch4_mute
+  - type: Filter
+    channels: [5]
+    names:
+      - ch5_mute
+  - type: Filter
+    channels: [6]
+    names:
+      - ch6_mute
+  - type: Filter
+    channels: [7]
+    names:
+      - ch7_mute
