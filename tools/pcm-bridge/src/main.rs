@@ -29,7 +29,7 @@ use log::{info, warn};
 struct Args {
     /// PipeWire target node name to capture from.
     /// This is matched against the node.name property in PipeWire.
-    #[arg(long, default_value = "CamillaDSP")]
+    #[arg(long, default_value = "loopback-8ch-sink")]
     target: String,
 
     /// Listen address. Use "tcp:HOST:PORT" for TCP or "unix:PATH" for Unix socket.
@@ -120,6 +120,85 @@ fn main() {
     info!("pcm-bridge shutdown complete");
 }
 
+/// Build an SPA audio format pod for stream negotiation as raw bytes.
+///
+/// PipeWire requires at least one format param to connect a stream to the
+/// graph. Without it the stream stays Suspended because the session manager
+/// cannot negotiate a format. We request F32 interleaved at the configured
+/// rate and channel count, which matches CamillaDSP's native format.
+///
+/// The pod is constructed directly in the SPA wire format rather than using
+/// the spa_pod_builder C API, because those are inline functions that bindgen
+/// does not expose in libspa-sys.
+#[allow(non_upper_case_globals)]
+fn build_audio_format(channels: u32, rate: u32) -> Vec<u8> {
+    // SPA pod wire format (all little-endian, 8-byte aligned):
+    //
+    // Pod header:     size:u32, type:u32
+    // Object body:    body_type:u32, body_id:u32
+    // Property:       key:u32, flags:u32, value_pod(size:u32, type:u32, data...)
+    //
+    // Constants from spa/utils/type.h and spa/param/format.h
+    // (names match C headers for easy cross-reference):
+    const SPA_TYPE_Id: u32 = 4;
+    const SPA_TYPE_OBJECT_Format: u32 = 0x40002;
+    const SPA_PARAM_EnumFormat: u32 = 3;
+    const SPA_FORMAT_mediaType: u32 = 1;
+    const SPA_FORMAT_mediaSubtype: u32 = 2;
+    const SPA_FORMAT_AUDIO_format: u32 = 0x10001;
+    const SPA_FORMAT_AUDIO_rate: u32 = 0x10004;
+    const SPA_FORMAT_AUDIO_channels: u32 = 0x10005;
+    const SPA_MEDIA_TYPE_audio: u32 = 0;
+    const SPA_MEDIA_SUBTYPE_raw: u32 = 1;
+    const SPA_AUDIO_FORMAT_F32LE: u32 = 3;
+    const SPA_TYPE_Int: u32 = 6;
+
+    let mut buf = Vec::with_capacity(128);
+
+    // Helper: write a property with an Id value (key, flags=0, pod{size=4, type=Id, val})
+    fn write_prop_id(buf: &mut Vec<u8>, key: u32, val: u32) {
+        buf.extend_from_slice(&key.to_le_bytes());   // property key
+        buf.extend_from_slice(&0u32.to_le_bytes());   // property flags
+        buf.extend_from_slice(&4u32.to_le_bytes());   // pod size (4 bytes for u32)
+        buf.extend_from_slice(&4u32.to_le_bytes());   // pod type = SPA_TYPE_Id
+        buf.extend_from_slice(&val.to_le_bytes());    // value
+        // Pad to 8-byte alignment: 4 bytes of value is already aligned (8+8+4 = 20,
+        // but property is key(4)+flags(4)+pod_header(8)+data(4) = 20 -> pad to 24)
+        buf.extend_from_slice(&[0u8; 4]);             // padding to 8-byte align
+    }
+
+    // Helper: write a property with an Int value
+    fn write_prop_int(buf: &mut Vec<u8>, key: u32, val: i32) {
+        buf.extend_from_slice(&key.to_le_bytes());
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.extend_from_slice(&4u32.to_le_bytes());   // pod size
+        buf.extend_from_slice(&6u32.to_le_bytes());   // pod type = SPA_TYPE_Int
+        buf.extend_from_slice(&val.to_le_bytes());
+        buf.extend_from_slice(&[0u8; 4]);             // padding
+    }
+
+    // Reserve space for the object pod header (will fill in size at the end)
+    let header_pos = buf.len();
+    buf.extend_from_slice(&0u32.to_le_bytes());            // size (placeholder)
+    buf.extend_from_slice(&SPA_TYPE_OBJECT_Format.to_le_bytes()); // type
+    // Object body header
+    buf.extend_from_slice(&SPA_TYPE_OBJECT_Format.to_le_bytes()); // body type
+    buf.extend_from_slice(&SPA_PARAM_EnumFormat.to_le_bytes());   // body id
+
+    // Properties
+    write_prop_id(&mut buf, SPA_FORMAT_mediaType, SPA_MEDIA_TYPE_audio);
+    write_prop_id(&mut buf, SPA_FORMAT_mediaSubtype, SPA_MEDIA_SUBTYPE_raw);
+    write_prop_id(&mut buf, SPA_FORMAT_AUDIO_format, SPA_AUDIO_FORMAT_F32LE);
+    write_prop_int(&mut buf, SPA_FORMAT_AUDIO_rate, rate as i32);
+    write_prop_int(&mut buf, SPA_FORMAT_AUDIO_channels, channels as i32);
+
+    // Fill in the object pod size (total bytes after the 8-byte pod header)
+    let body_size = (buf.len() - header_pos - 8) as u32;
+    buf[header_pos..header_pos + 4].copy_from_slice(&body_size.to_le_bytes());
+
+    buf
+}
+
 /// Run the PipeWire main loop, capturing audio from monitor ports.
 fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<AtomicBool>) {
     pipewire::init();
@@ -153,21 +232,23 @@ fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<A
     let stream = pipewire::stream::Stream::new(&core, "pcm-bridge", props)
         .expect("Failed to create PipeWire stream");
 
-    // Audio format negotiation: we pass empty params and let PipeWire
-    // auto-negotiate. Since we're capturing from CamillaDSP's monitor
-    // ports (which are already running at 48kHz interleaved F32), PipeWire
-    // will give us the matching format. The channelmap and rate properties
-    // are set on the stream node via the properties above.
-    let mut params: [&libspa::pod::Pod; 0] = [];
+    // Build an explicit audio format pod for stream negotiation.
+    // Without format params, PipeWire's session manager cannot negotiate
+    // and the stream stays Suspended indefinitely.
+    let format_pod_bytes = build_audio_format(channels, args.rate);
+    let format_pod = unsafe {
+        &*(format_pod_bytes.as_ptr() as *const libspa::pod::Pod)
+    };
+    let mut params: [&libspa::pod::Pod; 1] = [format_pod];
 
     // Process callback: invoked by PipeWire each quantum. Copies interleaved
     // float32 data from the PW buffer into our ring buffer. This runs on the
     // PW data thread (RT_PROCESS flag), but since we're reading monitor ports
     // the graph does NOT wait for us — if we're slow, frames are simply dropped.
     //
-    // Note: the callback receives &Stream (base type), which only provides raw
+    // Note: the callback receives &StreamRef, which only provides raw
     // pointer access. We use the FFI pw_stream_dequeue_buffer directly because
-    // the safe dequeue_buffer() wrapper is on StreamBox/StreamRc, not Stream.
+    // the safe dequeue_buffer() wrapper is on StreamBox/StreamRc, not StreamRef.
     let ring_for_cb = ring;
     let channels_usize = channels as usize;
 
@@ -260,6 +341,16 @@ fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<A
 
     mainloop.run();
     info!("PipeWire main loop exited");
+
+    // Drop PipeWire objects in reverse order BEFORE calling deinit().
+    // Calling deinit() while stream/context/core are alive causes SIGSEGV
+    // because their Drop impls reference already-freed PipeWire internals.
+    drop(_shutdown_timer);
+    drop(_listener);
+    drop(stream);
+    drop(core);
+    drop(context);
+    drop(mainloop);
 
     unsafe { pipewire::deinit(); }
 }
