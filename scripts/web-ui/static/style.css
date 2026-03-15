@@ -2074,6 +2074,22 @@ html, body {
     padding: 4px 0;
 }
 
+/* TT-2: Level slider warning/danger zones */
+.tt-level-slider.warning::-webkit-slider-thumb { background: var(--yellow); }
+.tt-level-slider.danger::-webkit-slider-thumb { background: var(--red); }
+
+/* TT-2: Flash animation for "select a channel" validation */
+.tt-channel-grid.flash-warn {
+    outline: 2px solid var(--red);
+    outline-offset: 2px;
+    animation: flash-border 0.3s ease 2;
+}
+
+@keyframes flash-border {
+    0%, 100% { outline-color: var(--red); }
+    50% { outline-color: transparent; }
+}
+
 /* Mobile (phone at venue) — ensure touch targets */
 
 @media (max-width: 600px) {
