@@ -23,13 +23,41 @@ var PiAudio = (function () {
 
     var activeView = "dashboard";
     var views = {};          // { name: { init(), onShow(), onHide() } }
+    var globalConsumers = {}; // { name: { init(), onMonitoring(), onSystem(), onMeasurement() } }
     var sockets = {};        // { path: { ws, connected, attempt, onMessage, onConn } }
     var initialized = false;
+
+    // Map WebSocket paths to globalConsumer callback names
+    var WS_PATH_TO_CALLBACK = {
+        "/ws/monitoring": "onMonitoring",
+        "/ws/system": "onSystem",
+        "/ws/measurement": "onMeasurement"
+    };
 
     // -- View management --
 
     function registerView(name, module) {
         views[name] = module;
+    }
+
+    function registerGlobalConsumer(name, consumer) {
+        globalConsumers[name] = consumer;
+        if (initialized && consumer.init) consumer.init();
+    }
+
+    function dispatchToGlobalConsumers(path, data) {
+        var callbackName = WS_PATH_TO_CALLBACK[path];
+        if (!callbackName) return;
+        for (var key in globalConsumers) {
+            var gc = globalConsumers[key];
+            if (gc[callbackName]) {
+                try {
+                    gc[callbackName](data);
+                } catch (e) {
+                    // Don't let a failing consumer break others
+                }
+            }
+        }
     }
 
     function switchView(name) {
@@ -81,7 +109,9 @@ var PiAudio = (function () {
 
             ws.onmessage = function (ev) {
                 try {
-                    onMessage(JSON.parse(ev.data));
+                    var data = JSON.parse(ev.data);
+                    onMessage(data);
+                    dispatchToGlobalConsumers(path, data);
                 } catch (e) {
                     // ignore parse errors
                 }
@@ -226,6 +256,10 @@ var PiAudio = (function () {
             if (views[name].init) views[name].init();
         }
 
+        for (var gcName in globalConsumers) {
+            if (globalConsumers[gcName].init) globalConsumers[gcName].init();
+        }
+
         if (views[activeView] && views[activeView].onShow) {
             views[activeView].onShow();
         }
@@ -237,6 +271,8 @@ var PiAudio = (function () {
 
     return {
         registerView: registerView,
+        registerGlobalConsumer: registerGlobalConsumer,
+        notifyGlobalConsumers: dispatchToGlobalConsumers,
         connectWebSocket: connectWebSocket,
         setText: setText,
         cpuColor: cpuColor,
