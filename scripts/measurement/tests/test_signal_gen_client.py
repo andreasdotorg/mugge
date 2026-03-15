@@ -247,6 +247,13 @@ class MockSignalGenServer:
             "signal": signal, "duration": duration,
             "recorded_frames": n_frames,
         })
+        # Send state broadcast (playing=False, recording=False) matching
+        # real server behavior -- playrec() now uses wait_for_state().
+        self._send({
+            "type": "state", "playing": False, "recording": False,
+            "signal": signal, "channels": [],
+            "level_dbfs": -20.0,
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -567,6 +574,35 @@ class TestEventWaiting(unittest.TestCase):
         """Waiting for a non-existent event should timeout."""
         with self.assertRaises(TimeoutError):
             self.client.wait_for_event("nonexistent_event", timeout=0.2)
+
+
+class TestReadAckRobustness(unittest.TestCase):
+    """Test _read_ack accepts responses without a cmd field (SG-12)."""
+
+    def setUp(self):
+        self.server = MockSignalGenServer()
+        # Override status handler to omit the cmd field, simulating the
+        # old Rust server that used StatusResponse without cmd.
+        def status_no_cmd(cmd):
+            return {
+                "type": "ack", "ok": True,
+                "playing": False, "recording": False,
+                "capture_connected": True,
+            }
+        self.server.set_handler("status", status_no_cmd)
+        self.server.start()
+        self.client = SignalGenClient(port=self.server.port, timeout=2.0)
+        self.client.connect()
+
+    def tearDown(self):
+        self.client.close()
+        self.server.stop()
+
+    def test_status_without_cmd_field_accepted(self):
+        """status() should succeed even if server omits the cmd field."""
+        ack = self.client.status()
+        self.assertTrue(ack["ok"])
+        self.assertNotIn("cmd", ack)
 
 
 class TestEdgeCases(unittest.TestCase):
