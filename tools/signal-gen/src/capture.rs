@@ -249,9 +249,8 @@ impl CaptureRingBuffer {
         let n_samples = frames_written.min(self.capacity);
         let mut result = Vec::with_capacity(n_samples);
 
-        if frames_written <= self.capacity {
-            // No wraparound: samples are at [0..write_pos).
-            // write_pos == frames_written since we didn't wrap.
+        if frames_written < self.capacity {
+            // No wraparound: samples are at [0..frames_written).
             result.extend_from_slice(&buf[..n_samples]);
         } else {
             // Wrapped: oldest samples start at write_pos, newest end at write_pos-1.

@@ -519,7 +519,8 @@ mod tests {
         let mut buf = vec![0.0f32; n_frames * channels];
         gen.generate(&mut buf, n_frames, channels, 0b0101, 1.0);
 
-        for frame in 0..n_frames {
+        // Start from frame 1: frame 0 has sin(0)=0 which is legitimately zero.
+        for frame in 1..n_frames {
             let base = frame * channels;
             // Channels 0 and 2 should have signal.
             assert_ne!(buf[base], 0.0, "ch0 frame {} should have signal", frame);

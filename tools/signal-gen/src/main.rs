@@ -448,7 +448,7 @@ impl ProcessState {
             self.apply_command(cmd);
         }
 
-        // Handle pending stop (fade completed in previous quantum).
+        // Handle pending stop from a PREVIOUS quantum (fade already finished).
         if self.pending_stop && self.fade.is_finished() {
             self.play_state = PlayState::Stopped;
             self.active_signal = SignalType::Silence;
@@ -485,18 +485,39 @@ impl ProcessState {
         self.safety.hard_clip(output);
 
         // 5. Handle burst duration (auto-stop after N samples).
+        let mut burst_expired = false;
         if let Some(ref mut burst) = self.burst_remaining {
             *burst = burst.saturating_sub(n_frames as u64);
             if *burst == 0 {
-                self.fade = FadeRamp::new(1.0, 0.0, self.ramp_samples);
-                self.pending_stop = true;
+                burst_expired = true;
             }
+        }
+        if burst_expired {
+            self.fade = FadeRamp::new(1.0, 0.0, self.ramp_samples);
+            self.pending_stop = true;
+            // Clear burst to prevent re-triggering next quantum.
+            self.burst_remaining = None;
         }
 
         // 6. Check if sweep finished (generator-level auto-stop).
         if self.generator.is_finished() && self.play_state == PlayState::Playing {
             self.fade = FadeRamp::new(1.0, 0.0, self.ramp_samples);
             self.pending_stop = true;
+        }
+
+        // 6b. Check if pending_stop fade completed THIS quantum.
+        // This catches the case where burst triggers stop and the fade-out
+        // completes within the same quantum (e.g. ramp_samples=1).
+        if self.pending_stop && self.fade.is_finished() {
+            self.play_state = PlayState::Stopped;
+            self.active_signal = SignalType::Silence;
+            self.generator = Box::new(SilenceGenerator);
+            self.burst_remaining = None;
+            self.pending_stop = false;
+
+            if self.playrec_active && self.playrec_tail_remaining.is_none() {
+                self.playrec_tail_remaining = Some(self.playrec_tail_samples);
+            }
         }
 
         // 7. Handle playrec tail countdown.
@@ -1576,10 +1597,11 @@ mod tests {
         let mut state = ProcessState::new(1, 48000, -20.0, 20);
 
         // Very short burst: 0.005s (240 samples at 48kHz).
-        // Very short ramp to ensure fade completes quickly.
-        state.ramp_samples = 1;
-        // Short tail for testing: 480 samples (0.01s).
-        state.playrec_tail_samples = 480;
+        // Zero-length ramp so fade completes instantly within the same quantum.
+        state.ramp_samples = 0;
+        // Tail of 1024 samples -- larger than one 512-frame quantum so we can
+        // observe it counting before it expires.
+        state.playrec_tail_samples = 1024;
 
         cmd_queue
             .push(Command {
@@ -1594,17 +1616,19 @@ mod tests {
             })
             .unwrap();
 
-        // Process to exhaust burst + fade.
+        // Process to exhaust burst. With ramp_samples=0, the fade-out completes
+        // instantly and the tail countdown starts within the same quantum.
         let mut buf = vec![0.0f32; 512];
         state.process(&mut buf, 512, &cmd_queue, &state_queue, Some(&capture), None);
         // Write capture samples to simulate PW capture callback.
         capture.write_samples(&[0.1; 512]);
 
         // Playback should have stopped, tail countdown started.
+        // After 512 frames, the 1024-sample tail has 512 remaining.
         assert!(state.playrec_tail_remaining.is_some(), "Tail should be counting");
         assert!(capture.is_recording(), "Capture should still be recording during tail");
 
-        // Process enough frames to exhaust the tail.
+        // Process enough frames to exhaust the remaining tail.
         let mut buf2 = vec![0.0f32; 512];
         state.process(&mut buf2, 512, &cmd_queue, &state_queue, Some(&capture), None);
         capture.write_samples(&[0.2; 512]);
