@@ -1,0 +1,45 @@
+[Unit]
+Description=PCM Bridge audio stream: %i
+After=pipewire.service
+Wants=pipewire.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/pcm-bridge/%i.env
+ExecStart=/home/ela/bin/pcm-bridge \
+    --mode ${MODE} \
+    --target ${TARGET} \
+    --listen tcp:127.0.0.1:${PORT} \
+    --channels ${CHANNELS} \
+    --rate ${RATE} \
+    --quantum ${QUANTUM} \
+    ${EXTRA_ARGS}
+
+Restart=on-failure
+RestartSec=2
+
+# RT scheduling: inherited from PipeWire.
+# pcm-bridge uses RT_PROCESS streams, so PipeWire's data thread invokes
+# our process callbacks at its own RT priority (SCHED_FIFO/88). The binary
+# itself runs at normal priority; only the PW callback thread is RT.
+OOMScoreAdjust=-500
+LimitMEMLOCK=infinity
+LimitRTPRIO=88
+
+# Security hardening (matches signal-gen)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=default.target

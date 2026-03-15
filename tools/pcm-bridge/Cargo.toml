@@ -2,7 +2,7 @@
 name = "pcm-bridge"
 version = "0.1.0"
 edition = "2021"
-description = "Passive PipeWire monitor-port PCM bridge for the web UI"
+description = "PipeWire audio bridge for the web UI (monitor + capture modes)"
 license = "MIT"
 
 [dependencies]
