@@ -231,6 +231,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - ~~**F-020**~~ **RESOLVED (workaround).** PipeWire FIFO/88 persisted via systemd user service drop-in (commit `536f631`). Root cause uninvestigated but workaround reliable. T3d unblocked.
 - F-019 Headless labwc startup regression (WLR_LIBINPUT_NO_DEVICES removed -- labwc may fail without input devices)
 - cloud-init ~3.3s boot overhead (TK-007)
+- Local `nix flake check` on macOS blocked by SQLite cache permission issue (non-blocking, QE report 2026-03-15)
 - ~~**TK-055**~~ **DONE (PASS).** Upstream V3D RT fix confirmed in `6.12.62+rpt-rpi-v8-rt`. 37+ min stable with hardware GL on RT. D-022 filed. F-012/F-017 RESOLVED.
 - ~~**TK-054**~~ **wont-do.** Hardware GL available on RT (D-022). Software rendering DJ-A stability test no longer necessary.
 
