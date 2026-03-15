@@ -705,3 +705,61 @@ and testing (mock backend can inject at function level, not subprocess level).
 be replaced.
 
 **Related:** D-035 (measurement safety), D-020 (web UI architecture), TK-162.
+
+## D-037: TK-236 resolution — pcm-bridge uses scripted pw-link for port wiring (2026-03-15)
+
+**Context:** During TK-151 runtime validation, pcm-bridge was found to create
+only 1 input port instead of the expected 8. Architect investigation determined
+this is correct by design: `pw_stream` delivers multi-channel audio interleaved
+through a single port. WirePlumber does not auto-link pcm-bridge to the
+loopback-8ch-sink monitor ports. Three options were evaluated:
+(A) Current code + scripted `pw-link` in systemd ExecStartPost.
+(B) `pw_filter` FFI rewrite for per-channel ports (4-6h effort).
+(C) JACK API (rejected — re-enters the in-graph problem that caused F-030).
+
+**Decision:** Option A — keep `pw_stream` single-port design, use scripted
+`pw-link` in the systemd service to wire CamillaDSP monitor ports to the
+pcm-bridge input. Pragmatic solution, correct behavior, minimal effort.
+
+**Rationale:** The 1-port behavior is architecturally correct for `pw_stream`.
+Multi-channel data is interleaved. Option B would be correct at the PipeWire
+abstraction level but requires significant FFI work for no functional benefit.
+Option C is rejected on principle (JACK client was the root cause of F-030).
+
+**Implications:**
+- `pcm-bridge@.service` template includes `ExecStartPost` with `pw-link` commands
+- Port wiring depends on node names being stable (ensured by `--node-name` flag from PCM-MODE-1)
+- Pi validation needed to confirm `pw-link` correctly connects monitor ports
+
+**Related:** TK-151, TK-236, F-030, D-020, PCM-MODE-1.
+
+## D-038: Generalize pcm-bridge for capture mode — multi-instance architecture (2026-03-15)
+
+**Context:** Owner strategic pivot requires mic input visualization (spectrum
+of capture signal in the test tool page). The existing pcm-bridge only operates
+in monitor mode (tapping CamillaDSP output). Architect and Audio Engineer
+reached consensus on generalizing pcm-bridge rather than building a separate
+capture tool.
+
+**Decision:** Generalize pcm-bridge with `--mode capture|monitor` and
+`--node-name` flags. Run multiple instances (one per audio source) on
+different TCP ports. The web UI backend discovers sources via
+`PI4AUDIO_PCM_SOURCES` JSON env var and exposes them through a parameterized
+`/ws/pcm/{source}` WebSocket endpoint with a `/api/v1/pcm-sources` discovery API.
+
+**Rationale:** Single binary, single wire format, single maintenance surface.
+Monitor mode taps CamillaDSP output (existing behavior). Capture mode taps a
+PipeWire source node (e.g., `usbstreamer-in`). The difference is PipeWire
+stream properties: monitor sets `stream.capture.sink=true` + `media.role=Monitor`;
+capture omits both. Same TCP streaming protocol, same web UI consumer code.
+
+**Implementation (4 tasks):**
+- PCM-MODE-1: `--mode` + `--node-name` CLI flags (Rust, code-complete)
+- PCM-MODE-2: `/ws/pcm/{source}` parameterized endpoint (Python, code-complete)
+- PCM-MODE-3: Test tool spectrum wiring + source selector (JS, in progress)
+- PCM-MODE-4: systemd template `pcm-bridge@.service` + env files (code-complete)
+
+**AE corrections applied:** Target node is `usbstreamer-in` (not generic).
+`--position` flag deferred (not needed for MVP capture).
+
+**Related:** TK-151, PCM-MODE-1/2/3/4, US-049, US-053, D-037 (TK-236).

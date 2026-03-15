@@ -41,6 +41,18 @@ The record must include:
 3. Test author writes execution record -> QE reviews and approves
 4. Only after both QE approvals: task/story DoD criteria for that test are met
 
+### Automated Regression (owner directive 2026-03-15)
+
+All tests MUST be part of the project's automated regression suite (runnable via
+`nix flake check` or equivalent CI gate). One-shot validation scripts that are not
+wired into the regression harness do NOT satisfy DoD. Specifically:
+
+- Every test must catch regressions on every commit — not just validate once
+- Every bug fix must include a regression test that would have caught the bug
+- A fix without a regression test is incomplete
+- Tests that cannot run headlessly (e.g., perceptual audio quality) must be explicitly
+  marked as manual-only with justification; all others must be automated
+
 ---
 
 ## Tier 0 — Core Software Installation
