@@ -124,14 +124,12 @@ fn main() {
 fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<AtomicBool>) {
     pipewire::init();
 
-    // Use Rc variants for reference-counted ownership. MainLoopRc is
-    // Clone-able, which we need for the shutdown timer callback.
-    let mainloop = pipewire::main_loop::MainLoopRc::new(None)
+    let mainloop = pipewire::main_loop::MainLoop::new(None)
         .expect("Failed to create PipeWire main loop");
-    let context = pipewire::context::ContextRc::new(&mainloop, None)
+    let context = pipewire::context::Context::new(&mainloop)
         .expect("Failed to create PipeWire context");
     let core = context
-        .connect_rc(None)
+        .connect(None)
         .expect("Failed to connect to PipeWire daemon");
 
     let channels = args.channels;
@@ -152,7 +150,7 @@ fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<A
         "target.object" => &*args.target,
     };
 
-    let stream = pipewire::stream::StreamRc::new(&core, "pcm-bridge", props)
+    let stream = pipewire::stream::Stream::new(&core, "pcm-bridge", props)
         .expect("Failed to create PipeWire stream");
 
     // Audio format negotiation: we pass empty params and let PipeWire
@@ -238,14 +236,17 @@ fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<A
 
     // Periodic timer polls the shutdown AtomicBool (set by signal_hook
     // in main()) and quits the PipeWire main loop when triggered.
-    // MainLoopRc is Clone, so we can capture a clone in the timer callback.
+    // We capture the raw pointer to call pw_main_loop_quit from the
+    // timer callback, since MainLoop is not Clone.
+    let mainloop_ptr = mainloop.as_raw_ptr();
     let _shutdown_timer = mainloop.loop_().add_timer({
         let shutdown = shutdown.clone();
-        let mainloop = mainloop.clone();
         move |_expirations| {
             if shutdown.load(Ordering::Relaxed) {
                 info!("Shutdown signal received, quitting PipeWire main loop");
-                mainloop.quit();
+                unsafe {
+                    pipewire_sys::pw_main_loop_quit(mainloop_ptr);
+                }
             }
         }
     });
