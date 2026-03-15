@@ -2805,7 +2805,7 @@ spectrum in real time,
 tools (e.g., REW on Windows), and verify system behavior before running
 automated measurement sessions.
 
-**Status:** draft
+**Status:** selected (owner-authorized 2026-03-15; blocked on US-051 + US-052)
 **Depends on:** US-052 (RT signal generator provides the backend), US-051 (persistent status bar provides health monitoring frame), UX spec (lighter review — not full 5-phase gate, per PO recommendation; owner to confirm)
 **Blocks:** none (but enables debugging of TK-231 SPL computation and future measurement issues)
 **Decisions:** D-035 (measurement safety), D-009 (cut-only / gain limits)
