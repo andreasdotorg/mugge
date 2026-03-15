@@ -490,9 +490,12 @@ class TestSdCompatibleInterface(unittest.TestCase):
         d = self.client.query_devices("UMIK")
         self.assertIn("UMIK", d["name"])
 
-    def test_query_devices_not_found(self):
-        with self.assertRaises(ValueError):
-            self.client.query_devices("nonexistent")
+    def test_query_devices_unknown_falls_back(self):
+        """Unknown device name/index falls back to output device (SG-12)."""
+        d = self.client.query_devices("nonexistent")
+        self.assertEqual(d["max_output_channels"], 8)
+        d2 = self.client.query_devices(99)
+        self.assertEqual(d2["max_output_channels"], 8)
 
 
 class TestMessageInterleaving(unittest.TestCase):

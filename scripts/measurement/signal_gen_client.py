@@ -354,18 +354,30 @@ class SignalGenClient:
             }
 
         if isinstance(device, int):
+            # When used as sd_override in non-mock mode, session.py resolves
+            # real sounddevice indices before passing them here.  The signal
+            # generator replaces all audio I/O, so map any index to the
+            # appropriate synthetic device (output or input based on the
+            # device's channel layout).  First try an exact match, then
+            # fall back to the output device (callers query output info
+            # to determine max_output_channels).
             devices = self.query_devices()
             for d in devices:
                 if d["index"] == device:
                     return d
-            raise ValueError(f"Device index {device} not found")
+            # Fallback: return the output device for unknown indices.
+            # This handles the case where session.py passes a real
+            # sounddevice output index (e.g. 3) that doesn't match our
+            # synthetic indices (0, 1).
+            return self.query_devices(kind="output")
 
         if isinstance(device, str):
             devices = self.query_devices()
             for d in devices:
                 if device.lower() in d["name"].lower():
                     return d
-            raise ValueError(f"Device '{device}' not found")
+            # Fallback: return the output device for unrecognised names.
+            return self.query_devices(kind="output")
 
         raise TypeError(f"Unsupported device type: {type(device)}")
 
