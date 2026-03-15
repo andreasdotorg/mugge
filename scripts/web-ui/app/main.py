@@ -6,9 +6,18 @@ Stage 1 implements Monitor and System; Measure and MIDI are frontend stubs.
 WebSocket endpoints:
     /ws/monitoring   — Level meters + CamillaDSP status at ~10 Hz
     /ws/system       — Full system health at ~1 Hz
-    /ws/pcm          — Binary PCM stream (3-channel interleaved float32)
+    /ws/pcm          — Binary PCM stream (backward compat, delegates to monitor)
+    /ws/pcm/{source} — Parameterized binary PCM stream (PCM-MODE-2)
     /ws/measurement  — Real-time measurement progress feed (WP-E)
     /ws/siggen       — Signal generator status proxy (SG-11, PI4AUDIO_SIGGEN=1)
+
+PCM sources (PI4AUDIO_PCM_SOURCES env var, JSON):
+    Maps source names to pcm-bridge TCP addresses.  Each pcm-bridge instance
+    runs on its own port.  Example::
+
+        PI4AUDIO_PCM_SOURCES='{"monitor":"tcp:127.0.0.1:9090","capture-usb":"tcp:127.0.0.1:9091"}'
+
+    Default: {"monitor": "tcp:127.0.0.1:9090"}
 
 Mock mode (PI_AUDIO_MOCK=1):
     Real collectors are not started; MockDataGenerator is used instead.
@@ -201,6 +210,14 @@ async def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+# -- REST endpoints --
+
+@app.get("/api/v1/pcm-sources")
+async def list_pcm_sources():
+    """List available PCM source names for /ws/pcm/{source}."""
+    return {"sources": sorted(PCM_SOURCES.keys())}
+
+
 # -- WebSocket endpoints --
 
 app.websocket("/ws/monitoring")(ws_monitoring)
@@ -208,29 +225,144 @@ app.websocket("/ws/system")(ws_system)
 app.websocket("/ws/measurement")(ws_measurement)
 
 
+# -- PCM source mapping (PCM-MODE-2) --
+
+_DEFAULT_PCM_SOURCES = {"monitor": "tcp:127.0.0.1:9090"}
+
+def _parse_pcm_sources() -> dict[str, tuple[str, int]]:
+    """Parse PI4AUDIO_PCM_SOURCES env var into {name: (host, port)} map.
+
+    Format: JSON object mapping source names to "tcp:host:port" strings.
+    Returns parsed (host, port) tuples for socket.create_connection().
+    """
+    raw = os.environ.get("PI4AUDIO_PCM_SOURCES", "")
+    if raw:
+        try:
+            sources = json.loads(raw)
+        except json.JSONDecodeError:
+            log.error("PI4AUDIO_PCM_SOURCES is not valid JSON: %s", raw)
+            sources = _DEFAULT_PCM_SOURCES
+    else:
+        sources = _DEFAULT_PCM_SOURCES
+
+    result: dict[str, tuple[str, int]] = {}
+    for name, addr in sources.items():
+        if addr.startswith("tcp:"):
+            addr = addr[4:]
+        parts = addr.rsplit(":", 1)
+        if len(parts) != 2:
+            log.error("Invalid PCM source address for %r: %r", name, addr)
+            continue
+        try:
+            result[name] = (parts[0], int(parts[1]))
+        except ValueError:
+            log.error("Invalid port for PCM source %r: %r", name, parts[1])
+            continue
+    return result
+
+
+PCM_SOURCES = _parse_pcm_sources()
+
+
+async def _pcm_tcp_relay(ws: WebSocket, host: str, port: int,
+                         source: str) -> None:
+    """Relay binary PCM frames from a pcm-bridge TCP server to a WebSocket.
+
+    Opens a blocking TCP connection (via asyncio.to_thread), then reads
+    binary data in a loop and forwards it as WebSocket binary messages.
+    The pcm-bridge sends its own framing (4-byte header + float32 payload),
+    so we just relay raw bytes.
+    """
+    tcp_sock = None
+    try:
+        tcp_sock = await asyncio.to_thread(
+            socket.create_connection, (host, port), 5.0)
+        await asyncio.to_thread(tcp_sock.settimeout, 2.0)
+        log.info("PCM relay connected to %s:%d (source=%s)", host, port, source)
+
+        while True:
+            data = await asyncio.to_thread(tcp_sock.recv, 65536)
+            if not data:
+                break
+            await ws.send_bytes(data)
+
+    except WebSocketDisconnect:
+        log.info("PCM client disconnected (source=%s)", source)
+    except (ConnectionRefusedError, ConnectionResetError, OSError) as exc:
+        log.warning("PCM relay TCP error (source=%s): %s", source, exc)
+    except Exception:
+        log.exception("PCM relay error (source=%s)", source)
+    finally:
+        if tcp_sock is not None:
+            try:
+                tcp_sock.close()
+            except OSError:
+                pass
+
+
+@app.websocket("/ws/pcm/{source}")
+async def ws_pcm_source(ws: WebSocket, source: str, scenario: str = "A"):
+    """Parameterized binary PCM stream from a named pcm-bridge instance.
+
+    Source names map to pcm-bridge TCP addresses via PI4AUDIO_PCM_SOURCES.
+    Wire format: 4-byte LE uint32 header + interleaved float32 PCM.
+    """
+    if MOCK_MODE:
+        await ws.accept()
+        from .mock.mock_pcm import mock_pcm_stream
+        log.info("PCM client connected (mock, source=%s, scenario=%s)",
+                 source, scenario)
+        await mock_pcm_stream(ws, scenario)
+        return
+
+    addr = PCM_SOURCES.get(source)
+    if addr is None:
+        await ws.close(code=4004,
+                       reason=f"Unknown PCM source: {source!r}. "
+                              f"Available: {sorted(PCM_SOURCES)}")
+        return
+
+    await ws.accept()
+    log.info("PCM client connected (source=%s)", source)
+    await _pcm_tcp_relay(ws, addr[0], addr[1], source)
+
+
 @app.websocket("/ws/pcm")
 async def ws_pcm(ws: WebSocket, scenario: str = "A"):
-    """Binary PCM stream: 4-byte LE uint32 header + interleaved float32."""
-    await ws.accept()
+    """Binary PCM stream (backward compat, delegates to monitor source).
 
+    Legacy endpoint preserved for existing spectrum.js clients.
+    In mock mode, serves synthetic data directly.
+    In production, delegates to the ``monitor`` pcm-bridge instance.
+    """
     if MOCK_MODE:
+        await ws.accept()
         from .mock.mock_pcm import mock_pcm_stream
         log.info("PCM client connected (mock, scenario=%s)", scenario)
         await mock_pcm_stream(ws, scenario)
         return
 
-    pcm_collector = getattr(app.state, "pcm", None)
-    if pcm_collector is None or not pcm_collector.active:
-        await ws.close(code=1008, reason="PCM collector not active")
+    # Delegate to the monitor source via pcm-bridge TCP relay.
+    addr = PCM_SOURCES.get("monitor")
+    if addr is None:
+        # Fall back to legacy JACK collector if available.
+        pcm_collector = getattr(app.state, "pcm", None)
+        if pcm_collector is not None and pcm_collector.active:
+            await ws.accept()
+            log.info("PCM client connected (legacy JACK collector)")
+            try:
+                await pcm_collector.stream_to_client(ws)
+            except WebSocketDisconnect:
+                log.info("PCM client disconnected")
+            except Exception:
+                log.exception("PCM websocket error")
+            return
+        await ws.close(code=1008, reason="No PCM source configured")
         return
 
-    log.info("PCM client connected")
-    try:
-        await pcm_collector.stream_to_client(ws)
-    except WebSocketDisconnect:
-        log.info("PCM client disconnected")
-    except Exception:
-        log.exception("PCM websocket error")
+    await ws.accept()
+    log.info("PCM client connected (monitor via pcm-bridge)")
+    await _pcm_tcp_relay(ws, addr[0], addr[1], "monitor")
 
 
 # -- Signal generator status proxy (SG-11) --
