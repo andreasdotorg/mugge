@@ -1,12 +1,13 @@
-# Minimal CamillaDSP config for integration testing.
-# Uses File I/O backend — no audio hardware required.
-# Reads silence from /dev/zero, writes output to /dev/null.
+# Minimal CamillaDSP config for integration testing (TK-189).
+# Uses file I/O backend — no audio hardware required.
+# Reads silence from /dev/zero (RawFile), writes to /dev/null (File).
+# Both types are cross-platform (macOS + Linux).
 devices:
   samplerate: 48000
   chunksize: 2048
   queuelimit: 4
   capture:
-    type: File
+    type: RawFile
     channels: 2
     filename: /dev/zero
     format: S32LE

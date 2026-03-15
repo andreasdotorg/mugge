@@ -96,6 +96,10 @@
             hash = "sha256-IJ1sYprBh8ys1Og3T3newIDlBlR0PoQiblbJmzLbsfs=";
           };
           cargoLock.lockFile = ./tools/camilladsp-test/Cargo.lock;
+          # Upstream doesn't ship a Cargo.lock — copy ours into the source.
+          postPatch = ''
+            cp ${./tools/camilladsp-test/Cargo.lock} Cargo.lock
+          '';
           # Default features = ["websocket"] — includes tungstenite WS server.
           # No extra features needed: File I/O backend is always compiled in.
           buildNoDefaultFeatures = false;
