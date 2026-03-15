@@ -17,6 +17,7 @@
         <button class="nav-tab active" data-view="dashboard">Dashboard</button>
         <button class="nav-tab" data-view="system">System</button>
         <button class="nav-tab" data-view="measure">Measure</button>
+        <button class="nav-tab" data-view="test">Test</button>
         <button class="nav-tab" data-view="midi">MIDI</button>
     </div>
     <div class="nav-right">
@@ -539,6 +540,131 @@
     </div>
 </div>
 
+<!-- VIEW: Test — Manual signal generation and spectrum analysis -->
+<div class="view" id="view-test">
+    <div class="tt-layout">
+        <!-- Left column: signal generator controls -->
+        <div class="tt-controls">
+            <div class="tt-section">
+                <div class="tt-section-title">SIGNAL TYPE</div>
+                <div class="tt-signal-row">
+                    <button class="tt-signal-btn active" data-signal="sine">Sine</button>
+                    <button class="tt-signal-btn" data-signal="white">White</button>
+                    <button class="tt-signal-btn" data-signal="pink">Pink</button>
+                    <button class="tt-signal-btn" data-signal="sweep">Sweep</button>
+                </div>
+            </div>
+
+            <!-- Frequency (visible for sine/sweep only) -->
+            <div class="tt-section" id="tt-freq-section">
+                <div class="tt-section-title">FREQUENCY</div>
+                <div class="tt-slider-row">
+                    <input type="range" class="tt-slider" id="tt-freq-slider"
+                           min="1.301" max="4.301" step="0.001" value="3.0">
+                    <span class="tt-slider-value" id="tt-freq-value">1000 Hz</span>
+                </div>
+            </div>
+
+            <div class="tt-section">
+                <div class="tt-section-title">OUTPUT CHANNEL</div>
+                <div class="tt-channel-grid">
+                    <button class="tt-channel-btn" data-ch="1">1 SatL</button>
+                    <button class="tt-channel-btn" data-ch="2">2 SatR</button>
+                    <button class="tt-channel-btn sub-channel" data-ch="3">3 Sub1</button>
+                    <button class="tt-channel-btn sub-channel" data-ch="4">4 Sub2</button>
+                    <button class="tt-channel-btn" data-ch="5">5 EngL</button>
+                    <button class="tt-channel-btn" data-ch="6">6 EngR</button>
+                    <button class="tt-channel-btn" data-ch="7">7 IEML</button>
+                    <button class="tt-channel-btn" data-ch="8">8 IEMR</button>
+                </div>
+                <label class="tt-multi-toggle">
+                    <input type="checkbox" id="tt-multi-select"> MULTI
+                </label>
+            </div>
+
+            <div class="tt-section">
+                <div class="tt-section-title">LEVEL</div>
+                <div class="tt-slider-row">
+                    <input type="range" class="tt-slider tt-level-slider" id="tt-level-slider"
+                           min="-60" max="0" step="0.1" value="-40">
+                    <span class="tt-slider-value" id="tt-level-value">-40.0 dBFS</span>
+                </div>
+            </div>
+
+            <div class="tt-section">
+                <div class="tt-section-title">DURATION</div>
+                <div class="tt-duration-row">
+                    <label class="tt-radio">
+                        <input type="radio" name="tt-duration" value="continuous" checked> Continuous
+                    </label>
+                    <label class="tt-radio">
+                        <input type="radio" name="tt-duration" value="burst"> Burst:
+                        <input type="number" class="tt-burst-input" id="tt-burst-sec"
+                               min="1" max="60" value="5" disabled> sec
+                    </label>
+                </div>
+            </div>
+
+            <div class="tt-action-row">
+                <button class="tt-play-btn" id="tt-play-btn" disabled>PLAY</button>
+                <button class="tt-stop-btn" id="tt-stop-btn" disabled>STOP</button>
+            </div>
+
+            <!-- Signal generator status -->
+            <div class="tt-siggen-status" id="tt-siggen-status">
+                Signal generator: <span id="tt-siggen-state">checking...</span>
+            </div>
+        </div>
+
+        <!-- Right column: measured signal -->
+        <div class="tt-measured">
+            <div class="tt-section">
+                <div class="tt-section-title-row">
+                    <span class="tt-section-title">SPECTRUM ANALYZER</span>
+                    <select class="tt-source-select" id="tt-spectrum-source">
+                        <option value="umik1">UMIK-1</option>
+                        <option value="main">Main L+R</option>
+                        <option value="sub">Sub sum</option>
+                    </select>
+                </div>
+                <div class="tt-spectrum-container">
+                    <canvas class="tt-spectrum-canvas" id="tt-spectrum-canvas"></canvas>
+                    <div class="tt-spectrum-overlay hidden" id="tt-spectrum-no-mic">
+                        Microphone not connected.<br>Connect UMIK-1 via USB.
+                    </div>
+                </div>
+            </div>
+
+            <div class="tt-section tt-spl-section">
+                <div class="tt-spl-uncal-banner" id="tt-spl-uncal">
+                    SPL UNCALIBRATED — values are approximate
+                </div>
+                <div class="tt-spl-grid">
+                    <div class="tt-spl-row">
+                        <span class="tt-spl-label">SPL (A)</span>
+                        <span class="tt-spl-value" id="tt-spl-a">--</span>
+                        <span class="tt-spl-unit">dB</span>
+                    </div>
+                    <div class="tt-spl-row">
+                        <span class="tt-spl-label">SPL (C)</span>
+                        <span class="tt-spl-value" id="tt-spl-c">--</span>
+                        <span class="tt-spl-unit">dB</span>
+                    </div>
+                    <div class="tt-spl-row">
+                        <span class="tt-spl-label">SPL peak</span>
+                        <span class="tt-spl-value" id="tt-spl-peak">--</span>
+                        <span class="tt-spl-unit">dB</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tt-mic-status" id="tt-mic-status">
+                Mic: <span id="tt-mic-state">checking...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- VIEW: MIDI -->
 <div class="view" id="view-midi">
     <div class="stub-container">
@@ -559,6 +685,7 @@
 <script src="/static/js/dashboard.js"></script>
 <script src="/static/js/system.js"></script>
 <script src="/static/js/measure.js"></script>
+<script src="/static/js/test.js"></script>
 <script src="/static/js/midi.js"></script>
 </body>
 </html>

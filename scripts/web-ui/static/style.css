@@ -1629,6 +1629,451 @@ html, body {
     line-height: 1.5;
 }
 
+/* -- Test tool page (US-053) -------------------------------------------- */
+
+.tt-layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+}
+
+.tt-controls {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+}
+
+.tt-measured {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    overflow-y: auto;
+}
+
+.tt-section {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+}
+
+.tt-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+}
+
+.tt-section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.tt-section-title-row .tt-section-title {
+    margin-bottom: 0;
+}
+
+/* Signal type toggle buttons */
+
+.tt-signal-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tt-signal-btn {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 16px;
+    min-height: 40px;
+    min-width: 64px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-bar);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.tt-signal-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+.tt-signal-btn.active {
+    background: rgba(66, 165, 245, 0.15);
+    color: var(--blue);
+    border-color: var(--blue);
+}
+
+/* Frequency slider */
+
+.tt-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tt-slider {
+    flex: 1;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-bar);
+    border-radius: 3px;
+    outline: none;
+}
+
+.tt-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--blue);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+}
+
+.tt-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--blue);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+}
+
+.tt-slider-value {
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    min-width: 90px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* Channel selector grid */
+
+.tt-channel-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
+.tt-channel-btn {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 8px 12px;
+    min-height: 44px;
+    min-width: 72px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-bar);
+    color: var(--text-dim);
+    cursor: pointer;
+    text-align: center;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.tt-channel-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+.tt-channel-btn.selected {
+    background: rgba(46, 125, 50, 0.2);
+    color: var(--green);
+    border-color: rgba(46, 125, 50, 0.5);
+}
+
+.tt-channel-btn.sub-channel.selected {
+    background: rgba(255, 111, 0, 0.15);
+    color: var(--orange);
+    border-color: rgba(255, 111, 0, 0.4);
+}
+
+.tt-multi-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.tt-multi-toggle input[type="checkbox"] {
+    accent-color: var(--blue);
+}
+
+/* Level slider */
+
+.tt-level-slider::-webkit-slider-thumb {
+    background: var(--green);
+}
+
+.tt-level-slider::-moz-range-thumb {
+    background: var(--green);
+}
+
+/* Duration controls */
+
+.tt-duration-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.tt-radio {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.tt-radio input[type="radio"] {
+    accent-color: var(--blue);
+}
+
+.tt-burst-input {
+    font-family: var(--font-numeric);
+    font-size: 12px;
+    font-weight: 600;
+    width: 48px;
+    padding: 4px 6px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    text-align: center;
+}
+
+.tt-burst-input:focus {
+    outline: none;
+    border-color: var(--blue);
+}
+
+.tt-burst-input:disabled {
+    opacity: 0.35;
+}
+
+/* PLAY and STOP buttons */
+
+.tt-action-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.tt-play-btn {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 16px 24px;
+    min-height: 56px;
+    flex: 2;
+    border: 2px solid rgba(66, 165, 245, 0.5);
+    border-radius: 4px;
+    background: rgba(66, 165, 245, 0.12);
+    color: var(--blue);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.tt-play-btn:hover:not(:disabled) {
+    background: rgba(66, 165, 245, 0.25);
+    border-color: rgba(66, 165, 245, 0.7);
+}
+
+.tt-play-btn.playing {
+    background: rgba(121, 226, 91, 0.12);
+    border-color: rgba(121, 226, 91, 0.5);
+    color: var(--green);
+    animation: pulse-play 2s ease-in-out infinite;
+}
+
+.tt-play-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+@keyframes pulse-play {
+    0%, 100% { background: rgba(121, 226, 91, 0.12); }
+    50% { background: rgba(121, 226, 91, 0.20); }
+}
+
+.tt-stop-btn {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 16px 16px;
+    min-height: 56px;
+    flex: 1;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-bar);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.tt-stop-btn:hover:not(:disabled) {
+    border-color: var(--text-dim);
+    color: var(--text);
+}
+
+.tt-stop-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* Signal generator status line */
+
+.tt-siggen-status {
+    font-size: 10px;
+    color: var(--text-dim);
+    padding: 4px 0;
+}
+
+/* Spectrum analyzer (right column) */
+
+.tt-source-select {
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.tt-source-select:focus {
+    outline: none;
+    border-color: var(--blue);
+}
+
+.tt-spectrum-container {
+    position: relative;
+    min-height: 200px;
+    background: var(--bg-meter);
+    border-radius: 2px;
+    aspect-ratio: 3 / 2;
+    max-height: 400px;
+}
+
+.tt-spectrum-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.tt-spectrum-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 2px;
+}
+
+/* SPL readout */
+
+.tt-spl-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tt-spl-uncal-banner {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 6px 10px;
+    background: rgba(226, 192, 57, 0.1);
+    border: 1px solid rgba(226, 192, 57, 0.3);
+    border-radius: 3px;
+    color: var(--yellow);
+    text-align: center;
+}
+
+.tt-spl-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.tt-spl-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.tt-spl-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    min-width: 64px;
+}
+
+.tt-spl-value {
+    font-size: 20px;
+    font-weight: 700;
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    min-width: 64px;
+    text-align: right;
+}
+
+.tt-spl-unit {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+/* Mic status line */
+
+.tt-mic-status {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 4px 0;
+}
+
 /* Mobile (phone at venue) — ensure touch targets */
 
 @media (max-width: 600px) {
@@ -1678,6 +2123,33 @@ html, body {
     .mw-channel-chip {
         min-height: 36px;
         padding: 6px 12px;
+    }
+
+    /* Test tool: stack vertically on phone */
+    .tt-layout {
+        flex-direction: column;
+    }
+
+    .tt-controls {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .tt-spectrum-container {
+        min-height: 200px;
+    }
+
+    .tt-play-btn,
+    .tt-stop-btn {
+        min-height: 48px;
+    }
+
+    .tt-channel-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    #view-test {
+        overflow-y: auto;
     }
 }
 
