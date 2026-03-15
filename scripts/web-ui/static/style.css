@@ -112,25 +112,6 @@ html, body {
     gap: 8px;
 }
 
-.mode-badge {
-    font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    background: var(--blue);
-    color: #fff;
-    padding: 1px 6px;
-    border-radius: 8px;
-    line-height: 1.4;
-}
-
-.nav-temp {
-    font-size: 9px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    color: var(--text-dim);
-}
-
 .connection-dot {
     width: 8px;
     height: 8px;
@@ -1223,34 +1204,6 @@ html, body {
     color: var(--green);
 }
 
-/* Abort button */
-
-.mw-abort-btn {
-    flex-shrink: 0;
-    font-family: inherit;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 6px 16px;
-    border: 2px solid var(--red);
-    border-radius: 4px;
-    background: rgba(229, 69, 58, 0.15);
-    color: var(--red);
-    cursor: pointer;
-    min-width: 48px;
-    min-height: 36px;
-    transition: background 0.15s;
-}
-
-.mw-abort-btn:hover {
-    background: rgba(229, 69, 58, 0.3);
-}
-
-.mw-abort-btn:active {
-    background: rgba(229, 69, 58, 0.5);
-}
-
 /* Wizard body (screen container) */
 
 .mw-body {
@@ -1707,12 +1660,6 @@ html, body {
         width: 100%;
         min-height: 64px;
         font-size: 16px;
-    }
-
-    .mw-abort-btn {
-        min-height: 48px;
-        min-width: 64px;
-        font-size: 12px;
     }
 
     .mw-header {

@@ -20,7 +20,6 @@
     var POLL_INTERVAL_MS = 3000;
     var STATUS_URL = "/api/v1/measurement/status";
     var START_URL = "/api/v1/measurement/start";
-    var ABORT_URL = "/api/v1/measurement/abort";
     var WS_PATH = "/ws/measurement";
 
     // -- State --
@@ -84,12 +83,6 @@
         ws.onerror = function () {
             // onclose fires after this
         };
-    }
-
-    function sendWsCommand(cmd) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify(cmd));
-        }
     }
 
     // -- Polling fallback --
@@ -237,17 +230,6 @@
 
         // Update state indicator
         setText("mw-state-text", state.toUpperCase().replace(/_/g, " "));
-
-        // Show/hide abort button
-        var abortBtn = $("mw-abort-btn");
-        var activeStates = ["setup", "gain_cal", "measuring", "filter_gen", "deploy", "verify"];
-        if (abortBtn) {
-            if (activeStates.indexOf(state) >= 0) {
-                show(abortBtn);
-            } else {
-                hide(abortBtn);
-            }
-        }
 
         // Update progress bar segments
         updateProgressBar(state);
@@ -682,16 +664,6 @@
         });
     }
 
-    function abortMeasurement() {
-        // Send abort via WebSocket (preferred) and REST (fallback)
-        sendWsCommand({ command: "abort", reason: "operator abort via UI" });
-
-        fetch(ABORT_URL, { method: "POST" })
-            .catch(function () {
-                // WebSocket abort should have worked
-            });
-    }
-
     function returnToIdle() {
         switchScreen("idle");
         // Clear dynamic content
@@ -719,11 +691,6 @@
         var startBtn = $("mw-start-btn");
         if (startBtn) {
             startBtn.addEventListener("click", startMeasurement);
-        }
-
-        var abortBtn = $("mw-abort-btn");
-        if (abortBtn) {
-            abortBtn.addEventListener("click", abortMeasurement);
         }
 
         var returnBtns = document.querySelectorAll(".mw-return-btn");

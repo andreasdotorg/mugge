@@ -482,16 +482,6 @@
     }
 
     function onSystemData(data) {
-        // Nav bar: mode badge
-        var mode = data.mode.toUpperCase();
-        var badge = document.getElementById("mode-badge");
-        if (badge) badge.textContent = mode;
-
-        // Nav bar: temperature
-        var temp = data.cpu.temperature;
-        PiAudio.setText("nav-temp", temp.toFixed(1) + "\u00b0C",
-            PiAudio.tempColor(temp));
-
         // Health bar: CPU gauge (normalize to 0-100% by dividing by core count)
         var cpuTotal = data.cpu.total_percent;
         var cpuCores = data.cpu.per_core.length || 4;
