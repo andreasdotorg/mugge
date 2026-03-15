@@ -346,8 +346,12 @@ def verify_measurement_config(camilladsp_client):
 # ---------------------------------------------------------------------------
 
 def _play_burst(noise_signal, channel_index, output_device, input_device,
-                sr=SAMPLE_RATE):
+                sr=SAMPLE_RATE, pre_roll_s=0.5):
     """Play a noise burst on one channel and record from the mic.
+
+    A pre-roll of silence is prepended to the output buffer to give
+    PipeWire time to route the new stream node before the signal starts.
+    The pre-roll is trimmed from the recording before returning.
 
     Parameters
     ----------
@@ -361,11 +365,14 @@ def _play_burst(noise_signal, channel_index, output_device, input_device,
         Sounddevice input device identifier (UMIK-1).
     sr : int
         Sample rate.
+    pre_roll_s : float
+        Seconds of silence before signal. Allows PipeWire to route the
+        stream node before audio starts playing.
 
     Returns
     -------
     np.ndarray
-        Mono recording from the mic (float64).
+        Mono recording from the mic (float64), trimmed to signal portion.
     """
     sd = _sd_override
     if sd is None:
@@ -382,10 +389,12 @@ def _play_burst(noise_signal, channel_index, output_device, input_device,
             f"Channel {channel_index} exceeds device capacity "
             f"({n_out_channels} channels on '{out_info['name']}')")
 
-    # Build multi-channel output: target channel only, all others silent
-    output_buffer = np.zeros((len(noise_signal), n_out_channels),
+    pre_roll_samples = int(pre_roll_s * sr)
+
+    # Build multi-channel output: pre-roll silence + signal on target channel
+    output_buffer = np.zeros((pre_roll_samples + len(noise_signal), n_out_channels),
                              dtype=np.float32)
-    output_buffer[:, channel_index] = noise_signal.astype(np.float32)
+    output_buffer[pre_roll_samples:, channel_index] = noise_signal.astype(np.float32)
 
     recording = sd.playrec(
         output_buffer,
@@ -396,7 +405,8 @@ def _play_burst(noise_signal, channel_index, output_device, input_device,
     )
     sd.wait()
 
-    return recording[:, 0].astype(np.float64)
+    # Trim pre-roll: return only the signal-aligned recording
+    return recording[pre_roll_samples:, 0].astype(np.float64)
 
 
 def _play_burst_with_xrun_check(noise_signal, channel_index, output_device,
