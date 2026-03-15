@@ -183,13 +183,13 @@
             pushEvent("dsp_load", null, "CPU dropped below 60% (" + cpuNorm.toFixed(0) + "%)");
         }
 
-        // Temperature threshold
+        // Temperature threshold (Pi 4 throttles at 80C; warn at 75C for 5C margin)
         if (data.cpu.temperature >= 75 && prev.cpu.temperature < 75) {
             pushEvent("temp", "warning",
                 "Temperature crossed 75\u00b0C (" + data.cpu.temperature.toFixed(1) + "\u00b0C)");
-        } else if (data.cpu.temperature < 65 && prev.cpu.temperature >= 65) {
+        } else if (data.cpu.temperature < 70 && prev.cpu.temperature >= 70) {
             pushEvent("temp", null,
-                "Temperature dropped below 65\u00b0C (" + data.cpu.temperature.toFixed(1) + "\u00b0C)");
+                "Temperature dropped below 70\u00b0C (" + data.cpu.temperature.toFixed(1) + "\u00b0C)");
         }
 
         // Memory threshold

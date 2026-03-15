@@ -501,7 +501,7 @@
         // System health panel — CPU temperature gauge
         setHealthGauge("sh-cpu-temp", tempPct,
             temp.toFixed(0) + "\u00b0C",
-            temp < 65 ? "#79e25b" : temp < 75 ? "#e2c039" : "#e5453a");
+            temp < 75 ? "#79e25b" : temp < 80 ? "#e2c039" : "#e5453a");
 
         // Health bar: Memory gauge
         var mem = data.memory;

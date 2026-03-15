@@ -180,14 +180,14 @@ var PiAudio = (function () {
     }
 
     function tempColor(temp) {
-        if (temp >= 75) return "c-red";
-        if (temp >= 65) return "c-yellow";
+        if (temp >= 80) return "c-red";
+        if (temp >= 75) return "c-yellow";
         return "c-green";
     }
 
     function tempColorRaw(temp) {
-        if (temp >= 75) return "var(--red)";
-        if (temp >= 65) return "var(--yellow)";
+        if (temp >= 80) return "var(--red)";
+        if (temp >= 75) return "var(--yellow)";
         return "var(--green)";
     }
 
