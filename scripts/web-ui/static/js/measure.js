@@ -125,6 +125,11 @@
     // -- Message handling --
 
     function handleWsMessage(msg) {
+        // Forward to global consumers (status bar needs measurement state)
+        if (PiAudio.notifyGlobalConsumers) {
+            PiAudio.notifyGlobalConsumers("/ws/measurement", msg);
+        }
+
         var type = msg.type;
 
         if (type === "state_snapshot") {
