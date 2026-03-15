@@ -141,6 +141,36 @@
             exec nixGLIntel mixxx "$@"
           '';
         };
+
+        # Rust PipeWire tools (Linux-only, need libpipewire).
+        # Defined here so both packages and checks can reference them.
+        pcm-bridge = pkgs.rustPlatform.buildRustPackage {
+          pname = "pcm-bridge";
+          version = "0.1.0";
+          src = ./tools/pcm-bridge;
+          cargoLock.lockFile = ./tools/pcm-bridge/Cargo.lock;
+          nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
+          buildInputs = [ pkgs.pipewire ];
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          BINDGEN_EXTRA_CLANG_ARGS = builtins.toString [
+            "-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include"
+            "-isystem ${pkgs.glibc.dev}/include"
+          ];
+        };
+
+        signal-gen = pkgs.rustPlatform.buildRustPackage {
+          pname = "pi4audio-signal-gen";
+          version = "0.1.0";
+          src = ./tools/signal-gen;
+          cargoLock.lockFile = ./tools/signal-gen/Cargo.lock;
+          nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
+          buildInputs = [ pkgs.pipewire ];
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          BINDGEN_EXTRA_CLANG_ARGS = builtins.toString [
+            "-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include"
+            "-isystem ${pkgs.glibc.dev}/include"
+          ];
+        };
       in
       {
         packages = {
@@ -154,37 +184,10 @@
           mixxx-gl = mixxx-wrapped;
 
           # Passive PipeWire monitor-port PCM bridge for web UI.
-          # Replaces the broken JACK-based PcmStreamCollector — runs at
-          # SCHED_OTHER and cannot cause xruns in the RT audio graph.
-          pcm-bridge = pkgs.rustPlatform.buildRustPackage {
-            pname = "pcm-bridge";
-            version = "0.1.0";
-            src = ./tools/pcm-bridge;
-            cargoLock.lockFile = ./tools/pcm-bridge/Cargo.lock;
-            nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
-            buildInputs = [ pkgs.pipewire ];
-            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-            BINDGEN_EXTRA_CLANG_ARGS = builtins.toString [
-              "-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include"
-              "-isystem ${pkgs.glibc.dev}/include"
-            ];
-          };
+          inherit pcm-bridge;
 
           # RT signal generator for measurement and test tooling (D-037).
-          # Always-on PipeWire streams eliminate WirePlumber routing races.
-          signal-gen = pkgs.rustPlatform.buildRustPackage {
-            pname = "pi4audio-signal-gen";
-            version = "0.1.0";
-            src = ./tools/signal-gen;
-            cargoLock.lockFile = ./tools/signal-gen/Cargo.lock;
-            nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
-            buildInputs = [ pkgs.pipewire ];
-            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-            BINDGEN_EXTRA_CLANG_ARGS = builtins.toString [
-              "-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include"
-              "-isystem ${pkgs.glibc.dev}/include"
-            ];
-          };
+          inherit signal-gen;
 
           # Default package for `nix run .#` on Linux
           default = mixxx-wrapped;
@@ -272,6 +275,10 @@
             python -m pytest tests/ -v --tb=short
             touch $out
           '';
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          # Rust PipeWire tools — cargo test runs during buildRustPackage.
+          test-pcm-bridge = pcm-bridge;
+          test-signal-gen = signal-gen;
         };
 
         # -----------------------------------------------------------------
