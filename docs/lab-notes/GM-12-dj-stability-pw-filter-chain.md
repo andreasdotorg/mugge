@@ -161,8 +161,46 @@ Volume applied only on node 41 (convolver capture). Node 42 (convolver-out)
 left at unity to avoid double attenuation.
 
 **Limitation:** This is a runtime-only setting. Resets on PipeWire restart.
+Must be re-applied after every PW restart.
 
-**Persistent fix options:**
+### Production Workaround Procedure: -30 dB Convolver Attenuation
+
+This is the current production workaround until a durable solution is
+implemented. Apply after every PipeWire restart.
+
+**Step 1:** Find the convolver capture node ID:
+```bash
+pw-cli ls Node | grep -A1 pi4audio-convolver
+# Look for the node with media.class = "Audio/Sink" (capture side)
+# Example output: id 41, type PipeWire:Interface:Node/3
+```
+
+**Step 2:** Apply -30 dB attenuation to the capture node:
+```bash
+pw-cli s <node-id> Props '{ volume: 0.0316 }'
+# 0.0316 = 10^(-30/20) = -30 dB linear
+```
+
+**Step 3:** Verify attenuation is applied:
+```bash
+pw-dump <node-id> | grep volume
+# Should show: "volume": 0.0316...
+```
+
+**Rules:**
+- Apply ONLY to the convolver capture node (`pi4audio-convolver`,
+  `media.class = Audio/Sink`), NOT the output node (`pi4audio-convolver-out`,
+  `media.class = Audio/Source`). Applying to both causes double attenuation
+  (-60 dB).
+- The node ID may change across PipeWire restarts. Always look it up first.
+- Owner confirmed: attenuation is audible and correct at -30 dB.
+
+**Why -30 dB:** This is the safety margin specified in the convolver config's
+`config.gain` parameter, which PW 1.4.9 silently ignores. The -30 dB provides
+headroom below 0 dBFS so that hot source material does not overdrive the
+amplifier chain (4x450W into speakers).
+
+**Persistent fix options (not yet implemented):**
 1. Pre-attenuate WAV coefficient files (bake gain into FIR data)
 2. WirePlumber volume rule targeting the convolver node
 3. PW filter-chain `volume` property (if supported -- needs investigation)
@@ -240,7 +278,7 @@ Mixxx registered 6 JACK output ports (`out_0` through `out_5`):
 |------|---------|
 | `out_0` / `out_1` | Master L/R |
 | `out_2` / `out_3` | Headphone preview (unconfigured in `~/.mixxx/mixxx.cfg`) |
-| `out_4` / `out_5` | Additional outputs (used for headphone bypass to USBStreamer AUX4/AUX5) |
+| `out_4` / `out_5` | Routed to USBStreamer AUX4/AUX5 for headphone bypass (actual content undetermined -- no SoundManager config in `mixxx.cfg`) |
 
 Only 6 ports, not 8. Singer IEM (ch 7-8) requires Reaper in live mode, not
 Mixxx. This is consistent with the dual-mode design.
