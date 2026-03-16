@@ -3066,8 +3066,8 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** to benchmark PipeWire's built-in filter-chain convolver with 16,384-tap FIR filters on 4 speaker channels on the Pi 4B,
 **so that** we have definitive data on whether PipeWire-native convolution is a viable long-term replacement for CamillaDSP's FIR engine on this hardware.
 
-**Status:** selected (owner-authorized 2026-03-16)
-**Depends on:** none (independent track, can start immediately)
+**Status:** in-review (all 6 BM2 tasks done 2026-03-16. BM2-4 PASS: q1024 1.70% CPU, q256 3.47% CPU. AE + Architect signed off. Pending owner acceptance.)
+**Depends on:** none (independent track)
 **Blocks:** none directly (gates long-term Option B evaluation per unified graph analysis decision tree)
 **Decisions:** unified graph analysis Section 6 (decision tree), Section 8 (long-term PW-native convolution)
 **Architecture ref:** `docs/architecture/unified-graph-analysis.md` BM-2 definition (line 835), decision tree (lines 837-877)

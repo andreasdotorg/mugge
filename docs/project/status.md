@@ -63,7 +63,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-051 | DEFERRED | 2/4 | **deferred** (owner directive 2026-03-16: deselected for Tier 11. Was IMPLEMENT 2/4 — SB-1-6 done, Playwright E2E written. Work preserved.) |
 | US-052 | DEFERRED | 3/6 | **deferred** (owner directive 2026-03-16: deselected for Tier 11. Was IMPLEMENT 3/6 — 11/12 subtasks done, SG-12 ABORTED (architecture). Code preserved (6,183 lines, 193 tests). Resumes after US-056/057/058.) |
 | US-053 | DEFERRED | 3/6 | **deferred** (owner directive 2026-03-16: deselected for Tier 11. Was IMPLEMENT 3/6 — TT-2 committed, PCM-MODE-3 code-complete. Work preserved.) |
-| US-058 | IMPLEMENT | 0/7 | **in-progress** (owner-authorized 2026-03-16, started first per agreed sequencing). PW filter-chain FIR benchmark (BM-2). 6 tasks. BM2-1/2/3 DONE. **BM2-4 PASS** (q1024: 1.70% CPU, q256: 3.47% CPU -- 3-5.6x more efficient than CamillaDSP ALSA). BM2-5 (analysis + lab note) and BM2-6 (sign-offs) remain. |
+| US-058 | REVIEW | 7/7 | **in-review** (owner-authorized 2026-03-16). PW filter-chain FIR benchmark (BM-2). **ALL 6 TASKS DONE. BM2-4 PASS** (q1024: 1.70% CPU, q256: 3.47% CPU -- 3-5.6x more efficient than CamillaDSP ALSA with FFTW3 NEON). Lab note: `docs/lab-notes/LN-BM2-pw-filter-chain-benchmark.md`. AE + Architect both signed off (BM2-6). All 7 DoD items met. Pending owner acceptance. |
 
 ## In Progress
 
@@ -72,7 +72,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **TK-151** (**DONE — S-001 Steps 3-9 ALL PASS**): pcm-bridge runtime validated on Pi. AD-F006 build chain + runtime both proven. **TK-236 VERIFIED (HIGH).** 8 AUX output ports created and linked to loopback-8ch-sink on Pi (build #8, commit `c3cf92a`). Fix: `audio.position` property in stream props + SPA format pod. Playback: AUX0-AUX7 (8 output ports matching loopback sink). Capture: MONO. 10 regression tests. pcm-bridge capture mode may need same fix (future item).
 - **US-056** (Phase: **SELECTED** — owner-authorized 2026-03-16): CamillaDSP JACK backend migration. No dependencies. Validate-or-rollback. Unblocks US-052 + US-059.
 - **US-057** (Phase: **SELECTED** — owner-authorized 2026-03-16): CamillaDSP PW-native backend investigation. 1-day time-boxed spike. Depends on US-056.
-- **US-058** (Phase: **IMPLEMENT 4/6** — owner-authorized 2026-03-16): PW filter-chain FIR benchmark (BM-2). **BM2-4 PASS** — q1024: 1.70% CPU (<20% threshold), q256: 3.47% CPU (<40% threshold). PW filter-chain with FFTW3 NEON is 3-5.6x more CPU efficient than CamillaDSP ALSA. BM2-5 (analysis + lab note) and BM2-6 (AE + Architect sign-offs) remain.
+- **US-058** (Phase: **REVIEW** — all 6 tasks done, in-review): PW filter-chain FIR benchmark (BM-2). **BM2-4 PASS** — q1024: 1.70% CPU, q256: 3.47% CPU. FFTW3 NEON 3-5.6x more efficient than CamillaDSP ALSA. Lab note: `LN-BM2-pw-filter-chain-benchmark.md`. AE + Architect signed off. All 7 DoD met. **Pending owner acceptance.**
 - **US-059** (Phase: **SELECTED** — owner-authorized 2026-03-16): GraphManager sole PW session manager (D-039). Depends on any-of US-056/057/058.
 - **US-051** (DEFERRED — owner directive 2026-03-16): Was IMPLEMENT 2/4. SB-1-6 done, Playwright E2E written. Work preserved, resumes later.
 - **US-052** (DEFERRED — owner directive 2026-03-16): Was IMPLEMENT 3/6. Code complete (6,183 lines, 193 tests). SG-12 ABORTED (architecture). Resumes after US-056/057/058.

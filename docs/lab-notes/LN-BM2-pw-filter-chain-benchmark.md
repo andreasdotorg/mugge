@@ -396,7 +396,7 @@ unified-graph-analysis.md:
 
 ## Raw Evidence
 
-### On Pi (`/tmp/bm2-results/`)
+### In repository (`results/benchmarks/bm2/`)
 
 | File | Contents |
 |------|----------|
@@ -406,8 +406,10 @@ unified-graph-analysis.md:
 | `BM2_q256_avg_cpu.txt` | Average CPU: 3.47 |
 | `BM2_q1024_temp.txt` | Post-test temperature: 62322 (millidegrees) |
 | `BM2_q256_temp.txt` | Post-test temperature: 64270 (millidegrees) |
-| `bm2-filter-chain.conf` | Generated config (template with paths substituted) |
-| `silence_4ch.wav` | 100s silence file used as audio source |
+
+Also generated on Pi during execution (not committed, ephemeral):
+- `/tmp/bm2-results/bm2-filter-chain.conf` -- generated config (template with paths substituted)
+- `/tmp/bm2-results/silence_4ch.wav` -- 100s silence file used as audio source
 
 ### In repository
 
