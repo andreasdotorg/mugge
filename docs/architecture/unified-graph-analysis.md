@@ -425,13 +425,14 @@ attempt it unless PipeWire gains a partitioned overlap-save convolution
 plugin, which does not exist today and is not on any public roadmap.
 
 **Correction (2026-03-16):** The statement above that PipeWire filter-chain
-"does not implement partitioned convolution" may be wrong. AE has
-identified that PipeWire may have included partitioned convolution since
-v0.3.56 (2022). Our installed version (1.4.9) likely includes it. If so,
-the CPU estimates above (40-60%) are based on the wrong algorithm and
-would be significantly lower. **BM-2 is now the critical gate** -- it
-must be run before any conclusion about Option B viability. See Section 8
-for the full analysis of PW-native convolution as a long-term endpoint.
+"does not implement partitioned convolution" is wrong. PipeWire has
+included non-uniform partitioned convolution since v0.3.56 (2022),
+using vendored PFFFT with explicit ARM NEON intrinsics. Our installed
+version (1.4.9) includes it. The CPU estimates above (40-60%) are based
+on the wrong algorithm and are invalid. **BM-2 is the critical gate** --
+it measures actual ARM performance with our specific workload (16k taps
+x 4ch). See Section 8 for the full analysis of PW-native convolution
+as a long-term endpoint.
 
 **AD counterpoint:** The losses (items 1-10 above) are engineering
 problems with known solutions -- not fundamental impossibilities. If
@@ -797,17 +798,14 @@ computation. No NEON regression risk.
 
 Rollback is trivial: change YAML back to `type: Alsa`, restart services.
 
-**Option B risk: HIGH (structural, hard to reverse). AE initial verdict:
-dealbreaker -- but see correction below.**
+**Option B risk: HIGH (structural, hard to reverse). CPU risk resolved
+pending BM-2; remaining risks are integration complexity.**
 Four compounding risks:
-1. *CPU budget (CRITICAL):* Earlier analysis assumed PipeWire filter-chain
-   does not implement partitioned convolution (40-60% CPU estimate). AE
-   correction (2026-03-16): PW may have partitioned convolution since
-   v0.3.56 (2022). **BM-2 must be run to determine actual CPU cost.**
-   If non-partitioned: direct convolution requires ~6.3 billion
-   MACs/second; monolithic FFT requires 341ms blocks (incompatible with
-   latency) -- unviable. If partitioned: CPU may be comparable to
-   CamillaDSP's 19% at chunksize 256.
+1. *CPU budget:* Earlier analysis assumed non-partitioned convolution
+   (40-60% CPU estimate). This is wrong -- PW has non-uniform partitioned
+   convolution since v0.3.56, using PFFFT with ARM NEON intrinsics.
+   CPU may be comparable to CamillaDSP's 19% at chunksize 256.
+   **BM-2 must be run to confirm actual ARM performance.**
 2. *Measurement workflow redesign:* D-036's config hot-swap depends on
    CamillaDSP's websocket API. Filter-chain module restart causes stream
    disconnect, reintroducing TK-224 routing races. Core control mechanism
@@ -834,7 +832,7 @@ Two benchmarks gate the entire decision:
 | Benchmark | What | Criteria | Determines |
 |-----------|------|----------|------------|
 | **BM-1** | CamillaDSP `type: Jack` via `pw-jack`: 16k taps x 4ch at quantum 1024 on Pi 4B | CPU < 12% (DJ mode budget). AE interpolation: 8-9% expected (10% upper bound). | Option A viability |
-| **BM-2** | PipeWire filter-chain convolver: 16k taps x 4ch at quantum 1024 on Pi 4B | CPU < 20% (comparable to CamillaDSP). AE correction: PW v1.4.9 may already have partitioned convolution (since v0.3.56). Earlier 40-60% estimate assumed non-partitioned -- may be wrong. **Must benchmark to determine.** | Option B viability + Section 8 long-term endpoint |
+| **BM-2** | PipeWire filter-chain convolver: 16k taps x 4ch at quantum 1024 on Pi 4B | CPU < 20% (comparable to CamillaDSP). PW v1.4.9 likely has partitioned convolution (since v0.3.56, per AE). The question is not algorithm existence but **ARM performance** -- NEON optimization quality and FFT engine efficiency on Cortex-A72. | Option B viability + Section 8 long-term endpoint |
 
 ### Decision Tree
 
@@ -1373,24 +1371,36 @@ This is a Phase 4+ activity. It does not change the near-term roadmap
 as the owner's stated vision for the project's long-term architectural
 endpoint.
 
-### 8.1 Critical Correction: PipeWire May Already Have Partitioned Convolution
+### 8.1 Critical Correction: PipeWire Has Partitioned Convolution
 
 **Correction (2026-03-16):** Earlier sections of this document (Section 4,
 Option B) stated categorically that "PipeWire filter-chain does not
-implement partitioned convolution." AE has identified that **PipeWire
-may have included partitioned convolution since v0.3.56 (2022).** Our
-installed version (1.4.9) almost certainly includes it.
+implement partitioned convolution." This was wrong. **PipeWire has
+included non-uniform partitioned convolution since v0.3.56 (2022).**
+Our installed version (1.4.9) certainly includes it. (AE analysis;
+Architect has retracted the earlier "NOT partitioned" assertion.)
 
-If this is correct, the entire Option B analysis changes:
+This changes the entire Option B analysis:
 - The 40-60% CPU estimate (based on non-partitioned FFT) is wrong.
 - Actual CPU cost could be comparable to CamillaDSP's ~19% at chunksize
-  256, depending on the FFT engine and NEON optimization.
-- The path becomes "improve what exists" rather than "build from scratch."
+  256, given the FFT engine quality (see below).
+- The path is "improve what exists" rather than "build from scratch."
 
-**This makes BM-2 the single most important benchmark in this document.**
-Running BM-2 (16k taps x 4ch on Pi 4B) would immediately resolve
-whether PW's existing convolver is viable, obsoleting months of
-speculative analysis.
+**FFT implementation (AE, 2026-03-16):** PipeWire's SPA convolver plugin
+uses a vendored copy of **PFFFT** (Julien Pommier, BSD license) with
+explicit ARM NEON intrinsics, or optionally **FFTW3** (build-time
+option with hand-optimized NEON codelets). Both have hand-written NEON
+SIMD paths for ARMv8. This is competitive with or potentially faster
+than CamillaDSP's rustfft (which relies on LLVM auto-vectorization
+rather than hand-written intrinsics). Combined with non-uniform
+partitioning, **BM-2 PASS is the expected outcome.** Verification
+command: `ldd /usr/lib/aarch64-linux-gnu/spa-0.2/filter-graph/libspa-filter-graph.so | grep fft`
+
+**BM-2 remains the single most important benchmark in this document.**
+Running BM-2 (16k taps x 4ch on Pi 4B) would immediately confirm
+whether PW's existing convolver performs within budget, obsoleting
+months of speculative analysis. The question is not algorithm existence
+(confirmed) but ARM performance on Cortex-A72 with 16,384-tap filters.
 
 ### 8.2 Licensing Feasibility
 
@@ -1417,10 +1427,10 @@ mainline inclusion if LGPL/MIT licensing is desired.
 
 | Library | License | Language | ARM NEON | Notes |
 |---------|---------|----------|----------|-------|
-| FFTW3 | GPL-2.0+ | C | Yes | Fast, well-proven on ARM. Natural choice for GPL SPA plugin (Path D). |
-| PFFFT | BSD | C (~1500 lines) | Yes | Header-only, embeddable. Best choice for LGPL/MIT clean-room (Path B). (AE + Architect consensus) |
+| FFTW3 | GPL-2.0+ | C | Yes (hand-optimized codelets) | Fast, well-proven on ARM. Build-time option in PipeWire's convolver. Natural choice for GPL SPA plugin (Path D). |
+| PFFFT | BSD | C (~1500 lines) | Yes (explicit intrinsics) | Header-only, embeddable. **Already vendored in PipeWire's SPA convolver.** Best choice for LGPL/MIT clean-room (Path B). (AE + Architect consensus) |
 | KissFFT | BSD | C | Partial | Small, simple. Less optimized than PFFFT for ARM. |
-| rustfft | MIT/Apache-2.0 | Rust | Via LLVM | What CamillaDSP uses. Not viable for C upstream contribution. |
+| rustfft | MIT/Apache-2.0 | Rust | Via LLVM auto-vectorization | What CamillaDSP uses. Potentially slower than PFFFT/FFTW3 hand-written NEON. Not viable for C upstream contribution. |
 
 **Prior art:**
 - **zita-convolver** (C++, GPL-3.0): Mature partitioned convolver by
@@ -1507,10 +1517,15 @@ not in the convolution algorithm itself.
 
 Unknown. Wim Taymans (PipeWire lead) has not been consulted.
 PipeWire's `filter-chain` module already supports a `convolver`
-element, demonstrating that the project acknowledges the use case.
-Whether it already implements partitioned convolution (see Section 8.1
-correction) or uses direct-form convolution is the open question that
-BM-2 resolves.
+element with non-uniform partitioned convolution (since v0.3.56, using
+vendored PFFFT with ARM NEON intrinsics -- see Section 8.1). The
+project clearly acknowledges the use case.
+
+The remaining open question is not whether PW implements partitioned
+convolution (confirmed, per AE + Section 8.1), but **how well it
+performs on Pi 4B ARM with 16,384-tap filters.** This is what BM-2
+measures: algorithm existence is confirmed; ARM performance with our
+specific workload (4 channels x 16k taps at quantum 256-1024) is not.
 
 **Recommended first step (all advisors agree):** Open a PipeWire GitLab
 issue gauging interest before writing any code. The issue should
