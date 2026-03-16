@@ -436,6 +436,82 @@ viability; GM-12 confirms it under real conditions.
 
 ---
 
+## Appendix A: Architecture Comparison — GM-12 vs CamillaDSP Era
+
+### How `top` Reports CPU on Linux
+
+Linux `top` reports per-process CPU as a percentage of **one CPU core** (0-100%
+per core), not as a percentage of total system capacity. On the Pi 4B (4
+cores), the maximum per-process figure is 100% (single-threaded) or up to 400%
+(if using all 4 cores). Mixxx at 25% means 25% of one core, not 25% of total
+system capacity.
+
+To convert to "percentage of total system":
+- **Mixxx 25%** of one core = 25/400 = **6.25% of total**
+- **PipeWire 41.7%** of one core = 41.7/400 = **10.4% of total**
+- **Xwayland 16.7%** of one core = 16.7/400 = **4.2% of total**
+
+The "58.5% idle" figure from `top`'s summary line IS already expressed as
+percentage of total system capacity (all 4 cores combined). This is consistent:
+6.25% + 10.4% + 4.2% + kernel/other = ~41.5% busy, leaving ~58.5% idle.
+
+All `top` figures in this lab note and the F-012/TK-055 lab note use the same
+per-core convention, so they are directly comparable.
+
+### Full Comparison Table
+
+Data sources: GM-12 (this document), BM-2 (`LN-BM2`), F-012/TK-055 (CamillaDSP
+era, hardware GL, quantum 1024, 15-min monitoring window), US-001 (CamillaDSP
+CPU benchmarks), US-002 (latency measurements).
+
+| Metric | CamillaDSP Era (F-012/TK-055) | PW Filter-Chain (GM-12) | Change |
+|--------|-------------------------------|-------------------------|--------|
+| **Architecture** | PW -> ALSA Loopback -> CamillaDSP -> USBStreamer | PW -> PW filter-chain convolver -> USBStreamer | Eliminated ALSA Loopback + CamillaDSP |
+| **DSP engine** | CamillaDSP 3.0.1 (rustfft, LLVM auto-vec) | PW filter-chain (FFTW3, hand-written ARM NEON) | FFT engine change |
+| **Convolver CPU** (per-core %) | 27-28% (CamillaDSP, cs2048) | 41.7% (PW daemon total incl. graph + I/O) | See note 1 |
+| **Convolver-only CPU** (isolated) | 5.23% (US-001 internal API, cs2048) | 1.70% (BM-2 pidstat, q1024) | 3.1x more efficient |
+| **Convolver B/Q ratio** | Not measured | 8-12% of quantum budget | -- |
+| **Mixxx CPU** (per-core %) | 39-41% (hardware GL, DJ playback) | 25% (hardware GL, DJ playback) | Reduced ~15% |
+| **Xwayland CPU** (per-core %) | Not separately measured | 16.7% | -- |
+| **PipeWire daemon CPU** (per-core %) | 3.5-5.1% (routing + JACK bridge only) | 41.7% (routing + JACK bridge + convolver) | Expected increase: convolver now runs inside PW |
+| **CamillaDSP CPU** (per-core %) | 27-28% | 0% (stopped) | Eliminated |
+| **Total busy CPU** (of 400%) | ~70-74% (Mixxx + CamillaDSP + PW) | ~83% (Mixxx + PW + Xwayland) | Similar total |
+| **Idle** (% of total system) | Not recorded | 58.5% | -- |
+| **Temperature** | 64-71C (15 min) | 71.1C (snapshot) | Comparable |
+| **Xruns** | 0 (F-012 monitoring) | 0 (after ALSA buffer fix) | Both clean |
+| **Load average** | 4.4-7.8 | 5.4-5.5 | Comparable |
+| **DJ audio latency (PA path)** | ~109ms (PW q1024 + Loopback + CamillaDSP 2x2048) | ~21ms (PW q1024, single graph) | ~5x reduction |
+| **Mixxx UI smoothness** | Functional (hardware GL, ~40% CPU) | Functional (hardware GL, ~25% CPU) | More headroom |
+
+**Notes:**
+
+1. **Convolver CPU is not directly comparable between architectures.** In the
+   CamillaDSP era, CamillaDSP ran as a separate process (27-28% per-core),
+   while PipeWire handled only routing (3.5-5.1%). In GM-12, PipeWire handles
+   everything (41.7% per-core). The combined total is lower: 41.7% vs ~32%
+   (28+4). However, the isolated convolver benchmarks (US-001 vs BM-2) show
+   the PW convolver is 3.1x more efficient at comparable buffer sizes.
+
+2. **Mixxx CPU dropped from ~40% to 25%.** This is unexpected -- the Mixxx
+   configuration and hardware GL path are the same. Possible explanations:
+   different track complexity, different skin/waveform settings, or reduced
+   contention from eliminating CamillaDSP's ALSA Loopback traffic. This was
+   not controlled for and should not be treated as a confirmed improvement.
+
+3. **Latency improvement is the most significant gain.** Eliminating the ALSA
+   Loopback bridge and CamillaDSP's 2-chunk buffering removes ~88ms from the
+   DJ PA path. The remaining ~21ms is one PipeWire quantum (1024/48000). For
+   DJ mode this is not perceptible. For live mode (quantum 256), the PA path
+   would be ~5.3ms -- transformative for singer slapback prevention (was the
+   primary motivation for D-011's aggressive chunksize 256 target).
+
+4. **Latency has NOT been measured for GM-12.** The ~21ms figure is the
+   theoretical single-quantum latency. A formal loopback measurement (like
+   US-002) has not been performed on the PW filter-chain architecture. This
+   should be done to confirm the ALSA buffering artifact is truly eliminated.
+
+---
+
 **Session:** CHANGE C-004
 **Operator:** worker-mock-backend
 **Date:** 2026-03-16
