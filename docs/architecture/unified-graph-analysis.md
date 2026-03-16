@@ -314,10 +314,10 @@ PipeWire ports.
   mathematically identical output regardless of partition size (within
   32-bit float rounding at ~-150 dBFS). The trade-off is purely CPU
   vs latency. (AE analysis)
-  **Could we set PW quantum to 2048 to recover the CPU benefit?** No.
-  See Section 7.2 for the full analysis -- quantum 2048 is unanimously
-  rejected by all advisors due to DJ response degradation and live mode
-  incompatibility.
+  **Could we set PW quantum to 2048 to recover the CPU benefit?**
+  For DJ mode, yes -- quantum 2048 is a viable option saving ~10-15%
+  combined CPU (Mixxx + CamillaDSP). For live mode, no -- violates
+  D-011. See Section 7.2 for the full trade-off analysis.
 - **Priority isolation.** CamillaDSP's processing callback runs inside
   PipeWire's data-loop thread (FIFO/88) instead of its own thread
   (FIFO/80). This means CamillaDSP's 16k-tap convolution shares the RT
@@ -1052,7 +1052,8 @@ The owner asked: in a tightly integrated scenario (Option A), why not
 set PipeWire quantum to 2048, matching CamillaDSP's current DJ-mode
 chunksize, to preserve the CPU benefit of large buffers?
 
-**Answer: unanimously rejected by all four advisors.**
+**Answer: rejected for live mode (D-011 violation). For DJ mode,
+quantum 2048 is a viable option trading PA latency for CPU headroom.**
 
 PipeWire quantum is graph-global. When set to 2048, ALL nodes in the
 graph process in 2048-sample blocks (42.7ms at 48 kHz). There is no
@@ -1062,28 +1063,55 @@ practical for CamillaDSP as a JACK client. (Architect analysis)
 
 **Impact analysis:**
 
-| Dimension | Quantum 1024 (current DJ) | Quantum 2048 (proposed) | Assessment |
-|-----------|--------------------------|------------------------|------------|
-| CamillaDSP CPU (DJ) | 8-9% (AE) | 5.23% (measured) | Saves ~3-4%. Within budget either way. |
-| Mixxx CPU | ~85% | ~70-80% (AE estimate) | **This is the real motivation.** But the trade-offs below outweigh it. |
-| DJ fader/kill response | 21.3ms quantization | **42.7ms quantization** | **Audible and unacceptable for psytrance.** Crossfader cuts and kill switches quantized to 43ms produce noticeable lag. (AD) |
-| PA path latency | ~90ms round-trip | **~141ms round-trip** | Challenging for DJ headphone monitoring. (AD) |
-| WP routing races | Normal | **L-020 resurfaces:** 42-128ms for new connections. (AE) |
-| USBStreamer compatibility | Verified at period-size 1024 | period-size 2048 needs verification. (AE) |
-| Metering granularity | ~21ms | ~43ms | Acceptable for DJ mode. (PO) |
-| Live mode (quantum 256) | N/A | **Non-starter.** Violates D-011 by ~6x (42.7ms vs 5.3ms target). Singer IEM slapback. (PO, AE, AD) |
+| Aspect | Quantum 1024 (current DJ) | Quantum 2048 (proposed) | Assessment |
+|--------|--------------------------|------------------------|------------|
+| CamillaDSP CPU | ~8-9% (AE) | ~5.2% (measured) | Saves ~3-4%. |
+| Mixxx CPU (est.) | ~85% | ~70-80% (AE) | Saves ~10-15%. **Significant on Pi 4.** |
+| PA path latency | ~87ms | ~173ms | For DJ/PA with pre-recorded material, functionally irrelevant (US-002 finding #5). |
+| DJ fader response | Not affected | Not affected | Faders, crossfaders, kill switches, EQ are processed inside Mixxx's audio engine before samples reach PipeWire. Quantum does not affect DJ control response. |
+| Routing race (startup) | 21-64ms | 42-128ms (L-020) | Mitigated by persistent streams (Option H Lua scripts). |
+| USBStreamer compatibility | Verified at period-size 1024 | period-size 2048 needs verification | One-time test on Pi. |
+| Spectrum update rate | ~47 Hz | ~23 Hz | Reduced but adequate for DJ mode. |
+| Live mode (quantum 256) | N/A | **Non-starter.** Violates D-011 by ~6x (42.7ms vs 5.3ms target). Singer IEM slapback. | Unchanged -- live mode quantum 256 is non-negotiable. |
+
+**Correction (2026-03-16):** An earlier draft of this section claimed
+that DJ fader/kill response would be degraded to 42.7ms quantization.
+This was factually wrong. DJ faders, crossfaders, kill switches, and
+EQ knobs are all processed inside Mixxx's audio engine. PipeWire
+quantum affects only when processed audio blocks are delivered to the
+graph -- the fader action is already baked into the samples. AE and
+Architect retracted the fader argument.
 
 **The loss of independent chunksize is the documented cost of Option A.**
-The cost is ~3-4% CPU -- within budget and not worth mitigating via
-quantum 2048. The Mixxx CPU saving (~10-15%) is more meaningful, but
-the DJ response degradation (43ms fader quantization) and live mode
-incompatibility make quantum 2048 unacceptable.
+For DJ mode, the real trade-offs of quantum 2048 are: (1) PA path
+latency roughly doubles (~87ms to ~173ms), and (2) L-020 routing races
+widen at startup. The PA latency increase is functionally irrelevant
+for DJ/PA with pre-recorded material (US-002 finding #5: PA latency
+only matters for live performers hearing their own voice through the
+PA). The routing race is a startup-only concern mitigated by persistent
+streams.
 
-**Per-mode quantum remains the correct approach:** quantum 1024 for DJ
-mode, quantum 256 for live mode, set at runtime via `pw-metadata`.
-CamillaDSP follows PipeWire's quantum automatically in JACK/PW backend
-mode. (AE: CamillaDSP does NOT drive PW graph timing -- quantum is set
-externally.)
+The combined CPU saving of ~10-15% (Mixxx + CamillaDSP) is significant
+on the Pi 4's constrained budget. **Quantum 2048 is a legitimate
+DJ-mode option** -- it could be the default DJ quantum, or a runtime
+fallback if CPU pressure is observed at quantum 1024.
+
+**Per-mode quantum remains the correct approach:** quantum 1024 (or
+optionally 2048) for DJ mode, quantum 256 for live mode, set at runtime
+via `pw-metadata`. CamillaDSP follows PipeWire's quantum automatically
+in JACK/PW backend mode. (AE: CamillaDSP does NOT drive PW graph
+timing -- quantum is set externally.)
+
+**Fundamental insight (AE):** The ALSA Loopback IS the independent
+chunksize mechanism. It creates a separate timing domain that allows
+CamillaDSP to process at chunksize 2048 while PipeWire runs at quantum
+1024. If the owner wants CamillaDSP at 2048-sample blocks while keeping
+other nodes at 1024, the only mechanisms are: (1) the current ALSA
+Loopback (separate timing domain), or (2) a separate PipeWire graph
+driver (which re-introduces clock domain separation). Both re-create
+the dual-graph architecture that Option A eliminates. This confirms
+that the independent chunksize trade-off is inherent to graph
+unification, not a solvable configuration problem.
 
 ### 7.3 AD Challenge: Against Incremental Migration
 
@@ -1139,7 +1167,7 @@ AD's critique applies most strongly to AE's stage-based decomposition
 |-------|-----------|-----|-----|-----|--------|
 | Phase 0: Option A (JACK backend) | YES | YES | YES | YES | **CONSENSUS** |
 | Phase 1: Option H (WP Lua scripts) | YES | YES | YES | YES | **CONSENSUS** |
-| Phase 2: IEM/HP bypass (ch 4-7) | YES (latency value) | NEUTRAL (deferred decision) | Less objectionable than stage-based | Operator-transparent? | **ARCHITECT PROPOSES** |
+| Phase 2: IEM/HP bypass (ch 4-7) | YES (latency value) | PREFERS STATUS QUO (audit simplicity) | Less objectionable than stage-based | Operator-transparent? | **OPEN TRADE-OFF** |
 | Phase 3+: Further decomposition | DEFER | DEFER | REJECT | -- | **CONSENSUS DEFER** |
 | Never migrate: mixer, FIR, monitoring API | NEVER | NEVER | NEVER | -- | **CONSENSUS NEVER** |
 
@@ -1215,21 +1243,44 @@ monitoring model already supports.
   internals has no proven path and would invalidate 28+ files of
   integration.
 
+**Per-feature migration assessment (Architect + AE consensus):**
+
+| Feature | Current Owner | Recommendation | Deciding Factor |
+|---------|--------------|----------------|-----------------|
+| Audio transport | ALSA Loopback | **MIGRATE** (Phase 0) | Eliminate loopback boundary; JACK backend proven |
+| Routing policy | WirePlumber defaults | **MIGRATE** (Phase 1) | Custom Lua scripts replace general-purpose policies |
+| IEM/HP routing (ch 4-7) | CamillaDSP passthrough | **OPEN** (Phase 2) | Architect: latency value; AE: audit simplicity favors status quo |
+| Mixer (input matrix) | CamillaDSP | **NEVER** | Atomic config swap (`session.py` 391-460) -- no PW equivalent |
+| FIR convolution | CamillaDSP | **NEVER** | No partitioned overlap-save in PW; ~8-9% CPU irreplaceable |
+| Gain staging | CamillaDSP | **NEVER** | D-009 single-file audit; ~0.1% CPU -- no motivation |
+| Delay / alignment | CamillaDSP | **NEVER** | Part of atomic config; ~0.1% CPU -- no motivation |
+| HPF (driver protection) | CamillaDSP | **NEVER** | D-031 safety-critical; survives in CamillaDSP crash only if CamillaDSP is running |
+| Monitoring API | CamillaDSP websocket | **NEVER** | 28+ files of integration; no PW rebuild path proven |
+
 ### 7.5 Contributor Perspectives on Migration
 
 - **AE:** Proposed 5-phase stage-based migration. Recommends stopping at
   Phase 1 maximum (backend + routing only). Confirms non-FIR overhead
   is ~0.1% CPU -- no motivation to extract non-FIR stages. CPU savings
-  from quantum 2048 are real but motivated by Mixxx (~85% to ~70-75%),
-  not CamillaDSP (~9% to ~5%). Neutral on Phase 2 (IEM bypass) --
-  deferred decision.
+  from quantum 2048 are real but motivated by Mixxx (~85% to ~70-80%),
+  not CamillaDSP (~9% to ~5%). Confirms `clock.force-quantum` is
+  graph-global, `jack_set_buffer_size()` is server-wide, CamillaDSP
+  `chunksize` YAML field ignored under JACK backend. **More conservative
+  on Phase 2 (IEM bypass):** prefers keeping all channels in CamillaDSP
+  for audit simplicity -- fewer moving parts, single config file, one
+  system to debug. Does not object to Phase 2 but would not pursue it
+  without demonstrated latency need.
 - **Architect:** Proposed channel-based decomposition (Phase 0-1-2-STOP).
   The clean boundary is speakers vs IEM/HP, not processing stages.
   Measurement pipeline's atomic config swap is the hard blocker against
-  mixer extraction. Quantum 2048 not recommended -- PW quantum is
-  graph-global with no per-node override, ~3-4% CPU saving not worth
-  DJ response degradation. Phase 2 has IEM latency value but
-  acknowledges AE's audit simplicity argument for stopping at Phase 1.
+  mixer extraction. Quantum 2048 viable for DJ mode (retracted earlier
+  fader-response objection -- faders are inside Mixxx, not affected by
+  PW quantum). **Phase 2 is an open trade-off, not a
+  consensus recommendation:** Architect sees IEM latency value (saving
+  ~2 CamillaDSP chunks), AE prefers audit simplicity. Both positions
+  are valid. Decision deferred until Phase 0-1 are validated and
+  operational experience reveals whether IEM latency is a real pain
+  point.
 - **AD:** Challenges incremental migration entirely. Every intermediate
   state requires full revalidation (4x testing burden). Recommends
   Option A or status quo -- do not split the DSP path. The channel-based
@@ -1239,10 +1290,11 @@ monitoring model already supports.
 - **PO:** Each step must be operator-transparent. Migration steps must
   move complete functional units or maintain the current API surface.
   Live mode quantum 256 is non-negotiable (D-011, design principle #5).
-  Metering at 42ms (quantum 2048) would be acceptable for DJ mode, but
-  the 43ms fader quantization is not.
+  Quantum 2048 acceptable for DJ mode (metering at 42ms is fine; fader
+  response is unaffected since faders are inside Mixxx).
 - **All four agree:** Phase 0 + Phase 1 are unambiguously beneficial.
-  Never migrate mixer, FIR, or monitoring API. Quantum 2048 rejected.
+  Never migrate mixer, FIR, or monitoring API. Quantum 2048 rejected
+  for live mode; viable option for DJ mode.
 
 ---
 
