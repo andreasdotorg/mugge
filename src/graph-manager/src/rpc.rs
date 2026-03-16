@@ -689,42 +689,26 @@ type ClientList = Arc<Mutex<Vec<TcpStream>>>;
 /// dispatches commands, and writes responses. Push events from
 /// `event_rx` are broadcast to all connected clients.
 ///
-/// Returns the thread handle and a command sender for the PW thread.
+/// Channels are created externally (in `main()`) so that:
+/// - `cmd_tx` stays with the RPC thread (to send commands to PW)
+/// - `cmd_rx` goes to the PW main loop thread (to receive commands)
+/// - `event_tx` goes to the PW main loop thread (to push events)
+/// - `event_rx` stays with the RPC thread (to broadcast events)
+///
+/// Returns the thread handle.
 pub fn start_rpc_thread(
     addr: &str,
     initial_mode: &str,
+    cmd_tx: mpsc::Sender<RpcCommand>,
+    event_rx: mpsc::Receiver<GraphEvent>,
     shutdown: Arc<AtomicBool>,
-) -> (
-    thread::JoinHandle<()>,
-    mpsc::Sender<RpcCommand>,
-    mpsc::Sender<GraphEvent>,
-) {
+) -> thread::JoinHandle<()> {
     let addr = addr.to_string();
     let initial_mode = initial_mode.to_string();
 
-    // Channel: RPC thread → PW thread (commands).
-    let (cmd_tx, cmd_rx) = mpsc::channel::<RpcCommand>();
-    // Channel: PW thread → RPC thread (events).
-    let (event_tx, event_rx) = mpsc::channel::<GraphEvent>();
-
-    let cmd_tx_clone = cmd_tx.clone();
-
-    let handle = thread::spawn(move || {
-        run_rpc_server(&addr, &initial_mode, cmd_tx_clone, event_rx, shutdown);
-    });
-
-    // Spawn a thread to handle PW-side command processing (stub).
-    let cmd_rx_shutdown = Arc::new(AtomicBool::new(false));
-    thread::spawn({
-        let mode = Arc::new(Mutex::new(initial_mode.clone()));
-        move || {
-            while let Ok(cmd) = cmd_rx.recv() {
-                handle_pw_command(cmd, &mode);
-            }
-        }
-    });
-
-    (handle, cmd_tx, event_tx)
+    thread::spawn(move || {
+        run_rpc_server(&addr, &initial_mode, cmd_tx, event_rx, shutdown);
+    })
 }
 
 fn run_rpc_server(
@@ -1355,11 +1339,35 @@ mod tests {
     // TCP connection handling (integration-style)
     // -----------------------------------------------------------------------
 
+    /// Start an RPC server with a stub PW handler thread for testing.
+    /// Creates channels, spawns the stub handler, and returns everything
+    /// needed to interact with the server.
+    fn start_test_rpc_server(
+        addr: &str,
+        initial_mode: &str,
+        shutdown: Arc<AtomicBool>,
+    ) -> thread::JoinHandle<()> {
+        let (cmd_tx, cmd_rx) = mpsc::channel::<RpcCommand>();
+        let (_event_tx, event_rx) = mpsc::channel::<GraphEvent>();
+
+        // Stub PW handler thread (same as GM-9 scaffolding).
+        thread::spawn({
+            let mode = Arc::new(Mutex::new(initial_mode.to_string()));
+            move || {
+                while let Ok(cmd) = cmd_rx.recv() {
+                    handle_pw_command(cmd, &mode);
+                }
+            }
+        });
+
+        start_rpc_thread(addr, initial_mode, cmd_tx, event_rx, shutdown)
+    }
+
     #[test]
     fn tcp_server_accepts_and_responds() {
         let shutdown = Arc::new(AtomicBool::new(false));
-        let (handle, _cmd_tx, _event_tx) =
-            start_rpc_thread("127.0.0.1:0", "monitoring", shutdown.clone());
+        let _handle =
+            start_test_rpc_server("127.0.0.1:0", "monitoring", shutdown.clone());
 
         // Give the server a moment to bind.
         // We can't know the port from start_rpc_thread with port 0,
@@ -1380,8 +1388,8 @@ mod tests {
 
         let shutdown = Arc::new(AtomicBool::new(false));
         let addr_str = addr.to_string();
-        let (handle, _cmd_tx, _event_tx) =
-            start_rpc_thread(&addr_str, "monitoring", shutdown.clone());
+        let _handle =
+            start_test_rpc_server(&addr_str, "monitoring", shutdown.clone());
 
         // Give the server a moment to bind.
         thread::sleep(std::time::Duration::from_millis(100));
@@ -1416,8 +1424,8 @@ mod tests {
 
         let shutdown = Arc::new(AtomicBool::new(false));
         let addr_str = addr.to_string();
-        let (_handle, _cmd_tx, _event_tx) =
-            start_rpc_thread(&addr_str, "monitoring", shutdown.clone());
+        let _handle =
+            start_test_rpc_server(&addr_str, "monitoring", shutdown.clone());
 
         thread::sleep(std::time::Duration::from_millis(100));
 
