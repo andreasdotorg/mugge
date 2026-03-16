@@ -10,7 +10,7 @@ The **Measure** and **MIDI** views are frontend stubs for Stage 2.
 ## Quick Start
 
 ```bash
-cd scripts/web-ui
+cd src/web-ui
 pip install fastapi uvicorn
 uvicorn app.main:app --host 0.0.0.0 --port 8080
 ```
@@ -55,7 +55,7 @@ data through shared WebSocket connections managed by `app.js`.
 ### File layout
 
 ```
-scripts/web-ui/
+src/web-ui/
   app/
     __init__.py
     main.py              FastAPI app, routes, static mount
@@ -182,7 +182,7 @@ Placeholder stubs. Will be implemented in Stage 2.
 ## Running Tests
 
 ```bash
-cd scripts/web-ui
+cd src/web-ui
 pip install fastapi uvicorn httpx pytest
 python -m pytest test_server.py -v
 ```

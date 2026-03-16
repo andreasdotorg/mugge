@@ -352,7 +352,7 @@ Check docs/architecture/test-tool-page.md exists               -> expect yes (D2
 
 ```bash
 nix run .#serve
-# or: cd scripts/web-ui && PI_AUDIO_MOCK=1 uvicorn app.server:app --host 0.0.0.0 --port 8080
+# or: cd src/web-ui && PI_AUDIO_MOCK=1 uvicorn app.server:app --host 0.0.0.0 --port 8080
 ```
 
 **Step 3: Navigation tests (AC-1: 1.1-1.4)**

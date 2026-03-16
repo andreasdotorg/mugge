@@ -65,7 +65,7 @@ Python with no network, no audio hardware, no running services.
 ### 2.4 Test Patterns
 
 - **Mock injection:** `MockSoundDevice` and `MockCamillaClient` from
-  `scripts/room-correction/mock/` are injected via `PI_AUDIO_MOCK=1` env var
+  `src/room-correction/mock/` are injected via `PI_AUDIO_MOCK=1` env var
   or constructor parameter. No monkey-patching needed for new daemon modules.
 - **State machine testing:** Drive the `MeasurementSession` through states by
   calling sync methods directly. Assert state transitions via the `ws_broadcast`
@@ -130,9 +130,9 @@ CamillaDSP by `MockCamillaClient`. Uses FastAPI `TestClient` for HTTP/WS.
 - **FastAPI TestClient** (`httpx.AsyncClient` with `ASGITransport`) for HTTP
 - **WebSocket testing** via `TestClient.websocket_connect()` or injected
   `ws_broadcast` callback
-- **MockSoundDevice** from `scripts/room-correction/mock/mock_audio.py` (uses
+- **MockSoundDevice** from `src/room-correction/mock/mock_audio.py` (uses
   room simulator for realistic simulated recordings)
-- **MockCamillaClient** from `scripts/room-correction/mock/mock_camilladsp.py`
+- **MockCamillaClient** from `src/room-correction/mock/mock_camilladsp.py`
 - **PI_AUDIO_MOCK=1** environment variable activates mock mode
 
 ### 3.4 Pass/Fail Criteria
@@ -216,7 +216,7 @@ baseline.
 - Existing e2e test infrastructure (`conftest.py` with `mock_server` fixture,
   `frozen_page` fixture for deterministic screenshots)
 - `--update-snapshots` flag for baseline creation
-- Screenshots saved to `scripts/web-ui/tests/e2e/screenshots/measurement/`
+- Screenshots saved to `src/web-ui/tests/e2e/screenshots/measurement/`
 
 ### 5.3 Screenshot Matrix
 
@@ -273,7 +273,7 @@ baseline.
 
 ```bash
 # Create baseline screenshots (mock mode, macOS):
-cd scripts/web-ui
+cd src/web-ui
 pytest tests/e2e/test_measurement_wizard.py --update-snapshots --headed
 
 # Regression check (CI or local):
@@ -313,21 +313,21 @@ PI_AUDIO_URL=https://192.168.178.185:8080 \
 
 ```bash
 # Quick check (T1 only, ~30s):
-cd scripts/room-correction && python3 -m pytest tests/ -x -q
-cd scripts/web-ui && python3 -m pytest tests/ -x -q
+cd src/room-correction && python3 -m pytest tests/ -x -q
+cd src/web-ui && python3 -m pytest tests/ -x -q
 
 # Full check (T1 + T2, ~3 min):
 PI_AUDIO_MOCK=1 python3 -m pytest tests/ -x -q --timeout=60
 
 # Visual check (T4, ~2 min):
-cd scripts/web-ui && pytest tests/e2e/test_measurement_wizard.py --headed
+cd src/web-ui && pytest tests/e2e/test_measurement_wizard.py --headed
 ```
 
 ### 6.2 Pi Deployment Workflow
 
 ```bash
 # Pre-deploy (T1 + T2 on Pi):
-ssh ela@192.168.178.185 "cd /home/ela/pi4-audio-workstation/scripts/room-correction && \
+ssh ela@192.168.178.185 "cd /home/ela/pi4-audio-workstation/src/room-correction && \
   source /home/ela/venv/bin/activate && python3 -m pytest tests/ -x -q"
 
 # Post-deploy (T3):

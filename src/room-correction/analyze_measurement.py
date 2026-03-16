@@ -21,7 +21,7 @@ import sys
 import numpy as np
 import soundfile as sf
 
-# Add the scripts/room-correction directory to path so room_correction package is importable
+# Add the src/room-correction directory to path so room_correction package is importable
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)

@@ -45,8 +45,8 @@ Fast-forward from `0075142` to `a39e7b7`. 4 files changed:
 |------|--------|
 | `docs/project/status.md` | +3 lines |
 | `docs/project/tasks.md` | +4/-1 lines |
-| `scripts/room-correction/measure_nearfield.py` | +572 lines net (TK-143 CamillaDSP hot-swap integration) |
-| `scripts/room-correction/tests/test_measurement_config.py` | New file, 163 lines |
+| `src/room-correction/measure_nearfield.py` | +572 lines net (TK-143 CamillaDSP hot-swap integration) |
+| `src/room-correction/tests/test_measurement_config.py` | New file, 163 lines |
 
 ### Step 2: Install pycamilladsp
 

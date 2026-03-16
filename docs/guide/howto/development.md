@@ -51,8 +51,8 @@ or do any interactive work:
 
 ```sh
 # Inside nix develop
-python -m pytest scripts/room-correction/tests/ -v
-python -m pytest scripts/web-ui/tests/ -v -k "not e2e"
+python -m pytest src/room-correction/tests/ -v
+python -m pytest src/web-ui/tests/ -v -k "not e2e"
 python -c "import camilladsp; print(camilladsp.versions.VERSION)"
 ```
 
@@ -70,14 +70,14 @@ environment setup. They are not the intended interface for running code.
 
 ## 2. Test Suites
 
-The project has four test suites, each in its own `scripts/` subdirectory with
-a `pytest.ini`.
+The project has four test suites, each in its own subdirectory (under `src/`
+for product code, `scripts/` for utilities) with a `pytest.ini`.
 
 ### 2.1 Room Correction Unit Tests
 
 Tests for the DSP pipeline: sweep generation, deconvolution, spatial averaging,
 gain calibration, time alignment, filter generation, thermal ceiling, power
-validation. 15 test files in `scripts/room-correction/tests/`.
+validation. 15 test files in `src/room-correction/tests/`.
 
 ```sh
 nix run .#test-room-correction
@@ -87,7 +87,7 @@ nix run .#test-room-correction
 
 Tests for the FastAPI backend: server startup, collectors, measurement session
 state machine, Phase 1 validation. Run in mock mode (`PI_AUDIO_MOCK=1`).
-Located in `scripts/web-ui/tests/` (excluding the `e2e/` subdirectory).
+Located in `src/web-ui/tests/` (excluding the `e2e/` subdirectory).
 
 ```sh
 nix run .#test-unit
@@ -97,14 +97,14 @@ nix run .#test-unit
 
 E2E tests use Playwright (Chromium) to drive the web UI against a
 session-scoped mock FastAPI server that starts automatically on a free port.
-Located in `scripts/web-ui/tests/e2e/`.
+Located in `src/web-ui/tests/e2e/`.
 
 ```sh
 nix run .#test-e2e
 ```
 
 **Visual regression tests** compare screenshots against reference images in
-`scripts/web-ui/tests/e2e/screenshots/`. After intentional UI changes,
+`src/web-ui/tests/e2e/screenshots/`. After intentional UI changes,
 regenerate reference screenshots and review the diffs before committing.
 
 **Destructive tests** are marked `@pytest.mark.destructive` (they modify Pi
@@ -115,7 +115,7 @@ state) and are skipped by default. They require the `--destructive` flag.
 
 ### 2.4 MIDI Daemon and Driver Tests
 
-Located in `scripts/midi/tests/` and `scripts/drivers/tests/` respectively.
+Located in `src/midi/tests/` and `scripts/drivers/tests/` respectively.
 These do not have individual `nix run` targets. They are included in:
 
 - `nix flake check` (as `test-midi` and `test-drivers` checks)
@@ -148,7 +148,7 @@ development shell:
 
 ```sh
 nix develop
-cd scripts/web-ui
+cd src/web-ui
 python -m uvicorn app.main:app --host 127.0.0.1 --port 9000 --reload
 ```
 

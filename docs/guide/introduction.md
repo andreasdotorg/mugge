@@ -205,10 +205,10 @@ Automation scripts for deployment, testing, measurement, and operations.
 | [scripts/deploy/](../../scripts/deploy/) | Deployment scripts (deploy.sh, configure-libjack-alternatives.sh) |
 | [scripts/test/](../../scripts/test/) | Benchmark and latency measurement scripts |
 | [scripts/stability/](../../scripts/stability/) | Long-running stability test scripts |
-| [scripts/room-correction/](../../scripts/room-correction/) | Automated room measurement and filter generation pipeline |
+| [src/room-correction/](../../src/room-correction/) | Automated room measurement and filter generation pipeline |
 | [scripts/launch/](../../scripts/launch/) | Application launch scripts (start-mixxx.sh) |
-| [scripts/midi/](../../scripts/midi/) | MIDI controller daemon and configuration |
-| [scripts/web-ui/](../../scripts/web-ui/) | Web monitoring dashboard |
+| [src/midi/](../../src/midi/) | MIDI controller daemon and configuration |
+| [src/web-ui/](../../src/web-ui/) | Web monitoring dashboard |
 
 See [scripts/README.md](../../scripts/README.md) for the complete script
 reference.

@@ -93,7 +93,7 @@ if not sys.stdout.line_buffering:
 if not sys.stderr.line_buffering:
     sys.stderr.reconfigure(line_buffering=True)
 
-# Add the scripts/room-correction directory to path so room_correction
+# Add the src/room-correction directory to path so room_correction
 # package is importable when running this script directly on the Pi.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
@@ -1906,7 +1906,7 @@ def main():
         "--mock-room-config", type=str, default=None,
         help=(
             "Path to a mock room configuration YAML file (only used with "
-            "--mock). Defaults to scripts/room-correction/mock/room_config.yml."
+            "--mock). Defaults to src/room-correction/mock/room_config.yml."
         ),
     )
     parser.add_argument(

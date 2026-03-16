@@ -23,7 +23,7 @@ Mock mode (PI_AUDIO_MOCK=1):
     Real collectors are not started; MockDataGenerator is used instead.
     This is the default on macOS development machines.
 
-Run from the scripts/web-ui directory:
+Run from the src/web-ui directory:
     pip install fastapi uvicorn
     uvicorn app.main:app --host 0.0.0.0 --port 8080
 

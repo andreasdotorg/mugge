@@ -8,7 +8,7 @@ Reference screenshots live in ``tests/e2e/screenshots/``.
 
 Workflow:
     # Generate (or update) reference screenshots after intentional changes:
-    cd scripts/web-ui
+    cd src/web-ui
     python -m pytest tests/e2e/test_visual_regression.py -v --update-snapshots
 
     # Run visual regression (fails if diff exceeds threshold):

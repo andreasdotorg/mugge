@@ -86,7 +86,7 @@ class TestTK132MockPCMStream:
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
 
-        web_ui_dir = Path(__file__).resolve().parent.parent  # scripts/web-ui/
+        web_ui_dir = Path(__file__).resolve().parent.parent  # src/web-ui/
         env = {
             "PI_AUDIO_MOCK": "1",
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",

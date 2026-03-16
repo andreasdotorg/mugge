@@ -391,9 +391,9 @@ else
     fi
 fi
 
-echo "  scripts/web-ui/{app,static} -> ~/web-ui/"
+echo "  src/web-ui/{app,static} -> ~/web-ui/"
 if $DRY_RUN; then
-    echo "  [dry-run] rsync -a --delete --exclude __pycache__ --exclude .pytest_cache --exclude .venv --exclude tests --exclude test_server.py --exclude Makefile --exclude README.md --exclude screenshots $REPO_ROOT/scripts/web-ui/app $REPO_ROOT/scripts/web-ui/static $PI:~/web-ui/"
+    echo "  [dry-run] rsync -a --delete --exclude __pycache__ --exclude .pytest_cache --exclude .venv --exclude tests --exclude test_server.py --exclude Makefile --exclude README.md --exclude screenshots $REPO_ROOT/src/web-ui/app $REPO_ROOT/src/web-ui/static $PI:~/web-ui/"
 else
     rsync -a --delete \
         --exclude __pycache__ \
@@ -404,22 +404,22 @@ else
         --exclude Makefile \
         --exclude README.md \
         --exclude screenshots \
-        "$REPO_ROOT/scripts/web-ui/app" \
-        "$REPO_ROOT/scripts/web-ui/static" \
+        "$REPO_ROOT/src/web-ui/app" \
+        "$REPO_ROOT/src/web-ui/static" \
         "$PI:~/web-ui/"
     file_count=$((file_count + 1))
 fi
 
-echo "  scripts/room-correction/ -> ~/room-correction/"
+echo "  src/room-correction/ -> ~/room-correction/"
 if $DRY_RUN; then
-    echo "  [dry-run] rsync -a --delete --exclude __pycache__ --exclude .pytest_cache --exclude tests --exclude mock $REPO_ROOT/scripts/room-correction/ $PI:~/room-correction/"
+    echo "  [dry-run] rsync -a --delete --exclude __pycache__ --exclude .pytest_cache --exclude tests --exclude mock $REPO_ROOT/src/room-correction/ $PI:~/room-correction/"
 else
     rsync -a --delete \
         --exclude __pycache__ \
         --exclude .pytest_cache \
         --exclude tests \
         --exclude mock \
-        "$REPO_ROOT/scripts/room-correction/" \
+        "$REPO_ROOT/src/room-correction/" \
         "$PI:~/room-correction/"
     file_count=$((file_count + 1))
 fi

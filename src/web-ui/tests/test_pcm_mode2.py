@@ -15,7 +15,7 @@ Tests run without Pi or PipeWire.  Production-path tests (2-4) use a fake
 TCP server and patch app.main.MOCK_MODE=False + app.main.PCM_SOURCES.
 
 Run:
-    cd scripts/web-ui
+    cd src/web-ui
     python -m pytest tests/test_pcm_mode2.py -v
 """
 

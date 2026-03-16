@@ -24,7 +24,7 @@ import yaml
 # ----- Constants -------------------------------------------------------
 
 # Project root: three levels up from this file
-# scripts/room-correction/config_generator.py -> project root
+# src/room-correction/config_generator.py -> project root
 _THIS_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = _THIS_DIR.parent.parent
 

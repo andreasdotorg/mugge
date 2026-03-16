@@ -35,7 +35,7 @@ ever closing or reopening the stream.
 ### 2.1 Binary
 
 - **Name:** `pi4audio-signal-gen`
-- **Location:** `tools/signal-gen/`
+- **Location:** `src/signal-gen/`
 - **Language:** Rust (same toolchain as pcm-bridge)
 - **PipeWire bindings:** `pipewire-rs` 0.8 (same as pcm-bridge)
 
@@ -1487,8 +1487,8 @@ pcm-bridge):
 signal-gen = pkgs.rustPlatform.buildRustPackage {
     pname = "pi4audio-signal-gen";
     version = "0.1.0";
-    src = ./tools/signal-gen;
-    cargoLock.lockFile = ./tools/signal-gen/Cargo.lock;
+    src = ./src/signal-gen;
+    cargoLock.lockFile = ./src/signal-gen/Cargo.lock;
     nativeBuildInputs = [ pkgs.pkg-config ];
     buildInputs = [ pkgs.pipewire ];
 };
@@ -1528,7 +1528,7 @@ Compared to pcm-bridge, the additions are:
 ## 13. Module Structure
 
 ```
-tools/signal-gen/
+src/signal-gen/
     Cargo.toml
     Cargo.lock
     src/
@@ -1610,7 +1610,7 @@ on the previous. AD-F006 (TK-151 pcm-bridge validation) gates Step 1.
 
 ### Step 1: Scaffold + PW Playback Stream (gates on AD-F006)
 
-- Create `tools/signal-gen/` with Cargo.toml, `main.rs`
+- Create `src/signal-gen/` with Cargo.toml, `main.rs`
 - CLI argument parsing (clap)
 - Open PW playback stream targeting `loopback-8ch-sink`
 - Process callback writes silence

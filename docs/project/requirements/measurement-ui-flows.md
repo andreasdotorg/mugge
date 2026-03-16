@@ -2,8 +2,8 @@
 
 Design document for the Measure view in the D-020 web UI. Covers user flows,
 technical procedures, screen wireframes, and integration with the existing room
-correction pipeline (`scripts/room-correction/`) and web UI
-(`scripts/web-ui/`).
+correction pipeline (`src/room-correction/`) and web UI
+(`src/web-ui/`).
 
 **Status:** Design complete. Implementation deferred per backlog priorities.
 
@@ -16,8 +16,8 @@ correction pipeline (`scripts/room-correction/`) and web UI
 - `docs/architecture/web-ui.md` -- D-020 web UI architecture
 - `docs/project/requirements/speaker-management-requirements.md` -- speaker
   identity schema, D-028/D-029
-- `scripts/room-correction/runner.py` -- 7-stage pipeline
-- `scripts/web-ui/` -- existing SPA with Monitor, System, Measure (stub), MIDI
+- `src/room-correction/runner.py` -- 7-stage pipeline
+- `src/web-ui/` -- existing SPA with Monitor, System, Measure (stub), MIDI
   (stub)
 
 ---

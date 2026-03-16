@@ -206,46 +206,16 @@ Application launch scripts.
 
 ---
 
-## scripts/midi/
+## Product Code (moved to `src/`)
 
-MIDI system controller daemon for the APCmini mk2.
+The following directories have been moved from `scripts/` to `src/`:
 
-| Script | Purpose | Requirements |
-|--------|---------|--------------|
-| `midi-system-controller.py` | MIDI daemon that maps APCmini mk2 buttons and faders to system actions (mode switching, volume control, transport). | venv with `mido`, `python-rtmidi` |
-| `test_midi_daemon.py` | Test suite for the MIDI daemon. | venv with `pytest` |
+- **`src/midi/`** — MIDI system controller daemon for the APCmini mk2
+- **`src/room-correction/`** — Automated room correction pipeline
+- **`src/web-ui/`** — Real-time monitoring web UI (FastAPI + JS)
+- **`src/measurement/`** — Measurement signal generation client
 
-See `scripts/midi/README.md` for configuration and usage details.
-
----
-
-## scripts/room-correction/
-
-Automated room correction pipeline: measurement, analysis, and FIR filter generation.
-
-| Script | Purpose | Requirements |
-|--------|---------|--------------|
-| `runner.py` | Pipeline orchestrator: runs measurement, analysis, and filter generation in sequence. | venv with scipy, numpy, soundfile |
-| `analyze_measurement.py` | Analyzes captured impulse responses and computes correction targets. | venv with scipy, numpy |
-| `config_generator.py` | Generates CamillaDSP YAML configs from correction results. | venv |
-| `generate_bose_filters.py` | Generates FIR filters for the Bose PS28 III home system. | venv with scipy, numpy |
-
----
-
-## scripts/web-ui/
-
-Real-time monitoring web UI (FastAPI backend + JavaScript frontend).
-
-The web UI provides a live dashboard with spectrum analysis, level meters, and
-CamillaDSP health monitoring over the local network. See `scripts/web-ui/README.md`
-for architecture and deployment details.
-
-| Entry point | Purpose | Requirements |
-|-------------|---------|--------------|
-| `app/` | FastAPI application (backend collectors, WebSocket endpoints) | venv with fastapi, uvicorn, pycamilladsp |
-| `static/` | Frontend assets (HTML, CSS, JavaScript including JS FFT spectrum renderer) | Served by FastAPI |
-| `Makefile` | Build and deploy targets | make |
-| `test_server.py`, `test_collectors.py`, `tests/` | Backend test suites | venv with pytest |
+See each directory's own README for details.
 
 ---
 

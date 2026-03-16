@@ -2003,12 +2003,12 @@ The scaffolding supports two modes:
 - [ ] `@pytest.mark.destructive` marker for tests that modify Pi state
 - [ ] `@pytest.mark.slow` marker for tests exceeding 10 seconds
 - [ ] pytest configuration (`pyproject.toml` or `pytest.ini`) registers all custom markers
-- [ ] Test discovery: `pytest scripts/web-ui/test_server.py` runs unit tests (fast, no browser). `pytest scripts/web-ui/tests/e2e/` runs Playwright tests (slow, needs browser). Both can run independently with different dependency profiles
+- [ ] Test discovery: `pytest src/web-ui/test_server.py` runs unit tests (fast, no browser). `pytest src/web-ui/tests/e2e/` runs Playwright tests (slow, needs browser). Both can run independently with different dependency profiles
 
 *File organization (architect recommendation):*
 - [ ] Playwright tests in a separate `tests/e2e/` directory. Existing `test_server.py` stays in place (different test suite, different dependencies, different execution speed)
   ```
-  scripts/web-ui/
+  src/web-ui/
     app/                          # existing FastAPI app
     static/                       # existing frontend
     test_server.py                # existing 71 backend unit tests (unchanged)
@@ -2024,7 +2024,7 @@ The scaffolding supports two modes:
   ```
 
 *Local test runner:*
-- [ ] `scripts/web-ui/Makefile` (or equivalent shell script) with targets for: `test-unit` (runs test_server.py), `test-e2e` (runs tests/e2e/ headless), `test-e2e-headed` (visible browser for debugging), `test-all`, `install-test-deps` (pip install + playwright install chromium)
+- [ ] `src/web-ui/Makefile` (or equivalent shell script) with targets for: `test-unit` (runs test_server.py), `test-e2e` (runs tests/e2e/ headless), `test-e2e-headed` (visible browser for debugging), `test-all`, `install-test-deps` (pip install + playwright install chromium)
 
 **Future scope (explicitly NOT in this story):**
 - Accessibility testing (axe-core integration)
@@ -3106,7 +3106,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** a GraphManager subsystem that is the sole authority over PipeWire application routing, and a production PW filter-chain configuration that replaces CamillaDSP for all FIR convolution,
 **so that** the entire audio pipeline runs as native PipeWire nodes with deterministic, centrally-managed routing -- eliminating the ALSA Loopback bridge, the CamillaDSP external process, and the class of integration bugs caused by distributed session management (BUG-SG12-1 through SG12-7, TK-224, TK-236).
 
-**Status:** in-progress (DECOMPOSE phase, 2026-03-16. Architect 15-task breakdown delivered GM-0 through GM-14. GM-0 gate test executing on Pi.)
+**Status:** in-progress (IMPLEMENT phase, 2026-03-16. GM-0 PASS. Workers staffed: GM-1 worker-mock-backend, GM-2 worker-signal-gen. Both in architect consultation.)
 **Depends on:** US-058 PASS (D-040: PW filter-chain replaces CamillaDSP, giving GraphManager linkable PW ports natively). **SATISFIED.**
 **Blocks:** US-060 (PW monitoring replacement), US-061 (measurement pipeline adaptation)
 **Decisions:** D-039 (owner corrections 2026-03-16: daemon subsystem, WHAT not HOW, sole session manager). D-040 (abandon CamillaDSP for PW filter-chain). Supersedes the original WP Lua scripts approach.
@@ -3138,7 +3138,8 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 - [ ] BUG-SG12-* class eliminated: components have no session management properties in managed mode -- GraphManager links by explicit port identity
 - [ ] 30-minute Mixxx stability test: DJ playback through PW filter-chain with correct graph topology, zero xruns, no spurious disconnections
 - [ ] 30-minute Reaper stability test: live vocal playback through PW filter-chain with correct graph topology, zero xruns, no spurious disconnections
-- [ ] Round-trip latency measurement at production quantum (256): total PA path latency measured and documented, compared against D-011 target (~21ms bone-to-electronic)
+- [ ] During each 30-minute stability test, spectral analysis confirms that the filter-chain is actively processing audio (crossover rolloff visible in DSP output, correct channel separation between mains and subs)
+- [ ] Round-trip latency measurement at production quantum (256): total PA path latency measured and documented. PASS criterion: PA path latency <= 25ms (D-011: ~21ms target, 4ms margin for measurement uncertainty)
 
 **DoD:**
 - [ ] GM-0 gate PASS verified before implementation begins
@@ -3149,7 +3150,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 - [ ] Statically validated (lint, type check)
 - [ ] Automated regression tests in CI: correct link topology after startup, re-linking after USB hotplug, atomic mode swap, crash recovery, daemon death resilience
 - [ ] 30-minute stability tests PASS (Mixxx + Reaper, separately)
-- [ ] Latency measurement documented in lab note
+- [ ] Latency measurement documented in lab note, with PASS/FAIL against 25ms threshold
 - [ ] Architect sign-off on GraphManager design and daemon integration
 - [ ] Security specialist review: component spawning has no command injection or privilege escalation risk
 - [ ] AD challenge (second pass complete, 3 findings accepted: link persistence, standalone mode, hard dependency)
@@ -3182,8 +3183,10 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 - [ ] Temperature and CPU indicators continue functioning (these already use OS sources, not CamillaDSP)
 - [ ] Xrun counter sourced from PipeWire -- replacing the former CamillaDSP xrun count
 - [ ] Graph health reporting from GraphManager (US-059) exposed to the web UI: connected nodes, active links, device status, disconnections
-- [ ] No pycamilladsp imports remain in the production codebase
+- [ ] No pycamilladsp imports remain in the monitoring and dashboard codebase
 - [ ] Dashboard renders with equivalent data fidelity at the same update rate (10Hz for meters, 1Hz for health indicators)
+- [ ] Post-DSP clip detection: output clipping events (>= 0 dBFS after filter-chain processing) are detected and reported per-channel. This is a monitoring indicator, not a safety control (D-009 cut-only correction structurally prevents output clipping in normal operation)
+- [ ] Level metering tap point: peak level data reflects post-DSP signal levels (after filter-chain processing) for all speaker output channels. If post-DSP metering is not achievable, the metering tap point is documented and the operator is informed which signal stage is being displayed
 
 **DoD:**
 - [ ] All pycamilladsp collectors replaced with PW-native equivalents
@@ -3216,7 +3219,9 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 - [ ] Measurement session can restore production filter-chain configuration after measurement completes or is aborted
 - [ ] Newly generated FIR filter WAV files can be deployed to the running PW filter-chain without a full PipeWire restart
 - [ ] Gain calibration (gain_calibration.py) reads actual output levels from PW-native sources -- replacing pycamilladsp level readback
+- [ ] Gain calibration measurement attenuation verification (GC-07/11) uses GraphManager state or PW node property query to confirm the measurement filter-chain is active, replacing the pycamilladsp config.active() API call. The acoustic SPL measurement algorithm (open-loop ramp with UMIK-1 readback) is unchanged
 - [ ] ABORT from any web UI tab (US-051 status bar) restores production filter-chain state -- same safety guarantee as the former CamillaDSP restore
+- [ ] Measurement session orphan detection: if the measurement daemon crashes or is killed during an active measurement, the system detects the orphaned measurement state and restores production filter-chain configuration on next startup. No measurement attenuation persists across a daemon restart
 - [ ] D-009 compliance: all generated correction filters verified to have gain <= -0.5 dBFS at every frequency (unchanged -- verification logic is in the room correction pipeline, not in the CamillaDSP interface)
 - [ ] No pycamilladsp imports remain in measurement daemon code
 - [ ] GraphManager measurement mode correctly routes signal-gen output through the filter-chain and UMIK-1 capture back to the measurement daemon

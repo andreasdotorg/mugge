@@ -576,7 +576,7 @@ operator's role is microphone placement and pipeline invocation.
 
 2. **Run the room correction pipeline.**
    ```bash
-   cd ~/pi4-audio-workstation/scripts/room-correction/
+   cd ~/pi4-audio-workstation/src/room-correction/
    python runner.py --stage full \
        --room-config /path/to/venue-room-config.yml \
        --profile /path/to/speaker-profile.yml \
@@ -1335,10 +1335,10 @@ Speakers (mains ch 1-2, subs ch 3-4, HP ch 5-6, IEM ch 7-8)
 | Combined FIR filters | `/etc/camilladsp/coeffs/combined_*.wav` | Deployed correction filters |
 | Speaker identities | `configs/speakers/identities/*.yml` | Speaker hardware specs |
 | Speaker profiles | `configs/speakers/profiles/*.yml` | System topology + crossover |
-| Room correction pipeline | `scripts/room-correction/runner.py` | Filter generation CLI |
+| Room correction pipeline | `src/room-correction/runner.py` | Filter generation CLI |
 | UMIK-1 calibration | `/home/ela/7161942.txt` | Microphone frequency correction |
 | PipeWire config | `~/.config/pipewire/pipewire.conf.d/10-audio-settings.conf` | Audio server settings |
-| Web UI | `scripts/web-ui/` | Monitoring dashboard source |
+| Web UI | `src/web-ui/` | Monitoring dashboard source |
 
 ## Appendix C: Decisions Referenced
 

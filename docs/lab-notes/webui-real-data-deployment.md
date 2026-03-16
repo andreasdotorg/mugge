@@ -18,9 +18,9 @@ to JACK2 instead of PipeWire), the AudioWorklet secure context requirement
 | Architecture decision | `docs/architecture/web-ui.md` (D-020) | |
 | HTTPS requirement | `docs/architecture/web-ui.md` Section 12 (D-032) | `107d6bf` |
 | Collector architecture | `docs/architecture/web-ui.md` Section 13 | |
-| Backend collectors | `scripts/web-ui/app/collectors/` (4 modules) | `efd6934` |
-| Spectrum analyzer | `scripts/web-ui/static/js/spectrum.js` | `efd6934` |
-| PCM AudioWorklet | `scripts/web-ui/static/js/pcm-worklet.js` | `efd6934` |
+| Backend collectors | `src/web-ui/app/collectors/` (4 modules) | `efd6934` |
+| Spectrum analyzer | `src/web-ui/static/js/spectrum.js` | `efd6934` |
+| PCM AudioWorklet | `src/web-ui/static/js/pcm-worklet.js` | `efd6934` |
 | systemd service | `configs/systemd/user/pi4-audio-webui.service` | `d976af2`, `3b2a669`, `42a87a5` |
 | D-020 PoC lab note | `docs/lab-notes/D-020-poc-validation.md` | |
 

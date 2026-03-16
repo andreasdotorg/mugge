@@ -12,7 +12,7 @@ All tests run on macOS (no /proc, no pw-top, no JACK, no CamillaDSP).
 System calls are mocked via unittest.mock.
 
 Run:
-    cd scripts/web-ui
+    cd src/web-ui
     python -m pytest tests/test_collectors.py -v
 """
 

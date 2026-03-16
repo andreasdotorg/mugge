@@ -682,7 +682,7 @@ different issue).
 **Affects:** US-011b, all speaker profiles using identities with `mandatory_hpf_hz`
 **Found by:** Team-lead during Bose deployment review
 
-**Description:** The config generator (`scripts/room-correction/config_generator.py`)
+**Description:** The config generator (`src/room-correction/config_generator.py`)
 does not generate a subsonic highpass protection filter for speakers whose identity
 file declares `mandatory_hpf_hz`. The `bose-home.yml` profile routes full-bandwidth
 signal to the Bose PS28 III sub channels (ch 2-3), which use 5.25" isobaric drivers.
@@ -777,8 +777,8 @@ buffer with drift compensation:
 Browser-side only change. No server/backend modifications needed.
 
 **Related:** TK-099 (spectrum module), TK-112 (amplitude coloring), TK-114 (blocked
-by this defect), TK-115 (fix task). Files: `scripts/web-ui/static/js/pcm-worklet.js`,
-`scripts/web-ui/static/js/spectrum.js`.
+by this defect), TK-115 (fix task). Files: `src/web-ui/static/js/pcm-worklet.js`,
+`src/web-ui/static/js/spectrum.js`.
 
 ## F-027: DSP load bar on dashboard health bar broken (RESOLVED)
 
@@ -806,8 +806,8 @@ see if DSP processing is approaching its CPU budget limit.
 
 **Related:** TK-095 (health bar spec), TK-116 (health bar clustering — may have
 affected load bar position), TK-063 (dashboard). Files:
-`scripts/web-ui/app/collectors/`, `scripts/web-ui/static/js/dashboard.js`,
-`scripts/web-ui/templates/index.html`.
+`src/web-ui/app/collectors/`, `src/web-ui/static/js/dashboard.js`,
+`src/web-ui/templates/index.html`.
 
 ## F-028: Test tone signal generation glitches via pw-play (RESOLVED)
 
@@ -860,7 +860,7 @@ the measurement pipeline (bypass PipeWire entirely for sweep playback).
 **Related:** F-015 (loopback hardening — addressed scheduling, not period-size),
 F-016 (PipeWire restart glitches), TK-114 (spectrum validation), TK-119 (loopback
 self-test capability), TK-120 (fix task). Room correction pipeline
-(`scripts/room-correction/`). File: `25-loopback-8ch.conf`.
+(`src/room-correction/`). File: `25-loopback-8ch.conf`.
 
 ## F-029: Level bar fill height 3dB below numeric readout (RESOLVED)
 
@@ -890,8 +890,8 @@ readout. Specific locations: `dashboard.js:233` (bar fill) and `dashboard.js:332
 **Impact:** Meters display inconsistent information — operator sees two different
 readings for the same signal. Undermines trust in metering accuracy.
 
-**Related:** TK-095 (meter spec). Files: `scripts/web-ui/static/js/dashboard.js`,
-`scripts/web-ui/templates/index.html`.
+**Related:** TK-095 (meter spec). Files: `src/web-ui/static/js/dashboard.js`,
+`src/web-ui/templates/index.html`.
 
 ---
 

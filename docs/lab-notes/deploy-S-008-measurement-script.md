@@ -44,13 +44,13 @@ N/A -- fresh clone already at target commit `8766fed`.
 ### Step 2: File Presence
 
 ```bash
-$ ls -la scripts/room-correction/measure_nearfield.py
+$ ls -la src/room-correction/measure_nearfield.py
 # 47907 bytes
 
-$ ls -la scripts/room-correction/room_correction/deconvolution.py
+$ ls -la src/room-correction/room_correction/deconvolution.py
 # 2521 bytes
 
-$ ls -la scripts/room-correction/tests/test_deconvolution.py
+$ ls -la src/room-correction/tests/test_deconvolution.py
 # 2109 bytes
 ```
 
@@ -59,7 +59,7 @@ All 3 target files present. PASS.
 ### Step 3: Syntax Validation
 
 ```bash
-$ python3 -m py_compile scripts/room-correction/measure_nearfield.py
+$ python3 -m py_compile src/room-correction/measure_nearfield.py
 ```
 
 No output (clean compile). PASS.
@@ -81,7 +81,7 @@ PASS.
 
 **Note:** System python3 is missing scipy, soundfile, and sounddevice. The
 measurement script must be run with the venv python:
-`~/audio-workstation-venv/bin/python3 scripts/room-correction/measure_nearfield.py`
+`~/audio-workstation-venv/bin/python3 src/room-correction/measure_nearfield.py`
 
 ### Step 5: room_correction Package Imports
 
@@ -94,7 +94,7 @@ PASS (no import errors).
 ### Step 6: --help
 
 ```bash
-$ ~/audio-workstation-venv/bin/python3 scripts/room-correction/measure_nearfield.py --help
+$ ~/audio-workstation-venv/bin/python3 src/room-correction/measure_nearfield.py --help
 ```
 
 Full help text rendered correctly. PASS.
@@ -102,7 +102,7 @@ Full help text rendered correctly. PASS.
 ### Step 7: --list-devices
 
 ```bash
-$ ~/audio-workstation-venv/bin/python3 scripts/room-correction/measure_nearfield.py --list-devices
+$ ~/audio-workstation-venv/bin/python3 src/room-correction/measure_nearfield.py --list-devices
 ```
 
 Detected devices:
@@ -147,7 +147,7 @@ All 7 verification steps PASS.
 - The measurement script requires the venv python, not system python. The
   owner should use:
   ```
-  ~/audio-workstation-venv/bin/python3 ~/pi4-audio-workstation/scripts/room-correction/measure_nearfield.py [args]
+  ~/audio-workstation-venv/bin/python3 ~/pi4-audio-workstation/src/room-correction/measure_nearfield.py [args]
   ```
   A convenience alias or wrapper script may be helpful for venue operation.
 - The UMIK-1 shows as `hw:4,0` with 2 input channels. The measurement script

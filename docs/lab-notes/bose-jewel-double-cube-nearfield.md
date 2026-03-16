@@ -18,7 +18,7 @@ original system design).
 | Speaker identity | `configs/speakers/identities/bose-jewel-double-cube.yml` |
 | Speaker profile (updated crossover) | `configs/speakers/profiles/bose-home.yml` |
 | CamillaDSP production config | `configs/camilladsp/production/bose-home.yml` |
-| FIR filter generator | `scripts/room-correction/generate_bose_filters.py` |
+| FIR filter generator | `src/room-correction/generate_bose_filters.py` |
 | Decision: boost + HPF framework | `docs/project/decisions.md` D-029 |
 
 ---
@@ -265,7 +265,7 @@ The following changes were made based on this measurement:
 - **`compensation_eq`:** Remains empty -- corrections deferred to Path A
   (listening-position measurement)
 - **FIR filters:** Must be regenerated at 200 Hz crossover frequency via
-  `scripts/room-correction/generate_bose_filters.py`
+  `src/room-correction/generate_bose_filters.py`
 
 ---
 

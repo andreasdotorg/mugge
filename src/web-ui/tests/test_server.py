@@ -7,7 +7,7 @@ Covers:
     - Static file serving
 
 Run:
-    cd scripts/web-ui
+    cd src/web-ui
     pip install fastapi uvicorn httpx
     python -m pytest tests/test_server.py -v
 """

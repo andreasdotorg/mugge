@@ -153,7 +153,7 @@ Deployed to the Pi at `~/.config/xdg-desktop-portal-wlr/`.
 ## MIDI (`midi/`)
 
 MIDI controller mappings used by the MIDI system controller daemon
-(`scripts/midi/midi-system-controller.py`).
+(`src/midi/midi-system-controller.py`).
 
 | File | Description |
 |------|-------------|

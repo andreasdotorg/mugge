@@ -200,7 +200,7 @@ Deploy:
 
 ```bash
 # Copy the daemon script
-cp scripts/midi/midi-system-controller.py /home/ela/bin/midi-system-controller.py
+cp src/midi/midi-system-controller.py /home/ela/bin/midi-system-controller.py
 chmod +x /home/ela/bin/midi-system-controller.py
 
 # Copy the config
@@ -231,10 +231,10 @@ package installed.
 
 ```bash
 # Run all tests
-python3 scripts/midi/test_midi_daemon.py -v
+python3 src/midi/test_midi_daemon.py -v
 
 # Or with pytest
-pytest scripts/midi/test_midi_daemon.py -v
+pytest src/midi/test_midi_daemon.py -v
 ```
 
 ## Safety Features

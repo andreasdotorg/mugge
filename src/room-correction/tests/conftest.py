@@ -30,7 +30,7 @@ CDSP_STARTUP_POLL = 0.1  # poll interval during startup
 _TEST_CONFIG_CANDIDATES = [
     os.path.join(os.path.dirname(__file__), "..", "test_camilladsp.yml"),
     os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                 "tools", "camilladsp-test", "test_config.yml"),
+                 "src", "camilladsp-test", "test_config.yml"),
 ]
 
 

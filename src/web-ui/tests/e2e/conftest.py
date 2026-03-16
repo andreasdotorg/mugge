@@ -72,7 +72,7 @@ def mock_server():
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
 
-    web_ui_dir = Path(__file__).resolve().parent.parent.parent  # scripts/web-ui/
+    web_ui_dir = Path(__file__).resolve().parent.parent.parent  # src/web-ui/
 
     proc = subprocess.Popen(
         [

@@ -95,10 +95,10 @@
             rev = "v3.0.1";
             hash = "sha256-IJ1sYprBh8ys1Og3T3newIDlBlR0PoQiblbJmzLbsfs=";
           };
-          cargoLock.lockFile = ./tools/camilladsp-test/Cargo.lock;
+          cargoLock.lockFile = ./src/camilladsp-test/Cargo.lock;
           # Upstream doesn't ship a Cargo.lock — copy ours into the source.
           postPatch = ''
-            cp ${./tools/camilladsp-test/Cargo.lock} Cargo.lock
+            cp ${./src/camilladsp-test/Cargo.lock} Cargo.lock
           '';
           # Default features = ["websocket"] — includes tungstenite WS server.
           # No extra features needed: File I/O backend is always compiled in.
@@ -147,8 +147,8 @@
         pcm-bridge = pkgs.rustPlatform.buildRustPackage {
           pname = "pcm-bridge";
           version = "0.1.0";
-          src = ./tools/pcm-bridge;
-          cargoLock.lockFile = ./tools/pcm-bridge/Cargo.lock;
+          src = ./src/pcm-bridge;
+          cargoLock.lockFile = ./src/pcm-bridge/Cargo.lock;
           nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
           buildInputs = [ pkgs.pipewire ];
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
@@ -161,8 +161,8 @@
         signal-gen = pkgs.rustPlatform.buildRustPackage {
           pname = "pi4audio-signal-gen";
           version = "0.1.0";
-          src = ./tools/signal-gen;
-          cargoLock.lockFile = ./tools/signal-gen/Cargo.lock;
+          src = ./src/signal-gen;
+          cargoLock.lockFile = ./src/signal-gen/Cargo.lock;
           nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
           buildInputs = [ pkgs.pipewire ];
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
@@ -231,8 +231,8 @@
             nativeBuildInputs = [ testPython ];
             PI_AUDIO_MOCK = "1";
           } ''
-            cp -r ${./scripts/web-ui} web-ui
-            cp -r ${./scripts/room-correction} room-correction
+            cp -r ${./src/web-ui} web-ui
+            cp -r ${./src/room-correction} room-correction
             chmod -R u+w web-ui room-correction
             cd web-ui
             python -m pytest tests/ -v -k "not e2e" --tb=short
@@ -243,8 +243,8 @@
             nativeBuildInputs = [ testPython camilladsp-test ];
             PI_AUDIO_MOCK = "1";
           } ''
-            cp -r ${./scripts/room-correction} room-correction
-            cp ${./tools/camilladsp-test/test_config.yml} room-correction/test_camilladsp.yml
+            cp -r ${./src/room-correction} room-correction
+            cp ${./src/camilladsp-test/test_config.yml} room-correction/test_camilladsp.yml
             chmod -R u+w room-correction
             cd room-correction
             python -m pytest tests/ -v --tb=short
@@ -255,7 +255,7 @@
             nativeBuildInputs = [ testPython ];
             PI_AUDIO_MOCK = "1";
           } ''
-            cp -r ${./scripts/midi} midi
+            cp -r ${./src/midi} midi
             cp -r ${./configs} configs
             chmod -R u+w midi configs
             cd midi
@@ -289,7 +289,7 @@
             type = "app";
             program = "${pkgs.writeShellScript "test-unit" ''
               export PI_AUDIO_MOCK=1
-              cd ${toString ./.}/scripts/web-ui
+              cd ${toString ./.}/src/web-ui
               exec ${testPython}/bin/python -m pytest tests/ -v -k "not e2e" "$@"
             ''}";
           };
@@ -300,7 +300,7 @@
               export PI_AUDIO_MOCK=1
               export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
               export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-              cd ${toString ./.}/scripts/web-ui
+              cd ${toString ./.}/src/web-ui
               exec ${e2ePython}/bin/python -m pytest tests/e2e/ -v "$@"
             ''}";
           };
@@ -309,7 +309,7 @@
             type = "app";
             program = "${pkgs.writeShellScript "test-room-correction" ''
               export PI_AUDIO_MOCK=1
-              cd ${toString ./.}/scripts/room-correction
+              cd ${toString ./.}/src/room-correction
               exec ${testPython}/bin/python -m pytest tests/ -v "$@"
             ''}";
           };
@@ -320,15 +320,15 @@
               export PI_AUDIO_MOCK=1
               set -e
               echo "=== web-ui unit tests ==="
-              cd ${toString ./.}/scripts/web-ui
+              cd ${toString ./.}/src/web-ui
               ${testPython}/bin/python -m pytest tests/ -v -k "not e2e" --tb=short
               echo ""
               echo "=== room-correction tests ==="
-              cd ${toString ./.}/scripts/room-correction
+              cd ${toString ./.}/src/room-correction
               ${testPython}/bin/python -m pytest tests/ -v --tb=short
               echo ""
               echo "=== midi tests ==="
-              cd ${toString ./.}/scripts/midi
+              cd ${toString ./.}/src/midi
               ${testPython}/bin/python -m pytest tests/ -v --tb=short
               echo ""
               echo "=== drivers tests ==="
@@ -343,7 +343,7 @@
             type = "app";
             program = "${pkgs.writeShellScript "serve" ''
               export PI_AUDIO_MOCK=1
-              cd ${toString ./.}/scripts/web-ui
+              cd ${toString ./.}/src/web-ui
               exec ${testPython}/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
             ''}";
           };

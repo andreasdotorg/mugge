@@ -21,7 +21,7 @@ for a crossover point.
 | Speaker identity | `configs/speakers/identities/markaudio-chn-50p-sealed-1l16.yml` |
 | Speaker profile | `configs/speakers/profiles/bose-home-chn50p.yml` |
 | CamillaDSP production config | `configs/camilladsp/production/bose-home-chn50p.yml` |
-| Measurement script | `scripts/room-correction/measure_nearfield.py` |
+| Measurement script | `src/room-correction/measure_nearfield.py` |
 | Raw measurement data | `measurements/chn50p-left_20260313-180406/` (on Pi) |
 | Decision: boost + HPF framework | `docs/project/decisions.md` D-029 |
 
@@ -308,5 +308,5 @@ to ~7 kHz vs ~6 kHz for the Jewel).
   Filters: A Safety Requirement"
 - **RT audio stack:** `docs/architecture/rt-audio-stack.md` "SAFETY: Driver
   Protection Filters in Production Configs"
-- **Measurement script:** `scripts/room-correction/measure_nearfield.py`
+- **Measurement script:** `src/room-correction/measure_nearfield.py`
   (commit a32c8fe: S-013 session fixes)

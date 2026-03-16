@@ -6,7 +6,7 @@ recovery, concurrent rejection, CamillaDSP failures, thermal ceiling,
 xrun injection, watchdog, mic disconnect, and muting verification.
 
 Run:
-    cd scripts/web-ui
+    cd src/web-ui
     python -m pytest tests/test_measurement_e2e.py -v
 """
 

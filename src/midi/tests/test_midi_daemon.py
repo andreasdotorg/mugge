@@ -4,7 +4,7 @@
 Mocks the mido module so tests run on any machine without MIDI hardware
 or the mido/python-rtmidi packages installed.
 
-Run:  cd scripts/midi && python -m pytest tests/test_midi_daemon.py -v
+Run:  cd src/midi && python -m pytest tests/test_midi_daemon.py -v
 """
 
 import importlib
