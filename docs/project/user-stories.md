@@ -292,7 +292,7 @@ configurations, monitoring for xruns, CPU usage, and thermal throttling,
 **so that** I can confirm the system is reliable enough for a full live
 performance without audio dropouts or thermal shutdown.
 
-**Status:** in-progress
+**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 3/4 — T3a/b/e PASS. T3d and T4 pending. Work preserved, resumes later.)
 **Depends on:** US-001 (done — 16,384 taps confirmed for both modes), US-002 (done — D-011 chunksize/quantum values confirmed)
 **Blocks:** US-008 through US-011 (pipeline work should not proceed if platform is unstable)
 **Decisions:** D-002 (dual chunksize — DJ mode), D-003 (16,384-tap FIR), D-011 (live mode chunksize 256 + quantum 256), D-013 (PREEMPT_RT mandatory for production)
@@ -2677,7 +2677,7 @@ session.
 and gain calibration (US-012) can be tested end-to-end without requiring
 physical hardware.
 
-**Status:** in-progress (owner-authorized 2026-03-14; Phase: IMPLEMENT — E2E-tier 8/8 ALL DONE, pending Pi execution. CI-tier DONE (4/4 DoD). E2E-tier code complete: EH-1-8 all done. Tests require Pi (PipeWire) for execution. Advance to TEST once E2E tests pass on Pi. Previous CI-tier advisor sign-offs preserved — E2E tier needs fresh review.)
+**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 5/6 — E2E-tier code complete, pending Pi execution. Work preserved, resumes later.)
 **Depends on:** US-045 (hardware config schema provides device definitions)
 **Blocks:** US-047 implementation (owner directive: mock backend required for local testing)
 **Decisions:** D-035 (measurement safety)
@@ -2754,7 +2754,7 @@ every web UI view,
 which tab I'm using — especially during measurement sessions when I'm not on
 the Dashboard.
 
-**Status:** in-progress (owner-authorized 2026-03-15; PO verified: AC complete, UX design complete. Phase: IMPLEMENT — SB-1-6 done, SB-7 Phase A 12/12 PASS. SB-7 Phase B (Pi validation) blocked on deployment. Cannot advance to TEST until all implementation tasks verified on Pi.)
+**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 2/4 — SB-1-6 done, SB-7 Phase A 12/12 PASS, Playwright E2E written. Work preserved, resumes later.)
 **Depends on:** D-020 (web UI infrastructure), TK-097 (24-channel metering spec defines channel mapping)
 **Blocks:** US-053 (manual test tool needs the persistent frame)
 **Decisions:** D-020
@@ -2795,7 +2795,7 @@ PipeWire/JACK client at RT priority,
 controllable from the Python measurement daemon without per-burst stream setup
 overhead.
 
-**Status:** in-progress (owner-authorized 2026-03-15; D-037 APPROVED 2026-03-15. Phase: IMPLEMENT — SG-1 done, SG-3 done, SG-9 done (3/12 subtasks). Pi integration tests blocked on TK-151 pcm-bridge validation.)
+**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 3/6 — 11/12 subtasks done, SG-12 ABORTED (architecture). Code preserved (6,183 lines, 193 tests). Resumes after US-056/057/058.)
 **Depends on:** Architect design (new system component), Rust toolchain on Pi (partially validated via pcm-bridge TK-151; AD-F006 Pi validation must pass first)
 **Blocks:** US-053 (manual test tool), US-047 (amended: uses RT signal gen instead of Python sounddevice), US-012 (amended: gain calibration uses RT signal gen)
 **Decisions:** D-036 (measurement daemon architecture — signal gen becomes a subprocess/sidecar), D-009 (cut-only correction / hard level cap)
@@ -2842,7 +2842,7 @@ spectrum in real time,
 tools (e.g., REW on Windows), and verify system behavior before running
 automated measurement sessions.
 
-**Status:** in-progress (owner-authorized 2026-03-15; Phase: IMPLEMENT — TT-1 scaffold done `f3fcfa2`. Blocked on US-051 frame + US-052 signal gen backend for full functionality.)
+**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 3/6 — TT-2 committed, PCM-MODE-3 code-complete. Work preserved, resumes later.)
 **Depends on:** US-052 (RT signal generator provides the backend), US-051 (persistent status bar provides health monitoring frame), UX spec (lighter review — not full 5-phase gate, per PO recommendation; owner to confirm)
 **Blocks:** none (but enables debugging of TK-231 SPL computation and future measurement issues)
 **Decisions:** D-035 (measurement safety), D-009 (cut-only / gain limits)
@@ -2988,7 +2988,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** CamillaDSP switched from its ALSA backend (`type: Alsa` via ALSA Loopback) to a JACK backend (`type: Jack` via `pw-jack`) so that it becomes a native node in the PipeWire graph,
 **so that** the ALSA Loopback bridge is eliminated, signal tapping becomes trivial (all ports visible in PW graph), mode switching simplifies (PW quantum change only, CamillaDSP follows automatically), and diagnostic clarity improves (one graph, one monitoring surface).
 
-**Status:** draft
+**Status:** selected (owner-authorized 2026-03-16)
 **Depends on:** none (zero dependencies to start, quick win)
 **Blocks:** US-057 (PW-native backend investigation depends on JACK baseline)
 **Decisions:** D-027 (pw-jack as permanent JACK bridge), unified graph analysis Option A
@@ -3032,7 +3032,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** to investigate whether CamillaDSP's native PipeWire backend (`type: PipeWire`, built with `--features pipewire`) works on the Pi and what advantages it offers over the JACK backend,
 **so that** we have data to decide whether the native PW backend is worth pursuing as a future improvement over the JACK backend established in US-056.
 
-**Status:** draft
+**Status:** selected (owner-authorized 2026-03-16)
 **Depends on:** US-056 (JACK backend provides the baseline to compare against)
 **Blocks:** none (investigation only, no deployment commitment)
 **Decisions:** unified graph analysis Option C
@@ -3066,7 +3066,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** to benchmark PipeWire's built-in filter-chain convolver with 16,384-tap FIR filters on 4 speaker channels on the Pi 4B,
 **so that** we have definitive data on whether PipeWire-native convolution is a viable long-term replacement for CamillaDSP's FIR engine on this hardware.
 
-**Status:** draft
+**Status:** selected (owner-authorized 2026-03-16)
 **Depends on:** none (independent track, can start immediately)
 **Blocks:** none directly (gates long-term Option B evaluation per unified graph analysis decision tree)
 **Decisions:** unified graph analysis Section 6 (decision tree), Section 8 (long-term PW-native convolution)
@@ -3106,7 +3106,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** a GraphManager subsystem in the audio workstation daemon that is the single authority over the PipeWire application graph -- owning all link creation, component lifecycle, device monitoring, and mode-based routing,
 **so that** audio routing is deterministic by declaration, components are simple sample producers/consumers with no session management logic, and the class of integration bugs caused by distributed PipeWire negotiation (BUG-SG12-1 through SG12-7, TK-224, TK-236) cannot recur.
 
-**Status:** draft
+**Status:** selected (owner-authorized 2026-03-16)
 **Depends on:** ANY ONE OF US-056 / US-057 / US-058 (all three place CamillaDSP in the PW graph with individually linkable ports -- without at least one, GraphManager has nothing to link to)
 **Blocks:** none
 **Decisions:** D-039 (owner corrections 2026-03-16: daemon subsystem, WHAT not HOW, sole session manager). Supersedes the original WP Lua scripts approach.
