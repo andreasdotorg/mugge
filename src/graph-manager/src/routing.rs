@@ -63,14 +63,15 @@ impl Mode {
 /// How to match a PW node by its `node.name` property.
 ///
 /// Exact match for nodes we control (signal-gen, pcm-bridge, filter-chain).
-/// Prefix match only for the USBStreamer, whose ALSA-generated name includes
-/// a variable serial suffix.
+/// Prefix match for USB devices with ALSA-generated variable suffixes
+/// (USBStreamer, UMIK-1) and JACK clients with potential instance suffixes
+/// (Mixxx, REAPER).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 pub enum NodeMatch {
     /// node.name must equal this value exactly.
     Exact(String),
-    /// node.name must start with this prefix (USBStreamer only).
+    /// node.name must start with this prefix (USB devices, JACK clients).
     Prefix(String),
 }
 
@@ -148,6 +149,8 @@ const CONVOLVER_OUT: &str = "pi4audio-convolver-out";
 const USBSTREAMER_OUT_PREFIX: &str = "alsa_output.usb-MiniDSP_USBStreamer";
 
 /// USBStreamer capture node name prefix.
+/// Not used in routing yet — will be needed when mic input routing is added.
+#[allow(dead_code)]
 const USBSTREAMER_IN_PREFIX: &str = "alsa_input.usb-MiniDSP_USBStreamer";
 
 /// Signal generator playback node.
@@ -160,7 +163,21 @@ const SIGNAL_GEN_CAPTURE: &str = "pi4audio-signal-gen-capture";
 const UMIK1_PREFIX: &str = "alsa_input.usb-miniDSP_UMIK-1";
 
 /// pcm-bridge node name (monitor port tap).
+/// Not linked by GraphManager — pcm-bridge creates its own monitor port
+/// connections for level metering. Recognized here so GraphManager's
+/// ownership filter doesn't destroy pcm-bridge's self-created links.
+#[allow(dead_code)]
 const PCM_BRIDGE: &str = "pi4audio-pcm-bridge";
+
+/// Mixxx JACK client node name prefix (under pw-jack).
+/// Prefix match because JACK clients may register with variable suffixes.
+/// TODO: Verify exact Mixxx PW node name on Pi (`pw-jack mixxx`).
+const MIXXX_PREFIX: &str = "Mixxx";
+
+/// REAPER JACK client node name prefix (under pw-jack).
+/// Prefix match because JACK clients may register with variable suffixes.
+/// TODO: Verify exact REAPER PW node name on Pi (`pw-jack reaper`).
+const REAPER_PREFIX: &str = "REAPER";
 
 impl RoutingTable {
     /// Build the production routing table.
@@ -218,18 +235,17 @@ impl RoutingTable {
     /// and go directly to USBStreamer ch 4-5.
     fn dj_links() -> Vec<DesiredLink> {
         let mut links = Vec::new();
+        let aux = ["AUX0", "AUX1", "AUX2", "AUX3"];
 
         // Mixxx → convolver (ch 0-3: speaker channels through FIR).
-        // Note: Mixxx node name depends on whether it's run via pw-jack
-        // or native JACK. Under pw-jack: node name is "Mixxx".
-        // This will be confirmed during integration testing.
-        // TODO: Confirm Mixxx PW node name from Pi testing.
-        for ch in 0..4 {
+        // TODO: Verify Mixxx port names on Pi — JACK clients may use
+        // output_FL/output_FR for stereo or output_AUX0 for multi-channel.
+        for ch_name in &aux {
             links.push(DesiredLink {
-                output_node: NodeMatch::Exact("Mixxx".to_string()),
-                output_port: format!("output_{}", ch),
+                output_node: NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
+                output_port: format!("output_{}", ch_name),
                 input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
-                input_port: format!("input_{}", ch),
+                input_port: format!("playback_{}", ch_name),
                 optional: false,
             });
         }
@@ -238,10 +254,11 @@ impl RoutingTable {
         links.extend(Self::convolver_to_usbstreamer_links());
 
         // Mixxx → USBStreamer direct (ch 4-5: engineer headphones, bypass convolver).
+        // TODO: Verify Mixxx output port names for ch 4-5 on Pi.
         for ch in 4..6 {
             links.push(DesiredLink {
-                output_node: NodeMatch::Exact("Mixxx".to_string()),
-                output_port: format!("output_{}", ch),
+                output_node: NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
+                output_port: format!("output_AUX{}", ch),
                 input_node: NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string()),
                 input_port: format!("playback_AUX{}", ch),
                 optional: false,
@@ -258,16 +275,16 @@ impl RoutingTable {
     /// USBStreamer (singer IEM, passthrough per D-011).
     fn live_links() -> Vec<DesiredLink> {
         let mut links = Vec::new();
+        let aux = ["AUX0", "AUX1", "AUX2", "AUX3"];
 
         // Reaper → convolver (ch 0-3: speaker channels through FIR).
-        // Note: Reaper PW node name under pw-jack is typically "REAPER".
-        // TODO: Confirm Reaper PW node name from Pi testing.
-        for ch in 0..4 {
+        // TODO: Verify Reaper port names on Pi — multi-channel JACK output.
+        for ch_name in &aux {
             links.push(DesiredLink {
-                output_node: NodeMatch::Exact("REAPER".to_string()),
-                output_port: format!("output_{}", ch),
+                output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
+                output_port: format!("output_{}", ch_name),
                 input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
-                input_port: format!("input_{}", ch),
+                input_port: format!("playback_{}", ch_name),
                 optional: false,
             });
         }
@@ -276,10 +293,11 @@ impl RoutingTable {
         links.extend(Self::convolver_to_usbstreamer_links());
 
         // Reaper → USBStreamer direct (ch 4-5: engineer headphones).
+        // TODO: Verify Reaper output port names for ch 4-5 on Pi.
         for ch in 4..6 {
             links.push(DesiredLink {
-                output_node: NodeMatch::Exact("REAPER".to_string()),
-                output_port: format!("output_{}", ch),
+                output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
+                output_port: format!("output_AUX{}", ch),
                 input_node: NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string()),
                 input_port: format!("playback_AUX{}", ch),
                 optional: false,
@@ -287,10 +305,11 @@ impl RoutingTable {
         }
 
         // Reaper → USBStreamer direct (ch 6-7: singer IEM, passthrough).
+        // TODO: Verify Reaper output port names for ch 6-7 on Pi.
         for ch in 6..8 {
             links.push(DesiredLink {
-                output_node: NodeMatch::Exact("REAPER".to_string()),
-                output_port: format!("output_{}", ch),
+                output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
+                output_port: format!("output_AUX{}", ch),
                 input_node: NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string()),
                 input_port: format!("playback_AUX{}", ch),
                 optional: true, // IEM is optional equipment
@@ -306,14 +325,17 @@ impl RoutingTable {
     /// UMIK-1 captures the room response back to signal-gen for analysis.
     fn measurement_links() -> Vec<DesiredLink> {
         let mut links = Vec::new();
+        let aux = ["AUX0", "AUX1", "AUX2", "AUX3"];
 
         // Signal-gen → convolver (ch 0-3: measurement signals).
-        for ch in 0..4 {
+        // Signal-gen uses audio.position = AUX0..AUX7 → output_AUX0..output_AUX7.
+        // Convolver capture is Audio/Sink with AUX positions → playback_AUX0..AUX3.
+        for ch_name in &aux {
             links.push(DesiredLink {
                 output_node: NodeMatch::Exact(SIGNAL_GEN.to_string()),
-                output_port: format!("output_{}", ch),
+                output_port: format!("output_{}", ch_name),
                 input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
-                input_port: format!("input_{}", ch),
+                input_port: format!("playback_{}", ch_name),
                 optional: false,
             });
         }
@@ -322,11 +344,13 @@ impl RoutingTable {
         links.extend(Self::convolver_to_usbstreamer_links());
 
         // UMIK-1 → signal-gen capture (mono measurement mic).
+        // UMIK-1 is a capture source with MONO position → capture_MONO.
+        // Signal-gen capture uses MONO position → input_MONO.
         links.push(DesiredLink {
             output_node: NodeMatch::Prefix(UMIK1_PREFIX.to_string()),
             output_port: "capture_MONO".to_string(),
             input_node: NodeMatch::Exact(SIGNAL_GEN_CAPTURE.to_string()),
-            input_port: "input_0".to_string(),
+            input_port: "input_MONO".to_string(),
             optional: true, // UMIK-1 may not be plugged in
         });
 
@@ -339,13 +363,19 @@ impl RoutingTable {
 
     /// Convolver output → USBStreamer playback (ch 0-3).
     /// Used by all modes (speakers always go through the convolver).
+    ///
+    /// Convolver playback source uses audio.position = [ AUX0..AUX3 ]
+    /// → output_AUX0..output_AUX3.
+    /// NOTE: Verify on Pi — filter-chain playback node may use playback_
+    /// prefix instead of output_. If so, update this helper.
     fn convolver_to_usbstreamer_links() -> Vec<DesiredLink> {
-        (0..4)
-            .map(|ch| DesiredLink {
+        let aux = ["AUX0", "AUX1", "AUX2", "AUX3"];
+        aux.iter()
+            .map(|ch_name| DesiredLink {
                 output_node: NodeMatch::Exact(CONVOLVER_OUT.to_string()),
-                output_port: format!("output_{}", ch),
+                output_port: format!("output_{}", ch_name),
                 input_node: NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string()),
-                input_port: format!("playback_AUX{}", ch),
+                input_port: format!("playback_{}", ch_name),
                 optional: false,
             })
             .collect()
@@ -568,5 +598,128 @@ mod tests {
         assert_eq!(table.links_for(Mode::Monitoring).len(), 0);
         assert_eq!(table.links_for(Mode::Dj).len(), 1);
         assert_eq!(table.links_for(Mode::Live).len(), 0); // not in table
+    }
+
+    // -----------------------------------------------------------------------
+    // Port name verification (GM-4)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn convolver_capture_uses_playback_aux_ports() {
+        // Audio/Sink nodes get playback_ prefixed ports per PW convention.
+        let table = RoutingTable::production();
+        let meas_links = table.links_for(Mode::Measurement);
+        let conv_input_links: Vec<_> = meas_links
+            .iter()
+            .filter(|l| matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-convolver"))
+            .collect();
+        assert_eq!(conv_input_links.len(), 4);
+        for link in &conv_input_links {
+            assert!(
+                link.input_port.starts_with("playback_AUX"),
+                "Convolver capture port should use playback_AUX prefix, got: {}",
+                link.input_port
+            );
+        }
+    }
+
+    #[test]
+    fn convolver_output_uses_output_aux_ports() {
+        // Convolver playback source uses output_AUX prefix.
+        let table = RoutingTable::production();
+        let mon_links = table.links_for(Mode::Monitoring);
+        for link in mon_links {
+            if matches!(&link.output_node, NodeMatch::Exact(n) if n == "pi4audio-convolver-out") {
+                assert!(
+                    link.output_port.starts_with("output_AUX"),
+                    "Convolver output port should use output_AUX prefix, got: {}",
+                    link.output_port
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn usbstreamer_uses_playback_aux_ports() {
+        // USBStreamer playback adapter gets playback_AUX ports.
+        let table = RoutingTable::production();
+        let mon_links = table.links_for(Mode::Monitoring);
+        for link in mon_links {
+            if matches!(&link.input_node, NodeMatch::Prefix(p) if p.starts_with("alsa_output.usb-MiniDSP")) {
+                assert!(
+                    link.input_port.starts_with("playback_AUX"),
+                    "USBStreamer port should use playback_AUX prefix, got: {}",
+                    link.input_port
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn signal_gen_uses_output_aux_ports() {
+        // Signal-gen is Stream/Output/Audio with AUX positions → output_AUX.
+        let table = RoutingTable::production();
+        let meas_links = table.links_for(Mode::Measurement);
+        let siggen_links: Vec<_> = meas_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Exact(n) if n == "pi4audio-signal-gen"))
+            .collect();
+        assert_eq!(siggen_links.len(), 4);
+        for link in &siggen_links {
+            assert!(
+                link.output_port.starts_with("output_AUX"),
+                "Signal-gen port should use output_AUX prefix, got: {}",
+                link.output_port
+            );
+        }
+    }
+
+    #[test]
+    fn signal_gen_capture_uses_input_mono_port() {
+        // Signal-gen capture uses MONO position → input_MONO.
+        let table = RoutingTable::production();
+        let meas_links = table.links_for(Mode::Measurement);
+        let capture_links: Vec<_> = meas_links
+            .iter()
+            .filter(|l| matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-signal-gen-capture"))
+            .collect();
+        assert_eq!(capture_links.len(), 1);
+        assert_eq!(capture_links[0].input_port, "input_MONO");
+    }
+
+    #[test]
+    fn umik1_uses_capture_mono_port() {
+        let table = RoutingTable::production();
+        let meas_links = table.links_for(Mode::Measurement);
+        let umik_links: Vec<_> = meas_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Prefix(p) if p.contains("UMIK")))
+            .collect();
+        assert_eq!(umik_links.len(), 1);
+        assert_eq!(umik_links[0].output_port, "capture_MONO");
+    }
+
+    #[test]
+    fn mixxx_uses_prefix_matching() {
+        let table = RoutingTable::production();
+        let dj_links = table.links_for(Mode::Dj);
+        let mixxx_links: Vec<_> = dj_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Prefix(p) if p == "Mixxx"))
+            .collect();
+        // 4 to convolver + 2 to USBStreamer HP = 6
+        assert_eq!(mixxx_links.len(), 6);
+    }
+
+    #[test]
+    fn reaper_uses_prefix_matching() {
+        let table = RoutingTable::production();
+        let live_links = table.links_for(Mode::Live);
+        let reaper_links: Vec<_> = live_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Prefix(p) if p == "REAPER"))
+            .collect();
+        // 4 to convolver + 2 to USBStreamer HP + 2 to USBStreamer IEM = 8
+        assert_eq!(reaper_links.len(), 8);
     }
 }
