@@ -89,6 +89,12 @@ struct Args {
     /// Device name pattern to watch for hot-plug events.
     #[arg(long, default_value = "UMIK-1")]
     device_watch: String,
+
+    /// Run in managed mode (GraphManager creates links).
+    /// When set, AUTOCONNECT and target.object are omitted so that
+    /// pi4audio-graph-manager controls all link topology.
+    #[arg(long, env = "PI4AUDIO_MANAGED")]
+    managed: bool,
 }
 
 /// Validate safety-critical arguments before entering the main loop.
@@ -718,18 +724,20 @@ fn run_pipewire(
     // Playback stream (Section 3.1)
     // -----------------------------------------------------------------------
 
-    let playback_props = pipewire::properties::properties! {
+    let mut playback_props = pipewire::properties::properties! {
         "media.type" => "Audio",
         "media.category" => "Playback",
         "media.role" => "Production",
         "media.class" => "Stream/Output/Audio",
         "node.name" => "pi4audio-signal-gen",
         "node.description" => "RT Signal Generator",
-        "target.object" => &*args.target,
         "audio.channels" => &*channels_str,
         "audio.position" => "AUX0,AUX1,AUX2,AUX3,AUX4,AUX5,AUX6,AUX7",
         "node.always-process" => "true",
     };
+    if !args.managed {
+        playback_props.insert("target.object", &*args.target);
+    }
 
     let playback_stream =
         pipewire::stream::Stream::new(&core, "pi4audio-signal-gen", playback_props)
@@ -833,41 +841,55 @@ fn run_pipewire(
         .register()
         .expect("Failed to register playback stream listener");
 
+    let playback_flags = if args.managed {
+        // Managed mode: GraphManager creates links. No AUTOCONNECT.
+        pipewire::stream::StreamFlags::MAP_BUFFERS
+            | pipewire::stream::StreamFlags::RT_PROCESS
+            // DRIVER makes this stream self-clocking so PipeWire always
+            // invokes the process callback (BUG-SG12-6). Required in both
+            // modes — independent of AUTOCONNECT.
+            | pipewire::stream::StreamFlags::DRIVER
+    } else {
+        // Standalone mode: PipeWire auto-links to target.
+        pipewire::stream::StreamFlags::AUTOCONNECT
+            | pipewire::stream::StreamFlags::MAP_BUFFERS
+            | pipewire::stream::StreamFlags::RT_PROCESS
+            | pipewire::stream::StreamFlags::DRIVER
+    };
+
     playback_stream
         .connect(
             libspa::utils::Direction::Output,
             None,
-            pipewire::stream::StreamFlags::AUTOCONNECT
-                | pipewire::stream::StreamFlags::MAP_BUFFERS
-                | pipewire::stream::StreamFlags::RT_PROCESS
-                // DRIVER makes this stream self-clocking so PipeWire always
-                // invokes the process callback. Without it, native PW streams
-                // stay suspended because no driver pulls them into a graph
-                // cycle (BUG-SG12-6). JACK clients get activation via
-                // jack_activate(); native streams need DRIVER instead.
-                | pipewire::stream::StreamFlags::DRIVER,
+            playback_flags,
             &mut playback_params,
         )
         .expect("Failed to connect PipeWire playback stream");
 
-    info!("PipeWire playback stream connected");
+    if args.managed {
+        info!("PipeWire playback stream connected (managed mode, no AUTOCONNECT)");
+    } else {
+        info!("PipeWire playback stream connected (target: {})", args.target);
+    }
 
     // -----------------------------------------------------------------------
     // Capture stream (Section 3.2) — targets UMIK-1
     // -----------------------------------------------------------------------
 
-    let capture_props = pipewire::properties::properties! {
+    let mut capture_props = pipewire::properties::properties! {
         "media.type" => "Audio",
         "media.category" => "Capture",
         "media.role" => "Production",
         "media.class" => "Stream/Input/Audio",
         "node.name" => "pi4audio-signal-gen-capture",
         "node.description" => "RT Signal Generator (UMIK-1 capture)",
-        "target.object" => &*args.capture_target,
         "audio.channels" => "1",
         "audio.position" => "MONO",
         "node.always-process" => "true",
     };
+    if !args.managed {
+        capture_props.insert("target.object", &*args.capture_target);
+    }
 
     let capture_stream =
         pipewire::stream::Stream::new(&core, "pi4audio-signal-gen-capture", capture_props)
@@ -948,18 +970,31 @@ fn run_pipewire(
         .register()
         .expect("Failed to register capture stream listener");
 
+    let capture_flags = if args.managed {
+        // Managed mode: GraphManager creates links. No AUTOCONNECT.
+        pipewire::stream::StreamFlags::MAP_BUFFERS
+            | pipewire::stream::StreamFlags::RT_PROCESS
+    } else {
+        // Standalone mode: PipeWire auto-links to target.
+        pipewire::stream::StreamFlags::AUTOCONNECT
+            | pipewire::stream::StreamFlags::MAP_BUFFERS
+            | pipewire::stream::StreamFlags::RT_PROCESS
+    };
+
     capture_stream
         .connect(
             libspa::utils::Direction::Input,
             None,
-            pipewire::stream::StreamFlags::AUTOCONNECT
-                | pipewire::stream::StreamFlags::MAP_BUFFERS
-                | pipewire::stream::StreamFlags::RT_PROCESS,
+            capture_flags,
             &mut capture_params,
         )
         .expect("Failed to connect PipeWire capture stream");
 
-    info!("PipeWire capture stream connected (target: {})", args.capture_target);
+    if args.managed {
+        info!("PipeWire capture stream connected (managed mode, no AUTOCONNECT)");
+    } else {
+        info!("PipeWire capture stream connected (target: {})", args.capture_target);
+    }
 
     // -----------------------------------------------------------------------
     // PipeWire registry listener for device hot-plug (Section 8.1)
@@ -1353,6 +1388,7 @@ mod tests {
             ramp_ms: 20,
             capture_buffer_secs: 30,
             device_watch: "UMIK-1".into(),
+            managed: false,
         }
     }
 
@@ -1411,6 +1447,42 @@ mod tests {
     #[test]
     fn validate_listen_without_tcp_prefix() {
         assert!(validate_args(&make_args("127.0.0.1:4001", -20.0)).is_ok());
+    }
+
+    // -----------------------------------------------------------------------
+    // --managed flag (GM-10)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn managed_default_is_false() {
+        let args = make_args("tcp:127.0.0.1:4001", -20.0);
+        assert!(!args.managed);
+    }
+
+    #[test]
+    fn managed_flag_can_be_set() {
+        let mut args = make_args("tcp:127.0.0.1:4001", -20.0);
+        args.managed = true;
+        assert!(args.managed);
+    }
+
+    #[test]
+    fn managed_flag_parsed_from_cli() {
+        // clap's derive macro generates the parser. Verify the flag name
+        // is accepted by constructing Args with try_parse_from.
+        let args = Args::try_parse_from([
+            "pi4audio-signal-gen",
+            "--managed",
+        ]).expect("--managed flag should be accepted");
+        assert!(args.managed);
+    }
+
+    #[test]
+    fn managed_flag_absent_defaults_false() {
+        let args = Args::try_parse_from([
+            "pi4audio-signal-gen",
+        ]).expect("no flags should be accepted");
+        assert!(!args.managed);
     }
 
     // -----------------------------------------------------------------------
