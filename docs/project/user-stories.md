@@ -3109,7 +3109,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **Status:** draft
 **Depends on:** US-056 (JACK backend places CamillaDSP in the PW graph with individually linkable ports -- without this, GraphManager has nothing to link to)
 **Blocks:** none
-**Decisions:** owner directive 2026-03-16. Supersedes the original WP Lua scripts approach.
+**Decisions:** D-039 (owner corrections 2026-03-16: daemon subsystem, WHAT not HOW, sole session manager). Supersedes the original WP Lua scripts approach.
 
 **The problem:** Each audio component (signal-gen, pcm-bridge) currently negotiates its own PipeWire session management independently. Signal-gen alone required 7 properties to coexist in the PW graph (AUTOCONNECT, DRIVER, node.group, target.object, media.role, session.suspend-timeout, audio.position). Getting these right caused 7 bugs and consumed days of debugging. The root cause is architectural: there is no single authority over the audio graph. Every new component must independently discover and negotiate its place, and the general-purpose session manager's heuristic matching actively interferes with a fixed-topology system.
 

@@ -763,3 +763,51 @@ capture omits both. Same TCP streaming protocol, same web UI consumer code.
 `--position` flag deferred (not needed for MVP capture).
 
 **Related:** TK-151, PCM-MODE-1/2/3/4, US-049, US-053, D-037 (TK-236).
+
+## D-039: GraphManager is sole PipeWire session manager — no WirePlumber, WHAT not HOW, daemon subsystem (2026-03-16)
+
+**Context:** US-059 was drafted as a GraphManager module in the web UI
+FastAPI backend, with AC specifying implementation tools (`pw-dump`,
+`pw-link`) and retaining WirePlumber for hardware device management with
+a Lua fragment to suppress auto-linking. Owner reviewed and made three
+corrections before approving.
+
+**Decision:** Three owner corrections to US-059 architecture, approved
+2026-03-16 ("Yes, please, seems we are aligned here"):
+
+1. **GraphManager is a daemon subsystem, not a web UI component.**
+   GraphManager lives in the audio workstation daemon, not in the web UI
+   FastAPI backend. The web UI is a presentation layer; session management
+   belongs in the daemon that manages the audio stack. US-059 user story
+   and AC rewritten accordingly.
+
+2. **AC specify WHAT, not HOW.** Acceptance criteria must describe
+   observable behavior (e.g., "push-based graph awareness within 100ms,"
+   "creates links programmatically," "atomic mode transitions") rather
+   than implementation choices (e.g., `pw-dump --monitor`, `pw-link`
+   subprocess calls). Tool and API choices are implementation details for
+   the architect's task breakdown, not story-level constraints.
+
+3. **No WirePlumber — GraphManager is the sole PipeWire session manager.**
+   The original draft retained WirePlumber for hardware device management
+   with a Lua fragment to suppress auto-linking of application nodes.
+   Owner correction: GraphManager replaces the general-purpose session
+   manager entirely. PipeWire handles device node creation, audio
+   processing, and clock management. GraphManager handles everything
+   above that: link topology, mode transitions, component lifecycle,
+   device monitoring, and USB hotplug recovery. No other session manager
+   creates or destroys application links.
+
+**Rationale:** These corrections ensure US-059 describes the right
+abstraction level for a user story (observable behavior, not
+implementation) and places session management in the right architectural
+layer (daemon, not web UI). Eliminating WirePlumber entirely removes a
+significant complexity layer and a source of the routing heuristic bugs
+that motivated this story.
+
+**Impact:** US-059 AC and DoD rewritten. All references to `pw-dump`,
+`pw-link`, WirePlumber Lua fragments, and web UI FastAPI backend removed
+from the story. Implementation approach deferred to architect task
+breakdown.
+
+**Related:** US-059, US-056 (hard dependency), TK-224, TK-236, BUG-SG12-*.
