@@ -93,8 +93,9 @@ class TestProductionFilterChainConfig(unittest.TestCase):
         self.assertIn("AUX3", self.config)
 
     def test_no_gain_nodes(self):
-        """Filter-chain must not contain gain/volume nodes.
-        All gain is baked into WAV coefficients."""
+        """Filter-chain must not contain separate gain/volume processing nodes.
+        Per-convolver config.gain (attenuation) is acceptable for deployment
+        safety; standalone gain/volume nodes are not."""
         lower = self.config.lower()
         self.assertNotIn("label = gain", lower)
         self.assertNotIn("label = volume", lower)
