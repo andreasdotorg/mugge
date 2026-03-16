@@ -443,6 +443,79 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // Feedback loop regression (duplicate creation window)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn reconcile_before_link_in_graph_produces_create() {
+        // Simulates the window between core.create_object() and the
+        // registry global event: link NOT yet in GraphState, so reconcile
+        // will produce another Create for the same port pair. The
+        // apply_actions guard (link_proxies check) prevents the actual
+        // duplicate PW call. This test documents the expected behavior
+        // of the pure reconcile function.
+        let mut g = GraphState::new();
+        g.add_node(make_node(10, "src-node", "Stream/Output/Audio"));
+        g.add_node(make_node(20, "sink-node", "Audio/Sink"));
+        g.add_port(make_port(100, 10, "output_0", "out"));
+        g.add_port(make_port(200, 20, "input_0", "in"));
+
+        let table = one_link_table("src-node", "output_0", "sink-node", "input_0", false);
+
+        // First reconcile: creates the link.
+        let actions1 = reconcile(&g, &table, Mode::Monitoring);
+        assert_eq!(actions1.len(), 1);
+
+        // Link NOT added to graph yet (simulates the window before
+        // the registry global event arrives).
+
+        // Second reconcile: still wants to create (link not in graph).
+        // The apply_actions guard prevents the actual duplicate.
+        let actions2 = reconcile(&g, &table, Mode::Monitoring);
+        assert_eq!(actions2.len(), 1);
+
+        // Now the registry event arrives: link added to graph.
+        g.add_link(make_link(500, 10, 100, 20, 200));
+
+        // Third reconcile: no actions (link exists).
+        let actions3 = reconcile(&g, &table, Mode::Monitoring);
+        assert!(actions3.is_empty());
+    }
+
+    #[test]
+    fn reconcile_after_new_port_during_link_window() {
+        // Scenario: reconcile creates link A. Before the global event
+        // for link A arrives, a new port appears for the same node,
+        // triggering another reconcile. Without guards, this would
+        // create a duplicate link A.
+        let mut g = GraphState::new();
+        g.add_node(make_node(10, "src-node", "Stream/Output/Audio"));
+        g.add_node(make_node(20, "sink-node", "Audio/Sink"));
+        g.add_port(make_port(100, 10, "output_0", "out"));
+        g.add_port(make_port(200, 20, "input_0", "in"));
+
+        let table = one_link_table("src-node", "output_0", "sink-node", "input_0", false);
+
+        // First reconcile: produce Create.
+        let actions1 = reconcile(&g, &table, Mode::Monitoring);
+        assert_eq!(actions1.len(), 1);
+
+        // New port appears (e.g., output_1 on same node), but link
+        // NOT yet in graph. Reconcile fires again.
+        g.add_port(make_port(101, 10, "output_1", "out"));
+        let actions2 = reconcile(&g, &table, Mode::Monitoring);
+
+        // Pure reconcile still says Create (it doesn't know about
+        // pending creates). The apply_actions guard catches this.
+        assert_eq!(actions2.len(), 1);
+        assert!(matches!(&actions2[0], LinkAction::Create {
+            output_port_id: 100,
+            input_port_id: 200,
+            ..
+        }));
+    }
+
+    // -----------------------------------------------------------------------
     // Mode transition
     // -----------------------------------------------------------------------
 

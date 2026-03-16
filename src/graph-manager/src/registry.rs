@@ -70,6 +70,15 @@ pub fn apply_actions(
                 input_port_id,
                 description,
             } => {
+                // Guard: skip if we already created this link (port pair
+                // already in link_proxies). Prevents duplicate creation
+                // during the window between core.create_object() and the
+                // registry global event confirming the link.
+                if link_proxies.borrow().contains_key(&(*output_port_id, *input_port_id)) {
+                    log::debug!("  SKIP (already created): {}", description);
+                    continue;
+                }
+
                 log::info!("  CREATE: {}", description);
 
                 let props = pipewire::properties::properties! {
@@ -245,6 +254,14 @@ pub fn register_graph_listener(
         .get_registry()
         .expect("Failed to get PipeWire registry");
 
+    // Re-entrancy guard: prevents reconciliation from firing when the
+    // registry delivers events for links that we just created/destroyed.
+    // Without this, create_object() -> global event -> reconcile() -> create_object()
+    // forms a feedback loop. Single-threaded, so Cell<bool> is sufficient.
+    let reconciling = Rc::new(std::cell::Cell::new(false));
+    let reconciling_add = reconciling.clone();
+    let reconciling_remove = reconciling;
+
     // Core is Clone (Rc-based) — safe to clone into closures on the
     // same PW main loop thread. No WeakCore needed.
     let core_add = core.clone();
@@ -362,7 +379,10 @@ pub fn register_graph_listener(
             }
 
             // Trigger reconciliation and health update after every graph mutation.
-            if mutated {
+            // Skip if already reconciling (re-entrancy guard: our own link
+            // creation triggers global events that re-enter this callback).
+            if mutated && !reconciling_add.get() {
+                reconciling_add.set(true);
                 let current_mode = *mode_add.borrow();
                 run_reconcile(
                     &g,
@@ -373,6 +393,7 @@ pub fn register_graph_listener(
                     &link_proxies_add,
                     &comp_reg_add,
                 );
+                reconciling_add.set(false);
             }
         })
         .global_remove(move |id| {
@@ -394,7 +415,9 @@ pub fn register_graph_listener(
             };
 
             // Trigger reconciliation and health update after every graph mutation.
-            if removed {
+            // Skip if already reconciling (re-entrancy guard).
+            if removed && !reconciling_remove.get() {
+                reconciling_remove.set(true);
                 let current_mode = *mode_remove.borrow();
                 run_reconcile(
                     &g,
@@ -405,6 +428,7 @@ pub fn register_graph_listener(
                     &link_proxies_remove,
                     &comp_reg_remove,
                 );
+                reconciling_remove.set(false);
             }
         })
         .register();
