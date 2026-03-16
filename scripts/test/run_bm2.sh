@@ -13,7 +13,8 @@
 #   - PipeWire running (systemd --user)
 #   - python3, soundfile, numpy (for Dirac WAV generation)
 #   - pidstat (from sysstat package)
-#   - pw-filter-chain, pw-play, pw-metadata (from PipeWire)
+#   - pipewire (for loading filter-chain config via `pipewire -c`)
+#   - pw-play, pw-metadata (from PipeWire)
 #
 # Usage:
 #   ./run_bm2.sh [results_dir]
@@ -54,6 +55,24 @@ echo "Generated config: ${CONF}"
 echo ""
 
 # -----------------------------------------------------------------------
+# Step 3: Generate silence WAV for feeding the filter-chain
+# -----------------------------------------------------------------------
+# pw-play cannot read /dev/zero as raw audio. Generate a silence WAV
+# file long enough to cover stabilization + measurement + margin.
+SILENCE_DURATION=$((STABILIZE_SECS + PIDSTAT_DURATION + 30))
+SILENCE_WAV="${RESULTS_DIR}/silence_4ch.wav"
+echo "--- Generating ${SILENCE_DURATION}s silence WAV (4ch, 48kHz, float32) ---"
+python3 -c "
+import numpy as np, soundfile as sf, sys
+dur = int(sys.argv[1])
+sr = 48000
+data = np.zeros((sr * dur, 4), dtype=np.float32)
+sf.write(sys.argv[2], data, sr, subtype='FLOAT')
+print(f'Generated {sys.argv[2]} ({dur}s, 4ch, {sr}Hz)')
+" "$SILENCE_DURATION" "$SILENCE_WAV"
+echo ""
+
+# -----------------------------------------------------------------------
 # Pre-benchmark temperature
 # -----------------------------------------------------------------------
 if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
@@ -86,35 +105,34 @@ run_benchmark() {
     pw-metadata -n settings 2>/dev/null | grep clock.quantum || echo "  (could not read)"
     echo ""
 
-    # Start filter-chain
-    echo "Starting pw-filter-chain..."
-    pw-filter-chain "$CONF" &
+    # Start filter-chain.
+    # Note: pw-filter-chain binary does not exist on this PipeWire version.
+    # Use `pipewire -c <config>` to load the filter-chain module config.
+    echo "Starting pipewire -c (filter-chain)..."
+    pipewire -c "$CONF" &
     local FC_PID=$!
     sleep 3
 
     if ! kill -0 "$FC_PID" 2>/dev/null; then
-        echo "ERROR: pw-filter-chain failed to start"
+        echo "ERROR: pipewire -c (filter-chain) failed to start"
         echo "${TEST_NAME} RESULT: FAILED_TO_START"
         return 1
     fi
-    echo "pw-filter-chain PID: ${FC_PID}"
+    echo "pipewire filter-chain PID: ${FC_PID}"
 
     # Feed silence to the filter-chain capture sink.
-    # pw-play with /dev/zero sends silence; --target routes to our sink.
-    echo "Starting silence generator targeting bm2-fir-benchmark-capture..."
-    pw-play --target="bm2-fir-benchmark-capture" \
-            --channels=4 --rate=48000 --format=f32 \
-            /dev/zero &
+    # This forces the convolver to process audio buffers even though
+    # the input is zeros — the FFT/IFFT work is the same for any input.
+    echo "Starting silence playback targeting bm2-fir-benchmark-capture..."
+    pw-play --target="bm2-fir-benchmark-capture" "$SILENCE_WAV" &
     local PLAY_PID=$!
     sleep 2
 
     if ! kill -0 "$PLAY_PID" 2>/dev/null; then
-        echo "WARNING: pw-play failed to start, trying pw-cat..."
-        pw-cat --playback --target="bm2-fir-benchmark-capture" \
-               --channels=4 --rate=48000 --format=f32 \
-               /dev/zero &
-        PLAY_PID=$!
-        sleep 2
+        echo "ERROR: pw-play failed to start"
+        echo "${TEST_NAME} RESULT: PLAY_FAILED"
+        kill "$FC_PID" 2>/dev/null
+        return 1
     fi
 
     # Find the PipeWire main process PID for pidstat.
