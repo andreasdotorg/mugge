@@ -2971,6 +2971,187 @@ Both mics MUST record simultaneously (NOT sequential).
 
 ---
 
+## Tier 11 — Architecture Evolution (owner directive 2026-03-16)
+
+Owner directive: migrate from dual-graph (PipeWire + CamillaDSP via ALSA
+Loopback) toward a tighter integration. "Fighting the current architecture
+for something as trivial as signal generation is a clear indicator we could
+win there." See `docs/architecture/unified-graph-analysis.md` for full
+analysis. Phased approach: Phase 0 (JACK backend), Phase 1 (WP custom
+routing), BM-2 (filter-chain benchmark), PW-native investigation.
+
+---
+
+## US-056: CamillaDSP JACK Backend Migration (Phase 0)
+
+**As** the system builder,
+**I want** CamillaDSP switched from its ALSA backend (`type: Alsa` via ALSA Loopback) to a JACK backend (`type: Jack` via `pw-jack`) so that it becomes a native node in the PipeWire graph,
+**so that** the ALSA Loopback bridge is eliminated, signal tapping becomes trivial (all ports visible in PW graph), mode switching simplifies (PW quantum change only, CamillaDSP follows automatically), and diagnostic clarity improves (one graph, one monitoring surface).
+
+**Status:** draft
+**Depends on:** none (zero dependencies to start, quick win)
+**Blocks:** US-057 (PW-native backend investigation depends on JACK baseline)
+**Decisions:** D-027 (pw-jack as permanent JACK bridge), unified graph analysis Option A
+**Architecture ref:** `docs/architecture/unified-graph-analysis.md` Section 3.1 (Option A), Section 6 (decision tree), Section 7.4 (Phase 0 consensus)
+
+**Note:** All four advisors reached CONSENSUS on Phase 0. AE confirms signal quality is identical under JACK backend. Latency expected to drop 42-61% (ALSA Loopback overhead eliminated). Rollback is trivial: revert `type: Jack` to `type: Alsa` in CamillaDSP YAML. Under the JACK backend, CamillaDSP's `chunksize` field becomes advisory -- processing granularity follows PW quantum. This is a feature: no separate quantum management needed. Per-channel JACK ports avoid the SPA format negotiation issues that caused TK-236 and BUG-SG12-5. **This is a validate-or-rollback operation, not a guaranteed win.** BM-1 is a go/no-go gate: if BM-1 fails (CPU > 12%), the story ends with rollback to ALSA backend and a lab note documenting why. The chunksize loss only affects DJ mode (live mode already processes at quantum 256 = chunksize 256). DJ mode CPU increase from 5.23% (chunksize 2048) to estimated 8-9% (quantum 1024) consumes 3-4% headroom from Mixxx's ~85% budget -- plausible but unverified until BM-1.
+
+**Acceptance criteria:**
+- [ ] CamillaDSP config changed from `type: Alsa` to `type: Jack`, launched via `pw-jack camilladsp`
+- [ ] 8-input + 8-output JACK ports visible in PipeWire graph (`pw-dump` / `pw-link`)
+- [ ] ALSA Loopback module no longer loaded (snd-aloop removed from config)
+- [ ] BM-1 benchmark PASS: CPU < 12% at quantum 1024 with 16k taps x 4 channels on Pi 4B (AE expects 8-9%)
+- [ ] Gate G-0 PASS: latency measurement (T2a-equivalent) with JACK backend. PASS threshold: PA path latency < 80ms (meaningful improvement over ALSA ~114ms baseline). Expected: ~44-65ms (~2 quanta). Note: "expected" is a projection -- actual measurement determines pass/fail
+- [ ] Gate G-1 PASS: CamillaDSP 3.0.1 `type: Jack` works with PipeWire 1.4.9 on Pi
+- [ ] Gate G-2 PASS: PipeWire graph stable with ~19% CPU callback on data-loop (30-min stability test under DJ load)
+- [ ] Gate G-3 PASS: CamillaDSP config reload (WAV filter swap) does not block PipeWire graph thread. **Critical risk (AD Finding 2):** Under JACK backend, CamillaDSP's processing callback runs on PW's graph thread (FIFO/88). If `config.reload()` triggers WAV file loading inside the RT callback, the graph thread stalls -- all nodes miss their deadline, producing xruns. **Test procedure:** (1) CamillaDSP running with JACK backend, audio flowing. (2) Trigger `config.reload()` via websocket API. (3) Monitor PW for xruns during reload (`pw-top -b`). (4) PASS = zero xruns during reload. FAIL = any xruns. If G-3 FAILS, the measurement workflow (D-036 config swap) is broken under JACK backend
+- [ ] Gate G-4 PASS: CamillaDSP websocket API (levels, config, state) works with JACK backend -- web UI monitoring unaffected
+- [ ] Mode switching verified: PW quantum change (1024 for DJ, 256 for live) propagates to CamillaDSP automatically
+- [ ] Signal-gen and pcm-bridge can link directly to CamillaDSP's JACK ports in the PW graph
+- [ ] Web UI dashboard, status bar (US-051), and test tool (US-053) continue to work without modification
+- [ ] systemd service updated for `pw-jack camilladsp` launch
+- [ ] Rollback procedure documented and tested (revert to `type: Alsa`)
+
+**DoD:**
+- [ ] Config migration complete and deployed on Pi
+- [ ] All 5 gate benchmarks (BM-1, G-0 through G-4) PASS with QE-approved test protocols (D-024)
+- [ ] 30-minute stability test PASS under DJ load (T3-equivalent)
+- [ ] Latency measurement recorded and compared to ALSA baseline
+- [ ] AE sign-off on signal quality (bit-identical or equivalent)
+- [ ] Architect sign-off on PW graph topology
+- [ ] Automated regression tests for JACK backend configuration in CI suite
+- [ ] Lab note documenting migration, benchmark results, and rollback procedure
+
+**Fail path (AD Finding 1):** If any gate benchmark FAILS (BM-1 > 12% CPU, G-0 >= 80ms latency, G-1/G-2/G-4 failure, or G-3 xruns during config reload), the story ends with: (1) rollback to ALSA backend, (2) lab note documenting the failure and measurements, (3) story status set to WONT-DO with data. No partial migration -- JACK backend is all-or-nothing.
+
+---
+
+## US-057: CamillaDSP Native PipeWire Backend Investigation (Spike)
+
+**As** the system builder,
+**I want** to investigate whether CamillaDSP's native PipeWire backend (`type: PipeWire`, built with `--features pipewire`) works on the Pi and what advantages it offers over the JACK backend,
+**so that** we have data to decide whether the native PW backend is worth pursuing as a future improvement over the JACK backend established in US-056.
+
+**Status:** draft
+**Depends on:** US-056 (JACK backend provides the baseline to compare against)
+**Blocks:** none (investigation only, no deployment commitment)
+**Decisions:** unified graph analysis Option C
+**Architecture ref:** `docs/architecture/unified-graph-analysis.md` Section 3.2 (Option C)
+
+**Note:** This is a TIME-BOXED SPIKE (1 day), not a migration commitment. AE recommends JACK first, PW-native second -- JACK has guaranteed per-channel ports while PW-native has SPA format negotiation risk (same surface as TK-236). EH-3 already validated CamillaDSP with `type: PipeWire` in the test harness for short runs. The spike answers: does it work on Pi in production conditions? Does it offer measurable advantages over JACK?
+
+**Acceptance criteria:**
+- [ ] CamillaDSP rebuilt on Pi with `--features pipewire` (or cross-compiled with the feature enabled)
+- [ ] Gate G-1c: CamillaDSP 3.0.1 `type: PipeWire` works with PipeWire 1.4.9 on Pi -- node appears in `pw-dump`
+- [ ] Port topology verified: correct channel count, correct `audio.position`, no SPA format issues (TK-236 class risk)
+- [ ] CPU benchmark at quantum 1024 compared to JACK backend baseline (US-056 BM-1 result)
+- [ ] Latency measurement compared to JACK backend baseline
+- [ ] Websocket API verified functional (levels, config, state)
+- [ ] Stability: 10-minute run under DJ load (shorter than US-056's 30-min since this is investigation)
+- [ ] If SPA format issues arise, document them and STOP -- JACK backend (US-056) remains the production choice
+- [ ] Decision document: recommend or reject PW-native backend, with data
+
+**DoD:**
+- [ ] Investigation completed within time box
+- [ ] Benchmark data recorded and compared to JACK baseline
+- [ ] Decision recommendation written (adopt / reject / defer) with supporting data
+- [ ] Architect sign-off on findings
+- [ ] AE sign-off on signal quality comparison
+
+---
+
+## US-058: PipeWire Filter-Chain FIR Convolution Benchmark (BM-2)
+
+**As** the system builder,
+**I want** to benchmark PipeWire's built-in filter-chain convolver with 16,384-tap FIR filters on 4 speaker channels on the Pi 4B,
+**so that** we have definitive data on whether PipeWire-native convolution is a viable long-term replacement for CamillaDSP's FIR engine on this hardware.
+
+**Status:** draft
+**Depends on:** none (independent track, can start immediately)
+**Blocks:** none directly (gates long-term Option B evaluation per unified graph analysis decision tree)
+**Decisions:** unified graph analysis Section 6 (decision tree), Section 8 (long-term PW-native convolution)
+**Architecture ref:** `docs/architecture/unified-graph-analysis.md` BM-2 definition (line 835), decision tree (lines 837-877)
+
+**Note:** This is the single highest priority benchmark per architect recommendation. It definitively answers whether PipeWire-native convolution is viable on Pi 4B ARM. The question is NOT algorithm existence (PW has partitioned convolution since v0.3.56) but ARM performance -- NEON optimization quality and FFT engine efficiency on Cortex-A72. BM-2 can run at any time, independently of Phase 0-1. The result informs long-term architecture direction but does NOT change the near-term roadmap (Phase 0 JACK backend proceeds regardless).
+
+**Pass/fail criteria (from unified graph analysis):**
+- CPU < 20% at quantum 1024: **PASS** -- PW convolver is viable, evaluate Option B as future migration
+- CPU 20-30%: **MARGINAL** -- viable with optimization, evaluate cost-benefit
+- CPU > 30%: **FAIL** -- PW convolver not viable on Pi 4B, Option A (CamillaDSP) is the ceiling
+
+**Acceptance criteria:**
+- [ ] PipeWire filter-chain config created: 16,384-tap FIR convolution on 4 channels (matching CamillaDSP speaker pipeline) at quantum 1024
+- [ ] Synthetic Dirac impulse filters used (same methodology as US-001 CamillaDSP benchmarks for comparability)
+- [ ] CPU measurement on Pi 4B under sustained load (minimum 5 minutes)
+- [ ] Benchmark repeated at quantum 256 (live mode) for comparison
+- [ ] Results compared to CamillaDSP baseline: BM-1 result from US-056 (JACK backend) and US-001 results (ALSA backend). **Fair comparison note (AD Finding 7):** Primary comparison is BM-2 (quantum 1024) vs BM-1 (quantum 1024) -- same processing granularity. Comparison to US-001 ALSA results (chunksize 2048) is informational only -- the larger chunksize gives CamillaDSP a structural advantage not available in unified-graph mode
+- [ ] If PASS: document filter-chain config, API capabilities (levels, config reload, hot-swap), and missing features vs CamillaDSP
+- [ ] If FAIL: document the performance gap and whether optimization could close it
+- [ ] Results recorded in lab note with exact PipeWire version, kernel version, and methodology
+
+**DoD:**
+- [ ] Benchmark executed on Pi 4B with QE-approved test protocol (D-024)
+- [ ] CPU, xrun, and latency data recorded
+- [ ] Comparison table: PW filter-chain vs CamillaDSP (ALSA) vs CamillaDSP (JACK)
+- [ ] Pass/fail determination documented with supporting data
+- [ ] AE sign-off on benchmark methodology and results interpretation
+- [ ] Architect sign-off on implications for long-term architecture direction
+- [ ] Results filed as lab note in `docs/lab-notes/`
+
+---
+
+## US-059: Central Audio Graph Control (GraphManager)
+
+**As** the system builder,
+**I want** a GraphManager module in the web UI backend that owns all PipeWire application routing -- spawning components, creating links, managing lifecycle, and swapping topologies on mode changes,
+**so that** audio routing is deterministic by declaration, components are simple audio producers/consumers with no PipeWire negotiation logic, and the 7 signal-gen integration bugs (BUG-SG12-1 through SG12-7) cannot recur.
+
+**Status:** draft
+**Depends on:** US-056 (JACK backend places CamillaDSP in the PW graph as a JACK client with 16 individually linkable ports -- without this, GraphManager has nothing to link to)
+**Blocks:** none
+**Decisions:** owner directive 2026-03-16. Supersedes the original WP Lua scripts approach.
+
+**Hard dependency on US-056 (JACK backend):** Under the current ALSA backend, CamillaDSP is not a node in the PipeWire graph -- it reads from ALSA Loopback directly. GraphManager has nothing to link to. The JACK backend (US-056) places CamillaDSP in the PW graph as a JACK client with 16 individually linkable ports, which is what GraphManager manages.
+
+**The problem:** Each audio component (signal-gen, pcm-bridge) currently negotiates its own PipeWire plumbing independently. Signal-gen alone required 7 properties to coexist in the PW graph (AUTOCONNECT, DRIVER, node.group, target.object, media.role, session.suspend-timeout, audio.position). Getting these right caused 7 bugs (BUG-SG12-1 through SG12-7) and consumed days of debugging. The root cause is architectural: there is no central authority over the audio graph. Every new component must independently discover and negotiate its place, and WirePlumber's general-purpose matching heuristics actively interfere (TK-224 routing race, TK-236 media.class misinterpretation).
+
+**The solution:** GraphManager is a new module in `scripts/web-ui/app/` that acts as the single authority for all application-level PW routing. It maintains a declarative routing table defining two topologies (monitoring mode and measurement mode). When a component starts, GraphManager detects it via `pw-dump --monitor`, looks up the routing table, and creates the appropriate PW links via `pw-link`. Components launch with zero PW negotiation properties -- they produce or consume samples, nothing more. WirePlumber stays for hardware device management (USB hotplug, ALSA card enumeration) but a single Lua fragment (`50-pi4audio-no-autolink.lua`) tells it to ignore all `pi4audio-*` and `CamillaDSP*` nodes.
+
+**Acceptance criteria:**
+- [ ] GraphManager module in `scripts/web-ui/app/` with declarative routing table for monitoring and measurement topologies
+- [ ] GraphManager spawns signal-gen and pcm-bridge instances, manages their lifecycle (start, stop, restart on crash)
+- [ ] GraphManager creates all PW links for application nodes via `pw-link` -- components have no AUTOCONNECT, no target.object, no node.group, no node.always-process when launched in managed mode
+- [ ] GraphManager monitors PW graph via `pw-dump --monitor` for node appear/disappear events -- detects component start, stop, and crash
+- [ ] Mode switch (monitoring <-> measurement) performs atomic link swap: old links destroyed, new links created, no intermediate state with incorrect routing
+- [ ] Audio continues flowing for 60s after web UI process death (SIGKILL). PW links persist without the creating process -- GraphManager creates links that survive its own crash. Audio is never interrupted by a web UI restart. (PW links are kernel-managed objects that survive the creating process.)
+- [ ] Signal-gen supports two modes: **managed mode** (no `--target`, no AUTOCONNECT -- GraphManager creates links externally) and **standalone mode** (`--target` flag, self-connecting for debugging/development). `--target` is optional, not removed.
+- [ ] pcm-bridge supports same two modes: managed (no `--target`) and standalone (`--target` flag preserved for debugging)
+- [ ] In managed mode, components have no PW negotiation properties (AUTOCONNECT, target.object, node.group, node.always-process all omitted). In standalone mode, existing self-connecting behavior is preserved.
+- [ ] WirePlumber Lua fragment deployed: WP ignores all `pi4audio-*` AND `CamillaDSP*` nodes, does not create automatic links for them. WP device management (USB hotplug, profiles) preserved.
+- [ ] USB hotplug recovery: UMIK-1 or USBStreamer disconnect/reconnect triggers GraphManager re-link, not WP auto-link
+- [ ] Crash recovery: if signal-gen or pcm-bridge crashes, GraphManager detects via node disappear event, restarts the process, and re-creates links
+- [ ] Graph health reporting: GraphManager pushes graph state (connected nodes, active links, disconnections) to web UI via existing WebSocket endpoint
+- [ ] Integration with mode_manager.py: mode transitions trigger GraphManager topology swap
+- [ ] Integration with session.py: measurement session start/stop triggers measurement mode entry/exit
+- [ ] TK-224 eliminated: measurement mode routing swap is atomic, no WirePlumber race
+- [ ] BUG-SG12-* class eliminated: components have no PW negotiation properties in managed mode -- GraphManager links by explicit port name
+
+**DoD:**
+- [ ] GraphManager module written and integrated into FastAPI backend
+- [ ] Lua fragment deployed on Pi, WP ignores pi4audio-* and CamillaDSP* nodes
+- [ ] Signal-gen and pcm-bridge updated with managed/standalone dual-mode support
+- [ ] GM-0 gate passed: PW link persistence verified after SIGKILL (gates all other testing)
+- [ ] Statically validated (lint, type check)
+- [ ] Automated regression tests in CI: correct link topology after startup, re-linking after USB hotplug, atomic mode swap, crash recovery, web UI death resilience
+- [ ] 30-minute stability test: graph topology correct under DJ load with no spurious disconnections
+- [ ] Architect sign-off on GraphManager design and mode_manager/session integration
+- [ ] Security specialist review: subprocess spawning has no command injection or privilege escalation risk
+- [ ] AD challenge (second pass -- first pass applied to original WP Lua framing, implementation approach changed fundamentally)
+- [ ] QE sign-off on test coverage
+- [ ] Lab note documenting routing policy, GraphManager architecture, and rollback procedure
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -3074,4 +3255,10 @@ US-051 + US-052 ──> US-053 (manual test tool page)
 US-052 + US-047 ──> US-054 (ADA8200 mic channel selection)
 US-054 + US-052 ──> US-055 (calibration transfer UMIK-1 to ADA8200 mic)
 TK-225/226/227 SUBSUMED into US-051. TK-229 SUPERSEDED by US-052. TK-230 root cause ELIMINATED by US-052.
+
+Tier 11 — Architecture Evolution (owner directive 2026-03-16):
+US-056 (JACK backend, Phase 0) — no dependencies, validate-or-rollback
+US-056 ──> US-057 (PW-native investigation spike, depends on JACK baseline)
+US-056 ──> US-059 (GraphManager: central audio graph control, depends on JACK topology)
+US-058 (BM-2 filter-chain benchmark) — no dependencies, can start immediately
 ```
