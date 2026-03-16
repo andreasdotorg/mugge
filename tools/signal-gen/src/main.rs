@@ -729,6 +729,12 @@ fn run_pipewire(
         "audio.channels" => &*channels_str,
         "audio.position" => "AUX0,AUX1,AUX2,AUX3,AUX4,AUX5,AUX6,AUX7",
         "node.always-process" => "true",
+        // Join the DSP scheduling group so the loopback-8ch-sink driver
+        // pulls this node into its graph cycle (BUG-SG12-6). Without
+        // this, native PW streams stay suspended even when linked.
+        // JACK clients (like pcm-bridge/webui-monitor) get this
+        // automatically; native streams must set it explicitly.
+        "node.group" => "group.dsp.0",
     };
 
     let playback_stream =
@@ -861,6 +867,7 @@ fn run_pipewire(
         "audio.channels" => "1",
         "audio.position" => "MONO",
         "node.always-process" => "true",
+        "node.group" => "group.dsp.0",  // BUG-SG12-6: join DSP scheduling group
     };
 
     let capture_stream =
