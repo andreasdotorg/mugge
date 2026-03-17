@@ -449,7 +449,7 @@ share the same ADAT link) must be in the same `node.group`. Their
 | 3 | WP channelVolumes suppression for convolver nodes | Medium | Architect | Finding 9, TK-246 |
 | 4 | Confirm `linear` Mult functionality with WP volumes at unity | Medium | Worker | Finding 10, TK-249 |
 | 5 | Web UI: replace `pw-top` spawning with native API | Medium | Worker | Finding 8, TK-245 |
-| 6 | Update safety.md with S-012 gain-increase rule | Medium | TW | Finding 1 |
+| 6 | ~~Update safety.md with S-012 gain-increase rule~~ DONE | Medium | TW | Finding 1 |
 | 7 | Thermal safety documentation for mixed speaker configs | Low | TW | Finding 7, TK-248 |
 | 8 | Commit `node.group` configs to repo | Low | CM | Finding 13 |
 
