@@ -244,6 +244,54 @@ power levels.
 
 ---
 
+## 7. Runtime Gain Increase Safety (S-012)
+
+**Never increase gain on any node in the live audio path without explicit
+owner confirmation.** This applies whether the owner is monitoring on
+headphones, in-ear monitors, or PA speakers.
+
+### The S-012 Safety Incident
+
+On 2026-03-17, during a Reaper live-mode investigation (CHANGE session C-005),
+a worker changed the PW `linear` gain node Mult parameter from 0.001 (-60 dB)
+to 0.0316 (-30 dB) — a +30 dB increase — without warning the owner. The
+owner was actively monitoring on headphones at the time. No injury occurred,
+but the incident demonstrated a gap in the safety rules: gain changes to live
+audio paths were not explicitly listed as triggering actions requiring owner
+confirmation.
+
+**Full details:** `docs/lab-notes/change-C-005-live-mode-investigation.md`
+(Finding 1)
+
+### Runtime Gain Safety Rules
+
+1. **Owner confirmation required before any gain increase.** Before increasing
+   gain on any node in the audio path (volume, Mult, channelVolumes, or any
+   parameter that increases signal level), explicitly inform the owner and wait
+   for confirmation. This applies even for small increases (e.g., +3 dB).
+
+2. **Gain decreases are safe.** Reducing gain (attenuation) does not require
+   owner confirmation — it can only make the signal quieter, never louder.
+
+3. **Applies to all gain mechanisms.** Including but not limited to:
+   - `pw-cli s <node> Props '{ volume: ... }'`
+   - `pw-cli s <node> Props '{ params: [ "Mult", ... ] }'`
+   - `pw-cli s <node> Props '{ channelVolumes: [ ... ] }'`
+   - Any PipeWire filter-chain parameter change that affects signal level
+
+4. **No exceptions for "small" increases.** The safety margin depends on the
+   current listening level, speaker thermal limits, and amplifier gain — none
+   of which the worker can reliably assess remotely.
+
+### Cross-References
+
+- S-012 / TK-242: Safety incident
+- `docs/lab-notes/change-C-005-live-mode-investigation.md` Finding 1
+- CLAUDE.md "Safety Rules": Updated with gain-increase rule
+- S-010: Prior near-miss (measurement bypass, different mechanism, same principle)
+
+---
+
 ## Summary of Safety Decisions
 
 | Decision | Summary | Section |
@@ -252,6 +300,7 @@ power levels.
 | D-013 | PREEMPT_RT mandatory for production | 6 |
 | D-029 | Per-speaker boost budget + mandatory HPF framework | 2 |
 | D-031 | IIR Butterworth HPF in all production configs | 2 |
+| S-012 | No gain increase without owner confirmation | 7 |
 
 ## Safety Incident Register
 
