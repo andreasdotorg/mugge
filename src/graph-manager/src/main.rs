@@ -89,9 +89,34 @@ fn parse_mode(s: &str) -> Result<Mode, String> {
     }
 }
 
-/// Parse the listen address, stripping optional "tcp:" prefix.
-fn parse_listen_addr(addr: &str) -> String {
-    addr.strip_prefix("tcp:").unwrap_or(addr).to_string()
+/// Parse and validate the listen address, stripping optional "tcp:" prefix.
+///
+/// # Security (SEC-GM-01)
+///
+/// Only loopback addresses are permitted. Binding to a non-loopback address
+/// would expose the unauthenticated RPC interface to the venue network,
+/// allowing anyone on the LAN to change operating modes, create/destroy
+/// links, and disrupt a live performance.
+fn parse_listen_addr(addr: &str) -> Result<String, String> {
+    let stripped = addr.strip_prefix("tcp:").unwrap_or(addr);
+
+    // Extract the host portion (everything before the last ':port').
+    let host = match stripped.rsplit_once(':') {
+        Some((h, _port)) => h,
+        None => stripped,
+    };
+
+    // Allow IPv6 bracket notation: [::1]:4002 → ::1
+    let host_bare = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')).unwrap_or(host);
+
+    match host_bare {
+        "127.0.0.1" | "::1" | "localhost" => Ok(stripped.to_string()),
+        _ => Err(format!(
+            "SEC-GM-01: refusing to bind to non-loopback address '{}'. \
+             Only 127.0.0.1, ::1, and localhost are permitted.",
+            stripped,
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +449,10 @@ fn main() {
     std::env::set_var("RUST_LOG", &args.log_level);
     env_logger::init();
 
-    let listen_addr = parse_listen_addr(&args.listen);
+    let listen_addr = parse_listen_addr(&args.listen).unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
+    });
     let initial_mode = parse_mode(&args.mode).unwrap_or_else(|e| {
         eprintln!("Error: {}", e);
         std::process::exit(1);
@@ -500,12 +528,65 @@ mod tests {
 
     #[test]
     fn parse_listen_addr_with_prefix() {
-        assert_eq!(parse_listen_addr("tcp:127.0.0.1:4002"), "127.0.0.1:4002");
+        assert_eq!(
+            parse_listen_addr("tcp:127.0.0.1:4002").unwrap(),
+            "127.0.0.1:4002"
+        );
     }
 
     #[test]
     fn parse_listen_addr_without_prefix() {
-        assert_eq!(parse_listen_addr("127.0.0.1:4002"), "127.0.0.1:4002");
+        assert_eq!(
+            parse_listen_addr("127.0.0.1:4002").unwrap(),
+            "127.0.0.1:4002"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SEC-GM-01: loopback binding validation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_listen_addr_accepts_ipv6_loopback() {
+        assert_eq!(
+            parse_listen_addr("tcp:[::1]:4002").unwrap(),
+            "[::1]:4002"
+        );
+    }
+
+    #[test]
+    fn parse_listen_addr_accepts_localhost() {
+        assert_eq!(
+            parse_listen_addr("tcp:localhost:4002").unwrap(),
+            "localhost:4002"
+        );
+    }
+
+    #[test]
+    fn parse_listen_addr_rejects_all_interfaces() {
+        let result = parse_listen_addr("tcp:0.0.0.0:4002");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("SEC-GM-01"));
+    }
+
+    #[test]
+    fn parse_listen_addr_rejects_lan_ip() {
+        let result = parse_listen_addr("tcp:192.168.1.100:4002");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("SEC-GM-01"));
+    }
+
+    #[test]
+    fn parse_listen_addr_rejects_wildcard_ipv6() {
+        let result = parse_listen_addr("tcp:[::]:4002");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("SEC-GM-01"));
+    }
+
+    #[test]
+    fn parse_listen_addr_rejects_bare_wildcard() {
+        let result = parse_listen_addr("0.0.0.0:4002");
+        assert!(result.is_err());
     }
 
     #[test]
