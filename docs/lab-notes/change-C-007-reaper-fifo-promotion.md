@@ -251,6 +251,33 @@ confirms both original TIDs at FIFO/80. See Methodology Note below.
 | pw-REAPER TID 9709 | SCHED_FIFO/80 (unchanged) |
 | pw-REAPER TID 9710 | SCHED_FIFO/80 (unchanged) |
 
+**Full Reaper thread inventory (O-012b, PID 9697, 13 threads):**
+
+| TID | Scheduler | Priority | Thread Name | Role |
+|-----|-----------|----------|-------------|------|
+| 9697 | SCHED_OTHER | -- | reaper | Main process thread |
+| 9706 | SCHED_BATCH | 0 | reaper:disk$0 | Disk I/O |
+| 9707 | SCHED_OTHER | -- | reaper/video | Video/UI |
+| 9709 | **SCHED_FIFO** | **80** | **pw-REAPER** | **PW JACK bridge (C-007 promoted)** |
+| 9710 | **SCHED_FIFO** | **80** | **pw-REAPER** | **PW JACK bridge (C-007 promoted)** |
+| 9712 | SCHED_FIFO | 83 | data-loop.0 | PipeWire data loop (RESET_ON_FORK) |
+| 9713 | SCHED_RR | 75 | reaper/mediaafx | Audio FX processing |
+| 9714 | SCHED_RR | 75 | reaper/mediaafx | Audio FX processing |
+| 9715 | SCHED_RR | 75 | reaper/mediaafx | Audio FX processing |
+| 9716 | SCHED_RR | 75 | reaper/mediaafx | Audio FX processing |
+| 9717 | SCHED_RR | 76 | reaper/livefx | Live FX processing |
+| 9718 | SCHED_RR | 76 | reaper/livefx | Live FX processing |
+| 9719 | SCHED_RR | 76 | reaper/livefx | Live FX processing |
+
+The thread inventory confirms the complete RT priority hierarchy within a
+single Reaper process:
+- **FIFO/83** (data-loop.0): PipeWire's data loop thread, highest priority
+- **FIFO/80** (pw-REAPER x2): JACK bridge threads, C-007 promotion intact
+- **RR/76** (reaper/livefx x3): Reaper live FX processing
+- **RR/75** (reaper/mediaafx x4): Reaper media FX processing
+- **BATCH/0** (reaper:disk$0): Disk I/O, lowest priority (expected)
+- **OTHER** (reaper, reaper/video): Main thread and video, non-RT
+
 ### B/Q Improvement Trajectory
 
 The convolver-out B/Q ratio has steadily declined through the session:
