@@ -1,10 +1,11 @@
 # GM-12: DJ Stability Test — PipeWire Filter-Chain (No CamillaDSP)
 
-First successful PipeWire-native filter-chain DJ session on the Pi. No
-CamillaDSP -- PW's built-in convolver handled all FIR processing (crossover +
-room correction on 4 speaker channels). Mixxx via `pw-jack`, manual `pw-link`
-routing, WirePlumber for device management only. This test validates the
-architecture described by D-040 (abandon CamillaDSP) under real DJ workload.
+First successful PipeWire-native filter-chain DJ session on the Pi, followed
+by an 11-hour overnight soak test. No CamillaDSP -- PW's built-in convolver
+handled all FIR processing (crossover + room correction on 4 speaker channels).
+Mixxx via `pw-jack`, manual `pw-link` routing, WirePlumber for device
+management only. This test validates the architecture described by D-040
+(abandon CamillaDSP) under both real DJ workload and sustained endurance.
 
 **Evidence basis: RECONSTRUCTED** from worker-mock-backend CHANGE session C-004
 notes. TW received structured summary after session completion.
@@ -372,6 +373,41 @@ management while disabling its auto-linking behavior for application nodes.
 
 ---
 
+## Finding 12: Overnight Soak Test — 11+ Hours, Zero Xruns
+
+**Severity:** N/A (positive result)
+**Status:** PASS
+
+**Date:** 2026-03-16 to 2026-03-17 (overnight)
+
+Following the successful 40-minute DJ session (Findings 1-11), Mixxx was left
+running continuously overnight through the PW filter-chain convolver to assess
+long-term stability.
+
+**Duration:** 11+ hours continuous playback
+
+| Metric | Value |
+|--------|-------|
+| Accumulated xruns | 0 |
+| USBStreamer ERR | 0 |
+| Convolver ERR | 0 |
+| Temperature | 72.1C |
+| Load average | 6.38 |
+| All PW nodes | Running (no stalls, no suspensions) |
+
+**Significance:** This is the strongest stability evidence for the D-040
+architecture to date. The 40-minute session (Finding 9) demonstrated
+viability; the 11-hour soak demonstrates endurance. Zero accumulated xruns
+over 11 hours means the ALSA buffer configuration (Finding 1), convolver
+pipeline, and PipeWire graph scheduling are all stable under sustained
+real-audio load.
+
+**Thermal note:** 72.1C after 11 hours is only 1C above the 40-minute
+snapshot (71.1C), confirming thermal equilibrium is reached early and holds
+steady. Well under the 75C threshold.
+
+---
+
 ## Deviations from Plan
 
 1. **GraphManager not deployed** — reconciler bugs prevented automated routing.
@@ -407,17 +443,20 @@ management while disabling its auto-linking behavior for application nodes.
 ## Summary
 
 **Verdict: PASS (with caveats).** The PipeWire filter-chain convolver ran a
-complete DJ session with zero xruns (after the ALSA buffer fix), 58% idle CPU
-headroom, and 71C temperature. The core thesis of D-040 -- that PipeWire's
-native convolver can replace CamillaDSP for FIR processing -- is validated
-under real DJ workload.
+complete DJ session (40+ minutes) with zero xruns (after the ALSA buffer fix),
+58% idle CPU headroom, and 71C temperature -- then continued for an 11-hour
+overnight soak with zero accumulated xruns, zero errors, and stable thermals
+(72.1C). The core thesis of D-040 -- that PipeWire's native convolver can
+replace CamillaDSP for FIR processing -- is validated under both real DJ
+workload and sustained endurance conditions.
 
 **What worked:**
 - PW filter-chain FIR convolution: stable, efficient (8-12% B/Q), zero errors
+- 11-hour overnight soak: zero xruns, zero errors, 72.1C (Finding 12)
 - Mono-sum sub routing via PipeWire's native multi-input port summing
 - Sub2 phase inversion baked into FIR coefficients
 - Headphone bypass via direct USBStreamer links (ch 4-5)
-- Temperature well under 75C threshold
+- Temperature well under 75C threshold (71-72C over 11+ hours)
 - Zero xruns after ALSA buffer fix
 
 **What needs work before production:**
@@ -432,7 +471,8 @@ under real DJ workload.
 ran a DJ session without CamillaDSP in the signal path. The entire audio
 pipeline was pure PipeWire: Mixxx -> PW JACK bridge -> PW filter-chain
 convolver (FFTW3/NEON) -> ALSA USBStreamer -> ADA8200. BM-2 predicted
-viability; GM-12 confirms it under real conditions.
+viability; GM-12 confirms it under real conditions -- and the 11-hour
+overnight soak (Finding 12) demonstrates production-grade endurance.
 
 ---
 
@@ -477,8 +517,9 @@ CPU benchmarks), US-002 (latency measurements).
 | **CamillaDSP CPU** (per-core %) | 27-28% | 0% (stopped) | Eliminated |
 | **Total busy CPU** (of 400%) | ~70-74% (Mixxx + CamillaDSP + PW) | ~83% (Mixxx + PW + Xwayland) | Similar total |
 | **Idle** (% of total system) | Not recorded | 58.5% | -- |
-| **Temperature** | 64-71C (15 min) | 71.1C (snapshot) | Comparable |
-| **Xruns** | 0 (F-012 monitoring) | 0 (after ALSA buffer fix) | Both clean |
+| **Temperature** | 64-71C (15 min) | 71.1C (40 min) / 72.1C (11 hr) | Comparable |
+| **Xruns** | 0 (F-012 monitoring) | 0 (40 min + 11 hr soak) | Both clean |
+| **Max continuous runtime tested** | 15 min (F-012) | 11+ hours (overnight soak) | 44x longer |
 | **Load average** | 4.4-7.8 | 5.4-5.5 | Comparable |
 | **DJ audio latency (PA path)** | ~109ms (PW q1024 + Loopback + CamillaDSP 2x2048) | ~21ms (PW q1024, single graph) | ~5x reduction |
 | **Mixxx UI smoothness** | Functional (hardware GL, ~40% CPU) | Functional (hardware GL, ~25% CPU) | More headroom |
