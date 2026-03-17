@@ -951,3 +951,60 @@ GM-12 PASS or any DoD criteria.
 
 **Related:** GM-12 (DJ stability test), D-040 (PW filter-chain replaces
 CamillaDSP), US-059 (GraphManager Core).
+
+---
+
+## F-033: PW RT module fails to promote JACK client threads on PREEMPT_RT (OPEN)
+
+**Severity:** High
+**Status:** Open (workaround available)
+**Found in:** CHANGE C-007 session, 2026-03-17
+**Affects:** q256 live-mode stability (xruns from SCHED_OTHER bridge threads)
+**Found by:** Worker (C-007 investigation), confirmed by architect analysis
+
+**Description:** PipeWire's RT module (`libpipewire-module-rt`) fails to
+promote JACK client bridge threads to real-time scheduling on PREEMPT_RT
+kernels. Reaper's `pw-REAPER` bridge threads (the threads that participate in
+the PipeWire graph cycle and must meet the quantum deadline) remain at
+SCHED_OTHER despite being launched via `pw-jack reaper`.
+
+This is the same root cause class as F-020, where the PipeWire daemon's own
+threads were not promoted to FIFO scheduling. F-020 affects PipeWire daemon
+threads; F-033 affects JACK client bridge threads. Both are caused by the RT
+module's failure to achieve real-time scheduling on PREEMPT_RT.
+
+**Impact:** At quantum 256 (5.3ms deadline), SCHED_OTHER bridge threads can
+be preempted by USB IRQ handlers (FIFO/50), ~30 vc4/HDMI IRQ threads
+(FIFO/50), and any other RT activity. With convolver-out B/Q at 0.60 (only
+2.1ms margin), scheduling delays > 2.1ms cause deadline misses. This
+produced ~65-70 xruns in 104 minutes at q256 before intervention. At quantum
+1024 (21.3ms deadline), the impact is negligible — SCHED_OTHER threads can
+usually meet the longer deadline.
+
+**Workaround (runtime):** Manual `chrt -f 80` on pw-REAPER bridge thread
+TIDs. Identify threads via `ps -eLo pid,tid,cls,rtprio,ni,comm | grep
+pw-REAPER`, then promote each TID. Persists for the session but must be
+re-applied after each Reaper restart. Thread recycling from graph
+reconfiguration events (USB errors, quantum changes) would also revert the
+promotion, though this was not observed during C-007.
+
+**Fix (recommended):** Launcher script wrapping the entire process:
+```
+exec chrt -f 70 pw-jack reaper
+```
+Same pattern for Mixxx: `exec chrt -f 70 pw-jack mixxx`. FIFO/70 places
+JACK clients below PipeWire daemon (FIFO/88) and the C-007 runtime promotion
+level (FIFO/80), but above USB IRQs (FIFO/50). POSIX `PTHREAD_INHERIT_SCHED`
+should propagate the scheduling class to child threads — verification needed
+that PipeWire does not override with `PTHREAD_EXPLICIT_SCHED`.
+
+**Fix candidates (long-term):**
+1. Investigate and fix PipeWire RT module client thread promotion on PREEMPT_RT
+2. PipeWire upstream bug report (if not already tracked)
+3. systemd user service for Reaper/Mixxx with `CPUSchedulingPolicy=fifo`
+   (same pattern as F-020 workaround)
+
+**Cross-references:**
+- F-020: Same root cause class (PW daemon threads, RESOLVED with systemd override)
+- `docs/lab-notes/change-C-007-reaper-fifo-promotion.md`: Full investigation
+- TP-006: Reaper stability test protocol (q256 soak with FIFO active)
