@@ -481,8 +481,10 @@ further complicates gain staging by setting channelVolumes to -91 dB on the
 convolver capture node.
 
 **Thermal safety (TK-248):** Mixed speaker systems (CHN-50P 7W vs PS28 III
-62W) require per-channel gain. Current settings: -42 dB mains, -52 dB subs,
-providing ~10 dB margin to thermal ceiling.
+62W) require per-channel gain. Thermal ceilings: CHN-50P -31.9 dBFS, PS28 III
+-24.8 dBFS. Current settings: -60 dB mains, -64 dB subs (28-39 dB margin).
+However, owner reports SPL as "uncomfortably loud" at these settings (TK-249),
+suggesting the `linear` Mult gain parameter may be silently ignored.
 
 **System hygiene:** Web UI's `pw-top` spawning consumes 5.7% CPU
 unnecessarily. WP channelVolumes interference causes silence on convolver
