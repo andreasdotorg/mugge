@@ -870,3 +870,53 @@ to "Option B is the production architecture."
 **Related:** US-058 (BM-2 PASS), US-056 (cancelled), US-057 (cancelled),
 US-059 (unblocked), D-039 (GraphManager architecture), unified graph
 analysis Sections 6 and 8.
+
+## D-041: One-based channel and port indexing universally (2026-03-17)
+
+**Context:** During the GM-12 DJ stability test, a mismatch was discovered
+between application port naming conventions: Mixxx uses zero-based names
+(out_0, out_1), Reaper uses one-based names (out1, out2), and the
+GraphManager routing.rs code assumed one convention inconsistently. In
+the audio world, physical interfaces are universally numbered starting
+at 1 (channel 1, input 1, ADA8200 channel 1-8). Zero-based indexing in
+software creates a constant source of confusion and off-by-one bugs when
+mapping between physical channels and software ports.
+
+**Decision:** Adopt one-based indexing as a universal project convention
+for all channel references, port identifiers, and user-facing numbering.
+Software-internal arrays may use zero-based indexing per language
+convention, but all external interfaces -- configuration files, routing
+tables, log messages, UI labels, documentation, and inter-component
+APIs -- use one-based indexing.
+
+**Consequences:**
+
+1. **GraphManager routing table** must use one-based channel references
+   in its declarative routing definitions. Application port names are
+   mapped to one-based canonical names at the GraphManager boundary.
+
+2. **Application port name mapping** is GraphManager's responsibility.
+   Each application has its own naming convention (Mixxx: out_0, Reaper:
+   out1, filter-chain: filter_chain:out_0). GraphManager maps these to
+   the canonical one-based channel identity (ch1, ch2, ..., ch8) in its
+   routing table. New applications only need their port naming pattern
+   registered.
+
+3. **Configuration files** (filter-chain conf, routing table) use
+   one-based channel numbers. Comments and labels reference "channel 1"
+   not "channel 0".
+
+4. **Web UI and status displays** show one-based channel numbers.
+
+5. **Documentation** uses one-based throughout. The channel assignment
+   table in CLAUDE.md already uses one-based (Ch 1-8).
+
+**Rationale:** Owner directive: "In the audio world, no one starts
+counting physical interfaces at zero, and it makes sense to keep this as
+a principle throughout to avoid confusion." This aligns with industry
+convention (MIDI channels 1-16, mixing console channels 1-N, ADA8200
+channels 1-8) and reduces cognitive load when mapping between physical
+hardware and software configuration.
+
+**Related:** GM-12 findings (Mixxx port name mismatch), US-059
+(GraphManager routing table), CLAUDE.md channel assignment table.
