@@ -800,4 +800,501 @@ mod tests {
         assert_eq!(creates.len(), 1);
         assert_eq!(destroys.len(), 1);
     }
+
+    // ===================================================================
+    // S-1 through S-4: DoD #7 regression tests (QE-specified scenarios)
+    // ===================================================================
+
+    // -------------------------------------------------------------------
+    // Helper: build a production-like graph with all nodes and ports
+    // -------------------------------------------------------------------
+
+    /// Build a GraphState with all production nodes and ports needed
+    /// to fully resolve links for the specified modes. Uses realistic
+    /// PW node names matching the production routing table constants.
+    ///
+    /// Node ID allocation scheme (deterministic, avoids collisions):
+    ///   Convolver-in:  100     Convolver-out: 200
+    ///   USBStreamer:    300     Mixxx-out:     400
+    ///   Mixxx-in:      401     Reaper-out:    500
+    ///   Reaper-in:     501     ADA8200-in:    600
+    ///   Signal-gen:    700     Signal-gen-cap: 800
+    ///   UMIK-1:        900
+    ///
+    /// Port IDs: node_id * 100 + zero-based-port-index.
+    fn build_production_graph() -> GraphState {
+        let mut g = GraphState::new();
+
+        // -- Convolver input (Audio/Sink): 4 playback ports --
+        g.add_node(make_node(100, "pi4audio-convolver", "Audio/Sink"));
+        for ch in 0..4u32 {
+            g.add_port(make_port(
+                10000 + ch, 100,
+                &format!("playback_AUX{}", ch), "in",
+            ));
+        }
+
+        // -- Convolver output (Stream/Output/Audio): 4 output ports --
+        g.add_node(make_node(200, "pi4audio-convolver-out", "Stream/Output/Audio"));
+        for ch in 0..4u32 {
+            g.add_port(make_port(
+                20000 + ch, 200,
+                &format!("output_AUX{}", ch), "out",
+            ));
+        }
+
+        // -- USBStreamer playback (Audio/Sink): 8 playback ports --
+        g.add_node(make_node(
+            300,
+            "alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0",
+            "Audio/Sink",
+        ));
+        for ch in 0..8u32 {
+            g.add_port(make_port(
+                30000 + ch, 300,
+                &format!("playback_AUX{}", ch), "in",
+            ));
+        }
+
+        // -- Mixxx output (Stream/Output/Audio): 4 ports (master L/R, HP L/R) --
+        g.add_node(make_node(400, "Mixxx", "Stream/Output/Audio"));
+        for ch in 0..4u32 {
+            g.add_port(make_port(
+                40000 + ch, 400,
+                &format!("out_{}", ch), "out",
+            ));
+        }
+
+        // -- Mixxx input (Stream/Input/Audio): 2 ports --
+        g.add_node(make_node(401, "Mixxx", "Stream/Input/Audio"));
+        g.add_port(make_port(40100, 401, "in_0", "in"));
+        g.add_port(make_port(40101, 401, "in_1", "in"));
+
+        // -- Reaper output (Stream/Output/Audio): 8 ports --
+        g.add_node(make_node(500, "REAPER", "Stream/Output/Audio"));
+        for ch in 1..=8u32 {
+            g.add_port(make_port(
+                50000 + ch, 500,
+                &format!("out{}", ch), "out",
+            ));
+        }
+
+        // -- Reaper input (Stream/Input/Audio): 8 ports --
+        g.add_node(make_node(501, "REAPER", "Stream/Input/Audio"));
+        for ch in 1..=8u32 {
+            g.add_port(make_port(
+                50100 + ch, 501,
+                &format!("in{}", ch), "in",
+            ));
+        }
+
+        // -- ADA8200 capture (Audio/Source): 8 capture ports --
+        g.add_node(make_node(600, "ada8200-in", "Audio/Source"));
+        for ch in 0..8u32 {
+            g.add_port(make_port(
+                60000 + ch, 600,
+                &format!("capture_AUX{}", ch), "out",
+            ));
+        }
+
+        // -- Signal-gen playback: 4 output ports --
+        g.add_node(make_node(700, "pi4audio-signal-gen", "Stream/Output/Audio"));
+        for ch in 0..4u32 {
+            g.add_port(make_port(
+                70000 + ch, 700,
+                &format!("output_AUX{}", ch), "out",
+            ));
+        }
+
+        // -- Signal-gen capture: 1 input port (mono) --
+        g.add_node(make_node(800, "pi4audio-signal-gen-capture", "Stream/Input/Audio"));
+        g.add_port(make_port(80000, 800, "input_MONO", "in"));
+
+        // -- UMIK-1 capture: 1 port (mono) --
+        g.add_node(make_node(
+            900,
+            "alsa_input.usb-miniDSP_UMIK-1-00.mono-fallback",
+            "Audio/Source",
+        ));
+        g.add_port(make_port(90000, 900, "capture_MONO", "out"));
+
+        g
+    }
+
+    /// Count Create actions in a list.
+    fn count_creates(actions: &[LinkAction]) -> usize {
+        actions.iter().filter(|a| matches!(a, LinkAction::Create { .. })).count()
+    }
+
+    /// Count Destroy actions in a list.
+    fn count_destroys(actions: &[LinkAction]) -> usize {
+        actions.iter().filter(|a| matches!(a, LinkAction::Destroy { .. })).count()
+    }
+
+    /// Simulate applying Create actions by adding corresponding links
+    /// to the graph. Uses link_id starting from `next_link_id`.
+    /// Returns the next available link ID.
+    fn apply_creates(g: &mut GraphState, actions: &[LinkAction], mut next_link_id: u32) -> u32 {
+        for action in actions {
+            if let LinkAction::Create {
+                output_node_id,
+                output_port_id,
+                input_node_id,
+                input_port_id,
+                ..
+            } = action
+            {
+                g.add_link(make_link(
+                    next_link_id,
+                    *output_node_id, *output_port_id,
+                    *input_node_id, *input_port_id,
+                ));
+                next_link_id += 1;
+            }
+        }
+        next_link_id
+    }
+
+    /// Simulate applying Destroy actions by removing links from the graph.
+    fn apply_destroys(g: &mut GraphState, actions: &[LinkAction]) {
+        for action in actions {
+            if let LinkAction::Destroy { link_id, .. } = action {
+                g.remove_link(*link_id);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // S-1: USB hotplug cycle
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn s1_usb_hotplug_cycle() {
+        // Build full DJ topology, remove USBStreamer (simulating unplug),
+        // reconcile, re-add USBStreamer with new PW IDs, reconcile.
+        let table = RoutingTable::production();
+        let mut g = build_production_graph();
+
+        // Step 1: Reconcile in DJ mode — should create all 12 DJ links.
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert_eq!(count_creates(&actions), 12, "DJ mode: expected 12 creates");
+        assert_eq!(count_destroys(&actions), 0, "DJ mode: no destroys initially");
+
+        // Simulate: apply all creates.
+        let next_id = apply_creates(&mut g, &actions, 1000);
+
+        // Verify idempotent: reconcile again, no actions.
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert!(actions.is_empty(), "idempotent check failed: {:?}", actions);
+
+        // Step 2: Unplug USBStreamer — remove node and its ports.
+        // This cascades: the node, 8 ports, and links involving those ports
+        // all disappear from the PW registry.
+        g.remove_node(300);
+        // Remove USBStreamer ports (IDs 30000-30007).
+        for ch in 0..8u32 {
+            g.remove_port(30000 + ch);
+        }
+        // Remove links that had USBStreamer ports. In DJ mode, links to
+        // USBStreamer are: convolver-out→USB (4) + Mixxx HP→USB (2) = 6.
+        // We need to find and remove those links.
+        let usb_port_ids: Vec<u32> = (30000..30008).collect();
+        let links_to_remove: Vec<u32> = g.links()
+            .filter(|l| usb_port_ids.contains(&l.output_port) || usb_port_ids.contains(&l.input_port))
+            .map(|l| l.id)
+            .collect();
+        assert_eq!(links_to_remove.len(), 6, "6 links involve USBStreamer ports");
+        for link_id in &links_to_remove {
+            g.remove_link(*link_id);
+        }
+
+        // Reconcile after unplug: USBStreamer gone, so 6 links can't resolve.
+        // The 6 Mixxx→convolver links are still satisfied (both endpoints
+        // still present). No creates (USBStreamer node missing), no destroys
+        // (those links are already gone from the graph).
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert_eq!(
+            count_creates(&actions), 0,
+            "after unplug: no creates (USBStreamer missing), got {:?}", actions,
+        );
+        assert_eq!(
+            count_destroys(&actions), 0,
+            "after unplug: no destroys (links already gone), got {:?}", actions,
+        );
+
+        // Step 3: Re-plug USBStreamer with new PW IDs (new hardware session).
+        g.add_node(make_node(
+            310,
+            "alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0",
+            "Audio/Sink",
+        ));
+        for ch in 0..8u32 {
+            g.add_port(make_port(
+                31000 + ch, 310,
+                &format!("playback_AUX{}", ch), "in",
+            ));
+        }
+
+        // Reconcile after re-plug: should recreate the 6 USBStreamer links.
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert_eq!(
+            count_creates(&actions), 6,
+            "after re-plug: expected 6 creates for USBStreamer links, got {:?}", actions,
+        );
+        assert_eq!(count_destroys(&actions), 0, "after re-plug: no destroys");
+
+        // Apply creates and verify idempotent.
+        apply_creates(&mut g, &actions, next_id);
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert!(actions.is_empty(), "final idempotent check: {:?}", actions);
+    }
+
+    // -------------------------------------------------------------------
+    // S-2: Component crash/restart (Mixxx)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn s2_component_crash_restart() {
+        // Build DJ topology, simulate Mixxx crash (nodes disappear),
+        // reconcile (Destroys for orphaned links), Mixxx restarts with
+        // new IDs, reconcile (Creates for new links).
+        let table = RoutingTable::production();
+        let mut g = build_production_graph();
+
+        // Step 1: Establish full DJ topology.
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert_eq!(count_creates(&actions), 12);
+        let next_id = apply_creates(&mut g, &actions, 1000);
+
+        // Step 2: Mixxx crashes — both nodes disappear.
+        // Mixxx output node (400) and input node (401).
+        g.remove_node(400);
+        for ch in 0..4u32 {
+            g.remove_port(40000 + ch);
+        }
+        g.remove_node(401);
+        g.remove_port(40100);
+        g.remove_port(40101);
+
+        // Links involving Mixxx ports disappear from PW graph.
+        // DJ Mixxx links: master→convolver (2) + master→sub (4) + HP→USB (2) = 8.
+        let mixxx_port_ids: Vec<u32> = (40000..40004).collect();
+        let links_to_remove: Vec<u32> = g.links()
+            .filter(|l| mixxx_port_ids.contains(&l.output_port) || mixxx_port_ids.contains(&l.input_port))
+            .map(|l| l.id)
+            .collect();
+        assert_eq!(links_to_remove.len(), 8, "8 links involve Mixxx output ports");
+        for link_id in &links_to_remove {
+            g.remove_link(*link_id);
+        }
+
+        // Reconcile: Mixxx gone, 8 links can't resolve. The 4
+        // convolver→USBStreamer links are still present and desired.
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert_eq!(
+            count_creates(&actions), 0,
+            "after crash: no creates (Mixxx gone), got {:?}", actions,
+        );
+        assert_eq!(
+            count_destroys(&actions), 0,
+            "after crash: no destroys (Mixxx links already gone), got {:?}", actions,
+        );
+
+        // Step 3: Mixxx restarts with new PW IDs.
+        g.add_node(make_node(410, "Mixxx", "Stream/Output/Audio"));
+        for ch in 0..4u32 {
+            g.add_port(make_port(
+                41000 + ch, 410,
+                &format!("out_{}", ch), "out",
+            ));
+        }
+        g.add_node(make_node(411, "Mixxx", "Stream/Input/Audio"));
+        g.add_port(make_port(41100, 411, "in_0", "in"));
+        g.add_port(make_port(41101, 411, "in_1", "in"));
+
+        // Reconcile: should recreate the 8 Mixxx links.
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert_eq!(
+            count_creates(&actions), 8,
+            "after restart: expected 8 creates for Mixxx links, got {:?}", actions,
+        );
+        assert_eq!(count_destroys(&actions), 0);
+
+        // Verify the creates use the NEW node ID (410, not 400).
+        for action in &actions {
+            if let LinkAction::Create { output_node_id, .. } = action {
+                assert_ne!(*output_node_id, 400, "should use new Mixxx node ID");
+            }
+        }
+
+        // Apply and verify idempotent.
+        apply_creates(&mut g, &actions, next_id);
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert!(actions.is_empty(), "final idempotent: {:?}", actions);
+    }
+
+    // -------------------------------------------------------------------
+    // S-3a/b/c: Production mode transitions
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn s3a_monitoring_to_dj_transition() {
+        let table = RoutingTable::production();
+        let mut g = build_production_graph();
+
+        // Establish Monitoring topology: 4 links (convolver→USB).
+        let actions = reconcile(&g, &table, Mode::Monitoring);
+        assert_eq!(count_creates(&actions), 4);
+        let next_id = apply_creates(&mut g, &actions, 1000);
+        assert!(reconcile(&g, &table, Mode::Monitoring).is_empty());
+
+        // Switch to DJ: creates Mixxx links, keeps convolver→USB links.
+        let actions = reconcile(&g, &table, Mode::Dj);
+
+        // DJ has 12 total links. 4 convolver→USB links are shared with
+        // Monitoring and already exist. So: 8 new creates, 0 destroys.
+        assert_eq!(
+            count_creates(&actions), 8,
+            "Mon→DJ: expected 8 new creates (Mixxx links), got {:?}", actions,
+        );
+        assert_eq!(
+            count_destroys(&actions), 0,
+            "Mon→DJ: convolver→USB links shared, no destroys",
+        );
+
+        apply_creates(&mut g, &actions, next_id);
+        assert!(reconcile(&g, &table, Mode::Dj).is_empty());
+    }
+
+    #[test]
+    fn s3b_dj_to_live_transition() {
+        let table = RoutingTable::production();
+        let mut g = build_production_graph();
+
+        // Establish DJ topology: 12 links.
+        let actions = reconcile(&g, &table, Mode::Dj);
+        assert_eq!(count_creates(&actions), 12);
+        let next_id = apply_creates(&mut g, &actions, 1000);
+        assert!(reconcile(&g, &table, Mode::Dj).is_empty());
+
+        // Switch to Live.
+        // Live has 22 links. Shared with DJ: convolver→USB (4 links).
+        // DJ-only links to destroy: Mixxx→convolver (6) + Mixxx HP→USB (2) = 8.
+        // Live-only links to create: Reaper→convolver (6) + Reaper HP→USB (2)
+        //   + Reaper IEM→USB (2) + ADA8200→Reaper (8) = 18.
+        let actions = reconcile(&g, &table, Mode::Live);
+
+        assert_eq!(
+            count_creates(&actions), 18,
+            "DJ→Live: expected 18 new creates, got {:?}", actions,
+        );
+        assert_eq!(
+            count_destroys(&actions), 8,
+            "DJ→Live: expected 8 destroys (Mixxx links), got {:?}", actions,
+        );
+
+        apply_creates(&mut g, &actions, next_id);
+        apply_destroys(&mut g, &actions);
+        assert!(reconcile(&g, &table, Mode::Live).is_empty());
+    }
+
+    #[test]
+    fn s3c_live_to_monitoring_transition() {
+        let table = RoutingTable::production();
+        let mut g = build_production_graph();
+
+        // Establish Live topology: 22 links.
+        let actions = reconcile(&g, &table, Mode::Live);
+        assert_eq!(count_creates(&actions), 22);
+        let next_id = apply_creates(&mut g, &actions, 1000);
+        assert!(reconcile(&g, &table, Mode::Live).is_empty());
+
+        // Switch to Monitoring.
+        // Monitoring has 4 links (convolver→USB), all shared with Live.
+        // Live-only links to destroy: Reaper→convolver (6) + Reaper HP→USB (2)
+        //   + Reaper IEM→USB (2) + ADA8200→Reaper (8) = 18.
+        let actions = reconcile(&g, &table, Mode::Monitoring);
+
+        assert_eq!(
+            count_creates(&actions), 0,
+            "Live→Mon: no new creates (convolver→USB already exists), got {:?}", actions,
+        );
+        assert_eq!(
+            count_destroys(&actions), 18,
+            "Live→Mon: expected 18 destroys (Reaper + ADA8200 links), got {:?}", actions,
+        );
+
+        apply_destroys(&mut g, &actions);
+        assert!(reconcile(&g, &table, Mode::Monitoring).is_empty());
+    }
+
+    // -------------------------------------------------------------------
+    // S-4: Stale link cleanup (foreign link on known node)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn s4_stale_foreign_link_destroyed() {
+        // A link exists on a known node (convolver) that is NOT in the
+        // desired set for the current mode. This simulates a leftover
+        // from a manual pw-link or a previous mode's stale link.
+        let table = RoutingTable::production();
+        let mut g = build_production_graph();
+
+        // Establish Monitoring topology.
+        let actions = reconcile(&g, &table, Mode::Monitoring);
+        let next_id = apply_creates(&mut g, &actions, 1000);
+
+        // Add a foreign node and a stale link: some-app → convolver.
+        g.add_node(make_node(999, "some-rogue-app", "Stream/Output/Audio"));
+        g.add_port(make_port(99900, 999, "output_0", "out"));
+        // Link from rogue app to convolver input port (playback_AUX0).
+        g.add_link(make_link(
+            next_id, 999, 99900, 100, 10000,
+        ));
+
+        // Reconcile: the foreign link has one known endpoint (convolver
+        // is in the routing table). It is NOT in the desired set for
+        // Monitoring. So it should be destroyed.
+        let actions = reconcile(&g, &table, Mode::Monitoring);
+
+        assert_eq!(
+            count_destroys(&actions), 1,
+            "expected 1 destroy for stale foreign link, got {:?}", actions,
+        );
+        match &actions.iter().find(|a| matches!(a, LinkAction::Destroy { .. })).unwrap() {
+            LinkAction::Destroy { link_id, .. } => {
+                assert_eq!(*link_id, next_id, "should destroy the foreign link");
+            }
+            _ => unreachable!(),
+        }
+
+        // No creates — the desired links are all still present.
+        assert_eq!(count_creates(&actions), 0);
+    }
+
+    #[test]
+    fn s4_foreign_link_between_unknown_nodes_ignored() {
+        // A link between two nodes that are NOT in any routing table
+        // entry. GraphManager should leave it alone.
+        let table = RoutingTable::production();
+        let mut g = build_production_graph();
+
+        // Establish Monitoring topology.
+        let actions = reconcile(&g, &table, Mode::Monitoring);
+        apply_creates(&mut g, &actions, 1000);
+
+        // Add two unknown nodes and a link between them.
+        g.add_node(make_node(990, "pw-internal-driver", "Audio/Source"));
+        g.add_port(make_port(99000, 990, "output_FL", "out"));
+        g.add_node(make_node(991, "pw-internal-sink", "Audio/Sink"));
+        g.add_port(make_port(99100, 991, "input_FL", "in"));
+        g.add_link(make_link(2000, 990, 99000, 991, 99100));
+
+        // Reconcile: link is between unknown nodes — should be ignored.
+        let actions = reconcile(&g, &table, Mode::Monitoring);
+        assert!(
+            actions.is_empty(),
+            "link between unknown nodes should be ignored, got {:?}", actions,
+        );
+    }
 }
