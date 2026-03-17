@@ -50,16 +50,30 @@ pub enum LinkAction {
     },
 }
 
-/// Find the first node in the graph that matches a NodeMatch.
-fn find_node(graph: &GraphState, matcher: &NodeMatch) -> Option<u32> {
-    let nodes: Vec<_> = graph.nodes_matching(|name| matcher.matches(name));
-    nodes.first().map(|n| n.id)
-}
-
-/// Find a port on a node by exact port name.
-fn find_port(graph: &GraphState, node_id: u32, port_name: &str) -> Option<u32> {
-    let ports = graph.ports_for_node(node_id, port_name);
-    ports.first().map(|p| p.id)
+/// Find a node+port combination: searches all nodes matching the
+/// NodeMatch and returns the first (node_id, port_id) where the node
+/// actually has the requested port.
+///
+/// This is the GM-13 fix. The previous implementation used `find_node`
+/// (first matching node) + `find_port` (port on that node) — which
+/// fails when multiple nodes match a Prefix pattern (e.g., a JACK
+/// client registering separate input and output nodes under the same
+/// name prefix). The first node might not have the requested port,
+/// causing the desired link to fail resolution even though the correct
+/// node+port exists in the graph.
+fn find_node_port(
+    graph: &GraphState,
+    matcher: &NodeMatch,
+    port_name: &str,
+) -> Option<(u32, u32)> {
+    let nodes = graph.nodes_matching(|name| matcher.matches(name));
+    for node in &nodes {
+        let ports = graph.ports_for_node(node.id, port_name);
+        if let Some(port) = ports.first() {
+            return Some((node.id, port.id));
+        }
+    }
+    None
 }
 
 /// Check if a node matches any NodeMatch in the routing table (any mode).
@@ -157,14 +171,17 @@ pub fn reconcile(graph: &GraphState, table: &RoutingTable, mode: Mode) -> Vec<Li
 ///
 /// Returns `Some((output_node_id, output_port_id, input_node_id, input_port_id))`
 /// if both endpoints are found, or `None` if any endpoint is missing.
+///
+/// Uses `find_node_port` to search ALL matching nodes for the requested
+/// port (GM-13 fix). This correctly handles JACK clients that register
+/// multiple nodes under the same name prefix (e.g., separate input and
+/// output nodes).
 fn resolve_desired_link(
     graph: &GraphState,
     dl: &DesiredLink,
 ) -> Option<(u32, u32, u32, u32)> {
-    let out_node_id = find_node(graph, &dl.output_node)?;
-    let in_node_id = find_node(graph, &dl.input_node)?;
-    let out_port_id = find_port(graph, out_node_id, &dl.output_port)?;
-    let in_port_id = find_port(graph, in_node_id, &dl.input_port)?;
+    let (out_node_id, out_port_id) = find_node_port(graph, &dl.output_node, &dl.output_port)?;
+    let (in_node_id, in_port_id) = find_node_port(graph, &dl.input_node, &dl.input_port)?;
     Some((out_node_id, out_port_id, in_node_id, in_port_id))
 }
 
@@ -513,6 +530,217 @@ mod tests {
             input_port_id: 200,
             ..
         }));
+    }
+
+    // -----------------------------------------------------------------------
+    // Mode transition
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    // GM-13: prefix match with multiple nodes (JACK client in/out nodes)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn gm13_prefix_match_picks_node_with_matching_port() {
+        // Reproduces the GM-13 bug: a JACK client (e.g., Mixxx via pw-jack)
+        // registers TWO nodes with the same prefix — one for outputs and
+        // one for inputs. The old find_node() picked the first match
+        // (HashMap iteration order), which might be the input node that
+        // has no output ports. The link then failed to resolve even though
+        // the correct node+port exists.
+        let mut g = GraphState::new();
+
+        // Mixxx input node (JACK capture) — has input ports only.
+        g.add_node(make_node(10, "Mixxx", "Stream/Input/Audio"));
+        g.add_port(make_port(100, 10, "in_0", "in"));
+        g.add_port(make_port(101, 10, "in_1", "in"));
+
+        // Mixxx output node (JACK playback) — has output ports.
+        g.add_node(make_node(11, "Mixxx", "Stream/Output/Audio"));
+        g.add_port(make_port(110, 11, "out_0", "out"));
+        g.add_port(make_port(111, 11, "out_1", "out"));
+
+        // Convolver input (sink).
+        g.add_node(make_node(20, "pi4audio-convolver", "Audio/Sink"));
+        g.add_port(make_port(200, 20, "playback_AUX0", "in"));
+
+        let table = RoutingTable::from_entries(vec![(
+            Mode::Dj,
+            vec![DesiredLink {
+                output_node: NodeMatch::Prefix("Mixxx".to_string()),
+                output_port: "out_0".to_string(),
+                input_node: NodeMatch::Exact("pi4audio-convolver".to_string()),
+                input_port: "playback_AUX0".to_string(),
+                optional: false,
+            }],
+        )]);
+
+        let actions = reconcile(&g, &table, Mode::Dj);
+
+        // Must create the link using the OUTPUT node (id=11), not the
+        // input node (id=10) which has no "out_0" port.
+        assert_eq!(actions.len(), 1, "expected 1 Create action, got {:?}", actions);
+        match &actions[0] {
+            LinkAction::Create {
+                output_node_id,
+                output_port_id,
+                input_port_id,
+                ..
+            } => {
+                assert_eq!(*output_node_id, 11, "should pick the output node");
+                assert_eq!(*output_port_id, 110);
+                assert_eq!(*input_port_id, 200);
+            }
+            _ => panic!("expected Create, got {:?}", actions[0]),
+        }
+    }
+
+    #[test]
+    fn gm13_prefix_match_input_side_picks_correct_node() {
+        // Same as above but for the INPUT side: multiple nodes match the
+        // input_node prefix, and only one has the requested input port.
+        let mut g = GraphState::new();
+
+        // Source node.
+        g.add_node(make_node(10, "pi4audio-convolver-out", "Stream/Output/Audio"));
+        g.add_port(make_port(100, 10, "output_AUX0", "out"));
+
+        // USBStreamer output node (playback) — has playback ports.
+        g.add_node(make_node(20, "alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0", "Audio/Sink"));
+        g.add_port(make_port(200, 20, "playback_AUX0", "in"));
+
+        // USBStreamer node with a different suffix but same prefix — no playback ports.
+        g.add_node(make_node(21, "alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-1", "Audio/Sink"));
+        // This node has different port names.
+        g.add_port(make_port(210, 21, "monitor_AUX0", "out"));
+
+        let table = RoutingTable::from_entries(vec![(
+            Mode::Monitoring,
+            vec![DesiredLink {
+                output_node: NodeMatch::Exact("pi4audio-convolver-out".to_string()),
+                output_port: "output_AUX0".to_string(),
+                input_node: NodeMatch::Prefix("alsa_output.usb-MiniDSP_USBStreamer".to_string()),
+                input_port: "playback_AUX0".to_string(),
+                optional: false,
+            }],
+        )]);
+
+        let actions = reconcile(&g, &table, Mode::Monitoring);
+
+        assert_eq!(actions.len(), 1, "expected 1 Create action, got {:?}", actions);
+        match &actions[0] {
+            LinkAction::Create {
+                input_node_id,
+                input_port_id,
+                ..
+            } => {
+                assert_eq!(*input_node_id, 20, "should pick node with playback_AUX0");
+                assert_eq!(*input_port_id, 200);
+            }
+            _ => panic!("expected Create"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // GM-14: manually created links not destroyed when desired set resolves
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn gm14_does_not_destroy_manually_created_desired_link() {
+        // Reproduces the GM-14 consequence: during GM-12, links were created
+        // manually with pw-link. If the reconciler failed to resolve the
+        // desired link (GM-13 bug), it wouldn't include those port pairs
+        // in desired_port_pairs, causing Phase 2 to mark the manually-created
+        // link as "stale" and destroy it.
+        //
+        // With the GM-13 fix, the link resolves correctly, so the manually-
+        // created link is recognized as desired and kept.
+        let mut g = GraphState::new();
+
+        // Two Mixxx nodes (JACK in/out) with same prefix.
+        g.add_node(make_node(10, "Mixxx", "Stream/Input/Audio"));
+        g.add_port(make_port(100, 10, "in_0", "in"));
+
+        g.add_node(make_node(11, "Mixxx", "Stream/Output/Audio"));
+        g.add_port(make_port(110, 11, "out_0", "out"));
+
+        // Convolver.
+        g.add_node(make_node(20, "pi4audio-convolver", "Audio/Sink"));
+        g.add_port(make_port(200, 20, "playback_AUX0", "in"));
+
+        // The correct link already exists (created manually with pw-link).
+        g.add_link(make_link(500, 11, 110, 20, 200));
+
+        let table = RoutingTable::from_entries(vec![(
+            Mode::Dj,
+            vec![DesiredLink {
+                output_node: NodeMatch::Prefix("Mixxx".to_string()),
+                output_port: "out_0".to_string(),
+                input_node: NodeMatch::Exact("pi4audio-convolver".to_string()),
+                input_port: "playback_AUX0".to_string(),
+                optional: false,
+            }],
+        )]);
+
+        let actions = reconcile(&g, &table, Mode::Dj);
+
+        // The link exists and is desired — no actions needed.
+        assert!(
+            actions.is_empty(),
+            "expected no actions (link is desired and exists), got {:?}",
+            actions,
+        );
+    }
+
+    #[test]
+    fn gm13_all_desired_links_created_despite_duplicate_nodes() {
+        // Full DJ scenario: Mixxx has two nodes matching the prefix.
+        // All desired links for Master L/R to convolver should resolve.
+        let mut g = GraphState::new();
+
+        // Mixxx input node.
+        g.add_node(make_node(10, "Mixxx", "Stream/Input/Audio"));
+        g.add_port(make_port(100, 10, "in_0", "in"));
+        g.add_port(make_port(101, 10, "in_1", "in"));
+
+        // Mixxx output node.
+        g.add_node(make_node(11, "Mixxx", "Stream/Output/Audio"));
+        g.add_port(make_port(110, 11, "out_0", "out"));
+        g.add_port(make_port(111, 11, "out_1", "out"));
+
+        // Convolver.
+        g.add_node(make_node(20, "pi4audio-convolver", "Audio/Sink"));
+        g.add_port(make_port(200, 20, "playback_AUX0", "in"));
+        g.add_port(make_port(201, 20, "playback_AUX1", "in"));
+
+        let table = RoutingTable::from_entries(vec![(
+            Mode::Dj,
+            vec![
+                DesiredLink {
+                    output_node: NodeMatch::Prefix("Mixxx".to_string()),
+                    output_port: "out_0".to_string(),
+                    input_node: NodeMatch::Exact("pi4audio-convolver".to_string()),
+                    input_port: "playback_AUX0".to_string(),
+                    optional: false,
+                },
+                DesiredLink {
+                    output_node: NodeMatch::Prefix("Mixxx".to_string()),
+                    output_port: "out_1".to_string(),
+                    input_node: NodeMatch::Exact("pi4audio-convolver".to_string()),
+                    input_port: "playback_AUX1".to_string(),
+                    optional: false,
+                },
+            ],
+        )]);
+
+        let actions = reconcile(&g, &table, Mode::Dj);
+
+        // Both links should be created (2 Create actions).
+        let creates: Vec<_> = actions
+            .iter()
+            .filter(|a| matches!(a, LinkAction::Create { .. }))
+            .collect();
+        assert_eq!(creates.len(), 2, "expected 2 Create actions, got {:?}", actions);
     }
 
     // -----------------------------------------------------------------------
