@@ -11,8 +11,17 @@
 //! - **Monitoring:** Default mode. Filter-chain active for speakers,
 //!   no application linked, no measurement.
 //! - **Dj:** Mixxx linked to filter-chain + headphones via USBStreamer.
-//! - **Live:** Reaper linked to filter-chain + headphones + singer IEM.
+//! - **Live:** Reaper linked to filter-chain + headphones + singer IEM
+//!   + ADA8200 capture inputs.
 //! - **Measurement:** Signal-gen → filter-chain, UMIK-1 capture active.
+//!
+//! ## Port naming (D-041)
+//!
+//! All channel references in the routing table use one-based indexing per
+//! D-041. Application-specific port name mapping is handled by
+//! [`AppPortNaming`] — each application's naming convention (Mixxx: `out_0`,
+//! Reaper: `out1`, filter-chain: `playback_AUX0`) is translated from
+//! canonical one-based channel numbers at link definition time.
 //!
 //! ## Design (D-039, D-040)
 //!
@@ -149,8 +158,6 @@ const CONVOLVER_OUT: &str = "pi4audio-convolver-out";
 const USBSTREAMER_OUT_PREFIX: &str = "alsa_output.usb-MiniDSP_USBStreamer";
 
 /// USBStreamer capture node name prefix.
-/// Not used in routing yet — will be needed when mic input routing is added.
-#[allow(dead_code)]
 const USBSTREAMER_IN_PREFIX: &str = "alsa_input.usb-MiniDSP_USBStreamer";
 
 /// Signal generator playback node.
@@ -176,8 +183,86 @@ const MIXXX_PREFIX: &str = "Mixxx";
 
 /// REAPER JACK client node name prefix (under pw-jack).
 /// Prefix match because JACK clients may register with variable suffixes.
-/// TODO: Verify exact REAPER PW node name on Pi (`pw-jack reaper`).
+/// Verified on Pi: `pw-jack reaper` registers as "REAPER" (C-005).
 const REAPER_PREFIX: &str = "REAPER";
+
+/// ADA8200 capture node (8ch input via USBStreamer ADAT).
+/// From: configs/pipewire/20-usbstreamer.conf node.name
+/// Verified on Pi: exact name "ada8200-in" (C-005).
+const ADA8200_IN: &str = "ada8200-in";
+
+// ---------------------------------------------------------------------------
+// Port naming — D-041 one-based channel mapping
+// ---------------------------------------------------------------------------
+
+/// Application-specific port naming conventions.
+///
+/// Each audio application uses different port name formats. This enum
+/// maps a canonical one-based channel number to the application's actual
+/// PW port name string. Per D-041, the routing table thinks in one-based
+/// channels; this layer handles the translation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppPortNaming {
+    /// Mixxx via pw-jack: `out_0`, `out_1`, ... (zero-based, underscore).
+    /// Channel 1 -> "out_0", channel 2 -> "out_1", etc.
+    MixxxOutput,
+    /// Reaper via pw-jack: `out1`, `out2`, ... (one-based, no underscore).
+    /// Channel 1 -> "out1", channel 2 -> "out2", etc.
+    ReaperOutput,
+    /// Reaper via pw-jack (inputs): `in1`, `in2`, ... (one-based, no underscore).
+    /// Channel 1 -> "in1", channel 2 -> "in2", etc.
+    ReaperInput,
+    /// PW filter-chain capture (Audio/Sink): `playback_AUX0`, `playback_AUX1`, ...
+    /// Channel 1 -> "playback_AUX0", channel 2 -> "playback_AUX1", etc.
+    ConvolverInput,
+    /// PW filter-chain playback (source): `output_AUX0`, `output_AUX1`, ...
+    /// Channel 1 -> "output_AUX0", channel 2 -> "output_AUX1", etc.
+    ConvolverOutput,
+    /// USBStreamer playback adapter: `playback_AUX0`, `playback_AUX1`, ...
+    /// Channel 1 -> "playback_AUX0", channel 2 -> "playback_AUX1", etc.
+    UsbStreamerPlayback,
+    /// ADA8200 capture adapter: `capture_AUX0`, `capture_AUX1`, ...
+    /// Channel 1 -> "capture_AUX0", channel 2 -> "capture_AUX1", etc.
+    Ada8200Capture,
+    /// Signal generator output: `output_AUX0`, `output_AUX1`, ...
+    /// Channel 1 -> "output_AUX0", channel 2 -> "output_AUX1", etc.
+    SignalGenOutput,
+    /// Signal generator capture input: `input_MONO`.
+    /// Only channel 1 is valid.
+    SignalGenCaptureInput,
+    /// UMIK-1 capture: `capture_MONO`.
+    /// Only channel 1 is valid.
+    Umik1Capture,
+}
+
+impl AppPortNaming {
+    /// Map a one-based channel number to the application's port name.
+    ///
+    /// # Panics
+    /// Panics if `channel` is 0 (violates D-041 one-based convention).
+    pub fn port_name(self, channel: u32) -> String {
+        assert!(channel >= 1, "D-041: channel numbers are one-based, got 0");
+        let zero_based = channel - 1;
+        match self {
+            AppPortNaming::MixxxOutput => format!("out_{}", zero_based),
+            AppPortNaming::ReaperOutput => format!("out{}", channel),
+            AppPortNaming::ReaperInput => format!("in{}", channel),
+            AppPortNaming::ConvolverInput => format!("playback_AUX{}", zero_based),
+            AppPortNaming::ConvolverOutput => format!("output_AUX{}", zero_based),
+            AppPortNaming::UsbStreamerPlayback => format!("playback_AUX{}", zero_based),
+            AppPortNaming::Ada8200Capture => format!("capture_AUX{}", zero_based),
+            AppPortNaming::SignalGenOutput => format!("output_AUX{}", zero_based),
+            AppPortNaming::SignalGenCaptureInput => {
+                assert_eq!(channel, 1, "signal-gen capture is mono, only channel 1");
+                "input_MONO".to_string()
+            }
+            AppPortNaming::Umik1Capture => {
+                assert_eq!(channel, 1, "UMIK-1 is mono, only channel 1");
+                "capture_MONO".to_string()
+            }
+        }
+    }
+}
 
 impl RoutingTable {
     /// Build the production routing table.
@@ -231,60 +316,63 @@ impl RoutingTable {
     /// DJ mode: Mixxx → convolver → USBStreamer (speakers + headphones).
     ///
     /// Mixxx outputs 4 channels via pw-jack (verified on Pi, GM-12):
-    ///   out_0 = Master L, out_1 = Master R,
-    ///   out_2 = Headphone L, out_3 = Headphone R.
+    ///   ch 1 = Master L, ch 2 = Master R,
+    ///   ch 3 = Headphone L, ch 4 = Headphone R.
     ///
-    /// Master L/R go 1:1 to convolver mains (AUX0-1) AND fan-out to
-    /// both sub convolver inputs (AUX2-3) for mono-sum. PipeWire mixes
-    /// multiple links to the same input port additively. The -6 dB mono
-    /// sum compensation is baked into the sub FIR WAV coefficients
+    /// Master L/R go 1:1 to convolver mains (ch 1-2) AND fan-out to
+    /// both sub convolver inputs (ch 3-4) for mono-sum (TK-239). PipeWire
+    /// mixes multiple links to the same input port additively. The -6 dB
+    /// mono sum compensation is baked into the sub FIR WAV coefficients
     /// (architect guidance).
     ///
     /// Headphone L/R bypass the convolver and go directly to USBStreamer
-    /// ch 4-5.
+    /// ch 5-6.
     fn dj_links() -> Vec<DesiredLink> {
         let mut links = Vec::new();
+        let mx = AppPortNaming::MixxxOutput;
+        let cv_in = AppPortNaming::ConvolverInput;
+        let usb = AppPortNaming::UsbStreamerPlayback;
 
         // Mixxx master → convolver mains (1:1).
-        // out_0 (Master L) → playback_AUX0 (left wideband)
-        // out_1 (Master R) → playback_AUX1 (right wideband)
-        for (out_ch, aux) in [(0, "AUX0"), (1, "AUX1")] {
+        // Ch 1 (Master L) → convolver ch 1 (left wideband)
+        // Ch 2 (Master R) → convolver ch 2 (right wideband)
+        for ch in 1..=2 {
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
-                output_port: format!("out_{}", out_ch),
+                output_port: mx.port_name(ch),
                 input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
-                input_port: format!("playback_{}", aux),
+                input_port: cv_in.port_name(ch),
                 optional: false,
             });
         }
 
-        // Mixxx master → convolver subs (fan-out for L+R mono sum).
-        // Both Master L and Master R feed each sub input. PipeWire
-        // sums the two links at the input port.
-        for sub_aux in ["AUX2", "AUX3"] {
-            for out_ch in [0, 1] {
+        // Mixxx master → convolver subs (explicit L+R mono sum, TK-239).
+        // Both Master L (ch 1) and Master R (ch 2) feed each sub input.
+        // PipeWire sums the two links at the input port.
+        for sub_ch in [3, 4] {
+            for master_ch in [1, 2] {
                 links.push(DesiredLink {
                     output_node: NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
-                    output_port: format!("out_{}", out_ch),
+                    output_port: mx.port_name(master_ch),
                     input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
-                    input_port: format!("playback_{}", sub_aux),
+                    input_port: cv_in.port_name(sub_ch),
                     optional: false,
                 });
             }
         }
 
-        // Convolver → USBStreamer (ch 0-3: processed speakers).
+        // Convolver → USBStreamer (ch 1-4: processed speakers).
         links.extend(Self::convolver_to_usbstreamer_links());
 
         // Mixxx headphones → USBStreamer direct (bypass convolver).
-        // out_2 (Headphone L) → USBStreamer playback_AUX4
-        // out_3 (Headphone R) → USBStreamer playback_AUX5
-        for (out_ch, usb_aux) in [(2, "AUX4"), (3, "AUX5")] {
+        // Ch 3 (Headphone L) → USBStreamer ch 5
+        // Ch 4 (Headphone R) → USBStreamer ch 6
+        for (mx_ch, usb_ch) in [(3, 5), (4, 6)] {
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
-                output_port: format!("out_{}", out_ch),
+                output_port: mx.port_name(mx_ch),
                 input_node: NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string()),
-                input_port: format!("playback_{}", usb_aux),
+                input_port: usb.port_name(usb_ch),
                 optional: false,
             });
         }
@@ -292,77 +380,99 @@ impl RoutingTable {
         links
     }
 
-    /// Live mode: Reaper → convolver → USBStreamer (speakers + HP + IEM).
+    /// Live mode: Reaper → convolver → USBStreamer (speakers + HP + IEM)
+    /// + ADA8200 capture → Reaper inputs (TK-239).
     ///
-    /// Reaper outputs 8 channels via pw-jack (verified on Pi):
-    ///   out1 = Master L, out2 = Master R,
-    ///   out3-out4 = unused (available but not routed),
-    ///   out5 = HP L, out6 = HP R,
-    ///   out7 = IEM L, out8 = IEM R.
+    /// Reaper outputs 8 channels via pw-jack (verified on Pi, C-005):
+    ///   ch 1 = Master L, ch 2 = Master R,
+    ///   ch 3-4 = unused (available but not routed),
+    ///   ch 5 = HP L, ch 6 = HP R,
+    ///   ch 7 = IEM L, ch 8 = IEM R.
     ///
-    /// Master L/R go 1:1 to convolver mains (AUX0-1) AND fan-out to
-    /// both sub convolver inputs (AUX2-3) for mono-sum, same pattern
-    /// as DJ mode. The -6 dB mono sum compensation is baked into the
-    /// sub FIR WAV coefficients (architect guidance).
+    /// Master L/R go 1:1 to convolver mains (ch 1-2) AND fan-out to
+    /// both sub convolver inputs (ch 3-4) for mono-sum (TK-239), same
+    /// pattern as DJ mode. The -6 dB mono sum compensation is baked
+    /// into the sub FIR WAV coefficients (architect guidance).
     ///
     /// HP and IEM bypass the convolver and go directly to USBStreamer.
+    ///
+    /// ADA8200 8-channel capture feeds Reaper inputs for vocal mic,
+    /// spare mic/line, and additional inputs (C-005 verified).
     fn live_links() -> Vec<DesiredLink> {
         let mut links = Vec::new();
+        let rp_out = AppPortNaming::ReaperOutput;
+        let rp_in = AppPortNaming::ReaperInput;
+        let cv_in = AppPortNaming::ConvolverInput;
+        let usb = AppPortNaming::UsbStreamerPlayback;
+        let ada = AppPortNaming::Ada8200Capture;
 
         // Reaper master → convolver mains (1:1).
-        // out1 (Master L) → playback_AUX0 (left wideband)
-        // out2 (Master R) → playback_AUX1 (right wideband)
-        for (out_ch, aux) in [(1, "AUX0"), (2, "AUX1")] {
+        // Ch 1 (Master L) → convolver ch 1 (left wideband)
+        // Ch 2 (Master R) → convolver ch 2 (right wideband)
+        for ch in 1..=2 {
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
-                output_port: format!("out{}", out_ch),
+                output_port: rp_out.port_name(ch),
                 input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
-                input_port: format!("playback_{}", aux),
+                input_port: cv_in.port_name(ch),
                 optional: false,
             });
         }
 
-        // Reaper master → convolver subs (fan-out for L+R mono sum).
-        // Both Master L and Master R feed each sub input. PipeWire
-        // sums the two links at the input port.
-        for sub_aux in ["AUX2", "AUX3"] {
-            for out_ch in [1, 2] {
+        // Reaper master → convolver subs (explicit L+R mono sum, TK-239).
+        // Both Master L (ch 1) and Master R (ch 2) feed each sub input.
+        // PipeWire sums the two links at the input port.
+        for sub_ch in [3, 4] {
+            for master_ch in [1, 2] {
                 links.push(DesiredLink {
                     output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
-                    output_port: format!("out{}", out_ch),
+                    output_port: rp_out.port_name(master_ch),
                     input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
-                    input_port: format!("playback_{}", sub_aux),
+                    input_port: cv_in.port_name(sub_ch),
                     optional: false,
                 });
             }
         }
 
-        // Convolver → USBStreamer (ch 0-3: processed speakers).
+        // Convolver → USBStreamer (ch 1-4: processed speakers).
         links.extend(Self::convolver_to_usbstreamer_links());
 
         // Reaper headphones → USBStreamer direct (bypass convolver).
-        // out5 (HP L) → USBStreamer playback_AUX4
-        // out6 (HP R) → USBStreamer playback_AUX5
-        for (out_ch, usb_aux) in [(5, "AUX4"), (6, "AUX5")] {
+        // Ch 5 (HP L) → USBStreamer ch 5
+        // Ch 6 (HP R) → USBStreamer ch 6
+        for ch in 5..=6 {
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
-                output_port: format!("out{}", out_ch),
+                output_port: rp_out.port_name(ch),
                 input_node: NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string()),
-                input_port: format!("playback_{}", usb_aux),
+                input_port: usb.port_name(ch),
                 optional: false,
             });
         }
 
         // Reaper singer IEM → USBStreamer direct (passthrough per D-011).
-        // out7 (IEM L) → USBStreamer playback_AUX6
-        // out8 (IEM R) → USBStreamer playback_AUX7
-        for (out_ch, usb_aux) in [(7, "AUX6"), (8, "AUX7")] {
+        // Ch 7 (IEM L) → USBStreamer ch 7
+        // Ch 8 (IEM R) → USBStreamer ch 8
+        for ch in 7..=8 {
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
-                output_port: format!("out{}", out_ch),
+                output_port: rp_out.port_name(ch),
                 input_node: NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string()),
-                input_port: format!("playback_{}", usb_aux),
+                input_port: usb.port_name(ch),
                 optional: true, // IEM is optional equipment
+            });
+        }
+
+        // ADA8200 capture → Reaper inputs (TK-239, C-005 verified).
+        // All 8 ADA8200 channels feed Reaper's 8 input ports.
+        // Ch 1 = vocal mic, ch 2 = spare mic/line, ch 3-8 = available.
+        for ch in 1..=8 {
+            links.push(DesiredLink {
+                output_node: NodeMatch::Exact(ADA8200_IN.to_string()),
+                output_port: ada.port_name(ch),
+                input_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
+                input_port: rp_in.port_name(ch),
+                optional: false,
             });
         }
 
@@ -375,32 +485,31 @@ impl RoutingTable {
     /// UMIK-1 captures the room response back to signal-gen for analysis.
     fn measurement_links() -> Vec<DesiredLink> {
         let mut links = Vec::new();
-        let aux = ["AUX0", "AUX1", "AUX2", "AUX3"];
+        let sg = AppPortNaming::SignalGenOutput;
+        let cv_in = AppPortNaming::ConvolverInput;
+        let umik = AppPortNaming::Umik1Capture;
+        let sg_cap = AppPortNaming::SignalGenCaptureInput;
 
-        // Signal-gen → convolver (ch 0-3: measurement signals).
-        // Signal-gen uses audio.position = AUX0..AUX7 → output_AUX0..output_AUX7.
-        // Convolver capture is Audio/Sink with AUX positions → playback_AUX0..AUX3.
-        for ch_name in &aux {
+        // Signal-gen → convolver (ch 1-4: measurement signals).
+        for ch in 1..=4 {
             links.push(DesiredLink {
                 output_node: NodeMatch::Exact(SIGNAL_GEN.to_string()),
-                output_port: format!("output_{}", ch_name),
+                output_port: sg.port_name(ch),
                 input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
-                input_port: format!("playback_{}", ch_name),
+                input_port: cv_in.port_name(ch),
                 optional: false,
             });
         }
 
-        // Convolver → USBStreamer (ch 0-3: measurement signal to speakers).
+        // Convolver → USBStreamer (ch 1-4: measurement signal to speakers).
         links.extend(Self::convolver_to_usbstreamer_links());
 
         // UMIK-1 → signal-gen capture (mono measurement mic).
-        // UMIK-1 is a capture source with MONO position → capture_MONO.
-        // Signal-gen capture uses MONO position → input_MONO.
         links.push(DesiredLink {
             output_node: NodeMatch::Prefix(UMIK1_PREFIX.to_string()),
-            output_port: "capture_MONO".to_string(),
+            output_port: umik.port_name(1),
             input_node: NodeMatch::Exact(SIGNAL_GEN_CAPTURE.to_string()),
-            input_port: "input_MONO".to_string(),
+            input_port: sg_cap.port_name(1),
             optional: true, // UMIK-1 may not be plugged in
         });
 
@@ -411,21 +520,20 @@ impl RoutingTable {
     // Shared link sets
     // -------------------------------------------------------------------
 
-    /// Convolver output → USBStreamer playback (ch 0-3).
+    /// Convolver output → USBStreamer playback (ch 1-4).
     /// Used by all modes (speakers always go through the convolver).
     ///
-    /// Convolver playback source uses audio.position = [ AUX0..AUX3 ]
-    /// → output_AUX0..output_AUX3.
-    /// NOTE: Verify on Pi — filter-chain playback node may use playback_
-    /// prefix instead of output_. If so, update this helper.
+    /// Verified on Pi (C-005): filter-chain playback node uses
+    /// `output_AUX0..output_AUX3` port names.
     fn convolver_to_usbstreamer_links() -> Vec<DesiredLink> {
-        let aux = ["AUX0", "AUX1", "AUX2", "AUX3"];
-        aux.iter()
-            .map(|ch_name| DesiredLink {
+        let cv_out = AppPortNaming::ConvolverOutput;
+        let usb = AppPortNaming::UsbStreamerPlayback;
+        (1..=4)
+            .map(|ch| DesiredLink {
                 output_node: NodeMatch::Exact(CONVOLVER_OUT.to_string()),
-                output_port: format!("output_{}", ch_name),
+                output_port: cv_out.port_name(ch),
                 input_node: NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string()),
-                input_port: format!("playback_{}", ch_name),
+                input_port: usb.port_name(ch),
                 optional: false,
             })
             .collect()
@@ -574,12 +682,12 @@ mod tests {
     }
 
     #[test]
-    fn live_has_14_links() {
+    fn live_has_22_links() {
         // REAPER → convolver mains (2) + REAPER → convolver subs fan-out (4)
         // + convolver → USBStreamer (4) + REAPER → USBStreamer HP (2)
-        // + REAPER → USBStreamer IEM (2) = 14.
+        // + REAPER → USBStreamer IEM (2) + ADA8200 → REAPER capture (8) = 22.
         let table = RoutingTable::production();
-        assert_eq!(table.links_for(Mode::Live).len(), 14);
+        assert_eq!(table.links_for(Mode::Live).len(), 22);
     }
 
     #[test]
@@ -869,6 +977,204 @@ mod tests {
                 !link.output_port.contains('_'),
                 "Reaper port should not contain underscore, got: {}",
                 link.output_port
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // AppPortNaming — D-041 one-based channel mapping
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn port_naming_mixxx_output() {
+        // Mixxx: zero-based with underscore (out_0, out_1, ...).
+        assert_eq!(AppPortNaming::MixxxOutput.port_name(1), "out_0");
+        assert_eq!(AppPortNaming::MixxxOutput.port_name(2), "out_1");
+        assert_eq!(AppPortNaming::MixxxOutput.port_name(4), "out_3");
+    }
+
+    #[test]
+    fn port_naming_reaper_output() {
+        // Reaper: one-based, no underscore (out1, out2, ...).
+        assert_eq!(AppPortNaming::ReaperOutput.port_name(1), "out1");
+        assert_eq!(AppPortNaming::ReaperOutput.port_name(2), "out2");
+        assert_eq!(AppPortNaming::ReaperOutput.port_name(8), "out8");
+    }
+
+    #[test]
+    fn port_naming_reaper_input() {
+        // Reaper input: one-based, no underscore (in1, in2, ...).
+        assert_eq!(AppPortNaming::ReaperInput.port_name(1), "in1");
+        assert_eq!(AppPortNaming::ReaperInput.port_name(8), "in8");
+    }
+
+    #[test]
+    fn port_naming_convolver_input() {
+        // Convolver capture (Audio/Sink): playback_AUX prefix, zero-based.
+        assert_eq!(AppPortNaming::ConvolverInput.port_name(1), "playback_AUX0");
+        assert_eq!(AppPortNaming::ConvolverInput.port_name(4), "playback_AUX3");
+    }
+
+    #[test]
+    fn port_naming_convolver_output() {
+        // Convolver playback (source): output_AUX prefix, zero-based.
+        assert_eq!(AppPortNaming::ConvolverOutput.port_name(1), "output_AUX0");
+        assert_eq!(AppPortNaming::ConvolverOutput.port_name(4), "output_AUX3");
+    }
+
+    #[test]
+    fn port_naming_usbstreamer_playback() {
+        assert_eq!(AppPortNaming::UsbStreamerPlayback.port_name(1), "playback_AUX0");
+        assert_eq!(AppPortNaming::UsbStreamerPlayback.port_name(8), "playback_AUX7");
+    }
+
+    #[test]
+    fn port_naming_ada8200_capture() {
+        assert_eq!(AppPortNaming::Ada8200Capture.port_name(1), "capture_AUX0");
+        assert_eq!(AppPortNaming::Ada8200Capture.port_name(8), "capture_AUX7");
+    }
+
+    #[test]
+    fn port_naming_signal_gen_output() {
+        assert_eq!(AppPortNaming::SignalGenOutput.port_name(1), "output_AUX0");
+        assert_eq!(AppPortNaming::SignalGenOutput.port_name(4), "output_AUX3");
+    }
+
+    #[test]
+    fn port_naming_signal_gen_capture_input() {
+        assert_eq!(AppPortNaming::SignalGenCaptureInput.port_name(1), "input_MONO");
+    }
+
+    #[test]
+    fn port_naming_umik1_capture() {
+        assert_eq!(AppPortNaming::Umik1Capture.port_name(1), "capture_MONO");
+    }
+
+    #[test]
+    #[should_panic(expected = "D-041: channel numbers are one-based")]
+    fn port_naming_rejects_channel_zero() {
+        // D-041: channel 0 is never valid.
+        AppPortNaming::MixxxOutput.port_name(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "signal-gen capture is mono")]
+    fn port_naming_signal_gen_capture_rejects_multichannel() {
+        AppPortNaming::SignalGenCaptureInput.port_name(2);
+    }
+
+    #[test]
+    #[should_panic(expected = "UMIK-1 is mono")]
+    fn port_naming_umik1_rejects_multichannel() {
+        AppPortNaming::Umik1Capture.port_name(2);
+    }
+
+    // -----------------------------------------------------------------------
+    // Live mode — ADA8200 capture links (TK-239)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn live_has_8_ada8200_capture_links() {
+        // ADA8200 8-channel capture → Reaper inputs (TK-239).
+        let table = RoutingTable::production();
+        let live_links = table.links_for(Mode::Live);
+        let capture_links: Vec<_> = live_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Exact(n) if n == "ada8200-in"))
+            .collect();
+        assert_eq!(capture_links.len(), 8);
+    }
+
+    #[test]
+    fn live_capture_links_use_correct_port_names() {
+        // ADA8200: capture_AUX0..7, Reaper: in1..in8.
+        let table = RoutingTable::production();
+        let live_links = table.links_for(Mode::Live);
+        let capture_links: Vec<_> = live_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Exact(n) if n == "ada8200-in"))
+            .collect();
+        for (i, link) in capture_links.iter().enumerate() {
+            let expected_out = format!("capture_AUX{}", i);
+            let expected_in = format!("in{}", i + 1);
+            assert_eq!(link.output_port, expected_out, "ADA8200 port mismatch at ch {}", i + 1);
+            assert_eq!(link.input_port, expected_in, "Reaper input port mismatch at ch {}", i + 1);
+        }
+    }
+
+    #[test]
+    fn live_capture_links_are_required() {
+        // Capture links are NOT optional — ADA8200 is always present in live mode.
+        let table = RoutingTable::production();
+        let live_links = table.links_for(Mode::Live);
+        let capture_links: Vec<_> = live_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Exact(n) if n == "ada8200-in"))
+            .collect();
+        assert!(capture_links.iter().all(|l| !l.optional));
+    }
+
+    #[test]
+    fn live_capture_uses_exact_match_for_ada8200() {
+        // ADA8200 uses Exact match (fixed node.name in our config), not Prefix.
+        let table = RoutingTable::production();
+        let live_links = table.links_for(Mode::Live);
+        let capture_links: Vec<_> = live_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Exact(n) if n == "ada8200-in"))
+            .collect();
+        assert!(!capture_links.is_empty());
+        for link in &capture_links {
+            assert!(
+                matches!(&link.output_node, NodeMatch::Exact(_)),
+                "ADA8200 should use Exact match, not Prefix"
+            );
+        }
+    }
+
+    #[test]
+    fn live_capture_targets_reaper_prefix() {
+        // Capture links target Reaper (Prefix match for JACK client).
+        let table = RoutingTable::production();
+        let live_links = table.links_for(Mode::Live);
+        let capture_links: Vec<_> = live_links
+            .iter()
+            .filter(|l| matches!(&l.output_node, NodeMatch::Exact(n) if n == "ada8200-in"))
+            .collect();
+        for link in &capture_links {
+            assert!(
+                matches!(&link.input_node, NodeMatch::Prefix(p) if p == "REAPER"),
+                "Capture links should target REAPER prefix"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // DJ mode — sub mono sum (TK-239)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn dj_has_no_capture_links() {
+        // DJ mode has no capture input links — Mixxx doesn't use mic input.
+        let table = RoutingTable::production();
+        let dj_links = table.links_for(Mode::Dj);
+        let capture_links: Vec<_> = dj_links
+            .iter()
+            .filter(|l| l.output_port.starts_with("capture_"))
+            .collect();
+        assert_eq!(capture_links.len(), 0);
+    }
+
+    #[test]
+    fn monitoring_has_no_app_links() {
+        // Monitoring mode: only convolver → USBStreamer, no app links.
+        let table = RoutingTable::production();
+        let mon_links = table.links_for(Mode::Monitoring);
+        assert_eq!(mon_links.len(), 4);
+        for link in mon_links {
+            assert!(
+                matches!(&link.output_node, NodeMatch::Exact(n) if n == "pi4audio-convolver-out"),
+                "Monitoring should only have convolver output links"
             );
         }
     }
