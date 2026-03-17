@@ -258,3 +258,4 @@ power levels.
 | Date | Session | Summary | Outcome | Lab Note |
 |------|---------|---------|---------|----------|
 | 2026-03-13 | S-010 | Sweep bypassed CamillaDSP via sysdefault ALSA device | No damage (sysdefault not routed to physical output) | `change-S-010-measurement-test-failed.md` |
+| 2026-03-17 | S-012 | +30 dB gain increase on live path while owner monitoring on headphones | No injury. New rule: never increase gain without owner confirmation | `change-C-005-live-mode-investigation.md` |
