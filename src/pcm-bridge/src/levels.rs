@@ -90,7 +90,14 @@ pub struct LevelTracker {
     peak: [AtomicU32; MAX_CHANNELS],
     /// Per-channel sum of squares, stored as f32 bits in AtomicU32.
     sum_sq: [AtomicU32; MAX_CHANNELS],
-    /// Total sample count accumulated since last snapshot (shared across channels).
+    /// Total frame count accumulated since last snapshot (shared across channels).
+    ///
+    /// Uses `saturating_add` in [`process`] so it clamps at `u32::MAX` instead
+    /// of wrapping. At 48 kHz this saturates after ~24.8 hours without a
+    /// `take_snapshot()` call. Once saturated, the RMS divisor is frozen at
+    /// `u32::MAX` while `sum_sq` keeps growing, producing an artificially low
+    /// RMS reading. In practice this is harmless because `take_snapshot()` runs
+    /// at 10 Hz, resetting the counter every ~100 ms.
     sample_count: AtomicU32,
 }
 
