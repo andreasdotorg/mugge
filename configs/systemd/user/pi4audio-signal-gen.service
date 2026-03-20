@@ -1,12 +1,17 @@
 [Unit]
-Description=RT Signal Generator for Pi Audio Workstation (D-037)
-After=pipewire.service
-Wants=pipewire.service
+Description=RT Signal Generator for Pi Audio Workstation (D-037, D-040)
+# D-040: GraphManager controls all link topology. Signal-gen runs in managed
+# mode — it registers PW streams with ports but does not auto-connect.
+# GM must be running before signal-gen starts so links can be established.
+# WirePlumber activates adapter node ports (hardware device profiles).
+After=pipewire.service wireplumber.service pi4audio-graph-manager.service
+Requires=pipewire.service
+Wants=wireplumber.service pi4audio-graph-manager.service
 
 [Service]
 Type=simple
-ExecStart=/home/ela/bin/pi4audio-signal-gen \
-    --target loopback-8ch-sink \
+ExecStart=%h/bin/pi4audio-signal-gen \
+    --managed \
     --capture-target UMIK-1 \
     --channels 8 \
     --listen tcp:127.0.0.1:4001 \
