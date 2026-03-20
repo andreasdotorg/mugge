@@ -2677,8 +2677,8 @@ session.
 and gain calibration (US-012) can be tested end-to-end without requiring
 physical hardware.
 
-**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 5/6 — E2E-tier code complete, pending Pi execution. Work preserved, resumes later.)
-**Depends on:** US-045 (hardware config schema provides device definitions)
+**Status:** active (resumed per owner directive 2026-03-20. Was deferred 2026-03-16. CI tier done, E2E tier needs D-040 adaptation. Blocked on US-060.)
+**Depends on:** US-045 (hardware config schema provides device definitions), US-060 (PW monitoring replacement — D-040 adaptation)
 **Blocks:** US-047 implementation (owner directive: mock backend required for local testing)
 **Decisions:** D-035 (measurement safety)
 
@@ -2754,8 +2754,8 @@ every web UI view,
 which tab I'm using — especially during measurement sessions when I'm not on
 the Dashboard.
 
-**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 2/4 — SB-1-6 done, SB-7 Phase A 12/12 PASS, Playwright E2E written. Work preserved, resumes later.)
-**Depends on:** D-020 (web UI infrastructure), TK-097 (24-channel metering spec defines channel mapping)
+**Status:** active (resumed per owner directive 2026-03-20. Was deferred 2026-03-16. UI structure done (SB-1-7), data source wiring blocked on US-060.)
+**Depends on:** D-020 (web UI infrastructure), TK-097 (24-channel metering spec defines channel mapping), US-060 (PW monitoring replacement — data source wiring)
 **Blocks:** US-053 (manual test tool needs the persistent frame)
 **Decisions:** D-020
 
@@ -2795,7 +2795,7 @@ PipeWire/JACK client at RT priority,
 controllable from the Python measurement daemon without per-burst stream setup
 overhead.
 
-**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 3/6 — 11/12 subtasks done, SG-12 ABORTED (architecture). Code preserved (6,183 lines, 193 tests). Resumes after US-056/057/058.)
+**Status:** active (resumed per owner directive 2026-03-20. Was deferred 2026-03-16. D-040 adaptation in progress — SG-12 blocker resolved by D-040. Worker assigned. Was IMPLEMENT 3/6 — 11/12 subtasks done, code preserved (6,183 lines, 193 tests).)
 **Depends on:** Architect design (new system component), Rust toolchain on Pi (partially validated via pcm-bridge TK-151; AD-F006 Pi validation must pass first)
 **Blocks:** US-053 (manual test tool), US-047 (amended: uses RT signal gen instead of Python sounddevice), US-012 (amended: gain calibration uses RT signal gen)
 **Decisions:** D-036 (measurement daemon architecture — signal gen becomes a subprocess/sidecar), D-009 (cut-only correction / hard level cap)
@@ -2842,7 +2842,7 @@ spectrum in real time,
 tools (e.g., REW on Windows), and verify system behavior before running
 automated measurement sessions.
 
-**Status:** deferred (owner directive 2026-03-16: deselected in favor of Tier 11 architecture evolution. Was IMPLEMENT 3/6 — TT-2 committed, PCM-MODE-3 code-complete. Work preserved, resumes later.)
+**Status:** active (resumed per owner directive 2026-03-20. Was deferred 2026-03-16. TT-2 + PCM-MODE-3 code preserved. Blocked on US-052. Was IMPLEMENT 3/6.)
 **Depends on:** US-052 (RT signal generator provides the backend), US-051 (persistent status bar provides health monitoring frame), UX spec (lighter review — not full 5-phase gate, per PO recommendation; owner to confirm)
 **Blocks:** none (but enables debugging of TK-231 SPL computation and future measurement issues)
 **Decisions:** D-035 (measurement safety), D-009 (cut-only / gain limits)
