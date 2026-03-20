@@ -1,12 +1,12 @@
 """WebSocket handler for the Monitor view.
 
-Pushes combined level-meter + CamillaDSP status data at ~10 Hz.
+Pushes combined level-meter + DSP health data at ~10 Hz.
 
 In mock mode (PI_AUDIO_MOCK=1): each connected client gets its own
 MockDataGenerator instance.
 
-In real mode: data is read from the CamillaDSPCollector singleton
-stored on app.state.
+In real mode: data is read from the FilterChainCollector singleton
+stored on app.state.cdsp (D-040: replaces CamillaDSPCollector).
 """
 
 import asyncio
@@ -26,7 +26,7 @@ async def ws_monitoring(
     scenario: str = Query("A"),
     freeze_time: str = Query("false"),
 ):
-    """Push monitoring data (levels + CamillaDSP health) at ~10 Hz."""
+    """Push monitoring data (levels + filter-chain health) at ~10 Hz."""
     await ws.accept()
 
     if MOCK_MODE:
@@ -44,7 +44,7 @@ async def ws_monitoring(
             log.exception("Monitoring WS error")
         return
 
-    # Real mode — read from CamillaDSP collector
+    # Real mode — read from FilterChainCollector (D-040)
     cdsp = getattr(ws.app.state, "cdsp", None)
     log.info("Monitoring WS connected (real)")
     try:

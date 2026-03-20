@@ -1,13 +1,14 @@
 """WebSocket handler for the System view.
 
 Pushes full system health data at ~1 Hz: CPU, temperature, memory,
-PipeWire state, CamillaDSP state, per-process CPU breakdown.
+PipeWire state, filter-chain/DSP state, per-process CPU breakdown.
 
 In mock mode (PI_AUDIO_MOCK=1): each connected client gets its own
 MockDataGenerator instance.
 
 In real mode: data is assembled from the SystemCollector,
-PipeWireCollector, and CamillaDSPCollector singletons on app.state.
+PipeWireCollector, and FilterChainCollector singletons on app.state
+(D-040: FilterChainCollector replaces CamillaDSPCollector).
 """
 
 import asyncio

@@ -118,12 +118,12 @@ async def lifespan(app: FastAPI):
     if not MOCK_MODE:
         log.info("Starting real data collectors...")
         from .collectors import (
-            CamillaDSPCollector,
+            FilterChainCollector,
             PcmStreamCollector,
             PipeWireCollector,
             SystemCollector,
         )
-        app.state.cdsp = CamillaDSPCollector()
+        app.state.cdsp = FilterChainCollector()
         await app.state.cdsp.start()
         app.state.pcm = PcmStreamCollector()
         await app.state.pcm.start()
