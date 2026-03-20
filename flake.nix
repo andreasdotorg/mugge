@@ -267,7 +267,7 @@
             cp -r ${./src/room-correction} room-correction
             chmod -R u+w web-ui room-correction
             cd web-ui
-            python -m pytest tests/ -v -k "not e2e" --tb=short
+            python -m pytest tests/ -v --ignore=tests/e2e/ --tb=short
             touch $out
           '';
 
@@ -347,7 +347,7 @@
             program = "${pkgs.writeShellScript "test-unit" ''
               export PI_AUDIO_MOCK=1
               cd ${toString ./.}/src/web-ui
-              exec ${testPython}/bin/python -m pytest tests/ -v -k "not e2e" "$@"
+              exec ${testPython}/bin/python -m pytest tests/ -v --ignore=tests/e2e/ "$@"
             ''}";
           };
 
@@ -378,7 +378,7 @@
               set -e
               echo "=== web-ui unit tests ==="
               cd ${toString ./.}/src/web-ui
-              ${testPython}/bin/python -m pytest tests/ -v -k "not e2e" --tb=short
+              ${testPython}/bin/python -m pytest tests/ -v --ignore=tests/e2e/ --tb=short
               echo ""
               echo "=== room-correction tests ==="
               cd ${toString ./.}/src/room-correction
