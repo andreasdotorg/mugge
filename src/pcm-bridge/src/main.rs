@@ -3,8 +3,8 @@
 //! Two operating modes:
 //!
 //! **Monitor mode** (default, `--mode monitor`): Passive tap on a sink's
-//! monitor ports. Reads from CamillaDSP's loopback-8ch-sink monitor ports
-//! without participating in the RT audio graph. Cannot cause xruns.
+//! monitor ports. Reads from the PipeWire graph's output without
+//! participating in the RT audio graph. Cannot cause xruns.
 //!
 //! **Capture mode** (`--mode capture`): Reads from a PipeWire capture/source
 //! node directly (e.g., the USBStreamer ALSA input carrying ADA8200 ADAT
@@ -16,7 +16,15 @@
 //! Wire format (matches existing web UI protocol):
 //!   4-byte LE uint32 header (frame count) + interleaved float32 PCM
 //!   Sent in chunks of `quantum` frames (default 256).
+//!
+//! **Level metering** (US060-3): Per-channel peak and RMS levels are computed
+//! in the PW process callback and exposed on a separate TCP port (`--levels-listen`).
+//! The levels server sends JSON snapshots at 10 Hz — one line per snapshot,
+//! newline-delimited. Format:
+//!   `{"channels":8,"peak":[-3.1,-4.2,...],"rms":[-12.5,-14.0,...]}\n`
+//! Values are in dBFS, rounded to 1 decimal place. -120.0 means silence.
 
+mod levels;
 mod ring_buffer;
 mod server;
 
@@ -64,9 +72,14 @@ struct Args {
     #[arg(long)]
     node_name: Option<String>,
 
-    /// Listen address. Use "tcp:HOST:PORT" for TCP or "unix:PATH" for Unix socket.
+    /// Listen address for PCM streaming. Use "tcp:HOST:PORT" for TCP or "unix:PATH" for Unix socket.
     #[arg(long, default_value = "tcp:127.0.0.1:9090")]
     listen: String,
+
+    /// Listen address for level metering (JSON at 10 Hz). Use "tcp:HOST:PORT" or "unix:PATH".
+    /// If not set, level metering is disabled.
+    #[arg(long)]
+    levels_listen: Option<String>,
 
     /// Number of audio channels to capture.
     #[arg(long, default_value_t = 3)]
@@ -134,6 +147,9 @@ fn main() {
     // without excessive memory use.
     let ring = Arc::new(ring_buffer::RingBuffer::new(8192, args.channels as usize));
 
+    // Level tracker shared between PipeWire process callback and the levels server.
+    let level_tracker = Arc::new(levels::LevelTracker::new(args.channels as usize));
+
     // Spawn the socket server thread.
     let server_ring = ring.clone();
     let server_shutdown = shutdown.clone();
@@ -153,11 +169,28 @@ fn main() {
         })
         .expect("Failed to spawn server thread");
 
+    // Spawn the levels server thread if --levels-listen is set.
+    let levels_thread = args.levels_listen.as_ref().map(|listen| {
+        let (levels_kind, levels_addr) = parse_listen(listen);
+        let tracker = level_tracker.clone();
+        let shutdown = shutdown.clone();
+        info!("Level metering enabled: {:?}:{}", levels_kind, levels_addr);
+        std::thread::Builder::new()
+            .name("levels-server".into())
+            .spawn(move || {
+                server::run_levels_server(levels_kind, &levels_addr, tracker, shutdown);
+            })
+            .expect("Failed to spawn levels server thread")
+    });
+
     // Run PipeWire main loop on the main thread.
-    run_pipewire(&args, ring.clone(), shutdown.clone());
+    run_pipewire(&args, ring.clone(), level_tracker.clone(), shutdown.clone());
 
     info!("PipeWire loop exited, waiting for server thread...");
     let _ = server_thread.join();
+    if let Some(thread) = levels_thread {
+        let _ = thread.join();
+    }
     info!("pcm-bridge shutdown complete");
 }
 
@@ -283,7 +316,12 @@ fn build_stream_props(args: &Args) -> pipewire::properties::Properties {
 }
 
 /// Run the PipeWire main loop, capturing audio from monitor or source ports.
-fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<AtomicBool>) {
+fn run_pipewire(
+    args: &Args,
+    ring: Arc<ring_buffer::RingBuffer>,
+    level_tracker: Arc<levels::LevelTracker>,
+    shutdown: Arc<AtomicBool>,
+) {
     pipewire::init();
 
     let mainloop = pipewire::main_loop::MainLoop::new(None)
@@ -316,6 +354,7 @@ fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<A
     // wait for us (best-effort). In capture mode, we're a regular graph
     // participant but still run at SCHED_OTHER.
     let ring_for_cb = ring;
+    let levels_for_cb = level_tracker;
     let channels_usize = channels as usize;
 
     let _listener = stream
@@ -356,6 +395,7 @@ fn run_pipewire(args: &Args, ring: Arc<ring_buffer::RingBuffer>, shutdown: Arc<A
                         n_frames * channels_usize,
                     );
                     ring_for_cb.write_interleaved(float_slice, channels_usize);
+                    levels_for_cb.process(float_slice, channels_usize);
                 }
 
                 pipewire_sys::pw_stream_queue_buffer(stream.as_raw_ptr(), raw_buf);
@@ -575,6 +615,18 @@ mod tests {
         assert!(args.managed);
     }
 
+    #[test]
+    fn cli_levels_listen_default_is_none() {
+        let args = parse_args(&["pcm-bridge"]).unwrap();
+        assert!(args.levels_listen.is_none());
+    }
+
+    #[test]
+    fn cli_levels_listen_custom() {
+        let args = parse_args(&["pcm-bridge", "--levels-listen", "tcp:127.0.0.1:9091"]).unwrap();
+        assert_eq!(args.levels_listen.as_deref(), Some("tcp:127.0.0.1:9091"));
+    }
+
     // --- PipeWire property generation tests ---
     //
     // pipewire::init() is safe to call without a running daemon — it only
@@ -597,6 +649,7 @@ mod tests {
             target: target.to_string(),
             node_name: node_name.map(String::from),
             listen: "tcp:127.0.0.1:9090".to_string(),
+            levels_listen: None,
             channels,
             rate: 48000,
             quantum: 256,
