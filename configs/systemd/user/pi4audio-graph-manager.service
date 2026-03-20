@@ -26,20 +26,14 @@ OOMScoreAdjust=-500
 LimitMEMLOCK=infinity
 LimitRTPRIO=88
 
-# Security hardening (follows SEC-D037-02 pattern from signal-gen)
+# Security hardening — relaxed profile.
+# SystemCallFilter=~@privileged @resources causes SIGSYS on PipeWire init
+# (PW uses syscalls in the @resources group). ProtectSystem=strict also
+# conflicts. Tightening deferred until syscall profiling (strace --seccomp-bpf).
 NoNewPrivileges=true
-ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-CapabilityBoundingSet=
-RestrictSUIDSGID=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-SystemCallArchitectures=native
-SystemCallFilter=@system-service
-SystemCallFilter=~@privileged @resources
 
 [Install]
 WantedBy=default.target

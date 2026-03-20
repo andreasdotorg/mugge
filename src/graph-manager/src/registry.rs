@@ -50,7 +50,7 @@ use crate::rpc::GraphEvent;
 /// the lifetime of the registry (which outlives all closures).
 #[derive(Clone)]
 pub struct RegistryHandle {
-    ptr: std::ptr::NonNull<pw_sys::pw_registry>,
+    ptr: std::ptr::NonNull<pipewire_sys::pw_registry>,
 }
 
 impl RegistryHandle {
@@ -59,16 +59,16 @@ impl RegistryHandle {
     /// # Safety
     /// The caller must ensure the `Registry` outlives all uses of this handle.
     fn from_registry(registry: &pipewire::registry::Registry) -> Self {
-        // Registry stores a NonNull<pw_sys::pw_registry>. We access the
+        // Registry stores a NonNull<pipewire_sys::pw_registry>. We access the
         // raw pointer via the same pattern used for Core in main.rs.
         // Registry::as_ptr() is private, so we cast through the struct layout.
         // Safety: Registry is #[repr(Rust)] but its only field is
-        // NonNull<pw_sys::pw_registry>, so transmuting &Registry to get
+        // NonNull<pipewire_sys::pw_registry>, so transmuting &Registry to get
         // the pointer is sound on the same thread.
         let ptr = unsafe {
             let reg_ptr: *const pipewire::registry::Registry = registry;
-            let nn: std::ptr::NonNull<pw_sys::pw_registry> =
-                std::ptr::read(reg_ptr as *const std::ptr::NonNull<pw_sys::pw_registry>);
+            let nn: std::ptr::NonNull<pipewire_sys::pw_registry> =
+                std::ptr::read(reg_ptr as *const std::ptr::NonNull<pipewire_sys::pw_registry>);
             nn
         };
         Self { ptr }
@@ -77,9 +77,9 @@ impl RegistryHandle {
     /// Destroy a global object by ID via the PipeWire registry.
     pub fn destroy_global(&self, global_id: u32) {
         unsafe {
-            spa::spa_interface_call_method!(
+            libspa::spa_interface_call_method!(
                 self.ptr.as_ptr(),
-                pw_sys::pw_registry_methods,
+                pipewire_sys::pw_registry_methods,
                 destroy,
                 global_id
             );

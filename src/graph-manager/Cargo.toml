@@ -7,12 +7,14 @@ license = "MIT"
 
 [features]
 default = ["pipewire-backend"]
-pipewire-backend = ["pipewire", "pipewire-sys", "libspa"]
+pipewire-backend = ["pipewire", "pipewire-sys", "libspa", "spa_sys"]
 
 [dependencies]
 pipewire = { version = "0.8", optional = true }
 pipewire-sys = { version = "0.8", optional = true }
 libspa = { version = "0.8", optional = true }
+# Aliased as spa_sys — required by libspa::spa_interface_call_method! macro (GM-7).
+spa_sys = { version = "0.8", optional = true, package = "libspa-sys" }
 clap = { version = "4", features = ["derive"] }
 log = "0.4"
 env_logger = "0.11"
