@@ -3165,9 +3165,9 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** all web UI monitoring (dashboard health indicators, real-time levels, spectrum data) to use PipeWire-native data sources instead of the CamillaDSP websocket API,
 **so that** the web UI dashboard and status bar function correctly after CamillaDSP removal (D-040), with equivalent or better data fidelity.
 
-**Status:** draft
+**Status:** active (owner-authorized 2026-03-20. Architect scoped into 6 tasks: US060-1 through US060-6. US060-2 pcm-bridge retarget DONE at `0611394`. Track A: US060-1, US060-3 parallelizable. Track B: US060-4, US060-5 sequential after A. Track C: US060-6 cleanup last.)
 **Depends on:** US-059 (GraphManager core + production filter-chain must be operational)
-**Blocks:** none
+**Blocks:** US-050 (E2E tier D-040 adaptation), US-051 (data source wiring)
 **Decisions:** D-040 (CamillaDSP websocket API lost -- consequence #5). D-020 (web UI dashboard uses pycamilladsp collectors that must be replaced).
 
 **The problem:** The web UI dashboard (D-020) and persistent status bar (US-051) rely on `pycamilladsp` to collect real-time data from CamillaDSP's websocket API: DSP state, buffer levels, processing load, peak levels, and configuration state. With CamillaDSP removed (D-040), these data sources no longer exist. The dashboard shows stale or missing data for 6 health indicators and the 24-channel level meters.
@@ -3205,7 +3205,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** the measurement daemon (session.py, gain_calibration.py) to work with PipeWire filter-chain instead of CamillaDSP,
 **so that** the automated room correction pipeline (US-047, US-012) can measure, compute, and deploy correction filters to the PW filter-chain -- completing the CamillaDSP removal.
 
-**Status:** draft
+**Status:** active (owner-authorized 2026-03-20. Independent of US-060, parallelizable.)
 **Depends on:** US-059 (GraphManager core + production filter-chain must be operational)
 **Blocks:** none (but enables US-047 Path A measurement and US-012 automation to function with the new architecture)
 **Decisions:** D-040 (CamillaDSP removed). D-036 (measurement daemon design -- integration points change). D-009 (cut-only correction, -0.5 dBFS hard cap -- unchanged).
