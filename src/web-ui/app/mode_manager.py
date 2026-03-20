@@ -1,4 +1,4 @@
-"""Daemon mode manager — tracks MONITORING vs MEASUREMENT mode (D-036).
+"""Daemon mode manager — tracks MONITORING vs MEASUREMENT mode (D-036, D-040).
 
 The FastAPI backend IS the measurement controller.  This module provides
 the core mode-switching mechanism between two mutually exclusive modes:
@@ -6,12 +6,12 @@ the core mode-switching mechanism between two mutually exclusive modes:
     MONITORING  — normal dashboard, all collectors active.
     MEASUREMENT — measurement wizard active, session owns audio I/O.
 
-The mode manager does NOT manage CamillaDSP connections.  The collector
-keeps its own long-lived connection; the measurement session creates its
-own short-lived connection.  The mode manager tracks mode, holds a
-session reference, and performs startup recovery when CamillaDSP is
-found in an orphaned measurement config (Section 7.1 of
-measurement-daemon.md).
+The mode manager tracks mode, holds a session reference, and performs
+startup recovery when the GraphManager is found in an orphaned
+measurement routing mode (Section 7.1 of measurement-daemon.md).
+
+D-040 adaptation: CamillaDSP replaced by GraphManager JSON-over-TCP RPC
+(port 4002) for mode switching and orphan detection.
 """
 
 from __future__ import annotations
@@ -19,19 +19,15 @@ from __future__ import annotations
 import asyncio
 import enum
 import logging
-from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable, Optional
-
-if TYPE_CHECKING:
-    from camilladsp import CamillaClient
+import os
+import sys
+from typing import Any, Awaitable, Callable, Optional
 
 log = logging.getLogger(__name__)
 
-# Marker embedded in CamillaDSP config titles by the measurement session.
-# Future: measurement session will embed this via set_active_raw() (SetConfigJson).
-# Restoration uses set_file_path() + reload() (reads from disk).
-# Presence in the active config title means a measurement session set the config.
-MEASUREMENT_CONFIG_MARKER = "__pi4audio_measurement__"
+# Path to measurement client modules (graph_manager_client).
+_MEAS_DIR = os.environ.get("PI4AUDIO_MEAS_DIR", os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "..", "measurement")))
 
 
 class DaemonMode(enum.Enum):
@@ -45,36 +41,32 @@ class ModeManager:
 
     Parameters
     ----------
-    production_config_path:
-        Absolute path to the production CamillaDSP YAML on the Pi.
     ws_broadcast:
         Async callback ``(msg: dict) -> None`` to broadcast to all WS
         clients.  Wired up by WP-E; pass a no-op coroutine until then.
-    cdsp_host:
-        CamillaDSP websocket host (default ``127.0.0.1``).
-    cdsp_port:
-        CamillaDSP websocket port (default ``1234``).
+    gm_host:
+        GraphManager RPC host (default ``127.0.0.1``).
+    gm_port:
+        GraphManager RPC port (default ``4002``).
     """
 
     def __init__(
         self,
-        production_config_path: str,
         ws_broadcast: Callable[[dict], Awaitable[None]],
-        cdsp_host: str = "127.0.0.1",
-        cdsp_port: int = 1234,
+        gm_host: str = "127.0.0.1",
+        gm_port: int = 4002,
     ) -> None:
         self._mode = DaemonMode.MONITORING
         self._measurement_session: Any | None = None
         self._last_completed_session: Any | None = None
-        self._production_config_path = production_config_path
         self._ws_broadcast = ws_broadcast
-        self._cdsp_host = cdsp_host
-        self._cdsp_port = cdsp_port
+        self._gm_host = gm_host
+        self._gm_port = gm_port
 
         # Startup recovery state -- read by middleware/lifespan.
         self.recovery_in_progress: bool = False
         self.recovery_warning: Optional[str] = None
-        self.cdsp_available: bool = True
+        self.gm_available: bool = True
 
     # -- Public properties ---------------------------------------------------
 
@@ -113,15 +105,15 @@ class ModeManager:
             "mode": DaemonMode.MEASUREMENT.value,
         })
 
-    async def enter_monitoring_mode(self, restore_cdsp: bool = True) -> None:
+    async def enter_monitoring_mode(self, restore_gm: bool = True) -> None:
         """Switch back to MONITORING mode.
 
-        If *restore_cdsp* is True (default), restores CamillaDSP to the
-        production config.  Set to False when the measurement session
+        If *restore_gm* is True (default), tells GraphManager to restore
+        monitoring routing.  Set to False when the measurement session
         already handled restoration (e.g. successful filter deployment).
         """
-        if restore_cdsp and self.cdsp_available:
-            await self._restore_production_config()
+        if restore_gm and self.gm_available:
+            await self._restore_monitoring_mode()
         if self._measurement_session is not None:
             self._last_completed_session = self._measurement_session
         self._measurement_session = None
@@ -134,11 +126,11 @@ class ModeManager:
 
     # -- Startup recovery ----------------------------------------------------
 
-    async def check_and_recover_cdsp_config(self) -> None:
-        """Check for orphaned measurement config on startup.
+    async def check_and_recover_gm_state(self) -> None:
+        """Check for orphaned measurement routing mode on startup.
 
         Must complete BEFORE the FastAPI app accepts connections.
-        If CamillaDSP is unreachable, sets ``cdsp_available = False``
+        If GraphManager is unreachable, sets ``gm_available = False``
         and logs a warning -- does not crash.
         """
         self.recovery_in_progress = True
@@ -149,88 +141,105 @@ class ModeManager:
 
     # -- Internal helpers ----------------------------------------------------
 
-    @asynccontextmanager
-    async def _cdsp_connection(self) -> AsyncIterator[CamillaClient]:
-        """Connect to CamillaDSP, yield client, disconnect on exit."""
-        from camilladsp import CamillaClient as _CamillaClient
+    def _create_gm_client(self) -> Any:
+        """Create and connect a GraphManagerClient (or mock).
 
-        client = _CamillaClient(self._cdsp_host, self._cdsp_port)
-        await asyncio.to_thread(client.connect)
-        try:
-            yield client
-        finally:
-            try:
-                await asyncio.to_thread(client.disconnect)
-            except Exception:
-                pass
-
-    async def _load_production_config(self, client: CamillaClient) -> None:
-        """Set config file path and reload on the given client."""
-        await asyncio.to_thread(
-            client.config.set_file_path,
-            self._production_config_path,
+        Returns the connected client. Raises on connection failure.
+        """
+        if _MEAS_DIR not in sys.path:
+            sys.path.insert(0, _MEAS_DIR)
+        from graph_manager_client import (
+            GraphManagerClient, MockGraphManagerClient,
         )
-        await asyncio.to_thread(client.general.reload)
+        mock_mode = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
+        if mock_mode:
+            client = MockGraphManagerClient(
+                host=self._gm_host, port=self._gm_port)
+        else:
+            client = GraphManagerClient(
+                host=self._gm_host, port=self._gm_port)
+        client.connect()
+        return client
 
     async def _do_recovery_check(self) -> None:
-        """Core recovery logic."""
+        """Core recovery logic: query GM mode and restore if orphaned."""
         try:
-            async with self._cdsp_connection() as client:
-                active_config = await asyncio.to_thread(client.config.active)
+            client = await asyncio.to_thread(self._create_gm_client)
         except Exception as exc:
             log.warning(
-                "CamillaDSP not reachable at %s:%d during startup "
-                "recovery (%s).  Setting cdsp_available=False.",
-                self._cdsp_host, self._cdsp_port, exc,
+                "GraphManager not reachable at %s:%d during startup "
+                "recovery (%s).  Setting gm_available=False.",
+                self._gm_host, self._gm_port, exc,
             )
-            self.cdsp_available = False
+            self.gm_available = False
             return
 
-        if active_config is None:
-            log.info("Startup recovery: no active CamillaDSP config.")
+        try:
+            mode = await asyncio.to_thread(client.get_mode)
+        except Exception as exc:
+            log.warning(
+                "GraphManager get_mode failed during startup recovery "
+                "(%s).  Setting gm_available=False.", exc,
+            )
+            self.gm_available = False
+            try:
+                client.close()
+            except Exception:
+                pass
             return
 
-        title = active_config.get("title") or ""
-        if MEASUREMENT_CONFIG_MARKER not in title:
+        if mode != "measurement":
             log.info(
-                "Startup recovery: production config active "
-                "(title=%r).  No recovery needed.", title,
+                "Startup recovery: GraphManager in %r mode.  "
+                "No recovery needed.", mode,
             )
+            try:
+                client.close()
+            except Exception:
+                pass
             return
 
-        # Orphaned measurement config -- restore production.
+        # Orphaned measurement routing -- restore monitoring.
         log.warning(
-            "Startup recovery: orphaned measurement config "
-            "(title=%r).  Restoring: %s",
-            title, self._production_config_path,
+            "Startup recovery: GraphManager in orphaned measurement "
+            "mode.  Restoring monitoring mode.",
         )
         try:
-            async with self._cdsp_connection() as client:
-                await self._load_production_config(client)
+            await asyncio.to_thread(client.restore_production_mode)
             self.recovery_warning = (
-                "CamillaDSP was running an orphaned measurement config "
-                "on startup.  Production config has been restored.  "
+                "GraphManager was in orphaned measurement routing mode "
+                "on startup.  Monitoring mode has been restored.  "
                 "Any in-progress measurement results are lost."
             )
             log.warning("Startup recovery complete.  %s",
                         self.recovery_warning)
         except Exception as exc:
             log.error(
-                "Startup recovery failed restoring production config: "
+                "Startup recovery failed restoring monitoring mode: "
                 "%s.  Manual intervention may be required.", exc,
             )
             self.recovery_warning = (
-                f"Startup recovery failed: {exc}.  CamillaDSP may "
+                f"Startup recovery failed: {exc}.  GraphManager may "
                 "still be in measurement mode.  Check manually."
             )
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
 
-    async def _restore_production_config(self) -> None:
-        """Restore CamillaDSP to the production config file."""
+    async def _restore_monitoring_mode(self) -> None:
+        """Tell GraphManager to switch back to monitoring routing."""
         try:
-            async with self._cdsp_connection() as client:
-                await self._load_production_config(client)
-                log.info("Restored CamillaDSP production config: %s",
-                         self._production_config_path)
+            client = await asyncio.to_thread(self._create_gm_client)
+            try:
+                await asyncio.to_thread(client.restore_production_mode)
+                log.info("Restored GraphManager to monitoring mode")
+            finally:
+                try:
+                    client.close()
+                except Exception:
+                    pass
         except Exception as exc:
-            log.error("Failed to restore CamillaDSP production config: %s",
+            log.error("Failed to restore GraphManager monitoring mode: %s",
                       exc)

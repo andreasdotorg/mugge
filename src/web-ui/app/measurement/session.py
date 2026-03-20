@@ -34,11 +34,11 @@ _MOCK_MODE = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
 
 # Path to room-correction scripts (resolved once at import time)
 _RC_DIR = os.environ.get("PI4AUDIO_RC_DIR", os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "..", "room-correction")))
+    os.path.dirname(__file__), "..", "..", "..", "room-correction")))
 
 # Path to measurement client modules (graph_manager_client, signal_gen_client).
 _MEAS_DIR = os.environ.get("PI4AUDIO_MEAS_DIR", os.path.normpath(os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "..", "measurement")))
+    os.path.dirname(__file__), "..", "..", "..", "measurement")))
 
 
 def _ensure_rc_path() -> None:

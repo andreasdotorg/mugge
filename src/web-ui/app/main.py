@@ -4,7 +4,7 @@ Unified SPA serving four views: Monitor, Measure, System, MIDI.
 Stage 1 implements Monitor and System; Measure and MIDI are frontend stubs.
 
 WebSocket endpoints:
-    /ws/monitoring   — Level meters + CamillaDSP status at ~10 Hz
+    /ws/monitoring   — Level meters + filter-chain status at ~10 Hz
     /ws/system       — Full system health at ~1 Hz
     /ws/pcm          — Binary PCM stream (backward compat, delegates to monitor)
     /ws/pcm/{source} — Parameterized binary PCM stream (PCM-MODE-2)
@@ -95,11 +95,12 @@ async def _watchdog_loop() -> None:
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown logic."""
     # 1. Create ModeManager.
-    production_config_path = os.environ.get(
-        "PI4AUDIO_PRODUCTION_CONFIG", "/etc/camilladsp/active.yml")
+    gm_host = os.environ.get("PI4AUDIO_GM_HOST", "127.0.0.1")
+    gm_port = int(os.environ.get("PI4AUDIO_GM_PORT", "4002"))
     mode_manager = ModeManager(
-        production_config_path=production_config_path,
         ws_broadcast=ws_broadcast,
+        gm_host=gm_host,
+        gm_port=gm_port,
     )
     app.state.mode_manager = mode_manager
     app.state.measurement_task = None
@@ -107,12 +108,12 @@ async def lifespan(app: FastAPI):
     # 2. Startup recovery check (blocks until complete).
     if not MOCK_MODE:
         log.info("Running startup recovery check...")
-        await mode_manager.check_and_recover_cdsp_config()
+        await mode_manager.check_and_recover_gm_state()
         if mode_manager.recovery_warning:
             log.warning("Recovery warning: %s", mode_manager.recovery_warning)
         log.info("Startup recovery check complete")
     else:
-        log.info("Mock mode — skipping CamillaDSP recovery check")
+        log.info("Mock mode — skipping GraphManager recovery check")
 
     # 3. Start collectors (production only).
     if not MOCK_MODE:

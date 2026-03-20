@@ -1,9 +1,9 @@
-"""End-to-end integration tests for the measurement daemon (TK-172, WP-H).
+"""End-to-end integration tests for the measurement daemon (TK-172, WP-H, D-040).
 
 Tests the full REST + WebSocket stack using FastAPI's TestClient with mock
 audio hardware (PI_AUDIO_MOCK=1). Covers happy path, abort, reconnect,
-recovery, concurrent rejection, CamillaDSP failures, thermal ceiling,
-xrun injection, watchdog, mic disconnect, and muting verification.
+recovery, concurrent rejection, GraphManager failures, thermal ceiling,
+xrun injection, watchdog, mic disconnect, and GM mode verification.
 
 Run:
     cd src/web-ui
@@ -13,7 +13,7 @@ Run:
 import asyncio
 import json
 import time
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -258,23 +258,23 @@ class TestConcurrentStartRejection:
 
 
 # ===========================================================================
-# Test 6: CamillaDSP connection loss
+# Test 6: GraphManager connection loss (D-040)
 # ===========================================================================
 
-class TestCamillaDSPConnectionLoss:
-    """MockCamillaClient raises ConnectionError -> session handles it."""
+class TestGraphManagerConnectionLoss:
+    """MockGraphManagerClient connect() fails -> session handles it."""
 
-    def test_cdsp_connection_error_during_setup(self, client):
-        """If CamillaDSP connect() raises, session logs warning and
-        continues with cdsp_client=None. The session either completes
-        or errors depending on whether gain_cal needs cdsp.
+    def test_gm_connection_error_during_setup(self, client):
+        """If GraphManager connect() raises, session logs warning and
+        continues with gm_client=None. The session either completes
+        or errors depending on whether gain_cal needs GM verification.
         """
-        from mock_camilladsp import MockCamillaClient
+        from graph_manager_client import MockGraphManagerClient
 
         def failing_connect(self):
-            raise ConnectionError("CamillaDSP connection lost (mock)")
+            raise ConnectionError("GraphManager connection lost (mock)")
 
-        with patch.object(MockCamillaClient, "connect", failing_connect):
+        with patch.object(MockGraphManagerClient, "connect", failing_connect):
             resp = client.post("/api/v1/measurement/start",
                                json=DEFAULT_START_BODY)
             assert resp.status_code == 200
@@ -427,26 +427,27 @@ class TestMicDisconnect:
 
 
 # ===========================================================================
-# Test 12: Muting verification failure
+# Test 12: GraphManager mode verification failure (D-040)
 # ===========================================================================
 
-class TestMutingVerificationFailure:
-    """MockCamillaClient reports unexpected state -> session handles it."""
+class TestGModeVerificationFailure:
+    """MockGraphManagerClient reports unexpected mode -> session handles it."""
 
-    def test_unexpected_cdsp_state_handled(self, client):
-        """If CamillaDSP reports PAUSED state, session logs warning
-        but proceeds through setup.
+    def test_unexpected_gm_mode_handled(self, client):
+        """If GraphManager reports a non-measurement mode during measurement,
+        session detects the mismatch and transitions to error or completes
+        (mock mode skips verification).
         """
-        from mock_camilladsp import MockCamillaClient, MockProcessingState
+        from graph_manager_client import MockGraphManagerClient
 
-        original_init = MockCamillaClient.__init__
+        original_set_mode = MockGraphManagerClient.set_mode
 
-        def patched_init(self, host="localhost", port=1234,
-                         measurement_mode=True):
-            original_init(self, host, port, measurement_mode)
-            self.general.state = lambda: MockProcessingState.PAUSED
+        def broken_set_mode(self, mode):
+            # Accept the set_mode call but don't actually change internal state,
+            # so get_mode() will return the wrong mode.
+            pass
 
-        with patch.object(MockCamillaClient, "__init__", patched_init):
+        with patch.object(MockGraphManagerClient, "set_mode", broken_set_mode):
             resp = client.post("/api/v1/measurement/start",
                                json=DEFAULT_START_BODY)
             assert resp.status_code == 200

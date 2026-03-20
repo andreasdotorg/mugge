@@ -220,8 +220,8 @@ async def _run_session_lifecycle(app: Any, session: MeasurementSession) -> None:
             MeasurementState.ERROR,
         )
         if terminal:
-            restore_cdsp = session.state is not MeasurementState.COMPLETE
-            await mode_manager.enter_monitoring_mode(restore_cdsp=restore_cdsp)
+            restore_gm = session.state is not MeasurementState.COMPLETE
+            await mode_manager.enter_monitoring_mode(restore_gm=restore_gm)
         # Close SignalGenClient if it was used as sd_override (SG-11).
         sd = getattr(session, "_sd_override", None)
         if sd is not None and hasattr(sd, "close"):

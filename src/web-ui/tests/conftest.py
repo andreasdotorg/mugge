@@ -13,27 +13,16 @@ _RC_DIR = os.path.normpath(os.path.join(
 if _RC_DIR not in sys.path:
     sys.path.insert(0, _RC_DIR)
 
-# Also add the mock subdirectory so mock_camilladsp is importable directly.
+# Also add the mock subdirectory so mock_audio etc. are importable directly.
 _MOCK_DIR = os.path.join(_RC_DIR, "mock")
 if _MOCK_DIR not in sys.path:
     sys.path.insert(0, _MOCK_DIR)
 
-# ---------------------------------------------------------------------------
-# Patch MockCamillaClient for integration tests
-# ---------------------------------------------------------------------------
-
-from mock_camilladsp import _MockConfigNamespace, MockCamillaClient
-
-# Default measurement_mode=True so verify_measurement_config() passes.
-_original_mock_cdsp_init = MockCamillaClient.__init__
-
-
-def _patched_mock_cdsp_init(self, host="localhost", port=1234,
-                            measurement_mode=True):
-    _original_mock_cdsp_init(self, host, port, measurement_mode)
-
-
-MockCamillaClient.__init__ = _patched_mock_cdsp_init
+# Add measurement client modules (graph_manager_client) to sys.path.
+_MEAS_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), "..", "..", "measurement"))
+if _MEAS_DIR not in sys.path:
+    sys.path.insert(0, _MEAS_DIR)
 
 # ---------------------------------------------------------------------------
 # Patch SessionConfig defaults for mock mode
