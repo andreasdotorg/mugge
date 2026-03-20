@@ -231,7 +231,7 @@ BATCH    Mixxx disk I/O
 |----------|-----------|------------------|-----------|
 | 88 | SCHED_FIFO | PipeWire (main) | Audio server drives the graph clock AND runs the filter-chain convolver. Post-D-040, all DSP processing happens inside the PipeWire process at this priority. |
 | 83 | SCHED_FIFO | Mixxx audio callback (`data-loop.0`) | PipeWire data loop thread inside Mixxx process. Runs Mixxx's JACK process callback (decode, mix, effects). |
-| 83 | SCHED_FIFO | pipewire-pulse, WirePlumber | PipeWire ecosystem threads. WirePlumber handles device format negotiation and port creation (GM-12 Finding 2: required for device management even though D-039 targets no WP for session management). |
+| 83 | SCHED_FIFO | pipewire-pulse, WirePlumber | PipeWire ecosystem threads. WirePlumber provides device management only (D-043): ALSA enumeration, format negotiation, port activation. Linking policies disabled via `90-no-auto-link.conf`. |
 | 50 | SCHED_FIFO | IRQ threads | Kernel default on PREEMPT_RT. Hardware interrupt handlers. |
 | 0 | SCHED_OTHER | Mixxx GUI, `pw-Mixxx` threads | GUI rendering and PipeWire client housekeeping. Not audio-critical. |
 | 0 | SCHED_BATCH | Mixxx disk I/O (`mixxx:disk$0`) | Track loading. Lowest priority (nice 19). |
@@ -511,6 +511,71 @@ The Loopback buffer sizing lessons (TK-064, F-028) informed the USBStreamer
 buffer rule above: ALSA period-size must match the PipeWire quantum to avoid
 rebuffering.
 
+### Service Boot Ordering (D-043, US-062)
+
+The audio stack starts in a defined dependency chain managed by systemd
+user services. Each service declares its dependencies via `After=` and
+`Requires=`/`Wants=` directives.
+
+```
+pipewire.service
+    |
+    +---> wireplumber.service
+    |         |
+    |         +---> pi4audio-graph-manager.service
+    |         |         |
+    |         |         +---> mixxx.service (DJ mode)
+    |         |         +---> pi4audio-signal-gen.service (measurement mode)
+    |         |
+    |         +---> pi4audio-dj-routing.service (interim, before GM)
+    |
+    +---> pipewire-force-quantum.service (oneshot: applies clock.force-quantum)
+```
+
+**Boot sequence:**
+
+| Order | Service | Purpose | Wait condition |
+|-------|---------|---------|----------------|
+| 1 | `pipewire.service` | Audio server, graph clock, filter-chain convolver | Port appears |
+| 2 | `wireplumber.service` | Device management: ALSA enumeration, format negotiation, port activation (D-043) | Adapter nodes have ports |
+| 3 | `pi4audio-graph-manager.service` | Sole link manager: reconciler creates/destroys links per mode | RPC listening on port 4002 |
+| 4 | `mixxx.service` / `pi4audio-signal-gen.service` | Audio application (mode-dependent) | JACK ports registered |
+
+**Key dependencies:**
+
+- **WP must start before GM.** PipeWire ALSA adapter nodes (USBStreamer,
+  ada8200-in) require WP to negotiate formats and call `SPA_PARAM_PortConfig`
+  before they expose ports. Without WP, adapter nodes exist but have zero
+  ports and GM cannot create links (GM-12 Finding 2, D-043).
+- **GM must start before Mixxx/signal-gen.** GM must be listening when
+  app nodes appear so the reconciler can immediately create the desired
+  links and destroy any JACK bypass links.
+- **WP linking is disabled.** `90-no-auto-link.conf` ensures WP does not
+  create links during the window between WP start and GM start.
+- **JACK autoconnect is disabled.** `80-jack-no-autoconnect.conf` prevents
+  `pw-jack` applications from calling `jack_connect()` to physical ports
+  on activation. GM's reconciler handles any bypass links that still appear.
+
+**Verification:**
+
+```bash
+# Check service ordering:
+systemctl --user list-dependencies pi4audio-graph-manager.service
+# Expected: pipewire.service, wireplumber.service listed as dependencies
+
+# Check boot sequence worked:
+systemctl --user status wireplumber pi4audio-graph-manager mixxx
+# All three should be active (running)
+
+# Check WP config deployed:
+cat ~/.config/wireplumber/wireplumber.conf.d/90-no-auto-link.conf
+# Expected: policy.standard = disabled, policy.linking.* = disabled
+
+# Check JACK config deployed:
+cat ~/.config/pipewire/jack.conf.d/80-jack-no-autoconnect.conf
+# Expected: node.autoconnect = false
+```
+
 ---
 
 ## 6. Signal Path Overview
@@ -559,13 +624,24 @@ three sessions (S-005, S-006, S-007) demonstrated that
 `update-alternatives` is fundamentally incompatible with `ldconfig` soname
 management for shared libraries.
 
-Note on WirePlumber (GM-12 Finding 2, Finding 11): WirePlumber is still
-running for device management (format negotiation, port creation, JACK
-device exposure). However, its auto-linking behavior creates unwanted
-direct links from Mixxx to USBStreamer that bypass the convolver, causing
-garbled audio (double-signal). These must be manually removed with
-`pw-link -d`. A persistent fix (WP linking rule or GraphManager bypass
-detection) is needed. See D-039 for the long-term plan.
+**WirePlumber role (D-043, amends D-039):** WirePlumber is retained for
+device-level services only: ALSA device enumeration, format negotiation,
+`SPA_PARAM_PortConfig` port activation (pro-audio 8-channel mode for
+USBStreamer), and USB hot-plug lifecycle. Its auto-linking policies are
+disabled. Three layers prevent bypass links:
+
+1. **WP linking disabled:** `90-no-auto-link.conf` disables `policy.standard`,
+   `policy.linking.standard`, and `policy.linking.role-based` profiles.
+2. **JACK autoconnect disabled:** `80-jack-no-autoconnect.conf` sets
+   `node.autoconnect = false` for all JACK clients, suppressing the PW
+   stream `AUTOCONNECT` flag.
+3. **GraphManager reconciler cleanup:** GM's Phase 2 reconciliation
+   actively destroys links not in the desired set for the current mode.
+   This handles JACK client `jack_connect()` bypass links that cannot be
+   suppressed at the source (they originate inside PW's `libjack-pw.so`).
+
+This architecture resolves GM-12 Findings 2 and 11. WP provides device
+management; GraphManager is the sole link manager.
 
 ### Latency Budget
 
@@ -728,10 +804,12 @@ pw-link -l
 #   pi4audio-convolver-out:AUX0-3 -> USBStreamer:AUX0-3
 #   Mixxx:out_4/out_5 -> USBStreamer:AUX4/AUX5 (headphone bypass)
 
-# Check for unwanted WP bypass links (should NOT exist):
+# Check for unwanted bypass links (should NOT exist):
 pw-link -l | grep -E "Mixxx.*USBStreamer.*AUX[0-3]"
 # Expected: empty (no direct Mixxx->USBStreamer links on speaker channels)
-# If present: remove with pw-link -d <output> <input>
+# D-043: three layers prevent these (WP linking disabled, JACK autoconnect
+# disabled, GM reconciler cleanup). If present despite this, check that
+# 90-no-auto-link.conf and 80-jack-no-autoconnect.conf are deployed.
 ```
 
 ### Full Priority Check
@@ -778,6 +856,7 @@ ps -eLo pid,tid,cls,rtprio,comm -p $(pgrep -x mixxx) | grep FF
 |----|----------|-----------|
 | D-039 | `docs/project/decisions.md` | GraphManager is sole session manager (no WP for linking) |
 | D-040 | `docs/project/decisions.md` | Abandon CamillaDSP — pure PipeWire filter-chain pipeline |
+| D-043 | `docs/project/decisions.md` | Amend D-039 — WirePlumber retained for device management, linking disabled |
 | D-011 | `docs/project/decisions.md` | Live mode quantum 256 (latency target) |
 | D-013 | `docs/project/decisions.md` | PREEMPT_RT mandatory for production |
 | D-022 | `docs/project/decisions.md` | V3D fix, hardware GL on PREEMPT_RT |
@@ -792,6 +871,8 @@ ps -eLo pid,tid,cls,rtprio,comm -p $(pgrep -x mixxx) | grep FF
 | `10-audio-settings.conf` | `configs/pipewire/` | PipeWire quantum settings |
 | `30-filter-chain-convolver.conf` | On Pi: `~/.config/pipewire/pipewire.conf.d/` | PW filter-chain convolver config |
 | `21-usbstreamer-playback.conf` | On Pi: `~/.config/pipewire/pipewire.conf.d/` | USBStreamer ALSA buffer config |
+| `80-jack-no-autoconnect.conf` | On Pi: `~/.config/pipewire/jack.conf.d/` | Disable JACK client autoconnect (D-043) |
+| `90-no-auto-link.conf` | On Pi: `~/.config/wireplumber/wireplumber.conf.d/` | Disable WP linking policies (D-043) |
 | `combined_*.wav` | On Pi: `/etc/pi4audio/coeffs/` | FIR coefficient files (4 channels) |
 
 ### Lab Notes (evidence for quoted numbers)
