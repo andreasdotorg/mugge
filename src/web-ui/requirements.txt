@@ -1,7 +1,6 @@
 fastapi>=0.104.0
 uvicorn>=0.24.0
 # Real data collectors (only needed on Pi, optional for development)
-pycamilladsp>=3.0.0
 JACK-Client>=0.5.4
 numpy>=1.24.0
 sounddevice

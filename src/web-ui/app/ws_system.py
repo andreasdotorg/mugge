@@ -88,8 +88,8 @@ def _build_system_snapshot(app) -> dict:
             "scheduling": pw_snap.get("scheduling", {
                 "pipewire_policy": "SCHED_OTHER",
                 "pipewire_priority": 0,
-                "camilladsp_policy": "SCHED_OTHER",
-                "camilladsp_priority": 0,
+                "graphmgr_policy": "SCHED_OTHER",
+                "graphmgr_priority": 0,
             }),
         },
         "camilladsp": cdsp_snap if cdsp_snap else {
@@ -112,7 +112,7 @@ def _build_system_snapshot(app) -> dict:
         "processes": sys_snap.get("processes", {
             "mixxx_cpu": 0.0,
             "reaper_cpu": 0.0,
-            "camilladsp_cpu": 0.0,
+            "graphmgr_cpu": 0.0,
             "pipewire_cpu": 0.0,
             "labwc_cpu": 0.0,
         }),

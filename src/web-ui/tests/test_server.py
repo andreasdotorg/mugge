@@ -158,8 +158,8 @@ class TestMockDataGenerator:
         sched = s["pipewire"]["scheduling"]
         assert "pipewire_policy" in sched
         assert "pipewire_priority" in sched
-        assert "camilladsp_policy" in sched
-        assert "camilladsp_priority" in sched
+        assert "graphmgr_policy" in sched
+        assert "graphmgr_priority" in sched
 
     def test_system_memory_consistent(self, scenario_id):
         gen = MockDataGenerator(scenario_id)
@@ -172,7 +172,7 @@ class TestMockDataGenerator:
 
     def test_system_processes(self, gen_a):
         s = gen_a.system()
-        expected = {"mixxx_cpu", "reaper_cpu", "camilladsp_cpu",
+        expected = {"mixxx_cpu", "reaper_cpu", "graphmgr_cpu",
                     "pipewire_cpu", "labwc_cpu"}
         assert set(s["processes"].keys()) == expected
 
@@ -215,7 +215,7 @@ class TestMockDataGenerator:
         s = gen.system()
         sched = s["pipewire"]["scheduling"]
         assert sched["pipewire_policy"] == "SCHED_OTHER"
-        assert sched["camilladsp_policy"] == "SCHED_OTHER"
+        assert sched["graphmgr_policy"] == "SCHED_OTHER"
 
     def test_scenario_b_live_mode(self):
         gen = MockDataGenerator("B")

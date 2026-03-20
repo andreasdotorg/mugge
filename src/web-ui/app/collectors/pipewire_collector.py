@@ -5,7 +5,7 @@ with a 3-second timeout. Polled at 1 Hz. Uses -n 2 because the first
 pass of pw-top outputs all zeros; the second pass has real values.
 
 Extracts: quantum, sample rate, xruns, errors, graph state,
-scheduling policy/priority for PipeWire and CamillaDSP.
+scheduling policy/priority for PipeWire and GraphManager (D-040).
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ class PipeWireCollector:
         contains the driver node with quantum and rate info.
 
         We also look for scheduling info from /proc/{pid}/stat for
-        PipeWire and CamillaDSP, but that's handled by SystemCollector.
+        PipeWire and GraphManager, but that's handled by SystemCollector.
         Here we focus on quantum, sample rate, xruns, and graph state.
         """
         result = self._fallback_snapshot()
@@ -162,9 +162,9 @@ class PipeWireCollector:
             except (ValueError, IndexError):
                 continue
 
-        # Read scheduling info for PipeWire and CamillaDSP
+        # Read scheduling info for PipeWire and GraphManager (D-040)
         pw_sched = self._read_scheduling("pipewire")
-        cdsp_sched = self._read_scheduling("camilladsp")
+        gm_sched = self._read_scheduling("pi4audio-graph")
 
         result = {
             "quantum": quantum if quantum > 0 else 256,
@@ -174,8 +174,8 @@ class PipeWireCollector:
             "scheduling": {
                 "pipewire_policy": pw_sched[0],
                 "pipewire_priority": pw_sched[1],
-                "camilladsp_policy": cdsp_sched[0],
-                "camilladsp_priority": cdsp_sched[1],
+                "graphmgr_policy": gm_sched[0],
+                "graphmgr_priority": gm_sched[1],
             },
         }
         return result
@@ -235,7 +235,7 @@ class PipeWireCollector:
             "scheduling": {
                 "pipewire_policy": "SCHED_OTHER",
                 "pipewire_priority": 0,
-                "camilladsp_policy": "SCHED_OTHER",
-                "camilladsp_priority": 0,
+                "graphmgr_policy": "SCHED_OTHER",
+                "graphmgr_priority": 0,
             },
         }

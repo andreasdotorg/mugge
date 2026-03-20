@@ -27,7 +27,7 @@ _IS_LINUX = sys.platform == "linux"
 _TRACKED_PROCESSES = {
     "mixxx": "mixxx_cpu",
     "reaper": "reaper_cpu",
-    "camilladsp": "camilladsp_cpu",
+    "pi4audio-graph": "graphmgr_cpu",
     "pipewire": "pipewire_cpu",
     "labwc": "labwc_cpu",
 }
@@ -259,7 +259,7 @@ class SystemCollector:
             "processes": {
                 "mixxx_cpu": 0.0,
                 "reaper_cpu": 0.0,
-                "camilladsp_cpu": 0.0,
+                "graphmgr_cpu": 0.0,
                 "pipewire_cpu": 0.0,
                 "labwc_cpu": 0.0,
             },

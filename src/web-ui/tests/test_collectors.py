@@ -1,17 +1,17 @@
-"""Tests for backend collectors — pipewire, camilladsp, filterchain, system, pcm.
+"""Tests for backend collectors — pipewire, filterchain, system, pcm.
 
 Covers:
     - PipeWireCollector._parse_pw_top() with captured output samples
     - Wire-format shape validation (collector output vs MockDataGenerator)
     - _build_system_snapshot() shape validation
     - _read_scheduling() field indexing with synthetic /proc data
-    - CamillaDSPCollector monitoring_snapshot() 8-channel padding
     - FilterChainCollector snapshot shapes and state derivation
-    - Fallback snapshots for all 5 collectors
+    - Fallback snapshots for all 4 collectors
+    - FilterChainCollector RPC integration with mock GM TCP server (T-1)
 
-All tests run on macOS (no /proc, no pw-top, no JACK, no CamillaDSP,
+All tests run on macOS (no /proc, no pw-top, no JACK,
 no GraphManager).  System calls and connections are mocked via
-unittest.mock.
+unittest.mock.  RPC integration tests spin up a local TCP server.
 
 Run:
     cd src/web-ui
@@ -19,12 +19,13 @@ Run:
 """
 
 from unittest.mock import patch, mock_open, MagicMock
+import asyncio
+import json
 import types
 
 import pytest
 
 from app.collectors.pipewire_collector import PipeWireCollector
-from app.collectors.camilladsp_collector import CamillaDSPCollector
 from app.collectors.filterchain_collector import FilterChainCollector
 from app.collectors.system_collector import SystemCollector
 from app.collectors.pcm_collector import PcmStreamCollector
@@ -37,11 +38,6 @@ from app.ws_system import _build_system_snapshot
 @pytest.fixture
 def pw_collector():
     return PipeWireCollector()
-
-
-@pytest.fixture
-def cdsp_collector():
-    return CamillaDSPCollector()
 
 
 @pytest.fixture
@@ -154,8 +150,8 @@ class TestParsePwTop:
         sched = result["scheduling"]
         assert "pipewire_policy" in sched
         assert "pipewire_priority" in sched
-        assert "camilladsp_policy" in sched
-        assert "camilladsp_priority" in sched
+        assert "graphmgr_policy" in sched
+        assert "graphmgr_priority" in sched
 
     def test_scheduling_defaults_on_macos(self, pw_collector):
         """On macOS, scheduling should return SCHED_OTHER / 0."""
@@ -166,66 +162,7 @@ class TestParsePwTop:
         assert sched["pipewire_priority"] == 0
 
 
-# ── 2. Wire-format: monitoring_snapshot vs MockDataGenerator ──
-
-class TestMonitoringWireFormat:
-
-    def test_monitoring_keys_match_mock(self, cdsp_collector, mock_gen_a):
-        """Every key in mock monitoring output must exist in collector output."""
-        mock_data = mock_gen_a.monitoring()
-        real_data = cdsp_collector.monitoring_snapshot()
-        for key in mock_data:
-            assert key in real_data, (
-                f"Key '{key}' in mock monitoring but missing from collector"
-            )
-
-    def test_monitoring_level_array_lengths(self, cdsp_collector, mock_gen_a):
-        """All level arrays must be length 8."""
-        mock_data = mock_gen_a.monitoring()
-        real_data = cdsp_collector.monitoring_snapshot()
-        for key in ("capture_rms", "capture_peak", "playback_rms", "playback_peak"):
-            assert len(real_data[key]) == 8, (
-                f"Collector {key} has {len(real_data[key])} channels, expected 8"
-            )
-            assert len(mock_data[key]) == 8, (
-                f"Mock {key} has {len(mock_data[key])} channels, expected 8"
-            )
-
-    def test_monitoring_camilladsp_keys_match(self, cdsp_collector, mock_gen_a):
-        """CamillaDSP section keys must match between collector and mock."""
-        mock_cdsp = mock_gen_a.monitoring()["camilladsp"]
-        real_cdsp = cdsp_collector.monitoring_snapshot()["camilladsp"]
-        for key in mock_cdsp:
-            assert key in real_cdsp, (
-                f"Key 'camilladsp.{key}' in mock but missing from collector"
-            )
-
-    def test_monitoring_value_types(self, cdsp_collector, mock_gen_a):
-        """Value types should match between collector and mock."""
-        mock_data = mock_gen_a.monitoring()
-        real_data = cdsp_collector.monitoring_snapshot()
-        # Level arrays should be lists of numbers
-        for key in ("capture_rms", "capture_peak", "playback_rms", "playback_peak"):
-            assert isinstance(real_data[key], list)
-            for v in real_data[key]:
-                assert isinstance(v, (int, float))
-        # Spectrum should be a dict with "bands" list
-        assert isinstance(real_data["spectrum"], dict)
-        assert isinstance(real_data["spectrum"]["bands"], list)
-
-    def test_dsp_health_keys_match_mock_camilladsp(self, cdsp_collector, mock_gen_a):
-        """dsp_health_snapshot() keys must be subset of mock system camilladsp keys."""
-        mock_cdsp = mock_gen_a.system()["camilladsp"]
-        real_cdsp = cdsp_collector.dsp_health_snapshot()
-        # All mock keys should be present (collector may have extra like cdsp_connected)
-        for key in mock_cdsp:
-            assert key in real_cdsp, (
-                f"Key 'camilladsp.{key}' in mock system but missing from "
-                f"dsp_health_snapshot"
-            )
-
-
-# ── 3. Wire-format: _build_system_snapshot vs MockDataGenerator ─
+# ── 2. Wire-format: _build_system_snapshot vs MockDataGenerator ─
 
 class TestBuildSystemSnapshot:
 
@@ -334,11 +271,11 @@ class TestBuildSystemSnapshot:
         """When real collectors are provided, their data flows through."""
         app = MagicMock()
         pw = PipeWireCollector()
-        cdsp = CamillaDSPCollector()
+        fc = FilterChainCollector()
         sys_col = SystemCollector()
         app.state.system_collector = sys_col
         app.state.pw = pw
-        app.state.cdsp = cdsp
+        app.state.cdsp = fc
         real_data = _build_system_snapshot(app)
         # Should still have all top-level keys
         mock_data = mock_gen_a.system()
@@ -346,7 +283,7 @@ class TestBuildSystemSnapshot:
             assert key in real_data
 
 
-# ── 4. _read_scheduling() field indexing ──────────────────────
+# ── 3. _read_scheduling() field indexing ──────────────────────
 
 class TestReadScheduling:
 
@@ -462,101 +399,7 @@ class TestReadScheduling:
             assert priority == 0
 
 
-# ── 5. monitoring_snapshot() 8-channel padding ────────────────
-
-class TestMonitoringPadding:
-
-    def test_2ch_padded_to_8(self, cdsp_collector):
-        """When only 2 channels of data, arrays should pad to length 8."""
-        cdsp_collector._connected = True
-        cdsp_collector._levels = {
-            "capture_rms": [-20.0, -18.0],
-            "capture_peak": [-15.0, -12.0],
-            "playback_rms": [-22.0, -19.0],
-            "playback_peak": [-17.0, -14.0],
-        }
-        cdsp_collector._status = {
-            "state": "Running",
-            "processing_load": 0.05,
-            "buffer_level": 2048,
-            "clipped_samples": 0,
-            "xruns": 0,
-            "rate_adjust": 1.0,
-            "capture_rate": 48000,
-            "playback_rate": 48000,
-            "chunksize": 2048,
-        }
-        snap = cdsp_collector.monitoring_snapshot()
-        for key in ("capture_rms", "capture_peak", "playback_rms", "playback_peak"):
-            assert len(snap[key]) == 8, (
-                f"{key} should be padded to 8, got {len(snap[key])}"
-            )
-
-    def test_padding_value_is_minus_120(self, cdsp_collector):
-        """Padded channels should be -120.0."""
-        cdsp_collector._connected = True
-        cdsp_collector._levels = {
-            "capture_rms": [-20.0, -18.0],
-            "capture_peak": [-15.0, -12.0],
-            "playback_rms": [-22.0, -19.0],
-            "playback_peak": [-17.0, -14.0],
-        }
-        cdsp_collector._status = {
-            "state": "Running",
-            "processing_load": 0.05,
-            "buffer_level": 2048,
-            "clipped_samples": 0,
-            "xruns": 0,
-            "rate_adjust": 1.0,
-            "capture_rate": 48000,
-            "playback_rate": 48000,
-            "chunksize": 2048,
-        }
-        snap = cdsp_collector.monitoring_snapshot()
-        for key in ("capture_rms", "capture_peak", "playback_rms", "playback_peak"):
-            # First 2 channels should have real values
-            assert snap[key][0] != -120.0
-            assert snap[key][1] != -120.0
-            # Remaining 6 channels should be -120.0
-            for ch in range(2, 8):
-                assert snap[key][ch] == -120.0, (
-                    f"{key}[{ch}] should be -120.0, got {snap[key][ch]}"
-                )
-
-    def test_8ch_no_padding_needed(self, cdsp_collector):
-        """With 8 channels already, no padding should occur."""
-        cdsp_collector._connected = True
-        cdsp_collector._levels = {
-            "capture_rms": [-20.0] * 8,
-            "capture_peak": [-15.0] * 8,
-            "playback_rms": [-22.0] * 8,
-            "playback_peak": [-17.0] * 8,
-        }
-        cdsp_collector._status = {
-            "state": "Running",
-            "processing_load": 0.05,
-            "buffer_level": 2048,
-            "clipped_samples": 0,
-            "xruns": 0,
-            "rate_adjust": 1.0,
-            "capture_rate": 48000,
-            "playback_rate": 48000,
-            "chunksize": 2048,
-        }
-        snap = cdsp_collector.monitoring_snapshot()
-        for key in ("capture_rms", "capture_peak", "playback_rms", "playback_peak"):
-            assert len(snap[key]) == 8
-
-    def test_disconnected_all_minus_120(self, cdsp_collector):
-        """When disconnected, all channels should be -120.0."""
-        snap = cdsp_collector.monitoring_snapshot()
-        for key in ("capture_rms", "capture_peak", "playback_rms", "playback_peak"):
-            assert len(snap[key]) == 8
-            for ch in range(8):
-                assert snap[key][ch] == -120.0
-
-
-# ── 6. Fallback snapshots ────────────────────────────────────
+# ── 4. Fallback snapshots ────────────────────────────────────
 
 class TestFallbackSnapshots:
 
@@ -569,28 +412,13 @@ class TestFallbackSnapshots:
         assert "scheduling" in snap
         assert snap["scheduling"]["pipewire_policy"] == "SCHED_OTHER"
         assert snap["scheduling"]["pipewire_priority"] == 0
-        assert snap["scheduling"]["camilladsp_policy"] == "SCHED_OTHER"
-        assert snap["scheduling"]["camilladsp_priority"] == 0
+        assert snap["scheduling"]["graphmgr_policy"] == "SCHED_OTHER"
+        assert snap["scheduling"]["graphmgr_priority"] == 0
 
     def test_pipewire_snapshot_returns_fallback_initially(self, pw_collector):
         """Before any poll, snapshot() should return fallback."""
         snap = pw_collector.snapshot()
         assert snap == pw_collector._fallback_snapshot()
-
-    def test_camilladsp_disconnected_snapshot(self, cdsp_collector):
-        snap = cdsp_collector.monitoring_snapshot()
-        assert snap["camilladsp"]["state"] == "Disconnected"
-        assert snap["camilladsp"]["processing_load"] == 0.0
-        assert snap["camilladsp"]["xruns"] == 0
-        assert snap["camilladsp"]["rate_adjust"] == 1.0
-        assert snap["camilladsp"]["buffer_level"] == 0
-        assert snap["camilladsp"]["chunksize"] == 0
-
-    def test_camilladsp_dsp_health_fallback(self, cdsp_collector):
-        snap = cdsp_collector.dsp_health_snapshot()
-        assert snap["state"] == "Disconnected"
-        assert snap["processing_load"] == 0.0
-        assert snap["cdsp_connected"] is False
 
     def test_system_fallback(self, sys_collector):
         snap = sys_collector._fallback_snapshot()
@@ -606,7 +434,7 @@ class TestFallbackSnapshots:
         assert snap["memory"]["available_mb"] == 0
         assert "mixxx_cpu" in snap["processes"]
         assert "reaper_cpu" in snap["processes"]
-        assert "camilladsp_cpu" in snap["processes"]
+        assert "graphmgr_cpu" in snap["processes"]
         assert "pipewire_cpu" in snap["processes"]
         assert "labwc_cpu" in snap["processes"]
 
@@ -629,13 +457,6 @@ class TestFallbackSnapshots:
         assert isinstance(pw_collector._fallback_snapshot(), dict)
         assert isinstance(sys_collector._fallback_snapshot(), dict)
 
-    def test_camilladsp_fallback_has_spectrum(self, cdsp_collector):
-        """Disconnected monitoring snapshot should include spectrum."""
-        snap = cdsp_collector.monitoring_snapshot()
-        assert "spectrum" in snap
-        assert "bands" in snap["spectrum"]
-        assert len(snap["spectrum"]["bands"]) == 31
-
     def test_filterchain_disconnected_snapshot(self, fc_collector):
         """FilterChainCollector should return disconnected state initially."""
         snap = fc_collector.dsp_health_snapshot()
@@ -655,7 +476,7 @@ class TestFallbackSnapshots:
         assert len(snap["spectrum"]["bands"]) == 31
 
 
-# ── 7. FilterChainCollector state derivation ─────────────────
+# ── 5. FilterChainCollector state derivation ─────────────────
 
 class TestFilterChainStateDrivation:
 
@@ -784,18 +605,18 @@ class TestFilterChainStateDrivation:
         assert snap["gm_convolver"] == "unknown"
 
 
-# ── 8. FilterChainCollector wire-format compat ───────────────
+# ── 6. FilterChainCollector wire-format compat ───────────────
 
 class TestFilterChainWireFormat:
 
-    def test_monitoring_keys_match_cdsp(self, fc_collector, cdsp_collector):
+    def test_monitoring_keys_match_mock(self, fc_collector, mock_gen_a):
         """FilterChainCollector monitoring_snapshot() must have the same
-        top-level keys as CamillaDSPCollector for drop-in compatibility."""
-        cdsp_snap = cdsp_collector.monitoring_snapshot()
+        top-level keys as MockDataGenerator for wire-format compatibility."""
+        mock_snap = mock_gen_a.monitoring()
         fc_snap = fc_collector.monitoring_snapshot()
-        for key in cdsp_snap:
+        for key in mock_snap:
             assert key in fc_snap, (
-                f"Key '{key}' in CamillaDSP monitoring but missing "
+                f"Key '{key}' in mock monitoring but missing "
                 f"from FilterChainCollector"
             )
 
@@ -826,3 +647,335 @@ class TestFilterChainWireFormat:
                 f"Key 'camilladsp.{key}' in mock system but missing "
                 f"from FilterChainCollector dsp_health_snapshot"
             )
+
+
+# ── 7. FilterChainCollector RPC integration (T-1) ─────────────
+
+# -- Mock GM TCP server helpers --
+
+async def _make_gm_server(responses, host="127.0.0.1"):
+    """Start a TCP server that responds to GM RPC commands.
+
+    Parameters
+    ----------
+    responses : dict[str, dict]
+        Maps command names to response dicts.  Each response is sent
+        as a newline-delimited JSON line when the matching command
+        arrives.  If a command is not in the map, the server sends
+        ``{"type":"response","cmd":"...","ok":false,"error":"unknown"}``.
+
+    Returns ``(server, port)`` so the caller can create a collector
+    pointed at ``host:port``.
+    """
+    async def handle_client(reader, writer):
+        try:
+            while True:
+                line = await reader.readline()
+                if not line:
+                    break
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                cmd = msg.get("cmd", "")
+                if cmd in responses:
+                    resp = responses[cmd]
+                else:
+                    resp = {"type": "response", "cmd": cmd,
+                            "ok": False, "error": "unknown command"}
+                writer.write(json.dumps(resp).encode() + b"\n")
+                await writer.drain()
+        except (asyncio.CancelledError, ConnectionResetError):
+            pass
+        finally:
+            writer.close()
+
+    server = await asyncio.start_server(handle_client, host, 0)
+    port = server.sockets[0].getsockname()[1]
+    return server, port
+
+
+# Standard GM response fixtures
+_GM_LINKS_DJ = {
+    "type": "response", "cmd": "get_links", "ok": True,
+    "mode": "dj", "desired": 12, "actual": 12, "missing": 0,
+    "links": [{"from": "mixxx:out_0", "to": "convolver:in_0",
+               "status": "active"}],
+}
+
+_GM_STATE_DJ = {
+    "type": "response", "cmd": "get_state", "ok": True,
+    "mode": "dj",
+    "nodes": [{"name": "mixxx"}, {"name": "convolver"}],
+    "devices": {"convolver": "present", "usbstreamer": "present"},
+}
+
+_GM_LINKS_DEGRADED = {
+    "type": "response", "cmd": "get_links", "ok": True,
+    "mode": "dj", "desired": 12, "actual": 9, "missing": 3,
+    "links": [],
+}
+
+_GM_LINKS_MONITORING = {
+    "type": "response", "cmd": "get_links", "ok": True,
+    "mode": "monitoring", "desired": 0, "actual": 0, "missing": 0,
+    "links": [],
+}
+
+_GM_STATE_MONITORING = {
+    "type": "response", "cmd": "get_state", "ok": True,
+    "mode": "monitoring", "nodes": [], "devices": {},
+}
+
+
+def _run_async(coro):
+    """Run an async coroutine in a fresh event loop (no pytest-asyncio needed)."""
+    return asyncio.run(coro)
+
+
+async def _gm_handler(reader, writer, responses):
+    """Handle one client connection for the mock GM TCP server."""
+    try:
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            cmd = msg.get("cmd", "")
+            resp = responses.get(cmd, {
+                "type": "response", "cmd": cmd,
+                "ok": False, "error": "unknown",
+            })
+            writer.write(json.dumps(resp).encode() + b"\n")
+            await writer.drain()
+    except (asyncio.CancelledError, ConnectionResetError):
+        pass
+    finally:
+        writer.close()
+
+
+class TestFilterChainRPCIntegration:
+    """Integration tests: FilterChainCollector talks to a mock GM TCP server.
+
+    Each test spins up a local TCP server that speaks the GraphManager
+    newline-delimited JSON protocol, then verifies the collector correctly
+    parses responses, handles disconnects, and produces accurate snapshots.
+    """
+
+    def test_poll_populates_links_and_state(self):
+        """After one poll cycle, collector has links and state data."""
+        async def _test():
+            server, port = await _make_gm_server({
+                "get_links": _GM_LINKS_DJ,
+                "get_state": _GM_STATE_DJ,
+            })
+            async with server:
+                fc = FilterChainCollector(host="127.0.0.1", port=port)
+                await fc.start()
+                await asyncio.sleep(1.0)
+                await fc.stop()
+
+            assert fc._links is not None
+            assert fc._links["mode"] == "dj"
+            assert fc._links["desired"] == 12
+            assert fc._links["actual"] == 12
+            assert fc._state is not None
+            assert fc._state["mode"] == "dj"
+
+        _run_async(_test())
+
+    def test_snapshot_running_after_poll(self):
+        """dsp_health_snapshot() reports Running with healthy links."""
+        async def _test():
+            server, port = await _make_gm_server({
+                "get_links": _GM_LINKS_DJ,
+                "get_state": _GM_STATE_DJ,
+            })
+            async with server:
+                fc = FilterChainCollector(host="127.0.0.1", port=port)
+                await fc.start()
+                await asyncio.sleep(1.0)
+                snap = fc.dsp_health_snapshot()
+                await fc.stop()
+
+            assert snap["state"] == "Running"
+            assert snap["gm_connected"] is True
+            assert snap["gm_mode"] == "dj"
+            assert snap["gm_links_desired"] == 12
+            assert snap["gm_links_actual"] == 12
+            assert snap["gm_links_missing"] == 0
+            assert snap["gm_convolver"] == "present"
+            assert snap["buffer_level"] == 100
+
+        _run_async(_test())
+
+    def test_snapshot_degraded_with_missing_links(self):
+        """State is Degraded when some links are missing."""
+        async def _test():
+            server, port = await _make_gm_server({
+                "get_links": _GM_LINKS_DEGRADED,
+                "get_state": _GM_STATE_DJ,
+            })
+            async with server:
+                fc = FilterChainCollector(host="127.0.0.1", port=port)
+                await fc.start()
+                await asyncio.sleep(1.0)
+                snap = fc.dsp_health_snapshot()
+                await fc.stop()
+
+            assert snap["state"] == "Degraded"
+            assert snap["gm_links_missing"] == 3
+            assert snap["buffer_level"] == 75
+
+        _run_async(_test())
+
+    def test_snapshot_idle_in_monitoring_mode(self):
+        """State is Idle when GM reports monitoring mode."""
+        async def _test():
+            server, port = await _make_gm_server({
+                "get_links": _GM_LINKS_MONITORING,
+                "get_state": _GM_STATE_MONITORING,
+            })
+            async with server:
+                fc = FilterChainCollector(host="127.0.0.1", port=port)
+                await fc.start()
+                await asyncio.sleep(1.0)
+                snap = fc.dsp_health_snapshot()
+                await fc.stop()
+
+            assert snap["state"] == "Idle"
+            assert snap["gm_mode"] == "monitoring"
+
+        _run_async(_test())
+
+    def test_monitoring_snapshot_has_level_arrays(self):
+        """monitoring_snapshot() includes 8-element level arrays."""
+        async def _test():
+            server, port = await _make_gm_server({
+                "get_links": _GM_LINKS_DJ,
+                "get_state": _GM_STATE_DJ,
+            })
+            async with server:
+                fc = FilterChainCollector(host="127.0.0.1", port=port)
+                await fc.start()
+                await asyncio.sleep(1.0)
+                snap = fc.monitoring_snapshot()
+                await fc.stop()
+
+            for key in ("capture_rms", "capture_peak",
+                         "playback_rms", "playback_peak"):
+                assert len(snap[key]) == 8
+            assert "camilladsp" in snap
+            assert snap["camilladsp"]["state"] == "Running"
+
+        _run_async(_test())
+
+    def test_connection_refused_graceful_degradation(self):
+        """When GM is unreachable, collector reports Disconnected."""
+        async def _test():
+            fc = FilterChainCollector(host="127.0.0.1", port=19999)
+            await fc.start()
+            await asyncio.sleep(1.5)
+            snap = fc.dsp_health_snapshot()
+            await fc.stop()
+
+            assert snap["state"] == "Disconnected"
+            assert fc._connected is False
+
+        _run_async(_test())
+
+    def test_reconnect_after_server_disconnect(self):
+        """After GM disconnects, collector reconnects to new server."""
+        async def _test():
+            # Phase 1: Start server, let collector connect and poll.
+            server1, port = await _make_gm_server({
+                "get_links": _GM_LINKS_DJ,
+                "get_state": _GM_STATE_DJ,
+            })
+            fc = FilterChainCollector(host="127.0.0.1", port=port)
+            async with server1:
+                await fc.start()
+                await asyncio.sleep(1.0)
+                assert fc._links is not None
+                snap1 = fc.dsp_health_snapshot()
+                assert snap1["state"] == "Running"
+            # server1 is now closed; collector will detect disconnect.
+
+            # Phase 2: Start a new server on the SAME port.
+            server2 = await asyncio.start_server(
+                lambda r, w: _gm_handler(r, w, {
+                    "get_links": _GM_LINKS_MONITORING,
+                    "get_state": _GM_STATE_MONITORING,
+                }),
+                "127.0.0.1", port,
+            )
+            async with server2:
+                # Wait for reconnection (backoff starts at 1s).
+                await asyncio.sleep(3.0)
+                snap2 = fc.dsp_health_snapshot()
+            await fc.stop()
+
+            # After reconnection, should reflect the new server's data.
+            assert snap2["gm_mode"] == "monitoring"
+            assert snap2["state"] == "Idle"
+
+        _run_async(_test())
+
+    def test_server_sends_error_response(self):
+        """When GM responds with ok=false, collector keeps old data."""
+        async def _test():
+            error_links = {
+                "type": "response", "cmd": "get_links",
+                "ok": False, "error": "internal error",
+            }
+            server, port = await _make_gm_server({
+                "get_links": error_links,
+                "get_state": _GM_STATE_DJ,
+            })
+            async with server:
+                fc = FilterChainCollector(host="127.0.0.1", port=port)
+                await fc.start()
+                await asyncio.sleep(1.0)
+                await fc.stop()
+
+            # Links should remain None because ok=false was returned.
+            assert fc._links is None
+            snap = fc.dsp_health_snapshot()
+            assert snap["state"] == "Disconnected"
+
+        _run_async(_test())
+
+    def test_backoff_increases_on_repeated_failure(self):
+        """Backoff doubles on each failed connection attempt, capped at 15s."""
+        from app.collectors.filterchain_collector import (
+            _BACKOFF_BASE, _BACKOFF_FACTOR, _BACKOFF_CAP,
+        )
+        fc = FilterChainCollector(host="127.0.0.1", port=19999)
+        assert fc._backoff == _BACKOFF_BASE
+
+        # Simulate backoff progression without sleeping.
+        for expected in [2.0, 4.0, 8.0, 15.0, 15.0]:
+            fc._backoff = min(fc._backoff * _BACKOFF_FACTOR, _BACKOFF_CAP)
+            assert fc._backoff == expected, (
+                f"Expected backoff {expected}, got {fc._backoff}"
+            )
+
+    def test_backoff_resets_on_successful_connect(self):
+        """Backoff resets to base after successful connection."""
+        async def _test():
+            server, port = await _make_gm_server({
+                "get_links": _GM_LINKS_DJ,
+                "get_state": _GM_STATE_DJ,
+            })
+            async with server:
+                fc = FilterChainCollector(host="127.0.0.1", port=port)
+                fc._backoff = 8.0
+                connected = await fc._connect()
+                assert connected is True
+                assert fc._backoff == 1.0  # reset to base
+                fc._disconnect()
+
+        _run_async(_test())

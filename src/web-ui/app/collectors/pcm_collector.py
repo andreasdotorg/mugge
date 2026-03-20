@@ -1,6 +1,6 @@
 """PCM stream collector — JACK ring buffer + binary WebSocket.
 
-Ported from poc/server.py. Captures 3 channels from CamillaDSP monitor
+Ported from poc/server.py. Captures 3 channels from filter-chain monitor
 taps via JACK and streams interleaved float32 PCM over WebSocket.
 
 Lock-free ring buffer: np.zeros((8192, 3), dtype=np.float32), with
@@ -113,7 +113,7 @@ class PcmStreamCollector:
             raise
 
     def _start_jack(self) -> None:
-        """Create JACK client, register ports, connect to CamillaDSP monitors."""
+        """Create JACK client, register ports, connect to filter-chain monitors."""
         import jack
         import numpy as np
 
@@ -129,14 +129,14 @@ class PcmStreamCollector:
         self._jack_client = client
         client.activate()
 
-        # Discover CamillaDSP monitor ports by pattern
+        # Discover filter-chain monitor ports by pattern (D-040)
         monitor_ports = client.get_ports(
-            "CamillaDSP.*:monitor.*", is_output=True
+            "filter-chain.*:monitor.*", is_output=True
         )
         if len(monitor_ports) < NUM_CHANNELS:
             log.warning(
-                "Found only %d CamillaDSP monitor ports (need %d). "
-                "Connect manually with jack_connect.",
+                "Found only %d filter-chain monitor ports (need %d). "
+                "Connect manually with pw-jack jack_connect.",
                 len(monitor_ports), NUM_CHANNELS,
             )
         for i, port in enumerate(monitor_ports[:NUM_CHANNELS]):

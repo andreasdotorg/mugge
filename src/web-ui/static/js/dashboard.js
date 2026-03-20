@@ -517,8 +517,8 @@
         // FIFO status
         var sched = data.pipewire.scheduling;
         var pwFifo = sched.pipewire_policy === "SCHED_FIFO";
-        var cdspFifo = sched.camilladsp_policy === "SCHED_FIFO";
-        var fifoText = sched.pipewire_priority + "/" + sched.camilladsp_priority;
+        var cdspFifo = sched.graphmgr_policy === "SCHED_FIFO";
+        var fifoText = sched.pipewire_priority + "/" + sched.graphmgr_priority;
         var fifoColor = (pwFifo && cdspFifo) ? "c-green" : "c-red";
         PiAudio.setText("hb-fifo", fifoText, fifoColor);
 

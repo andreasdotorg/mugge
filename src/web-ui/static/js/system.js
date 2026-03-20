@@ -348,10 +348,10 @@
         PiAudio.setText("sys-sched-pw",
             sched.pipewire_policy + "/" + sched.pipewire_priority,
             sched.pipewire_policy === "SCHED_FIFO" ? "c-green" : "c-red");
-        // D-040: Still reads camilladsp_policy from PipeWireCollector scheduling
+        // D-040: GraphManager scheduling from PipeWireCollector
         PiAudio.setText("sys-sched-cdsp",
-            sched.camilladsp_policy + "/" + sched.camilladsp_priority,
-            sched.camilladsp_policy === "SCHED_FIFO" ? "c-green" : "c-red");
+            sched.graphmgr_policy + "/" + sched.graphmgr_priority,
+            sched.graphmgr_policy === "SCHED_FIFO" ? "c-green" : "c-red");
         // F-9 FIX: Graph state color-coding — green for running, red for anything else
         PiAudio.setText("sys-sched-graph", data.pipewire.graph_state,
             data.pipewire.graph_state === "running" ? "c-green" : "c-red");
@@ -364,7 +364,7 @@
         // Processes
         setProc("sys-proc-mixxx", data.processes.mixxx_cpu);
         setProc("sys-proc-reaper", data.processes.reaper_cpu);
-        setProc("sys-proc-camilladsp", data.processes.camilladsp_cpu);
+        setProc("sys-proc-camilladsp", data.processes.graphmgr_cpu);
         setProc("sys-proc-pipewire", data.processes.pipewire_cpu);
         setProc("sys-proc-labwc", data.processes.labwc_cpu);
     }
