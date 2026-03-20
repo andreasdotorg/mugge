@@ -5,19 +5,25 @@ audio hardware (PI_AUDIO_MOCK=1). Covers happy path, abort, reconnect,
 recovery, concurrent rejection, GraphManager failures, thermal ceiling,
 xrun injection, watchdog, mic disconnect, and GM mode verification.
 
+Section 14+ (T-2): Unit-level GM integration tests that exercise the session's
+internal GraphManager RPC interaction methods directly — without the HTTP
+stack. Covers mode switching, verification, restore-on-abort, and error paths.
+
 Run:
     cd src/web-ui
-    python -m pytest tests/test_measurement_e2e.py -v
+    python -m pytest tests/test_measurement_integration.py -v
 """
 
 import asyncio
 import json
 import time
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-from app.measurement.session import MeasurementSession, MeasurementState
+from app.measurement.session import (
+    MeasurementSession, MeasurementState, SessionConfig, ChannelConfig,
+)
 from app.mode_manager import DaemonMode
 
 
@@ -538,3 +544,408 @@ class TestFutureEndpoints:
         resp = client.get("/api/v1/measurement/sessions")
         assert resp.status_code == 200
         assert resp.json() == {"sessions": []}
+
+
+# ===========================================================================
+# T-2: Session-level GraphManager RPC integration tests
+# ===========================================================================
+#
+# These tests directly exercise the MeasurementSession's internal GM
+# interaction methods (_enter_measurement_mode, _verify_measurement_mode_active,
+# _restore_production_mode, _connect_gm, _cleanup) using mock GM clients.
+# No HTTP stack — the session is instantiated directly.
+#
+# The GraphManagerClient API methods tested:
+#   - enter_measurement_mode()  (calls set_mode("measurement"))
+#   - get_mode()                (returns current mode string)
+#   - verify_measurement_mode() (raises if mode != "measurement")
+#   - restore_production_mode() (calls set_mode("monitoring"))
+#   - get_state()               (returns {"mode": str, ...})
+#   - connect() / close()
+# ===========================================================================
+
+def _make_session(**overrides) -> MeasurementSession:
+    """Create a MeasurementSession with minimal config for unit tests."""
+    channels = overrides.pop("channels", [
+        ChannelConfig(index=0, name="Left"),
+    ])
+    config = SessionConfig(channels=channels, **overrides)
+    broadcast = overrides.get("ws_broadcast", AsyncMock())
+    return MeasurementSession(
+        config=config, ws_broadcast=broadcast)
+
+
+def _make_mock_gm(initial_mode: str = "monitoring"):
+    """Create a mock GM client that tracks mode changes."""
+    from graph_manager_client import MockGraphManagerClient
+    client = MockGraphManagerClient()
+    client._mode = initial_mode
+    client._connected = True
+    return client
+
+
+class TestGMEnterMeasurementMode:
+    """Session._enter_measurement_mode() calls GM and verifies mode switch."""
+
+    def test_enter_measurement_mode_sets_gm_to_measurement(self):
+        """After _enter_measurement_mode, GM should be in measurement mode."""
+        session = _make_session()
+        gm = _make_mock_gm()
+        session._gm_client = gm
+
+        asyncio.get_event_loop().run_until_complete(
+            session._enter_measurement_mode())
+
+        assert gm.get_mode() == "measurement"
+
+    def test_enter_measurement_mode_no_client_is_noop(self):
+        """If gm_client is None, _enter_measurement_mode does nothing."""
+        session = _make_session()
+        session._gm_client = None
+
+        # Should not raise.
+        asyncio.get_event_loop().run_until_complete(
+            session._enter_measurement_mode())
+
+    def test_enter_measurement_mode_verifies_mode_after_set(self):
+        """Session calls get_mode() after set_mode to verify the switch."""
+        from graph_manager_client import MockGraphManagerClient
+
+        call_log = []
+        original_set_mode = MockGraphManagerClient.set_mode
+        original_get_mode = MockGraphManagerClient.get_mode
+
+        def tracking_set_mode(self, mode):
+            call_log.append(("set_mode", mode))
+            original_set_mode(self, mode)
+
+        def tracking_get_mode(self):
+            call_log.append(("get_mode",))
+            return original_get_mode(self)
+
+        session = _make_session()
+        gm = _make_mock_gm()
+        session._gm_client = gm
+
+        with patch.object(MockGraphManagerClient, "set_mode", tracking_set_mode), \
+             patch.object(MockGraphManagerClient, "get_mode", tracking_get_mode):
+            asyncio.get_event_loop().run_until_complete(
+                session._enter_measurement_mode())
+
+        # set_mode("measurement") should be called first, then get_mode for verification.
+        assert call_log[0] == ("set_mode", "measurement")
+        assert ("get_mode",) in call_log
+
+    def test_enter_measurement_mode_wrong_mode_raises(self):
+        """If GM reports wrong mode after set_mode, RuntimeError is raised."""
+        from graph_manager_client import MockGraphManagerClient
+
+        def stubborn_set_mode(self, mode):
+            # Accept the call but stay in "monitoring" mode.
+            pass
+
+        session = _make_session()
+        gm = _make_mock_gm()
+        session._gm_client = gm
+
+        with patch.object(MockGraphManagerClient, "set_mode", stubborn_set_mode):
+            with pytest.raises(RuntimeError, match="did not enter measurement mode"):
+                asyncio.get_event_loop().run_until_complete(
+                    session._enter_measurement_mode())
+
+    def test_enter_measurement_mode_failure_restores_production(self):
+        """If enter_measurement_mode fails after set_mode, session tries to
+        restore production mode before re-raising."""
+        from graph_manager_client import MockGraphManagerClient
+
+        restore_called = []
+
+        def stubborn_set_mode(self, mode):
+            # Accept the call but stay in "monitoring" mode.
+            pass
+
+        original_restore = MockGraphManagerClient.restore_production_mode
+
+        def tracking_restore(self):
+            restore_called.append(True)
+            original_restore(self)
+
+        session = _make_session()
+        gm = _make_mock_gm()
+        session._gm_client = gm
+
+        with patch.object(MockGraphManagerClient, "set_mode", stubborn_set_mode), \
+             patch.object(MockGraphManagerClient, "restore_production_mode",
+                          tracking_restore):
+            with pytest.raises(RuntimeError):
+                asyncio.get_event_loop().run_until_complete(
+                    session._enter_measurement_mode())
+
+        assert len(restore_called) == 1
+
+
+class TestGMVerifyMeasurementMode:
+    """Session._verify_measurement_mode_active() during MEASURING phase."""
+
+    def test_verify_succeeds_in_measurement_mode(self):
+        """Verification passes when GM is in measurement mode."""
+        session = _make_session()
+        session._is_mock = False
+        gm = _make_mock_gm(initial_mode="measurement")
+        session._gm_client = gm
+
+        # Should not raise.
+        asyncio.get_event_loop().run_until_complete(
+            session._verify_measurement_mode_active())
+
+    def test_verify_raises_when_mode_wrong(self):
+        """Verification raises RuntimeError when GM is NOT in measurement mode."""
+        session = _make_session()
+        session._is_mock = False
+        gm = _make_mock_gm(initial_mode="monitoring")
+        session._gm_client = gm
+
+        with pytest.raises(RuntimeError, match="not in measurement mode"):
+            asyncio.get_event_loop().run_until_complete(
+                session._verify_measurement_mode_active())
+
+    def test_verify_skipped_in_mock_mode(self):
+        """In mock mode, verification is skipped entirely."""
+        session = _make_session()
+        session._is_mock = True
+        gm = _make_mock_gm(initial_mode="monitoring")  # wrong mode
+        session._gm_client = gm
+
+        # Should NOT raise even though mode is wrong.
+        asyncio.get_event_loop().run_until_complete(
+            session._verify_measurement_mode_active())
+
+    def test_verify_skipped_when_no_client(self):
+        """If gm_client is None, verification is skipped."""
+        session = _make_session()
+        session._is_mock = False
+        session._gm_client = None
+
+        # Should not raise.
+        asyncio.get_event_loop().run_until_complete(
+            session._verify_measurement_mode_active())
+
+
+class TestGMRestoreOnCleanup:
+    """Session._cleanup() always restores production mode."""
+
+    def test_cleanup_restores_production_mode(self):
+        """After cleanup, GM should be back in monitoring mode."""
+        session = _make_session()
+        gm = _make_mock_gm(initial_mode="measurement")
+        session._gm_client = gm
+
+        asyncio.get_event_loop().run_until_complete(session._cleanup())
+
+        assert gm.get_mode() == "monitoring"
+
+    def test_cleanup_disconnects_gm(self):
+        """After cleanup, gm_client should be None."""
+        session = _make_session()
+        gm = _make_mock_gm(initial_mode="measurement")
+        session._gm_client = gm
+
+        asyncio.get_event_loop().run_until_complete(session._cleanup())
+
+        assert session._gm_client is None
+
+    def test_cleanup_no_client_is_noop(self):
+        """Cleanup with no GM client does not raise."""
+        session = _make_session()
+        session._gm_client = None
+
+        # Should not raise.
+        asyncio.get_event_loop().run_until_complete(session._cleanup())
+
+    def test_cleanup_restore_failure_does_not_crash(self):
+        """If restore_production_mode fails, cleanup still completes."""
+        from graph_manager_client import MockGraphManagerClient
+
+        def failing_restore(self):
+            raise ConnectionError("GM connection lost during restore")
+
+        session = _make_session()
+        gm = _make_mock_gm(initial_mode="measurement")
+        session._gm_client = gm
+
+        with patch.object(MockGraphManagerClient, "restore_production_mode",
+                          failing_restore):
+            # Should not raise even though restore fails.
+            asyncio.get_event_loop().run_until_complete(session._cleanup())
+
+        # GM client should still be disconnected.
+        assert session._gm_client is None
+
+
+class TestGMRestoreOnAbort:
+    """Abort path triggers cleanup which restores production mode."""
+
+    def test_abort_restores_production_mode(self):
+        """When a session is aborted, cleanup restores GM to monitoring."""
+        session = _make_session()
+        gm = _make_mock_gm(initial_mode="measurement")
+        session._gm_client = gm
+
+        asyncio.get_event_loop().run_until_complete(
+            session._handle_abort("test abort"))
+        asyncio.get_event_loop().run_until_complete(session._cleanup())
+
+        assert gm.get_mode() == "monitoring"
+        assert session._gm_client is None
+
+    def test_abort_sets_state_to_aborted(self):
+        """After _handle_abort, session state should be ABORTED."""
+        session = _make_session()
+        # Transition to a state that allows ABORTED.
+        session._state = MeasurementState.SETUP
+
+        asyncio.get_event_loop().run_until_complete(
+            session._handle_abort("operator abort"))
+
+        assert session.state == MeasurementState.ABORTED
+
+
+class TestGMConnectGM:
+    """Session._connect_gm() connection logic."""
+
+    def test_connect_gm_mock_mode_creates_mock_client(self):
+        """In mock mode, _connect_gm creates a MockGraphManagerClient."""
+        session = _make_session()
+
+        asyncio.get_event_loop().run_until_complete(session._connect_gm())
+
+        assert session._gm_client is not None
+        assert session._is_mock is True
+        assert session._gm_client.is_connected
+
+    def test_connect_gm_mock_mode_client_tracks_mode(self):
+        """Mock client created by _connect_gm can track mode changes."""
+        session = _make_session()
+
+        asyncio.get_event_loop().run_until_complete(session._connect_gm())
+
+        session._gm_client.set_mode("measurement")
+        assert session._gm_client.get_mode() == "measurement"
+
+        session._gm_client.set_mode("monitoring")
+        assert session._gm_client.get_mode() == "monitoring"
+
+    def test_disconnect_gm_clears_client(self):
+        """After _disconnect_gm, gm_client is None."""
+        session = _make_session()
+        session._gm_client = _make_mock_gm()
+
+        asyncio.get_event_loop().run_until_complete(session._disconnect_gm())
+
+        assert session._gm_client is None
+
+
+class TestGMSetupPhaseIntegration:
+    """_run_setup() connects to GM and queries initial state."""
+
+    def test_setup_connects_gm_and_queries_state(self):
+        """_run_setup transitions to SETUP, connects GM, and queries state."""
+        from graph_manager_client import MockGraphManagerClient
+
+        state_queries = []
+        original_get_state = MockGraphManagerClient.get_state
+
+        def tracking_get_state(self):
+            state_queries.append(True)
+            return original_get_state(self)
+
+        session = _make_session()
+
+        with patch.object(MockGraphManagerClient, "get_state",
+                          tracking_get_state):
+            asyncio.get_event_loop().run_until_complete(session._run_setup())
+
+        assert session.state == MeasurementState.SETUP
+        assert session._gm_client is not None
+        assert len(state_queries) == 1
+
+    def test_setup_state_check_failure_does_not_crash(self):
+        """If GM state check fails during setup, session logs and continues."""
+        from graph_manager_client import MockGraphManagerClient
+
+        def failing_get_state(self):
+            raise ConnectionError("GM state check failed")
+
+        session = _make_session()
+
+        with patch.object(MockGraphManagerClient, "get_state",
+                          failing_get_state):
+            # Should not raise.
+            asyncio.get_event_loop().run_until_complete(session._run_setup())
+
+        assert session.state == MeasurementState.SETUP
+        assert session._gm_client is not None
+
+
+class TestGMFullSessionLifecycle:
+    """Full session lifecycle verifying GM mode transitions end-to-end.
+
+    Uses the REST API (client fixture) to run a complete measurement and
+    verify GM mode was switched to measurement and restored to monitoring.
+    """
+
+    def test_gm_mode_transitions_during_happy_path(self, client):
+        """Track GM mode changes through a complete measurement session."""
+        from graph_manager_client import MockGraphManagerClient
+
+        mode_log = []
+        original_set_mode = MockGraphManagerClient.set_mode
+
+        def logging_set_mode(self, mode):
+            mode_log.append(mode)
+            original_set_mode(self, mode)
+
+        with patch.object(MockGraphManagerClient, "set_mode",
+                          logging_set_mode):
+            resp = client.post("/api/v1/measurement/start",
+                               json=DEFAULT_START_BODY)
+            assert resp.status_code == 200
+            _wait_for_session_done(client, timeout_s=120.0)
+
+        # Session should have: measurement (enter) -> monitoring (restore).
+        assert "measurement" in mode_log
+        assert mode_log[-1] == "monitoring"
+
+    def test_gm_mode_transitions_during_abort(self, client):
+        """Aborted session should restore GM to monitoring mode."""
+        from graph_manager_client import MockGraphManagerClient
+
+        mode_log = []
+        original_set_mode = MockGraphManagerClient.set_mode
+
+        def logging_set_mode(self, mode):
+            mode_log.append(mode)
+            original_set_mode(self, mode)
+
+        async def slow_gain_cal(self):
+            self._transition(MeasurementState.GAIN_CAL)
+            await self._broadcast_state()
+            for _ in range(50):
+                self._watchdog.kick()
+                self._check_abort("CP-2")
+                await asyncio.sleep(0.1)
+
+        with patch.object(MockGraphManagerClient, "set_mode",
+                          logging_set_mode), \
+             patch.object(MeasurementSession, "_run_gain_cal",
+                          slow_gain_cal):
+            resp = client.post("/api/v1/measurement/start",
+                               json=DEFAULT_START_BODY)
+            assert resp.status_code == 200
+
+            time.sleep(0.5)
+            client.post("/api/v1/measurement/abort")
+            _wait_for_session_done(client, timeout_s=30.0)
+
+        # Last mode set should be "monitoring" (restore).
+        assert mode_log[-1] == "monitoring"
