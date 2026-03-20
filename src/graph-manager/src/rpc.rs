@@ -288,6 +288,13 @@ pub enum GraphEvent {
         input_port: String,
         reason: String,
     },
+    #[serde(rename = "link_destroyed")]
+    LinkDestroyed {
+        output_node: String,
+        output_port: String,
+        input_node: String,
+        input_port: String,
+    },
     #[serde(rename = "device_connected")]
     DeviceConnected { name: String },
     #[serde(rename = "device_disconnected")]
@@ -1236,6 +1243,22 @@ mod tests {
         assert_eq!(v["type"], "event");
         assert_eq!(v["event"], "link_failed");
         assert_eq!(v["reason"], "port not found");
+    }
+
+    #[test]
+    fn event_link_destroyed_serializes() {
+        let event = GraphEvent::LinkDestroyed {
+            output_node: "Mixxx".to_string(),
+            output_port: "out_0".to_string(),
+            input_node: "alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0".to_string(),
+            input_port: "playback_AUX0".to_string(),
+        };
+        let json = format_event(&event);
+        let v: Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["type"], "event");
+        assert_eq!(v["event"], "link_destroyed");
+        assert_eq!(v["output_node"], "Mixxx");
+        assert_eq!(v["input_port"], "playback_AUX0");
     }
 
     #[test]

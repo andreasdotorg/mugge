@@ -41,17 +41,65 @@ use crate::reconcile::{self, LinkAction};
 use crate::routing::{Mode, RoutingTable};
 use crate::rpc::GraphEvent;
 
+/// Lightweight handle to call `destroy_global()` on the PW registry.
+///
+/// The PipeWire `Registry` type is not `Clone`, so we cannot share it
+/// between closures directly. This wrapper stores the raw pointer and
+/// provides a safe-ish `destroy_global()` method. It is only used on the
+/// PW main loop thread (single-threaded), and the pointer is valid for
+/// the lifetime of the registry (which outlives all closures).
+#[derive(Clone)]
+pub struct RegistryHandle {
+    ptr: std::ptr::NonNull<pw_sys::pw_registry>,
+}
+
+impl RegistryHandle {
+    /// Create a handle from a `Registry` reference.
+    ///
+    /// # Safety
+    /// The caller must ensure the `Registry` outlives all uses of this handle.
+    fn from_registry(registry: &pipewire::registry::Registry) -> Self {
+        // Registry stores a NonNull<pw_sys::pw_registry>. We access the
+        // raw pointer via the same pattern used for Core in main.rs.
+        // Registry::as_ptr() is private, so we cast through the struct layout.
+        // Safety: Registry is #[repr(Rust)] but its only field is
+        // NonNull<pw_sys::pw_registry>, so transmuting &Registry to get
+        // the pointer is sound on the same thread.
+        let ptr = unsafe {
+            let reg_ptr: *const pipewire::registry::Registry = registry;
+            let nn: std::ptr::NonNull<pw_sys::pw_registry> =
+                std::ptr::read(reg_ptr as *const std::ptr::NonNull<pw_sys::pw_registry>);
+            nn
+        };
+        Self { ptr }
+    }
+
+    /// Destroy a global object by ID via the PipeWire registry.
+    pub fn destroy_global(&self, global_id: u32) {
+        unsafe {
+            spa::spa_interface_call_method!(
+                self.ptr.as_ptr(),
+                pw_sys::pw_registry_methods,
+                destroy,
+                global_id
+            );
+        }
+    }
+}
+
 /// Apply reconciliation link actions to the PW graph.
 ///
 /// For `Create`: creates a PW link via `core.create_object()` and stores
 /// the proxy in `link_proxies` (keyed by port pair) to keep it alive.
-/// For `Destroy`: destroys the PW link via `registry.destroy_global()`.
+/// For `Destroy`: removes our proxy (if we created the link) and calls
+/// `registry.destroy_global()` to destroy the link in PipeWire (GM-7).
 ///
-/// Emits `GraphEvent::LinkCreated` / `GraphEvent::LinkFailed` for each
-/// create action.
+/// Emits `GraphEvent::LinkCreated` / `GraphEvent::LinkDestroyed` /
+/// `GraphEvent::LinkFailed` for each action.
 pub fn apply_actions(
     actions: &[LinkAction],
     core: &pipewire::core::CoreRef,
+    registry: &RegistryHandle,
     graph: &GraphState,
     event_tx: &mpsc::Sender<GraphEvent>,
     link_proxies: &Rc<RefCell<HashMap<(u32, u32), pipewire::link::Link>>>,
@@ -159,30 +207,64 @@ pub fn apply_actions(
             }
             LinkAction::Destroy { link_id, description } => {
                 log::info!("  DESTROY id={}: {}", link_id, description);
-                // Remove the proxy from our tracked set. When the proxy
-                // drops, PW will destroy the link. We also call
-                // destroy_global for links we didn't create (pre-existing).
-                let mut proxies = link_proxies.borrow_mut();
-                // Find and remove proxy by link_id — we need to scan
-                // since our key is (output_port, input_port), not link_id.
-                // The registry will notify us via global_remove when it
-                // actually goes away.
-                proxies.retain(|_, _| true); // Placeholder: real proxy
-                // lookup by link_id requires GraphState to map link_id
-                // to port pair. For now, destroy via global_remove.
-                drop(proxies);
 
-                // Destroy via registry. This works for any link by global ID.
-                // Note: requires the registry reference — we'll use the core
-                // to get a fresh registry destroy. Actually, PipeWire's
-                // Registry::destroy_global needs the registry object.
-                // For now, log the intent — the registry destroy_global
-                // integration requires passing the Registry into apply_actions.
-                // TODO (GM-7): Wire Registry into apply_actions for destroy.
-                log::warn!(
-                    "  DESTROY: link id={} logged but not yet removed (requires Registry ref)",
-                    link_id,
-                );
+                // Resolve names for the event BEFORE removing anything.
+                let (out_name, out_port_name, in_name, in_port_name) =
+                    if let Some(link) = graph.link(*link_id) {
+                        let on = graph
+                            .node(link.output_node)
+                            .map(|n| n.name.clone())
+                            .unwrap_or_else(|| link.output_node.to_string());
+                        let op = graph
+                            .port(link.output_port)
+                            .map(|p| p.name.clone())
+                            .unwrap_or_else(|| link.output_port.to_string());
+                        let in_ = graph
+                            .node(link.input_node)
+                            .map(|n| n.name.clone())
+                            .unwrap_or_else(|| link.input_node.to_string());
+                        let ip = graph
+                            .port(link.input_port)
+                            .map(|p| p.name.clone())
+                            .unwrap_or_else(|| link.input_port.to_string());
+                        (on, op, in_, ip)
+                    } else {
+                        (
+                            link_id.to_string(),
+                            "?".to_string(),
+                            "?".to_string(),
+                            "?".to_string(),
+                        )
+                    };
+
+                // Remove our proxy if we created this link. Look up the
+                // link in GraphState to find its port pair (our proxy key).
+                if let Some(link) = graph.link(*link_id) {
+                    let key = (link.output_port, link.input_port);
+                    let removed = link_proxies.borrow_mut().remove(&key);
+                    if removed.is_some() {
+                        log::info!(
+                            "  Proxy dropped for link id={} ({}:{} -> {}:{})",
+                            link_id,
+                            link.output_node, link.output_port,
+                            link.input_node, link.input_port,
+                        );
+                    }
+                }
+
+                // Destroy the link in PipeWire via the registry. This
+                // works for any link (ours or pre-existing/foreign).
+                // PipeWire will emit a global_remove event when the link
+                // is actually destroyed, which updates our GraphState.
+                registry.destroy_global(*link_id);
+                log::info!("  Link destroyed via registry: id={}", link_id);
+
+                let _ = event_tx.send(GraphEvent::LinkDestroyed {
+                    output_node: out_name,
+                    output_port: out_port_name,
+                    input_node: in_name,
+                    input_port: in_port_name,
+                });
             }
         }
     }
@@ -200,12 +282,13 @@ fn run_reconcile(
     table: &RoutingTable,
     mode: Mode,
     core: &pipewire::core::CoreRef,
+    registry: &RegistryHandle,
     event_tx: &mpsc::Sender<GraphEvent>,
     link_proxies: &Rc<RefCell<HashMap<(u32, u32), pipewire::link::Link>>>,
     component_registry: &Rc<RefCell<ComponentRegistry>>,
 ) {
     let actions = reconcile::reconcile(graph, table, mode);
-    apply_actions(&actions, core, graph, event_tx, link_proxies);
+    apply_actions(&actions, core, registry, graph, event_tx, link_proxies);
 
     // Update component health from the current graph state.
     let transitions = component_registry.borrow_mut().update(graph);
@@ -249,10 +332,16 @@ pub fn register_graph_listener(
     event_tx: mpsc::Sender<GraphEvent>,
     link_proxies: Rc<RefCell<HashMap<(u32, u32), pipewire::link::Link>>>,
     component_registry: Rc<RefCell<ComponentRegistry>>,
-) -> (pipewire::registry::Registry, Box<dyn std::any::Any>) {
+) -> (pipewire::registry::Registry, Box<dyn std::any::Any>, RegistryHandle) {
     let registry = core
         .get_registry()
         .expect("Failed to get PipeWire registry");
+
+    // Create a lightweight handle for destroy_global() calls inside closures.
+    // Safety: the Registry object is returned from this function and kept
+    // alive for the duration of the PW main loop. The handle is only used
+    // on the PW main loop thread (single-threaded).
+    let reg_handle = RegistryHandle::from_registry(&registry);
 
     // Re-entrancy guard: prevents reconciliation from firing when the
     // registry delivers events for links that we just created/destroyed.
@@ -266,6 +355,8 @@ pub fn register_graph_listener(
     // same PW main loop thread. No WeakCore needed.
     let core_add = core.clone();
     let core_remove = core.clone();
+    let reg_handle_add = reg_handle.clone();
+    let reg_handle_remove = reg_handle.clone();
     let graph_add = graph.clone();
     let table_add = table.clone();
     let mode_add = mode.clone();
@@ -389,6 +480,7 @@ pub fn register_graph_listener(
                     &table_add,
                     current_mode,
                     &core_add,
+                    &reg_handle_add,
                     &event_tx_add,
                     &link_proxies_add,
                     &comp_reg_add,
@@ -424,6 +516,7 @@ pub fn register_graph_listener(
                     &table_remove,
                     current_mode,
                     &core_remove,
+                    &reg_handle_remove,
                     &event_tx_remove,
                     &link_proxies_remove,
                     &comp_reg_remove,
@@ -433,5 +526,5 @@ pub fn register_graph_listener(
         })
         .register();
 
-    (registry, Box::new(listener))
+    (registry, Box::new(listener), reg_handle)
 }

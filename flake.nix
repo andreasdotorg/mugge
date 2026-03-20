@@ -171,6 +171,20 @@
             "-isystem ${pkgs.glibc.dev}/include"
           ];
         };
+
+        graph-manager = pkgs.rustPlatform.buildRustPackage {
+          pname = "pi4audio-graph-manager";
+          version = "0.1.0";
+          src = ./src/graph-manager;
+          cargoLock.lockFile = ./src/graph-manager/Cargo.lock;
+          nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
+          buildInputs = [ pkgs.pipewire ];
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          BINDGEN_EXTRA_CLANG_ARGS = builtins.toString [
+            "-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include"
+            "-isystem ${pkgs.glibc.dev}/include"
+          ];
+        };
       in
       {
         packages = {
@@ -188,6 +202,9 @@
 
           # RT signal generator for measurement and test tooling (D-037).
           inherit signal-gen;
+
+          # PipeWire graph manager — session manager for link topology (GM-7).
+          inherit graph-manager;
 
           # Default package for `nix run .#` on Linux
           default = mixxx-wrapped;

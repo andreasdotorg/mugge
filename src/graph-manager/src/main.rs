@@ -174,7 +174,7 @@ fn run_pipewire(
     // After every graph state change, reconciliation runs automatically
     // and component health is re-evaluated.
     // Pass core, event_tx, link_proxies, and component_registry.
-    let (_registry, _registry_listener) =
+    let (_registry, _registry_listener, reg_handle) =
         registry::register_graph_listener(
             &core,
             graph.clone(),
@@ -230,6 +230,7 @@ fn run_pipewire(
         let event_tx = event_tx.clone();
         let link_proxies = link_proxies.clone();
         let component_registry = component_registry.clone();
+        let reg_handle = reg_handle.clone();
         move |_expirations| {
             // Drain all pending commands.
             while let Ok(cmd) = cmd_rx.try_recv() {
@@ -247,6 +248,7 @@ fn run_pipewire(
                     &event_tx,
                     &link_proxies,
                     core_ref,
+                    &reg_handle,
                     &component_registry,
                 );
             }
@@ -294,6 +296,7 @@ fn dispatch_rpc_command(
     event_tx: &std::sync::mpsc::Sender<rpc::GraphEvent>,
     link_proxies: &std::rc::Rc<std::cell::RefCell<std::collections::HashMap<(u32, u32), pipewire::link::Link>>>,
     core_ref: &pipewire::core::CoreRef,
+    reg_handle: &registry::RegistryHandle,
     component_registry: &std::rc::Rc<std::cell::RefCell<lifecycle::ComponentRegistry>>,
 ) {
     use rpc::{DeviceStatus, GraphEvent, LinkSnapshot, RpcResult};
@@ -319,6 +322,7 @@ fn dispatch_rpc_command(
             registry::apply_actions(
                 &actions,
                 core_ref,
+                reg_handle,
                 &g,
                 event_tx,
                 link_proxies,
