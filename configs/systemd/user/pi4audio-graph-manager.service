@@ -1,0 +1,45 @@
+[Unit]
+Description=PipeWire Graph Manager — sole session manager for link topology
+# WirePlumber must start first to activate adapter node ports (hardware.audio
+# + policy.node profiles). GM depends on ports being present before it can
+# create links. WP's auto-linking policies are disabled via
+# 90-no-auto-link.conf — it only activates ports, GM handles all linking.
+After=pipewire.service wireplumber.service
+Requires=pipewire.service
+Wants=wireplumber.service
+
+[Service]
+Type=simple
+ExecStart=%h/bin/pi4audio-graph-manager --mode dj --log-level info
+Restart=on-failure
+RestartSec=3
+
+# RT scheduling: inherited from PipeWire.
+# GM uses the PW main loop thread for registry events and link management.
+# PipeWire's data thread callbacks run at SCHED_FIFO/88 on this system.
+# The GM binary itself runs at normal priority — only PW callbacks are RT.
+
+# Prevent OOM killer from targeting the session manager during audio
+OOMScoreAdjust=-500
+
+# Resource limits for PipeWire clients
+LimitMEMLOCK=infinity
+LimitRTPRIO=88
+
+# Security hardening (follows SEC-D037-02 pattern from signal-gen)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=default.target
