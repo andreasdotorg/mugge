@@ -1456,10 +1456,10 @@ refactoring that changed element IDs and removed DOM elements), US-051 (status b
 
 ---
 
-## F-040: Panic MUTE/UNMUTE backend endpoints missing — button silently fails (IN PROGRESS)
+## F-040: Panic MUTE/UNMUTE backend endpoints missing — button silently fails (RESOLVED)
 
 **Severity:** High (safety-related — panic mute button silently fails)
-**Status:** In progress (backend `audio_mute.py` + frontend error handling implemented by worker-3, UNCOMMITTED — blocks other workers)
+**Status:** Resolved (committed `4c80c23` 2026-03-21). Backend `audio_mute.py` + `pw_helpers.py` + frontend error handling. US-065 (`965f501`) and US-064 (`23a57c1`) committed on top.
 **Found in:** Status bar v2 review (2026-03-21)
 **Affects:** US-051 (persistent status bar), all web UI views (global consumer)
 **Found by:** Architect (status bar v2 review)

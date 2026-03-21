@@ -69,8 +69,8 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-059 | done | **14/14** | **done** (owner-accepted 2026-03-21). GraphManager Core + Production Filter-Chain (Phase A). Clean reboot demo PASS (S-004, 17/17 checks). Pi boots into working DJ mode on pure PW filter-chain pipeline (D-040/D-043). Follow-ups: F-033, I-1 CI wiring, spectral verification (AC 3141), D-042 lifting. |
 | US-060 | VERIFY | 3/7 | **VERIFY PASS** (S-002 2026-03-21). FilterChainCollector running, GM RPC working, 0 xruns. `56ef3f0` LevelsCollector adds PW-native level data for meters. DoD #1 (collectors replaced) advancing. Known gaps: AC #3 (processing load, F-039), AC #7 (xrun counter from PW metadata, needs US-063). |
 | US-061 | VERIFY | 1/8 | **VERIFY PASS** (S-002 2026-03-21). Client files deployed, imports OK on Pi. Known gaps resolved: deploy.py path fixed (`3dcccc2`), measure_nearfield.py pycamilladsp removed (`d368c76`). |
-| US-064 | IMPLEMENT | 3/8 | **in progress** (worker-4). `graph.js` view module implemented (#2), SVG layout working (#3), mock mode rendering (#6). **Blocked:** 600px responsive bug needs fix before UX review (#8). Remaining: GM RPC extension (#1), unit tests (#4), E2E test (#5), architect review (#7), UX review (#8). |
-| US-065 | IMPLEMENT | 5/10 | **code complete** (worker-1). Config Tab: `config.js` + `config_routes.py` + CSS + mock data + `main.py` router. Blocks: F-040 `audio_mute.py` uncommitted (shared `pw_helpers.py`), UX screenshot gate (#7). Remaining: E2E test (#6), Pi integration test (#8), architect sign-off (#9), safety review (#10). |
+| US-064 | IMPLEMENT | 3/8 | **committed** (`23a57c1`). `graph.js` view module (#2), SVG layout (#3), mock mode (#6). Remaining: GM RPC extension (#1), unit tests (#4), E2E test (#5), architect review (#7), UX review (#8, 600px responsive fix needed first). |
+| US-065 | IMPLEMENT | 5/10 | **committed** (`965f501`). Config Tab: `config.js` + `config_routes.py` + CSS + mock data + `main.py` router. Remaining: E2E test (#6), UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10). |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -91,9 +91,9 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **US-050** (Phase: **TEST, DoD 6/6** — advanced 2026-03-21): Measurement Pipeline Mock Backend. QE test plan delivered: T-050-1 (CI regression), T-050-2 (E2E harness on Linux+PW), T-050-3 (D-040 inspection), T-050-4 (AC coverage). QE will review T-050-3/4 on commit. T-050-1/2: worker evidence from implementation may suffice. Stale AC (line 2718 "Real CamillaDSP") flagged as doc cleanup. CM committing code.
 - **US-051** (Phase: **TEST, DoD 4/4** — advanced 2026-03-21): Persistent System Status Bar. QE test plan delivered: T-051-1 (Playwright E2E, 20+ tests in `test_status_bar.py`), T-051-2 (CI regression), T-051-3 (D-040 inspection — QE reviewing), T-051-4 (Pi hardware — deferred to VERIFY per QE recommendation). TP-003 protocol exists. Committed `8975b5b`. T-051-1/2 need worker execution.
 - **US-053** (Phase: **IMPLEMENT, DoD 4/6** — code complete 2026-03-21): Manual Test Tool Page. Code committed (`94103c3`): 7 UX spec fixes, signal-gen env var. Remaining DoD: #3 integration test (Pi), #4 hot-plug test (Pi), #5 AD sign-off (safety controls), #6 AE sign-off (signal quality). All remaining items need Pi access.
-- **US-065** (Phase: **IMPLEMENT, DoD 5/10** — code complete 2026-03-21): Configuration Tab. `config.js` view module, `config_routes.py` backend, CSS, mock data, `main.py` router all implemented (worker-1). **Blocked:** F-040 `audio_mute.py` uncommitted (shares `pw_helpers.py` — both must commit together). Remaining DoD: E2E test (#6), UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10).
-- **US-064** (Phase: **IMPLEMENT, DoD 3/8** — worker-4): PW Graph Visualization Tab. `graph.js` + CSS + HTML tab implemented. SVG layout working for production topology. Mock mode renders representative graph. **Blocked:** 600px responsive layout bug needs fix before UX specialist can review screenshot. F-040 commit also needed (shared index.html changes). Remaining: GM RPC port info extension (Rust, ~20 lines), unit tests, E2E test, architect review, UX review.
-- **F-040** (Phase: **code complete, UNCOMMITTED** — worker-3): Panic MUTE/UNMUTE backend (`audio_mute.py`) + frontend error handling (`statusbar.js`). Shares `pw_helpers.py` with US-065. **BLOCKING:** US-065 and US-064 commits depend on F-040 being committed first. Needs CM commit.
+- **US-065** (Phase: **IMPLEMENT, DoD 5/10** — committed `965f501` 2026-03-21): Configuration Tab. `config.js` view module, `config_routes.py` backend, CSS, mock data, `main.py` router. Committed with F-040 dependency resolved (`4c80c23`). Remaining DoD: E2E test (#6), UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10).
+- **US-064** (Phase: **IMPLEMENT, DoD 3/8** — committed `23a57c1` 2026-03-21): PW Graph Visualization Tab. `graph.js` + CSS + HTML tab implemented. SVG layout working for production topology. Mock mode renders representative graph. 600px responsive layout bug needs fix before UX review. Remaining: GM RPC port info extension (Rust, ~20 lines), unit tests, E2E test, architect review, UX review.
+- **F-040** (**RESOLVED** — committed `4c80c23` 2026-03-21): Panic MUTE/UNMUTE backend (`audio_mute.py` + `pw_helpers.py`). US-065 and US-064 commits followed (`965f501`, `23a57c1`). No longer blocking.
 - **F-041** (**RESOLVED, pending verification** — `3a1e6bb` + `c76b882`): Mock server crash fix. Health-check + stderr capture in conftest.py. Additional fix `c76b882`: subprocess.PIPE replaced with tempfile (deadlock prevention). **E2E verification run needed before proceeding with implementation work.**
 - **F-042** (**RESOLVED** — `3a1e6bb`, worker-2): 5 E2E assertion fixes. Stale selectors updated, timing adjusted.
 - **Rule 13 retrospective** (2026-03-20): 12 code commits (`ff40766`..`3a6fabb`) committed without pre-approval. Architect: **12/12 APPROVED.** AE: **4/4 APPROVED.** AD: no blockers. TW: documentation in progress. All high/medium items resolved. **Resolved items:**
@@ -122,12 +122,12 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - US-004, US-000a: moved to **done** (owner-accepted)
 - F-038 defect filed + code fix implemented (8 files, dashboard duplicate status bar consolidated)
 - F-039 defect filed (DSP load gauge 0%, FilterChainCollector hardcodes processing_load)
-- F-040 defect filed + **backend + frontend implemented** (worker-3): `audio_mute.py`, `pw_helpers.py`, `statusbar.js` error handling. **UNCOMMITTED — blocking US-065 and US-064.**
+- F-040 defect filed + **RESOLVED** (worker-3): `audio_mute.py`, `pw_helpers.py`, `statusbar.js` error handling. Committed `4c80c23`.
 - F-041 defect filed + **RESOLVED** (`3a1e6bb`, worker-2): mock server crash fix
 - F-042 defect filed + **RESOLVED** (`3a1e6bb`, worker-2): 5 E2E test assertion fixes
 - US-060: `56ef3f0` LevelsCollector, `2217bd2` port fix — DoD 2/7 -> 3/7
-- US-064: `graph.js` view module implemented (worker-4), SVG layout working, mock mode. DoD 0/8 -> 3/8. **Blocked:** 600px responsive bug.
-- US-065: **code complete** (worker-1): `config.js`, `config_routes.py`, CSS, mock data, `main.py` router. DoD 0/10 -> 5/10. **Blocked:** F-040 uncommitted (shared `pw_helpers.py`).
+- US-064: `graph.js` view module implemented (worker-4), SVG layout working, mock mode. DoD 0/8 -> 3/8. Committed `23a57c1`. 600px responsive bug still needs fix.
+- US-065: **code complete** (worker-1): `config.js`, `config_routes.py`, CSS, mock data, `main.py` router. DoD 0/10 -> 5/10. Committed `965f501`.
 - UX visual verification gate: added to global DoD section, US-051 and US-053 DoD items updated
 - E2E test fixes committed (`3a1e6bb`, `bba1493`): 7 fixes total. Full suite green not yet confirmed — verification run needed next session
 - F-043, F-044, F-045 defects filed (all Low, owner UI review): GM SCHED_OTHER color, "Links 100" label, "Mode"/"GM Mode" duplicate
@@ -143,32 +143,38 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - `2217bd2` — Port fix for LevelsCollector (US-060)
 - `3a1e6bb` — E2E test fixes: conftest.py health-check + stderr capture, test assertion fixes (F-041/F-042)
 - `bba1493` — E2E reliability + pcm-bridge config (commit #24)
-- F-040 audio_mute.py + pw_helpers.py + statusbar.js — **UNCOMMITTED** (worker-3, blocking)
+- `4c80c23` — F-040 audio_mute.py + pw_helpers.py (MUTE/UNMUTE backend)
+- `23a57c1` — US-064 graph.js PW graph visualization tab
+- `965f501` — US-065 config.js + config_routes.py Config tab
 
 **Worker state at session close (machine handoff preparation):**
 
 | Worker | Assignment | State | Blocker |
 |--------|-----------|-------|---------|
-| worker-1 | US-065 Config tab | Code complete, all files written | F-040 uncommitted (shared `pw_helpers.py`) + UX screenshot gate |
+| worker-1 | US-065 Config tab | **Committed** `965f501` | UX screenshot gate + remaining DoD items |
 | worker-2 | F-041/F-042 E2E fixes | **Done**, committed `3a1e6bb` | Available for new work |
-| worker-3 | F-040 MUTE/UNMUTE | Code complete, **UNCOMMITTED** | Needs CM commit — **CRITICAL BLOCKER** for US-064 and US-065 |
-| worker-4 | US-064 Graph viz | Implementation in progress | 600px responsive bug needs fix before UX review |
+| worker-3 | F-040 MUTE/UNMUTE | **Committed** `4c80c23` | Available for new work |
+| worker-4 | US-064 Graph viz | **Committed** `23a57c1` | 600px responsive bug needs fix before UX review |
 | worker-5 | pcm-bridge nix build | **INCOMPLETE** — nix build started on Pi (S-022), outcome unknown. Worker unresponsive. Session released. | Next session: check build result, deploy binary + env, start service, verify port 9100 |
 | worker-6 | linux-builder for Pi | **Done** — Pi configured to use Mac as remote nix builder (adjacent session) | Available |
 
-**Critical path for next session:**
-1. **FIRST:** Commit F-040 (worker-3's `audio_mute.py` + `pw_helpers.py` + `statusbar.js`) — this unblocks US-065 and US-064 commits
-2. Commit US-065 Config tab (worker-1, blocked on F-040)
-3. Fix US-064 600px responsive bug (worker-4), then UX screenshot review
-4. pcm-bridge deploy (S-022 follow-up): check nix build result on Pi, deploy binary + `monitor.env`, start service, verify port 9100
-5. E2E verification run: confirm full suite green after `3a1e6bb` + `bba1493` fixes
-6. US-060 DoD advancement: processing load (F-039) needs US-063 pw-top parsing
+**Critical path for next session (updated 2026-03-21 — F-040/US-065/US-064 now committed):**
+1. ~~Commit F-040~~ DONE (`4c80c23`). ~~Commit US-065~~ DONE (`965f501`). ~~Commit US-064~~ DONE (`23a57c1`).
+2. **FIRST:** E2E verification run — confirm full suite green after F-041 fix (`c76b882`)
+3. Fix US-064 600px responsive bug, then UX screenshot review
+4. Write E2E tests for US-064 and US-065 (new DoD items)
+5. F-046 quantum confirmation dialog (HIGH, safety-relevant)
+6. US-050/US-051 TEST phase execution (run QE test plans)
+7. Pi VERIFY sessions: US-053 integration/hot-plug, US-065/US-064 Pi tests, pcm-bridge S-022 follow-up
+8. US-060 DoD advancement: processing load (F-039) needs US-063 pw-top parsing
 
-**Open at session close:**
-- F-040 `audio_mute.py` UNCOMMITTED — critical blocker for US-065 and US-064
+**Open at session close (updated 2026-03-21 — F-040/US-065/US-064 committed):**
+- ~~F-040 UNCOMMITTED~~ RESOLVED (`4c80c23`). US-065 (`965f501`) and US-064 (`23a57c1`) also committed.
 - US-064 600px responsive bug — blocks UX review
+- F-046 quantum confirmation dialog (HIGH) — needs implementation
+- F-047 keyboard focus indicators (LOW) — needs implementation
 - pcm-bridge S-022: build started on Pi, outcome unknown. `monitor.env` committed locally, NOT deployed
-- E2E suite: 7 fixes committed, full green not confirmed
+- E2E suite: 7 fixes committed + F-041 deadlock fix (`c76b882`), full green not confirmed
 - F-043, F-044, F-045, ENH-001: all Low, filed, none assigned
 - 44 decisions, 68 stories
 - Rule 13: 4 low-priority TODOs remaining
@@ -402,7 +408,7 @@ See `docs/project/defects.md` for full details.
 | F-037 | High | Open | Web UI on port 8080 has no authentication. Signal generator controllable by unauthenticated network clients. Tracked for venue deployment, not blocking current work. |
 | F-038 | Medium | In progress | Dashboard duplicate status bar: code fix implemented (8 files), PM approved Rule 13. Awaiting UX + architect approvals for CM commit. |
 | F-039 | Medium | Open | DSP load gauge shows 0% — FilterChainCollector hardcodes processing_load. Needs pw-top BUSY parsing (US-060 AC #3). |
-| F-040 | High | In progress | Panic MUTE/UNMUTE: backend `audio_mute.py` + frontend error handling implemented (worker-3). **UNCOMMITTED** — blocks US-065 and US-064 commits (shared `pw_helpers.py`). |
+| F-040 | High | Resolved | Panic MUTE/UNMUTE: backend `audio_mute.py` + `pw_helpers.py` committed (`4c80c23`). US-065 (`965f501`) and US-064 (`23a57c1`) committed on top. |
 | F-041 | High | Resolved (pending verification) | Mock server crash: `3a1e6bb` health-check + `c76b882` PIPE deadlock fix. **E2E verification run needed.** |
 | F-042 | Medium | Resolved | 5 E2E assertion failures: test fixes committed (`3a1e6bb`, worker-2). Stale selectors + timing adjustments. |
 | F-043 | Low | Open | GM SCHED_OTHER shown red in System tab — GM is control plane, SCHED_OTHER is correct. `system.js:387` color logic. |
@@ -429,6 +435,7 @@ See `docs/project/defects.md` for full details.
 | F-028 | High | Resolved | ALSA period-size mismatch in loopback (`b06d0e5`) |
 | F-029 | Medium | Resolved | Level bar RMS vs Peak alignment (`d742fdf`) |
 | F-032 | High | Resolved | SEC-GM-01: `parse_listen_addr()` loopback enforcement + 8 unit tests (`main.rs:87-106`) |
+| F-040 | High | Resolved | Panic MUTE/UNMUTE backend: `audio_mute.py` + `pw_helpers.py` (`4c80c23`). Unblocked US-065 and US-064 commits. |
 
 ## External Dependencies
 
