@@ -58,6 +58,7 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 MOCK_MODE = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
+PCM_JACK_MODE = os.environ.get("PI4AUDIO_PCM_JACK", "") == "1"
 
 
 # -- Systemd watchdog (D-036 / WP-G) ---------------------------------------
@@ -126,8 +127,11 @@ async def lifespan(app: FastAPI):
         )
         app.state.cdsp = FilterChainCollector()
         await app.state.cdsp.start()
-        app.state.pcm = PcmStreamCollector()
-        await app.state.pcm.start()
+        if PCM_JACK_MODE:
+            app.state.pcm = PcmStreamCollector()
+            await app.state.pcm.start()
+        else:
+            log.info("PcmStreamCollector skipped (PI4AUDIO_PCM_JACK != 1)")
         app.state.system_collector = SystemCollector()
         await app.state.system_collector.start()
         app.state.pw = PipeWireCollector()
