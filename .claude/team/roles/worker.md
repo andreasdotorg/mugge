@@ -142,6 +142,32 @@ the agent system works — messages queue in inboxes.
 5. **One message to other agents, then wait.** If you message the CM or
    an advisor and don't hear back, they're busy — not ignoring you. Send
    one message and continue with other work while you wait.
+6. **Close the loop before going idle.** If someone asked you to do
+   something, you MUST message them with the outcome (success, failure,
+   blocked) before you stop working. An idle notification is NOT a status
+   report — it tells the requester nothing.
+
+## Context Compaction Recovery
+
+When your context is compacted (conversation history is summarized to free
+space), you lose awareness of your role, rules, current task, and protocol.
+
+**Your compaction summary MUST include:**
+1. Your role name and team name
+2. Where to find your role prompt: project `.claude/team/roles/worker.md`,
+   fallback `~/mobile/gabriela-bogk/team-protocol/roles/worker.md`
+3. Your current task and its status
+4. Any active deployment target sessions you hold (OBSERVE/CHANGE/DEPLOY
+   granted by the Change Manager) — include session ID and tier
+5. Pending consultations (who you're waiting on, what for)
+6. Key decisions made this session that affect your work
+7. "After compaction, re-read your role prompt before doing anything."
+
+**After compaction recovery:**
+1. Re-read your role prompt at the path noted in your summary
+2. Re-read the project CLAUDE.md for current context
+3. Resume your task from where compaction interrupted
+4. Do NOT start new work without checking with the team lead first
 
 ## Memory Reporting (mandatory)
 

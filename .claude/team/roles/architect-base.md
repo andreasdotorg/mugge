@@ -73,6 +73,32 @@ ignoring you.
    continue with other work.
 5. **"Idle" ≠ available.** An agent shown as idle may be waiting for human
    permission approval. Don't draw conclusions from idle status.
+6. **Close the loop before going idle.** If someone asked you to do
+   something, you MUST message them with the outcome (success, failure,
+   blocked) before you stop working. An idle notification is NOT a status
+   report — it tells the requester nothing.
+
+## Context Compaction Recovery
+
+When your context is compacted (conversation history is summarized to free
+space), you lose awareness of your role, rules, current task, and protocol.
+
+**Your compaction summary MUST include:**
+1. Your role name and team name
+2. Where to find your role prompt: project `.claude/team/roles/architect-base.md`,
+   fallback `~/mobile/gabriela-bogk/team-protocol/roles/architect.md`
+3. Your current task and its status (e.g., mid-decomposition, awaiting
+   consultation response, reviewing implementation)
+4. Pending consultations (who you're waiting on, what for)
+5. Key architectural decisions made this session that affect ongoing work
+6. Any active task decomposition in progress (story ID, tasks identified so far)
+7. "After compaction, re-read your role prompt before doing anything."
+
+**After compaction recovery:**
+1. Re-read your role prompt at the path noted in your summary
+2. Re-read the project CLAUDE.md for current context
+3. Resume your task from where compaction interrupted
+4. Do NOT start new work without checking with the team lead first
 
 ## Memory Reporting (mandatory)
 

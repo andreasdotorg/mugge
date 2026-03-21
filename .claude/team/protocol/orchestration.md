@@ -604,14 +604,17 @@ approval — idle does NOT mean available.
    matters most. **Process override is the sole privilege of the owner,
    at their explicit request.**
 
-**Agent rules (all roles):**
+**Agent rules (all roles — for reference; the full rules live in each
+agent's role prompt under "Communication & Responsiveness (L-040)").
+These do NOT apply to the orchestrator, which only communicates and waits.**
 
-1. Check and answer messages approximately every 5 minutes.
-2. Background long operations (`run_in_background`, tmux) to stay
-   responsive.
-3. Report status proactively after completing significant steps.
-4. Acknowledge received messages promptly.
-5. One message to other agents, then wait.
+- Check and answer messages every ~5 minutes
+- Background long operations to stay responsive
+- Report status proactively after completing significant steps
+- Close the loop: report the outcome of every request before going idle
+  (an idle notification is NOT a status report)
+- Acknowledge received messages promptly
+- One message to other agents, then wait
 
 ## Spawning Protocol
 

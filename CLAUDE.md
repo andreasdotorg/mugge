@@ -231,28 +231,21 @@ process on its own authority, no matter how urgent the situation feels.
   (sent message ~N minutes ago). They may be executing a long operation.
   Shall I wait or intervene?"
 
-**RULES for workers and advisory agents:**
+**The following rules are for workers and advisory agents — NOT for the
+orchestrator. They are here as reference; the actual rules live in each
+agent's role prompt. The orchestrator does NOT run builds, background
+operations, or long tool calls. The orchestrator communicates and waits.**
 
-1. **Check and answer messages approximately every 5 minutes.** If you are
-   about to start a tool call you expect to take longer than 5 minutes,
-   find a way to run it in the background first (e.g., `run_in_background`
-   parameter on Bash, or a tmux session for long SSH operations), then
-   check messages before resuming.
-2. **Report status proactively** to the team lead and relevant stakeholders
-   when you complete a significant step, even if nobody asked. Don't wait
-   for a ping.
-3. **Theory of mind (workers → other agents):** Other agents also don't
-   read your messages until their current tool call finishes. If you
-   message the CM or architect and don't hear back, they're busy — not
-   ignoring you. Send one message and continue with other work.
-4. **Background long operations.** SSH deployments, nix builds, large test
-   suites — use `run_in_background: true` on Bash calls or run commands
-   inside tmux (`tmux new-session -d -s build 'nix build ...'`) so you
-   remain responsive to messages.
-5. **Acknowledge received messages.** When you finish a tool call and find
-   messages in your inbox, acknowledge them promptly — even if just
-   "received, working on it." Silence from your side triggers the
-   orchestrator's impatience loop.
+Workers and advisory agents must:
+- Check messages every ~5 minutes; background long operations
+- Report status proactively after completing significant steps
+- Acknowledge received messages promptly
+- Close the loop: report the outcome of every request before going idle
+  (an idle notification is NOT a status report)
+- One message to other agents, then wait
+
+See each role's "Communication & Responsiveness (L-040)" section for the
+full rules.
 
 ## Project Summary
 

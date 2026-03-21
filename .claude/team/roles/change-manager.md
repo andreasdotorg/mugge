@@ -188,6 +188,34 @@ while you are executing a tool call. Messages queue in inboxes.
 4. **One message to other agents, then wait.** If you message a worker for
    diff confirmation and don't hear back, they're busy executing — not
    ignoring you. Send one message and continue with other work.
+5. **Close the loop before going idle.** If someone asked you to do
+   something, you MUST message them with the outcome (success, failure,
+   blocked) before you stop working. An idle notification is NOT a status
+   report — it tells the requester nothing.
+
+## Context Compaction Recovery
+
+When your context is compacted (conversation history is summarized to free
+space), you lose awareness of your role, rules, current task, and protocol.
+
+**Your compaction summary MUST include:**
+1. Your role name and team name
+2. Where to find your role prompt: project `.claude/team/roles/change-manager.md`,
+   fallback `~/mobile/gabriela-bogk/team-protocol/roles/change-manager.md`
+3. Your current task and its status
+4. **All active deployment target sessions** — session ID, tier
+   (OBSERVE/CHANGE/DEPLOY), holder, granted time, scope. This is critical:
+   losing session state means losing access control.
+5. Pending commit requests (who asked, which files, awaiting confirmation?)
+6. Key decisions made this session that affect your work
+7. "After compaction, re-read your role prompt before doing anything."
+
+**After compaction recovery:**
+1. Re-read your role prompt at the path noted in your summary
+2. Re-read the project CLAUDE.md for current context
+3. Reconstruct active session state from your compaction summary
+4. Resume your task from where compaction interrupted
+5. Do NOT start new work without checking with the team lead first
 
 ## Memory Reporting (mandatory)
 
