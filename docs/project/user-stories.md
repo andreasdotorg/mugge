@@ -113,7 +113,7 @@ any venue WiFi network,
 **so that** exposed services cannot be exploited by untrusted devices on the
 same network, protecting both system integrity and live performance availability.
 
-**Status:** in-review (4/4 DoD — F-002 resolved: CamillaDSP systemd service; F-011 resolved: nfs-blkmap masked; verified across reboot in US-000b T7)
+**Status:** done (owner-accepted 2026-03-21. 4/4 DoD — F-002 resolved: CamillaDSP systemd service; F-011 resolved: nfs-blkmap masked; verified across reboot in US-000b T7.)
 **Depends on:** US-000 (CamillaDSP must be installed before its config can be hardened)
 **Blocks:** none directly, but should be completed before any venue deployment
 **Decisions:** D-006 (security specialist scope: availability/integrity for live performance)
@@ -338,7 +338,7 @@ project relies on, tracked in a structured format,
 **so that** hidden risks are surfaced early and can be validated before they
 cause problems during implementation or live performance.
 
-**Status:** selected
+**Status:** in-review (4/4 DoD — assumption register A1-A28, cross-references documented, CLAUDE.md updated, blocking findings addressed. A27 gap resolved. Pending owner acceptance.)
 **Depends on:** none
 **Blocks:** none directly, but informs prioritization of all other stories
 
@@ -3106,7 +3106,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** a GraphManager subsystem that is the sole authority over PipeWire application routing, and a production PW filter-chain configuration that replaces CamillaDSP for all FIR convolution,
 **so that** the entire audio pipeline runs as native PipeWire nodes with deterministic, centrally-managed routing -- eliminating the ALSA Loopback bridge, the CamillaDSP external process, and the class of integration bugs caused by distributed session management (BUG-SG12-1 through SG12-7, TK-224, TK-236).
 
-**Status:** in-progress (TEST phase, advanced 2026-03-21. QE confirmed existing 168 regression tests + I-1 + hardware evidence satisfy formal test plan. DoD 14/14. DEPLOY gate next: QE test plan executed, all criteria pass.)
+**Status:** in-review (REVIEW phase, fast-tracked 2026-03-21. QE approved DEPLOY/VERIFY fast-track: accumulated evidence — GM-12 40min DJ session, C-006 config deployment, D-001 6-iteration reboot test, O-018 13h39m soak, S-001/S-002 VERIFY sessions — exceeds single-session requirements. DoD 14/14. All 4 advisory sign-offs collected: architect, security specialist, AD, QE. Pending owner acceptance.)
 **Depends on:** US-058 PASS (D-040: PW filter-chain replaces CamillaDSP, giving GraphManager linkable PW ports natively). **SATISFIED.**
 **Blocks:** US-060 (PW monitoring replacement), US-061 (measurement pipeline adaptation)
 **Decisions:** D-039 (owner corrections 2026-03-16: daemon subsystem, WHAT not HOW, sole session manager). D-040 (abandon CamillaDSP for PW filter-chain). Supersedes the original WP Lua scripts approach.

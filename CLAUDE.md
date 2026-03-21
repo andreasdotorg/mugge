@@ -450,7 +450,7 @@ At 48kHz, 16,384 taps = 341ms = 2.9Hz frequency resolution.
 
 ## Assumptions Needing Validation
 
-Full assumption register (A1-A26): `docs/project/assumption-register.md`
+Full assumption register (A1-A28): `docs/project/assumption-register.md`
 
 Original assumptions tracked in the Test Plan (SETUP-MANUAL.md section 6.13):
 
