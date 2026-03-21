@@ -1262,3 +1262,44 @@ security objective for this project per the threat model.
 
 **Related:** US-022 (web UI), US-000a (platform security), F-013 (wayvnc
 encryption), A28 (venue network self-sufficiency)
+
+---
+
+## F-038: Dashboard tab has duplicate status bar — not consolidated into persistent bar (OPEN)
+
+**Severity:** Medium (UI confusion, no audio impact)
+**Status:** Open
+**Found in:** Owner web UI review (2026-03-21)
+**Affects:** US-051 (persistent status bar)
+**Found by:** Owner
+
+**Description:** The Dashboard tab retains its own inline status display
+(health indicators, buffer info) that duplicates the persistent status bar
+added by US-051. The owner expects ONE unified status bar visible across all
+tabs, with the Dashboard's original status section removed or consolidated.
+
+The US-051 AC states: "Health indicators extracted from existing Dashboard
+implementation" and "Persistent header/nav bar rendered on ALL web UI pages."
+The intent is that the persistent bar replaces the Dashboard's inline status,
+not that both coexist.
+
+**Root cause:** During US-051 implementation, the persistent status bar was
+added as a new component but the Dashboard tab's original inline status
+display was not removed or refactored. The two displays show overlapping
+information, creating visual clutter and user confusion about which is
+authoritative.
+
+**Impact:** Owner sees two status bars on the Dashboard tab — confusing and
+contrary to the "single source of truth" UX intent. Other tabs correctly show
+only the persistent bar.
+
+**Fix required:** Remove or consolidate the Dashboard tab's inline status
+display into the persistent status bar. Any health indicators currently shown
+only in the Dashboard's inline display (not yet in the persistent bar) should
+be migrated to the persistent bar. After consolidation, the Dashboard tab
+should show only its unique content (e.g., detailed meters, spectrum) below
+the shared persistent bar.
+
+**Related:** US-051 (persistent status bar AC), TK-225 (persistent status bar
+ticket), TK-227 (dashboard label confusion — may be partially addressed by
+consolidation).
