@@ -333,9 +333,6 @@
         // Header strip
         PiAudio.setText("sys-mode", data.mode.toUpperCase());
         PiAudio.setText("sys-quantum", String(data.pipewire.quantum));
-        // D-040: chunksize replaced by GM mode (dj/live/monitoring)
-        var gmMode = data.camilladsp.gm_mode || "--";
-        PiAudio.setText("sys-chunksize", gmMode.toUpperCase());
         PiAudio.setText("sys-rate", (data.pipewire.sample_rate / 1000) + " kHz");
 
         var temp = data.cpu.temperature;
@@ -382,9 +379,12 @@
             sched.pipewire_policy + "/" + sched.pipewire_priority,
             sched.pipewire_policy === "SCHED_FIFO" ? "c-green" : "c-red");
         // D-040: GraphManager scheduling from PipeWireCollector
+        // F-043: SCHED_OTHER is correct for GM (control-plane, not RT)
+        var gmPolicy = sched.graphmgr_policy;
+        var gmSchedOk = gmPolicy === "SCHED_OTHER" || gmPolicy === "SCHED_FIFO";
         PiAudio.setText("sys-sched-cdsp",
-            sched.graphmgr_policy + "/" + sched.graphmgr_priority,
-            sched.graphmgr_policy === "SCHED_FIFO" ? "c-green" : "c-red");
+            gmPolicy + "/" + sched.graphmgr_priority,
+            gmSchedOk ? "c-green" : "c-red");
         // F-9 FIX: Graph state color-coding — green for running, red for anything else
         PiAudio.setText("sys-sched-graph", data.pipewire.graph_state,
             data.pipewire.graph_state === "running" ? "c-green" : "c-red");

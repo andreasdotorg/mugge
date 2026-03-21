@@ -169,8 +169,11 @@
         PiAudio.setText("sb-dsp-state", dspText,
             dspOk ? "c-green" : dspWarn ? "c-yellow" : "c-red");
 
-        // Buffer level (link health from GraphManager)
-        PiAudio.setText("sb-buf", String(cdsp.buffer_level));
+        // Links: actual/desired (F-044: replaces percentage display)
+        var linksText = (cdsp.gm_links_actual != null)
+            ? cdsp.gm_links_actual + "/" + cdsp.gm_links_desired
+            : String(cdsp.buffer_level);
+        PiAudio.setText("sb-buf", linksText);
 
         // Clip count
         PiAudio.setText("sb-clip", String(cdsp.clipped_samples),
@@ -197,6 +200,11 @@
 
         // Quantum
         PiAudio.setText("sb-quantum", String(data.pipewire.quantum));
+
+        // Sample rate (ENH-001)
+        var rate = data.pipewire.sample_rate;
+        var rateText = rate >= 1000 ? (rate / 1000) + "k" : String(rate);
+        PiAudio.setText("sb-rate", rateText);
 
         // Xrun count (from PipeWireCollector via /ws/system — pw-cli data)
         // Three-tier coloring per UX spec: green=0, yellow=1-5, red>5
