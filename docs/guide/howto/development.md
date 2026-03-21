@@ -207,6 +207,7 @@ appropriate for changes to scripts and application code (not system configs).
 | `PI_AUDIO_MOCK` | `1` | Enable mock mode (mock sounddevice, mock CamillaDSP, mock collectors). Set to `0` for real hardware. |
 | `PI_AUDIO_URL` | (unset) | Pi web UI URL for e2e tests against real hardware. Tests skip if unset. |
 | `PI4AUDIO_PCM_JACK` | (unset) | Enable legacy JACK PCM collector (`1` = enable). Default off — pcm-bridge (Rust) is the replacement. The JACK client joins the RT graph and can cause xruns. |
+| `PI4AUDIO_PW_TOP` | (unset) | Enable PipeWireCollector (`1` = enable). Default off — the `pw-top` subprocess spawned every second causes xruns on the Pi. Native PW metadata reads planned as replacement. |
 | `PI4AUDIO_PRODUCTION_CONFIG` | `/etc/camilladsp/active.yml` | Production CamillaDSP config path, restored after measurement. |
 | `PLAYWRIGHT_BROWSERS_PATH` | (set by flake) | Path to Playwright's Chromium. Set automatically in `nix develop` and `nix run`. |
 | `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` | `1` (set by flake) | Prevents Playwright from downloading browsers (Nix provides them). |
