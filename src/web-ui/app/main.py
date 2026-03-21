@@ -59,7 +59,6 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 MOCK_MODE = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
 PCM_JACK_MODE = os.environ.get("PI4AUDIO_PCM_JACK", "") == "1"
-PW_TOP_MODE = os.environ.get("PI4AUDIO_PW_TOP", "") == "1"
 
 
 # -- Systemd watchdog (D-036 / WP-G) ---------------------------------------
@@ -135,11 +134,8 @@ async def lifespan(app: FastAPI):
             log.info("PcmStreamCollector skipped (PI4AUDIO_PCM_JACK != 1)")
         app.state.system_collector = SystemCollector()
         await app.state.system_collector.start()
-        if PW_TOP_MODE:
-            app.state.pw = PipeWireCollector()
-            await app.state.pw.start()
-        else:
-            log.info("PipeWireCollector skipped (PI4AUDIO_PW_TOP != 1) — pw-top subprocess causes xruns")
+        app.state.pw = PipeWireCollector()
+        await app.state.pw.start()
         log.info("All collectors started")
     else:
         log.info("Mock mode enabled (PI_AUDIO_MOCK=1) — real collectors not started")

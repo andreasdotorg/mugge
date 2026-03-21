@@ -1,15 +1,15 @@
 """Tests for backend collectors — pipewire, filterchain, system, pcm.
 
 Covers:
-    - PipeWireCollector._parse_pw_top() with captured output samples
+    - PipeWireCollector._parse_xruns() with sample pw-cli output
     - Wire-format shape validation (collector output vs MockDataGenerator)
     - _build_system_snapshot() shape validation
-    - _read_scheduling() field indexing with synthetic /proc data
+    - SystemCollector scheduling extraction with synthetic /proc data (TK-245)
     - FilterChainCollector snapshot shapes and state derivation
     - Fallback snapshots for all 4 collectors
     - FilterChainCollector RPC integration with mock GM TCP server (T-1)
 
-All tests run on macOS (no /proc, no pw-top, no JACK,
+All tests run on macOS (no /proc, no pw-metadata, no pw-cli, no JACK,
 no GraphManager).  System calls and connections are mocked via
 unittest.mock.  RPC integration tests spin up a local TCP server.
 
@@ -60,106 +60,64 @@ def mock_gen_a():
     return MockDataGenerator(scenario="A", freeze_time=True)
 
 
-# ── Sample pw-top output ──────────────────────────────────────
+# ── Sample pw-cli info output for xrun parsing ───────────────
 
-# Realistic pw-top -b -n 2 output: two passes, first all zeros,
-# second with real values.
-PW_TOP_NORMAL = """\
-S  ID QUANT   RATE    WAIT    BUSY   W/Q   B/Q  ERR  NAME
-S  28     0      0       0       0  0.00  0.00    0  Dummy-Driver
-S  30     0      0       0       0  0.00  0.00    0  Freewheel-Driver
-S  34     0      0       0       0  0.00  0.00    0  alsa_output.usb
-
-S  ID QUANT   RATE    WAIT    BUSY   W/Q   B/Q  ERR  NAME
-S  28  1024  48000    2133     312  0.10  0.01    0  Dummy-Driver
-S  30  1024  48000       0       0  0.00  0.00    0  Freewheel-Driver
-R  34  1024  48000   21312    4521  1.00  0.21    0  alsa_output.usb
-R  42  1024  48000    3200    1200  0.15  0.06    0  CamillaDSP
+# Realistic pw-cli info output with xrun counter
+PW_CLI_INFO_WITH_XRUNS = """\
+	id: 34
+	permissions: r-xm
+	type: PipeWire:Interface:Node/3
+	  clock.xrun-count = "5"
+	  node.name = "alsa_output.usb-miniDSP_USBStreamer-00"
 """
 
-# Output with ERR > 0 on one node
-PW_TOP_WITH_ERRORS = """\
-S  ID QUANT   RATE    WAIT    BUSY   W/Q   B/Q  ERR  NAME
-R  34   256  48000   21312    4521  1.00  0.21    3  alsa_output.usb
-R  42   256  48000    3200    1200  0.15  0.06    2  CamillaDSP
-R  50   256  48000    1000     500  0.05  0.02    0  PipeWire
+# pw-cli info output without xrun properties
+PW_CLI_INFO_NO_XRUNS = """\
+	id: 34
+	permissions: r-xm
+	type: PipeWire:Interface:Node/3
+	  node.name = "alsa_output.usb-miniDSP_USBStreamer-00"
 """
 
-# Only first pass (all zeros) — should fall back to defaults
-PW_TOP_FIRST_PASS_ONLY = """\
-S  ID QUANT   RATE    WAIT    BUSY   W/Q   B/Q  ERR  NAME
-S  28     0      0       0       0  0.00  0.00    0  Dummy-Driver
-S  30     0      0       0       0  0.00  0.00    0  Freewheel-Driver
+# pw-cli info all output with multiple nodes and xruns
+PW_CLI_INFO_ALL_XRUNS = """\
+	id: 28
+	  clock.xrun-count = "0"
+	  node.name = "Dummy-Driver"
+
+	id: 34
+	  clock.xrun-count = "3"
+	  node.name = "alsa_output.usb"
+
+	id: 42
+	  clock.xrun-count = "2"
+	  node.name = "filter-chain"
 """
 
 
-# ── 1. PipeWireCollector._parse_pw_top() ──────────────────────
+# ── 1. PipeWireCollector._parse_xruns() ──────────────────────
 
-class TestParsePwTop:
+class TestParseXruns:
 
-    def test_normal_output_extracts_quantum_and_rate(self, pw_collector):
-        """Second pass should be used — quantum=1024, sample_rate=48000."""
-        result = pw_collector._parse_pw_top(PW_TOP_NORMAL)
-        assert result["quantum"] == 1024
-        assert result["sample_rate"] == 48000
+    def test_single_node_xruns(self, pw_collector):
+        """Single node with clock.xrun-count = 5."""
+        result = pw_collector._parse_xruns(PW_CLI_INFO_WITH_XRUNS)
+        assert result == 5
 
-    def test_normal_output_graph_state_running(self, pw_collector):
-        result = pw_collector._parse_pw_top(PW_TOP_NORMAL)
-        assert result["graph_state"] == "running"
+    def test_no_xrun_properties_returns_none(self, pw_collector):
+        """No xrun properties should return None (not found)."""
+        result = pw_collector._parse_xruns(PW_CLI_INFO_NO_XRUNS)
+        assert result is None
 
-    def test_normal_output_xruns_zero(self, pw_collector):
-        result = pw_collector._parse_pw_top(PW_TOP_NORMAL)
-        assert result["xruns"] == 0
+    def test_multiple_nodes_xruns_accumulate(self, pw_collector):
+        """Multiple nodes: xruns sum across all nodes."""
+        result = pw_collector._parse_xruns(PW_CLI_INFO_ALL_XRUNS)
+        # 0 + 3 + 2 = 5
+        assert result == 5
 
-    def test_partial_output_first_pass_zeros(self, pw_collector):
-        """When only first pass is present (all zeros), fallback defaults apply."""
-        result = pw_collector._parse_pw_top(PW_TOP_FIRST_PASS_ONLY)
-        assert result["quantum"] == 256  # fallback
-        assert result["sample_rate"] == 48000  # fallback
-        assert result["graph_state"] == "unknown"
-
-    def test_empty_output_returns_defaults(self, pw_collector):
-        result = pw_collector._parse_pw_top("")
-        assert result["quantum"] == 256
-        assert result["sample_rate"] == 48000
-        assert result["graph_state"] == "unknown"
-        assert result["xruns"] == 0
-
-    def test_errors_accumulate_xruns(self, pw_collector):
-        """ERR column > 0 should be summed across all nodes."""
-        result = pw_collector._parse_pw_top(PW_TOP_WITH_ERRORS)
-        # 3 + 2 + 0 = 5
-        assert result["xruns"] == 5
-
-    def test_errors_output_quantum_256(self, pw_collector):
-        result = pw_collector._parse_pw_top(PW_TOP_WITH_ERRORS)
-        assert result["quantum"] == 256
-        assert result["sample_rate"] == 48000
-
-    def test_two_pass_uses_last_pass(self, pw_collector):
-        """Parser should use the last header block when -n 2 produces two passes."""
-        result = pw_collector._parse_pw_top(PW_TOP_NORMAL)
-        # First pass has quantum=0, second has quantum=1024
-        assert result["quantum"] == 1024
-        assert result["sample_rate"] == 48000
-
-    def test_result_contains_scheduling(self, pw_collector):
-        """Result should contain scheduling dict."""
-        result = pw_collector._parse_pw_top(PW_TOP_NORMAL)
-        assert "scheduling" in result
-        sched = result["scheduling"]
-        assert "pipewire_policy" in sched
-        assert "pipewire_priority" in sched
-        assert "graphmgr_policy" in sched
-        assert "graphmgr_priority" in sched
-
-    def test_scheduling_defaults_on_macos(self, pw_collector):
-        """On macOS, scheduling should return SCHED_OTHER / 0."""
-        result = pw_collector._parse_pw_top(PW_TOP_NORMAL)
-        sched = result["scheduling"]
-        # _read_scheduling returns ("SCHED_OTHER", 0) on non-Linux
-        assert sched["pipewire_policy"] == "SCHED_OTHER"
-        assert sched["pipewire_priority"] == 0
+    def test_empty_output_returns_none(self, pw_collector):
+        result = pw_collector._parse_xruns("")
+        assert result is None
 
 
 # ── 2. Wire-format: _build_system_snapshot vs MockDataGenerator ─
@@ -322,9 +280,14 @@ class TestBuildSystemSnapshot:
         assert data["mode"] == "dj"
 
 
-# ── 3. _read_scheduling() field indexing ──────────────────────
+# ── 3. SystemCollector scheduling extraction (TK-245) ─────────
 
-class TestReadScheduling:
+class TestSchedulingConsolidation:
+    """Tests for scheduling policy/priority extraction in SystemCollector.
+
+    Scheduling was moved from PipeWireCollector into SystemCollector
+    to eliminate duplicate /proc PID scans (TK-245).
+    """
 
     def _make_stat_line(self, pid, comm, policy, rt_priority):
         """Build a synthetic /proc/{pid}/stat line.
@@ -334,16 +297,15 @@ class TestReadScheduling:
             0=state, 1=ppid, ... 37=rt_priority, 38=policy, ...
         We need at least 39 fields after the closing paren.
         """
-        # Build 39+ fields after the closing paren
         fields = ["S", "1"] + ["0"] * 35  # fields 0-36 (37 total)
         fields.append(str(rt_priority))    # field 37 = rt_priority
         fields.append(str(policy))         # field 38 = policy
         fields.append("0")                 # field 39
         return f"{pid} ({comm}) " + " ".join(fields)
 
-    @patch("app.collectors.pipewire_collector._IS_LINUX", True)
-    def test_fifo_policy_extracted(self, pw_collector):
-        """SCHED_FIFO (1) with priority 88 should be correctly parsed."""
+    @patch("app.collectors.system_collector._IS_LINUX", True)
+    def test_fifo_policy_extracted(self, sys_collector):
+        """SCHED_FIFO (1) with priority 88 for pipewire."""
         stat_content = self._make_stat_line(100, "pipewire", 1, 88)
 
         with patch("os.listdir", return_value=["100"]), \
@@ -351,91 +313,49 @@ class TestReadScheduling:
                  mock_open(read_data="pipewire\n")(),
                  mock_open(read_data=stat_content)(),
              ]):
-            policy, priority = pw_collector._read_scheduling("pipewire")
-            assert policy == "SCHED_FIFO"
-            assert priority == 88
+            _, sched = sys_collector._read_processes_and_scheduling()
+            assert sched["pipewire_policy"] == "SCHED_FIFO"
+            assert sched["pipewire_priority"] == 88
 
-    @patch("app.collectors.pipewire_collector._IS_LINUX", True)
-    def test_rr_policy_extracted(self, pw_collector):
-        """SCHED_RR (2) with priority 50."""
-        stat_content = self._make_stat_line(200, "camilladsp", 2, 50)
+    @patch("app.collectors.system_collector._IS_LINUX", True)
+    def test_graphmgr_scheduling(self, sys_collector):
+        """GraphManager (pi4audio-graph) with SCHED_FIFO and priority 80."""
+        stat_content = self._make_stat_line(200, "pi4audio-graph", 1, 80)
 
         with patch("os.listdir", return_value=["200"]), \
              patch("builtins.open", side_effect=[
-                 mock_open(read_data="camilladsp\n")(),
+                 mock_open(read_data="pi4audio-graph\n")(),
                  mock_open(read_data=stat_content)(),
              ]):
-            policy, priority = pw_collector._read_scheduling("camilladsp")
-            assert policy == "SCHED_RR"
-            assert priority == 50
+            _, sched = sys_collector._read_processes_and_scheduling()
+            assert sched["graphmgr_policy"] == "SCHED_FIFO"
+            assert sched["graphmgr_priority"] == 80
 
-    @patch("app.collectors.pipewire_collector._IS_LINUX", True)
-    def test_comm_with_spaces(self, pw_collector):
-        """Process comm containing spaces like '(Web Content)'.
-
-        The parser uses rfind(')') to handle comm fields with
-        parentheses and spaces.
-        """
-        stat_content = self._make_stat_line(300, "Web Content", 1, 70)
-
-        with patch("os.listdir", return_value=["300"]), \
-             patch("builtins.open", side_effect=[
-                 mock_open(read_data="web content\n")(),
-                 mock_open(read_data=stat_content)(),
-             ]):
-            policy, priority = pw_collector._read_scheduling("web content")
-            assert policy == "SCHED_FIFO"
-            assert priority == 70
-
-    @patch("app.collectors.pipewire_collector._IS_LINUX", True)
-    def test_comm_with_parentheses(self, pw_collector):
-        """Process comm containing extra parentheses like '(helper (v2))'."""
-        # Build a stat line with nested parens in comm
-        fields = ["S", "1"] + ["0"] * 35
-        fields.append("95")  # rt_priority
-        fields.append("1")   # policy = SCHED_FIFO
-        fields.append("0")
-        stat_content = "400 (helper (v2)) " + " ".join(fields)
-
-        with patch("os.listdir", return_value=["400"]), \
-             patch("builtins.open", side_effect=[
-                 mock_open(read_data="helper (v2)\n")(),
-                 mock_open(read_data=stat_content)(),
-             ]):
-            policy, priority = pw_collector._read_scheduling("helper")
-            assert policy == "SCHED_FIFO"
-            assert priority == 95
-
-    @patch("app.collectors.pipewire_collector._IS_LINUX", True)
-    def test_process_not_found(self, pw_collector):
-        """When the process name is not found, defaults are returned."""
+    @patch("app.collectors.system_collector._IS_LINUX", True)
+    def test_process_not_found_returns_defaults(self, sys_collector):
+        """When tracked processes aren't found, scheduling defaults apply."""
         with patch("os.listdir", return_value=["100"]), \
              patch("builtins.open", side_effect=[
                  mock_open(read_data="unrelated\n")(),
              ]):
-            policy, priority = pw_collector._read_scheduling("pipewire")
-            assert policy == "SCHED_OTHER"
-            assert priority == 0
+            _, sched = sys_collector._read_processes_and_scheduling()
+            assert sched["pipewire_policy"] == "SCHED_OTHER"
+            assert sched["pipewire_priority"] == 0
+            assert sched["graphmgr_policy"] == "SCHED_OTHER"
+            assert sched["graphmgr_priority"] == 0
 
-    def test_non_linux_returns_defaults(self, pw_collector):
-        """On non-Linux, _read_scheduling should return defaults."""
-        policy, priority = pw_collector._read_scheduling("pipewire")
-        assert policy == "SCHED_OTHER"
-        assert priority == 0
+    def test_fallback_has_scheduling(self, sys_collector):
+        """Fallback snapshot includes scheduling with defaults."""
+        snap = sys_collector._fallback_snapshot()
+        assert "scheduling" in snap
+        assert snap["scheduling"]["pipewire_policy"] == "SCHED_OTHER"
+        assert snap["scheduling"]["graphmgr_policy"] == "SCHED_OTHER"
 
-    @patch("app.collectors.pipewire_collector._IS_LINUX", True)
-    def test_sched_other_policy(self, pw_collector):
-        """SCHED_OTHER (0) with priority 0."""
-        stat_content = self._make_stat_line(500, "pipewire", 0, 0)
-
-        with patch("os.listdir", return_value=["500"]), \
-             patch("builtins.open", side_effect=[
-                 mock_open(read_data="pipewire\n")(),
-                 mock_open(read_data=stat_content)(),
-             ]):
-            policy, priority = pw_collector._read_scheduling("pipewire")
-            assert policy == "SCHED_OTHER"
-            assert priority == 0
+    def test_fallback_has_uptime(self, sys_collector):
+        """Fallback snapshot includes uptime_seconds."""
+        snap = sys_collector._fallback_snapshot()
+        assert "uptime_seconds" in snap
+        assert snap["uptime_seconds"] == 0.0
 
 
 # ── 4. Fallback snapshots ────────────────────────────────────
@@ -448,11 +368,8 @@ class TestFallbackSnapshots:
         assert snap["sample_rate"] == 48000
         assert snap["graph_state"] == "unknown"
         assert snap["xruns"] == 0
-        assert "scheduling" in snap
-        assert snap["scheduling"]["pipewire_policy"] == "SCHED_OTHER"
-        assert snap["scheduling"]["pipewire_priority"] == 0
-        assert snap["scheduling"]["graphmgr_policy"] == "SCHED_OTHER"
-        assert snap["scheduling"]["graphmgr_priority"] == 0
+        # Scheduling moved to SystemCollector (TK-245)
+        assert "scheduling" not in snap
 
     def test_pipewire_snapshot_returns_fallback_initially(self, pw_collector):
         """Before any poll, snapshot() should return fallback."""

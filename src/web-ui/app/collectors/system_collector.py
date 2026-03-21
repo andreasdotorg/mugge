@@ -1,11 +1,15 @@
-"""System collector — CPU, memory, temperature from /proc and /sys.
+"""System collector — CPU, memory, temperature, scheduling from /proc and /sys.
 
 Polled at 1 Hz. Sources:
     - /sys/class/thermal/thermal_zone0/temp
     - /proc/stat
     - /proc/meminfo
     - /proc/uptime
-    - /proc/{pid}/stat (for per-process CPU)
+    - /proc/{pid}/stat + /proc/{pid}/comm (per-process CPU + scheduling)
+
+Scheduling policy/priority for PipeWire and GraphManager is extracted
+in the same /proc PID scan as per-process CPU (consolidated from the
+old PipeWireCollector to eliminate duplicate /proc iterations, TK-245).
 
 Platform fallback: returns plausible mock data on macOS/non-Linux
 so development works without a Pi.
@@ -30,6 +34,22 @@ _TRACKED_PROCESSES = {
     "pi4audio-graph": "graphmgr_cpu",
     "pipewire": "pipewire_cpu",
     "labwc": "labwc_cpu",
+}
+
+# Processes for scheduling policy/priority extraction (TK-245 consolidation).
+# Extracted in the same /proc PID scan as CPU — no extra iteration.
+_SCHEDULING_PROCESSES = {
+    "pipewire": ("pipewire_policy", "pipewire_priority"),
+    "pi4audio-graph": ("graphmgr_policy", "graphmgr_priority"),
+}
+
+_SCHED_POLICY_MAP = {
+    0: "SCHED_OTHER",
+    1: "SCHED_FIFO",
+    2: "SCHED_RR",
+    3: "SCHED_BATCH",
+    5: "SCHED_IDLE",
+    6: "SCHED_DEADLINE",
 }
 
 
@@ -88,7 +108,8 @@ class SystemCollector:
         temperature = self._read_temperature()
         cpu_total, cpu_cores = self._read_cpu()
         mem_used, mem_total, mem_available = self._read_memory()
-        processes = self._read_processes()
+        processes, scheduling = self._read_processes_and_scheduling()
+        uptime = self._read_uptime()
 
         return {
             "timestamp": time.time(),
@@ -103,6 +124,8 @@ class SystemCollector:
                 "available_mb": mem_available,
             },
             "processes": processes,
+            "scheduling": scheduling,
+            "uptime_seconds": uptime,
         }
 
     def _read_temperature(self) -> float:
@@ -181,14 +204,25 @@ class SystemCollector:
 
         return (used_mb, total_mb, available_mb)
 
-    def _read_processes(self) -> dict:
-        """Read per-process CPU from /proc/{pid}/stat."""
-        result = {v: 0.0 for v in _TRACKED_PROCESSES.values()}
+    def _read_processes_and_scheduling(self) -> tuple[dict, dict]:
+        """Read per-process CPU and scheduling policy from /proc in one pass.
+
+        Returns (processes_dict, scheduling_dict).
+        Scheduling is extracted from the same PID scan to avoid the
+        duplicate /proc iterations that the old PipeWireCollector did.
+        """
+        cpu_result = {v: 0.0 for v in _TRACKED_PROCESSES.values()}
+        sched_result = {
+            "pipewire_policy": "SCHED_OTHER",
+            "pipewire_priority": 0,
+            "graphmgr_policy": "SCHED_OTHER",
+            "graphmgr_priority": 0,
+        }
 
         try:
             pids = [p for p in os.listdir("/proc") if p.isdigit()]
         except OSError:
-            return result
+            return cpu_result, sched_result
 
         now = time.monotonic()
         current_proc_times: dict[str, float] = {}
@@ -200,29 +234,47 @@ class SystemCollector:
             except (OSError, ValueError):
                 continue
 
-            # Match against tracked process names
-            matched_key = None
+            # Match against tracked process names for CPU
+            matched_cpu_key = None
             for proc_name, result_key in _TRACKED_PROCESSES.items():
                 if proc_name in comm:
-                    matched_key = result_key
+                    matched_cpu_key = result_key
                     break
-            if matched_key is None:
+
+            # Match against scheduling process names
+            matched_sched = None
+            for proc_name, sched_keys in _SCHEDULING_PROCESSES.items():
+                if proc_name in comm:
+                    matched_sched = sched_keys
+                    break
+
+            if matched_cpu_key is None and matched_sched is None:
                 continue
 
             try:
                 with open(f"/proc/{pid}/stat") as f:
                     stat_line = f.read()
-                # Fields after the comm (in parentheses): find closing paren
                 close_paren = stat_line.rfind(")")
                 fields = stat_line[close_paren + 2:].split()
-                utime = int(fields[11])  # field 14 in 1-indexed (utime)
-                stime = int(fields[12])  # field 15 in 1-indexed (stime)
-                total_ticks = utime + stime
 
-                # Accumulate for same process name (e.g., multiple pipewire threads)
-                current_proc_times[matched_key] = (
-                    current_proc_times.get(matched_key, 0) + total_ticks
-                )
+                # CPU time extraction
+                if matched_cpu_key is not None:
+                    utime = int(fields[11])  # field 14 in 1-indexed
+                    stime = int(fields[12])  # field 15 in 1-indexed
+                    total_ticks = utime + stime
+                    current_proc_times[matched_cpu_key] = (
+                        current_proc_times.get(matched_cpu_key, 0) + total_ticks
+                    )
+
+                # Scheduling policy/priority extraction (first match wins)
+                if matched_sched is not None:
+                    policy_key, priority_key = matched_sched
+                    if sched_result[policy_key] == "SCHED_OTHER":
+                        policy_num = int(fields[38]) if len(fields) > 38 else 0
+                        rt_priority = int(fields[37]) if len(fields) > 37 else 0
+                        sched_result[policy_key] = _SCHED_POLICY_MAP.get(
+                            policy_num, f"SCHED_{policy_num}")
+                        sched_result[priority_key] = rt_priority
             except (OSError, ValueError, IndexError):
                 continue
 
@@ -235,10 +287,18 @@ class SystemCollector:
                 dt = now - prev_time
                 if dt > 0:
                     cpu_pct = 100.0 * (ticks - prev_ticks) / clk_tck / dt
-                    result[key] = round(max(0.0, cpu_pct), 1)
+                    cpu_result[key] = round(max(0.0, cpu_pct), 1)
             self._prev_proc_times[key] = (ticks, now)
 
-        return result
+        return cpu_result, sched_result
+
+    def _read_uptime(self) -> float:
+        """Read system uptime in seconds from /proc/uptime."""
+        try:
+            with open("/proc/uptime") as f:
+                return float(f.read().split()[0])
+        except (OSError, ValueError, IndexError):
+            return 0.0
 
     # -- Fallback for non-Linux (macOS development) --
 
@@ -263,4 +323,11 @@ class SystemCollector:
                 "pipewire_cpu": 0.0,
                 "labwc_cpu": 0.0,
             },
+            "scheduling": {
+                "pipewire_policy": "SCHED_OTHER",
+                "pipewire_priority": 0,
+                "graphmgr_policy": "SCHED_OTHER",
+                "graphmgr_priority": 0,
+            },
+            "uptime_seconds": 0.0,
         }

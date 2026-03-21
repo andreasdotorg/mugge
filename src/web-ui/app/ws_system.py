@@ -6,9 +6,9 @@ PipeWire state, filter-chain/DSP state, per-process CPU breakdown.
 In mock mode (PI_AUDIO_MOCK=1): each connected client gets its own
 MockDataGenerator instance.
 
-In real mode: data is assembled from the SystemCollector,
-PipeWireCollector, and FilterChainCollector singletons on app.state
-(D-040: FilterChainCollector replaces CamillaDSPCollector).
+In real mode: data is assembled from SystemCollector (CPU, memory,
+scheduling, uptime), PipeWireCollector (quantum, sample rate, xruns),
+and FilterChainCollector (DSP/link health via GraphManager RPC).
 """
 
 import asyncio
@@ -74,9 +74,9 @@ def _build_system_snapshot(app) -> dict:
     pw_snap = pw_col.snapshot() if pw_col else {}
     cdsp_snap = cdsp_col.dsp_health_snapshot() if cdsp_col else {}
 
-    # Build camilladsp section, then override xruns with PipeWireCollector's
-    # real value.  FilterChainCollector hardcodes xruns=0 because GraphManager
-    # doesn't track xruns; PipeWireCollector reads them from pw-top.
+    # Build camilladsp section, then override xruns from PipeWireCollector.
+    # FilterChainCollector hardcodes xruns=0 because GraphManager doesn't
+    # track xruns; PipeWireCollector reads them (pw-cli or pw-top).
     dsp_section = cdsp_snap if cdsp_snap else {
         "state": "Disconnected",
         "processing_load": 0.0,
@@ -96,6 +96,15 @@ def _build_system_snapshot(app) -> dict:
     }
     dsp_section["xruns"] = pw_snap.get("xruns", 0)
 
+    # Scheduling comes from SystemCollector (TK-245: consolidated from
+    # PipeWireCollector to avoid duplicate /proc PID scans).
+    _default_sched = {
+        "pipewire_policy": "SCHED_OTHER",
+        "pipewire_priority": 0,
+        "graphmgr_policy": "SCHED_OTHER",
+        "graphmgr_priority": 0,
+    }
+
     return {
         "timestamp": time.time(),
         "cpu": sys_snap.get("cpu", {
@@ -107,12 +116,7 @@ def _build_system_snapshot(app) -> dict:
             "quantum": pw_snap.get("quantum", 256),
             "sample_rate": pw_snap.get("sample_rate", 48000),
             "graph_state": pw_snap.get("graph_state", "unknown"),
-            "scheduling": pw_snap.get("scheduling", {
-                "pipewire_policy": "SCHED_OTHER",
-                "pipewire_priority": 0,
-                "graphmgr_policy": "SCHED_OTHER",
-                "graphmgr_priority": 0,
-            }),
+            "scheduling": sys_snap.get("scheduling", _default_sched),
         },
         "camilladsp": dsp_section,
         "memory": sys_snap.get("memory", {
@@ -120,6 +124,7 @@ def _build_system_snapshot(app) -> dict:
             "total_mb": 0,
             "available_mb": 0,
         }),
+        "uptime_seconds": sys_snap.get("uptime_seconds"),
         "mode": cdsp_snap.get("gm_mode", "dj") if cdsp_snap else "dj",
         "processes": sys_snap.get("processes", {
             "mixxx_cpu": 0.0,

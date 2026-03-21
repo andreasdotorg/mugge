@@ -3,8 +3,8 @@
 Four singleton collectors poll actual system sources on the Pi:
     - FilterChainCollector: filter-chain health via GraphManager RPC (D-040)
     - PcmStreamCollector: JACK ring buffer for binary PCM streaming
-    - SystemCollector: CPU, memory, temperature from /proc and /sys
-    - PipeWireCollector: PipeWire graph state from pw-top
+    - SystemCollector: CPU, memory, temperature, scheduling from /proc and /sys
+    - PipeWireCollector: quantum/rate via pw-metadata, xruns via pw-cli (TK-245)
 
 On macOS (development), collectors return fallback/mock data.
 """

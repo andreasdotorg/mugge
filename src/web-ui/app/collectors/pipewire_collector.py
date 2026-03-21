@@ -1,11 +1,17 @@
-"""PipeWire collector — graph state from pw-top.
+"""PipeWire collector — graph metadata via pw-metadata and pw-cli.
 
-Parses ``pw-top -b -n 2`` stdout via asyncio.create_subprocess_exec
-with a 3-second timeout. Polled at 1 Hz. Uses -n 2 because the first
-pass of pw-top outputs all zeros; the second pass has real values.
+Lightweight replacement for the old pw-top-based collector (TK-245).
+The old collector spawned ``pw-top -b -n 2`` every second, consuming
+~5-6% CPU on the Pi 4 and causing xruns.
 
-Extracts: quantum, sample rate, xruns, errors, graph state,
-scheduling policy/priority for PipeWire and GraphManager (D-040).
+This collector uses two lighter-weight sources:
+    - ``pw-metadata -n settings``: quantum and sample rate (instant exit)
+    - ``pw-cli info <node-id>``: xrun counter from driver node properties
+
+Scheduling policy/priority reads have been consolidated into
+SystemCollector (same /proc PID scan as per-process CPU).
+
+Polled at 1 Hz. On non-Linux platforms returns fallback data.
 """
 
 from __future__ import annotations
@@ -14,23 +20,30 @@ import asyncio
 import logging
 import re
 import sys
-import time
 
 log = logging.getLogger(__name__)
 
 _IS_LINUX = sys.platform == "linux"
 
+# Regex for pw-metadata output lines like:
+#   update: id:0 key:'clock.quantum' value:'1024' type:''
+_META_RE = re.compile(
+    r"key:'([^']+)'\s+value:'([^']*)'"
+)
+
 
 class PipeWireCollector:
-    """Singleton collector for PipeWire graph state."""
+    """Singleton collector for PipeWire graph metadata."""
 
     def __init__(self) -> None:
         self._snapshot: dict | None = None
         self._task: asyncio.Task | None = None
+        self._driver_node_id: int | None = None
+        self._driver_discovery_done = False
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._poll_loop(), name="pipewire-poll")
-        log.info("PipeWireCollector started")
+        log.info("PipeWireCollector started (pw-metadata mode)")
 
     async def stop(self) -> None:
         if self._task:
@@ -45,8 +58,8 @@ class PipeWireCollector:
     def snapshot(self) -> dict:
         """Return the latest PipeWire snapshot.
 
-        Shape matches the ``pipewire`` section of
-        MockDataGenerator.system() for wire-format compatibility.
+        Shape: {quantum, sample_rate, graph_state, xruns}.
+        Scheduling is no longer included here (moved to SystemCollector).
         """
         if self._snapshot is not None:
             return self._snapshot
@@ -67,175 +80,207 @@ class PipeWireCollector:
                 await asyncio.sleep(1.0)
 
     async def _collect(self) -> dict:
-        """Run pw-top and parse its output."""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "pw-top", "-b", "-n", "2",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=3.0,
-            )
-        except asyncio.TimeoutError:
-            log.warning("pw-top timed out after 3s")
-            return self._fallback_snapshot()
-        except FileNotFoundError:
-            log.warning("pw-top not found — PipeWire data unavailable")
-            return self._fallback_snapshot()
+        """Collect PipeWire metadata and xrun count."""
+        quantum, sample_rate = await self._read_metadata()
+        xruns = await self._read_xruns()
 
-        if proc.returncode != 0:
-            log.warning("pw-top exited with %d", proc.returncode)
-            return self._fallback_snapshot()
+        graph_state = "running" if quantum > 0 else "unknown"
 
-        return self._parse_pw_top(stdout.decode("utf-8", errors="replace"))
-
-    def _parse_pw_top(self, output: str) -> dict:
-        """Parse pw-top batch output.
-
-        pw-top -b -n 2 output contains two passes separated by a blank
-        line or a repeated header. The first pass typically has all zeros;
-        the second pass has real values. We parse only the LAST set of
-        data lines.
-
-        pw-top -b output has a header line like:
-            S  ID QUANT   RATE    WAIT    BUSY   W/Q   B/Q  ERR  ...  NAME
-        followed by data rows. The first line after the header often
-        contains the driver node with quantum and rate info.
-
-        We also look for scheduling info from /proc/{pid}/stat for
-        PipeWire and GraphManager, but that's handled by SystemCollector.
-        Here we focus on quantum, sample rate, xruns, and graph state.
-        """
-        result = self._fallback_snapshot()
-        lines = output.strip().splitlines()
-
-        if not lines:
-            return result
-
-        # With -n 2, pw-top outputs two passes. Split on header lines
-        # to find the last pass. A header starts with "S " followed by
-        # column names.
-        last_pass_start = 0
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if stripped.startswith("S ") and "QUANT" in stripped:
-                last_pass_start = i
-
-        # Parse only lines from the last pass onward
-        parse_lines = lines[last_pass_start:]
-
-        quantum = 0
-        sample_rate = 0
-        total_xruns = 0
-        graph_state = "unknown"
-
-        for line in parse_lines:
-            line = line.strip()
-            if not line or line.startswith("S "):
-                continue
-
-            fields = line.split()
-            if len(fields) < 5:
-                continue
-
-            # Try to extract quantum and rate from QUANT and RATE columns
-            # pw-top format: S  ID QUANT   RATE    WAIT    BUSY ...
-            # S is single char (S/I/R), then numeric fields
-            try:
-                # fields[0] = state (S/I/R), fields[1] = ID
-                # fields[2] = quantum, fields[3] = rate
-                q = int(fields[2])
-                r = int(fields[3])
-                if q > 0 and quantum == 0:
-                    quantum = q
-                if r > 0 and sample_rate == 0:
-                    sample_rate = r
-                # ERR column (index 8 in typical pw-top output)
-                if len(fields) > 8:
-                    try:
-                        errs = int(fields[8])
-                        total_xruns += errs
-                    except ValueError:
-                        pass
-                graph_state = "running"
-            except (ValueError, IndexError):
-                continue
-
-        # Read scheduling info for PipeWire and GraphManager (D-040)
-        pw_sched = self._read_scheduling("pipewire")
-        gm_sched = self._read_scheduling("pi4audio-graph")
-
-        result = {
+        return {
             "quantum": quantum if quantum > 0 else 256,
             "sample_rate": sample_rate if sample_rate > 0 else 48000,
             "graph_state": graph_state,
-            "xruns": total_xruns,
-            "scheduling": {
-                "pipewire_policy": pw_sched[0],
-                "pipewire_priority": pw_sched[1],
-                "graphmgr_policy": gm_sched[0],
-                "graphmgr_priority": gm_sched[1],
-            },
+            "xruns": xruns,
         }
-        return result
 
-    def _read_scheduling(self, process_name: str) -> tuple[str, int]:
-        """Read scheduling policy and priority for a named process from /proc.
+    async def _read_metadata(self) -> tuple[int, int]:
+        """Read quantum and sample rate from pw-metadata.
 
-        Returns (policy_name, priority).
+        Runs ``pw-metadata -n settings`` which prints key-value pairs
+        and exits immediately (no monitoring mode). Output format::
+
+            Found "settings" metadata 32
+            update: id:0 key:'clock.quantum' value:'1024' type:''
+            update: id:0 key:'clock.rate' value:'48000' type:''
+
+        Returns (quantum, sample_rate). Falls back to (0, 0) on error.
         """
-        if not _IS_LINUX:
-            return ("SCHED_OTHER", 0)
-
-        import os
         try:
-            pids = [p for p in os.listdir("/proc") if p.isdigit()]
-        except OSError:
-            return ("SCHED_OTHER", 0)
+            proc = await asyncio.create_subprocess_exec(
+                "pw-metadata", "-n", "settings",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(
+                proc.communicate(), timeout=2.0,
+            )
+        except asyncio.TimeoutError:
+            log.warning("pw-metadata timed out")
+            return (0, 0)
+        except FileNotFoundError:
+            log.warning("pw-metadata not found")
+            return (0, 0)
 
-        for pid in pids:
+        if proc.returncode != 0:
+            return (0, 0)
+
+        quantum = 0
+        sample_rate = 0
+
+        for line in stdout.decode("utf-8", errors="replace").splitlines():
+            m = _META_RE.search(line)
+            if not m:
+                continue
+            key, value = m.group(1), m.group(2)
             try:
-                with open(f"/proc/{pid}/comm") as f:
-                    comm = f.read().strip().lower()
-                if process_name not in comm:
-                    continue
-
-                with open(f"/proc/{pid}/stat") as f:
-                    stat_line = f.read()
-                close_paren = stat_line.rfind(")")
-                fields = stat_line[close_paren + 2:].split()
-                # field index 39 (0-indexed from after comm) = policy
-                # field index 17 (0-indexed) = priority
-                policy_num = int(fields[38]) if len(fields) > 38 else 0
-                rt_priority = int(fields[37]) if len(fields) > 37 else 0
-
-                policy_map = {
-                    0: "SCHED_OTHER",
-                    1: "SCHED_FIFO",
-                    2: "SCHED_RR",
-                    3: "SCHED_BATCH",
-                    5: "SCHED_IDLE",
-                    6: "SCHED_DEADLINE",
-                }
-                policy_name = policy_map.get(policy_num, f"SCHED_{policy_num}")
-                return (policy_name, rt_priority)
-            except (OSError, ValueError, IndexError):
+                if key == "clock.quantum" and quantum == 0:
+                    quantum = int(value)
+                elif key == "clock.rate" and sample_rate == 0:
+                    sample_rate = int(value)
+            except ValueError:
                 continue
 
-        return ("SCHED_OTHER", 0)
+        return (quantum, sample_rate)
+
+    async def _discover_driver_node(self) -> int | None:
+        """Find the USBStreamer driver node ID via pw-cli.
+
+        Looks for a node with 'USBStreamer' in its description.
+        Called once at first poll; result is cached.
+
+        Returns the node ID, or None if not found.
+        """
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "pw-cli", "ls", "Node",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(
+                proc.communicate(), timeout=3.0,
+            )
+        except (asyncio.TimeoutError, FileNotFoundError):
+            return None
+
+        if proc.returncode != 0:
+            return None
+
+        # pw-cli ls Node output has blocks like:
+        #   id 42, type PipeWire:Interface:Node/3
+        #     ...
+        #     node.description = "USBStreamer"
+        current_id = None
+        for line in stdout.decode("utf-8", errors="replace").splitlines():
+            line = line.strip()
+            id_match = re.match(r"id\s+(\d+),", line)
+            if id_match:
+                current_id = int(id_match.group(1))
+            elif current_id is not None and "usbstreamer" in line.lower():
+                log.info("Discovered USBStreamer driver node: id %d", current_id)
+                return current_id
+
+        return None
+
+    async def _read_xruns(self) -> int:
+        """Read xrun count from the driver node via pw-cli.
+
+        Uses ``pw-cli info <node-id>`` to query the USBStreamer driver
+        node properties. PipeWire tracks xruns in driver node info.
+
+        Falls back to ``pw-cli info all`` with grep for xrun properties
+        if no specific driver node was discovered.
+
+        Returns the xrun count, or 0 on error.
+        """
+        # Discover driver node on first call
+        if not self._driver_discovery_done:
+            self._driver_discovery_done = True
+            self._driver_node_id = await self._discover_driver_node()
+            if self._driver_node_id is None:
+                log.info("USBStreamer driver node not found — "
+                         "xrun count will use pw-cli info all fallback")
+
+        if self._driver_node_id is not None:
+            xruns = await self._query_node_xruns(self._driver_node_id)
+            if xruns is not None:
+                return xruns
+
+        # Fallback: scan all nodes for xrun properties
+        return await self._query_all_xruns()
+
+    async def _query_node_xruns(self, node_id: int) -> int | None:
+        """Query xrun count from a specific node via pw-cli info."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "pw-cli", "info", str(node_id),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(
+                proc.communicate(), timeout=2.0,
+            )
+        except (asyncio.TimeoutError, FileNotFoundError):
+            return None
+
+        if proc.returncode != 0:
+            # Node may have been removed — reset discovery
+            self._driver_node_id = None
+            self._driver_discovery_done = False
+            return None
+
+        return self._parse_xruns(stdout.decode("utf-8", errors="replace"))
+
+    async def _query_all_xruns(self) -> int:
+        """Fallback: scan all node info for xrun properties."""
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "pw-cli", "info", "all",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(
+                proc.communicate(), timeout=3.0,
+            )
+        except (asyncio.TimeoutError, FileNotFoundError):
+            return 0
+
+        if proc.returncode != 0:
+            return 0
+
+        return self._parse_xruns(
+            stdout.decode("utf-8", errors="replace")) or 0
+
+    def _parse_xruns(self, output: str) -> int | None:
+        """Parse xrun count from pw-cli info output.
+
+        Looks for lines containing xrun-related properties like:
+            clock.xrun-count = "3"
+        or other xrun indicators in node info.
+        """
+        xrun_total = 0
+        found = False
+
+        for line in output.splitlines():
+            line_stripped = line.strip().lower()
+            if "xrun" not in line_stripped:
+                continue
+            # Try to extract numeric value from key = "value" patterns
+            parts = line.strip().split("=")
+            if len(parts) >= 2:
+                try:
+                    val = int(parts[-1].strip().strip('"').strip("'"))
+                    xrun_total += val
+                    found = True
+                except ValueError:
+                    pass
+
+        return xrun_total if found else None
 
     def _fallback_snapshot(self) -> dict:
-        """Return plausible defaults when pw-top is unavailable."""
+        """Return plausible defaults when PipeWire tools are unavailable."""
         return {
             "quantum": 256,
             "sample_rate": 48000,
             "graph_state": "unknown",
             "xruns": 0,
-            "scheduling": {
-                "pipewire_policy": "SCHED_OTHER",
-                "pipewire_priority": 0,
-                "graphmgr_policy": "SCHED_OTHER",
-                "graphmgr_priority": 0,
-            },
         }
