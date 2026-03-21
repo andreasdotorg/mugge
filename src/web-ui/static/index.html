@@ -25,54 +25,55 @@
     </div>
 </nav>
 
-<!-- Persistent status bar (32px) — visible on ALL tabs -->
+<!-- Persistent status bar (36px) — visible on ALL tabs -->
 <div class="status-bar" id="status-bar">
-    <!-- Left: mini level meters -->
-    <div class="sb-meters">
-        <canvas class="sb-meter-canvas" id="sb-mini-main"
-                width="14" height="20" title="MAIN (ML, MR)"></canvas>
-        <div class="sb-meter-sep"></div>
-        <canvas class="sb-meter-canvas" id="sb-mini-app"
-                width="29" height="20" title="APP>DSP (A3-A8)"></canvas>
-        <div class="sb-meter-sep"></div>
-        <canvas class="sb-meter-canvas" id="sb-mini-dspout"
-                width="39" height="20" title="DSP>OUT (SatL-IR)"></canvas>
-        <div class="sb-meter-sep"></div>
-        <canvas class="sb-meter-canvas" id="sb-mini-physin"
-                width="39" height="20" title="PHYS IN (Mic-P8)"></canvas>
+    <!-- Audio group: mini meters + DSP state + Clip + Xruns -->
+    <div class="sb-group sb-group-audio">
+        <div class="sb-meters">
+            <canvas class="sb-meter-canvas" id="sb-mini-main"
+                    width="16" height="24" title="MAIN (ML, MR)"></canvas>
+            <div class="sb-meter-sep"></div>
+            <canvas class="sb-meter-canvas" id="sb-mini-app"
+                    width="35" height="24" title="APP>DSP (A3-A8)"></canvas>
+            <div class="sb-meter-sep"></div>
+            <canvas class="sb-meter-canvas" id="sb-mini-dspout"
+                    width="47" height="24" title="DSP>OUT (SatL-IR)"></canvas>
+            <div class="sb-meter-sep"></div>
+            <canvas class="sb-meter-canvas" id="sb-mini-physin"
+                    width="47" height="24" title="PHYS IN (Mic-P8)"></canvas>
+        </div>
+        <span class="sb-item">
+            <span class="sb-label">DSP</span><span class="sb-value" id="sb-dsp-state">--</span>
+        </span>
+        <span class="sb-item">
+            <span class="sb-label">Clip</span><span class="sb-value" id="sb-clip">0</span>
+        </span>
+        <span class="sb-item">
+            <span class="sb-label">Xr</span><span class="sb-value" id="sb-xruns">0</span>
+        </span>
     </div>
 
-    <!-- Center: system health -->
-    <div class="sb-health">
-        <span class="sb-health-item">
-            <span class="sb-label">DSP:</span><span class="sb-value" id="sb-dsp-state">--</span>
-        </span>
-        <span class="sb-health-item sb-collapse-600">
-            <span class="sb-label">Load:</span>
+    <!-- Pipeline group: DSP Load + Quantum + Buffer + FIFO -->
+    <div class="sb-group sb-group-pipeline">
+        <span class="sb-item">
+            <span class="sb-label">Load</span>
             <span class="sb-gauge" id="sb-dsp-load-gauge">
                 <span class="sb-gauge-fill" id="sb-dsp-load-gauge-fill"></span>
                 <span class="sb-gauge-text" id="sb-dsp-load-gauge-text">--</span>
             </span>
         </span>
-        <span class="sb-health-item">
-            <span class="sb-label">Q:</span><span class="sb-value" id="sb-quantum">--</span>
+        <span class="sb-item">
+            <span class="sb-label">Q</span><span class="sb-value" id="sb-quantum">--</span>
         </span>
-        <span class="sb-health-item sb-collapse-600">
-            <span class="sb-label">Buf:</span><span class="sb-value" id="sb-buf">--</span>
+        <span class="sb-item sb-collapse-narrow">
+            <span class="sb-label">Buf</span><span class="sb-value" id="sb-buf">--</span>
         </span>
-        <span class="sb-health-item sb-collapse-600">
+        <span class="sb-item sb-collapse-narrow">
             <span class="sb-label">FIFO</span><span class="sb-value" id="sb-fifo">--</span>
         </span>
-        <span class="sb-health-item">
-            <span class="sb-label">Clip:</span><span class="sb-value" id="sb-clip">0</span>
-        </span>
-        <span class="sb-health-item">
-            <span class="sb-label">Xr:</span><span class="sb-value" id="sb-xruns">0</span>
-        </span>
     </div>
-    <span class="sb-safety-sep sb-collapse-600"></span>
 
-    <!-- Center: measurement progress (hidden when not measuring) -->
+    <!-- Measurement progress (hidden when idle) -->
     <div class="sb-measure-progress hidden" id="sb-measure-progress">
         <span class="sb-measure-step" id="sb-measure-step">--</span>
         <div class="sb-measure-bar">
@@ -81,15 +82,38 @@
         <span class="sb-measure-pct" id="sb-measure-pct">--%</span>
     </div>
 
-    <!-- Right: mem, uptime, temp, CPU, mode, ABORT -->
-    <div class="sb-right">
-        <span class="sb-value sb-mem sb-collapse-600" id="sb-mem">--</span>
-        <span class="sb-value sb-uptime sb-collapse-600" id="sb-uptime">--</span>
-        <span class="sb-value sb-temp" id="sb-temp">--</span>
-        <span class="sb-value sb-cpu" id="sb-cpu">--</span>
-        <div class="sb-sep"></div>
+    <!-- System group: CPU + Temp + Mem + Uptime -->
+    <div class="sb-group sb-group-system">
+        <span class="sb-item">
+            <span class="sb-label">CPU</span>
+            <span class="sb-gauge" id="sb-cpu-gauge">
+                <span class="sb-gauge-fill" id="sb-cpu-gauge-fill"></span>
+                <span class="sb-gauge-text" id="sb-cpu-gauge-text">--</span>
+            </span>
+        </span>
+        <span class="sb-item">
+            <span class="sb-label">Temp</span>
+            <span class="sb-gauge" id="sb-temp-gauge">
+                <span class="sb-gauge-fill" id="sb-temp-gauge-fill"></span>
+                <span class="sb-gauge-text" id="sb-temp-gauge-text">--</span>
+            </span>
+        </span>
+        <span class="sb-item sb-collapse-narrow">
+            <span class="sb-label">Mem</span>
+            <span class="sb-gauge" id="sb-mem-gauge">
+                <span class="sb-gauge-fill" id="sb-mem-gauge-fill"></span>
+                <span class="sb-gauge-text" id="sb-mem-gauge-text">--</span>
+            </span>
+        </span>
+        <span class="sb-item sb-collapse-narrow">
+            <span class="sb-label">Up</span><span class="sb-value" id="sb-uptime">--</span>
+        </span>
+    </div>
+
+    <!-- Anchor: panic button + mode badge -->
+    <div class="sb-anchor">
+        <button class="sb-panic-btn" id="sb-panic-btn" data-testid="panic-button">MUTE</button>
         <span class="sb-mode-badge" id="sb-mode">--</span>
-        <button class="sb-abort-btn hidden" id="sb-abort-btn" data-testid="abort-measurement">ABORT</button>
     </div>
 </div>
 

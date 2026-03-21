@@ -103,8 +103,8 @@ class TestHealthIndicators:
             "sb-quantum": None,  # numeric
             "sb-clip": None,
             "sb-xruns": None,
-            "sb-temp": None,
-            "sb-cpu": None,
+            "sb-temp-gauge-text": None,
+            "sb-cpu-gauge-text": None,
         }
         for elem_id, expected_values in indicators.items():
             loc = page.locator(f"#{elem_id}")
@@ -145,9 +145,9 @@ class TestHealthIndicators:
         """F-038: Memory % in status bar updates from '--'."""
         _wait_for_ws_data(page)
         page.wait_for_timeout(1000)
-        loc = page.locator("#sb-mem")
+        loc = page.locator("#sb-mem-gauge-text")
         text = loc.text_content().strip()
-        assert text != "--", "sb-mem still shows '--'"
+        assert text != "--", "sb-mem-gauge-text still shows '--'"
 
     def test_sb_uptime_populated(self, page):
         """F-038: Uptime in status bar updates from '--'."""
@@ -174,22 +174,20 @@ class TestLabelClarity:
         dsp_label = page.locator("#sb-dsp-state").locator("xpath=preceding-sibling::span[@class='sb-label']")
         expect(dsp_label).to_have_text("DSP:")
 
-        # CPU value exists and is in a different container
-        cpu = page.locator("#sb-cpu")
+        # CPU gauge exists and is in a different group
+        cpu = page.locator("#sb-cpu-gauge")
         expect(cpu).to_be_visible()
         dsp = page.locator("#sb-dsp-state")
         expect(dsp).to_be_visible()
 
-        # They must have different parent elements (different sb-health-item
-        # vs sb-right).
-        dsp_parent = page.evaluate(
-            "document.getElementById('sb-dsp-state').parentElement.className"
+        # They must be in different groups (audio vs system).
+        dsp_group = page.evaluate(
+            "document.getElementById('sb-dsp-state').closest('.sb-group').className"
         )
-        cpu_parent = page.evaluate(
-            "document.getElementById('sb-cpu').parentElement.className"
+        cpu_group = page.evaluate(
+            "document.getElementById('sb-cpu-gauge').closest('.sb-group').className"
         )
-        # CPU is in sb-right, DSP is in sb-health > sb-health-item.
-        assert dsp_parent != cpu_parent or "sb-right" not in dsp_parent
+        assert dsp_group != cpu_group, "DSP and CPU should be in different groups"
 
 
 # ---------------------------------------------------------------------------
@@ -201,10 +199,10 @@ class TestMiniMeterStructure:
     """4 canvas elements with correct dimensions and 24 total bars."""
 
     CANVAS_SPECS = {
-        "sb-mini-main":   {"width": 14, "height": 20},
-        "sb-mini-app":    {"width": 29, "height": 20},
-        "sb-mini-dspout": {"width": 39, "height": 20},
-        "sb-mini-physin": {"width": 39, "height": 20},
+        "sb-mini-main":   {"width": 16, "height": 24},
+        "sb-mini-app":    {"width": 35, "height": 24},
+        "sb-mini-dspout": {"width": 47, "height": 24},
+        "sb-mini-physin": {"width": 47, "height": 24},
     }
 
     @pytest.mark.parametrize("canvas_id,spec", list(CANVAS_SPECS.items()),
@@ -227,15 +225,15 @@ class TestMiniMeterStructure:
 
         Bar count is derived from canvas width and the rendering config in
         statusbar.js.  We verify canvas widths match the expected bar layout:
-          MAIN:    2 bars * 6px + 1 gap * 2px = 14px
-          APP:     6 bars * 4px + 5 gaps * 1px = 29px
-          DSP>OUT: 8 bars * 4px + 7 gaps * 1px = 39px
-          PHYS IN: 8 bars * 4px + 7 gaps * 1px = 39px
+          MAIN:    2 bars * 7px + 1 gap * 2px = 16px
+          APP:     6 bars * 5px + 5 gaps * 1px = 35px
+          DSP>OUT: 8 bars * 5px + 7 gaps * 1px = 47px
+          PHYS IN: 8 bars * 5px + 7 gaps * 1px = 47px
         """
-        expected_widths = {"sb-mini-main": 14, "sb-mini-app": 29,
-                           "sb-mini-dspout": 39, "sb-mini-physin": 39}
+        expected_widths = {"sb-mini-main": 16, "sb-mini-app": 35,
+                           "sb-mini-dspout": 47, "sb-mini-physin": 47}
         total_bars = 0
-        bar_configs = {14: 2, 29: 6, 39: 8}  # width -> bar count
+        bar_configs = {16: 2, 35: 6, 47: 8}  # width -> bar count
         for canvas_id, expected_w in expected_widths.items():
             w = int(page.locator(f"#{canvas_id}").get_attribute("width"))
             assert w == expected_w
@@ -369,11 +367,13 @@ class TestResponsiveBreakpoints:
                      "sb-mini-physin"]:
             expect(pg.locator(f"#{cid}")).to_be_visible()
 
-        # Health zone visible.
-        expect(pg.locator(".sb-health")).to_be_visible()
+        # All three groups visible.
+        expect(pg.locator(".sb-group-audio")).to_be_visible()
+        expect(pg.locator(".sb-group-pipeline")).to_be_visible()
+        expect(pg.locator(".sb-group-system")).to_be_visible()
 
-        # Right zone visible.
-        expect(pg.locator(".sb-right")).to_be_visible()
+        # Anchor visible.
+        expect(pg.locator(".sb-anchor")).to_be_visible()
 
         # No overflow: status bar fits in viewport width.
         sb_width = pg.evaluate(
@@ -481,22 +481,24 @@ class TestDashboardRegression:
 
 
 # ---------------------------------------------------------------------------
-# 9. ABORT Hidden When Idle (A1)
+# 9. Panic Button Idle State (A1)
 # ---------------------------------------------------------------------------
 
 
-class TestAbortIdleState:
-    """ABORT button must be hidden when no measurement is active."""
+class TestPanicButtonIdleState:
+    """Panic button shows MUTE when no measurement is active."""
 
-    def test_abort_hidden_in_idle(self, page):
-        """A1: #sb-abort-btn has 'hidden' class when idle."""
-        abort = page.locator("#sb-abort-btn")
-        expect(abort).to_have_class(re.compile(r".*\bhidden\b.*"))
+    def test_panic_shows_mute_in_idle(self, page):
+        """A1: #sb-panic-btn shows 'MUTE' text when idle (no measurement)."""
+        _wait_for_ws_data(page)
+        btn = page.locator("#sb-panic-btn")
+        expect(btn).to_be_visible()
+        expect(btn).to_have_text("MUTE")
 
-    def test_abort_has_data_testid(self, page):
-        """M4: Exactly one ABORT button with data-testid='abort-measurement'."""
-        count = page.locator('[data-testid="abort-measurement"]').count()
-        assert count == 1, f"Expected 1 abort button, found {count}"
+    def test_panic_has_data_testid(self, page):
+        """M4: Exactly one panic button with data-testid='panic-button'."""
+        count = page.locator('[data-testid="panic-button"]').count()
+        assert count == 1, f"Expected 1 panic button, found {count}"
 
 
 # ---------------------------------------------------------------------------

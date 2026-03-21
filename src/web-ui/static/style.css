@@ -27,7 +27,7 @@
     --meter-peak: #ffffff;
 
     --nav-height: 28px;
-    --status-bar-height: 32px;
+    --status-bar-height: 36px;
     --font-body: "Inter", "JetBrains Mono", system-ui, sans-serif;
     --font-numeric: "Space Mono", "JetBrains Mono", "Fira Code", monospace;
 }
@@ -136,7 +136,7 @@ html, body {
     flex-direction: column;
 }
 
-/* -- Persistent status bar (32px) ---------------------------------------- */
+/* -- Persistent status bar (36px) ---------------------------------------- */
 
 .status-bar {
     display: flex;
@@ -146,11 +146,41 @@ html, body {
     background: var(--bg-panel);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    gap: 8px;
-    font-size: 9px;
+    gap: 10px;
+    font-size: 10px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     font-family: var(--font-numeric);
+}
+
+/* -- Status bar groups --------------------------------------------------- */
+
+.sb-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding-right: 10px;
+    border-right: 1px solid var(--border);
+}
+
+.sb-group:last-of-type {
+    border-right: none;
+    padding-right: 0;
+}
+
+.sb-item {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.sb-label {
+    color: var(--text-dim);
+}
+
+.sb-value {
+    color: var(--text);
 }
 
 /* -- Mini meters --------------------------------------------------------- */
@@ -169,32 +199,9 @@ html, body {
 
 .sb-meter-sep {
     width: 1px;
-    height: 12px;
+    height: 14px;
     background: var(--border);
     margin: 0 2px;
-}
-
-/* -- System health (center) ---------------------------------------------- */
-
-.sb-health {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-}
-
-.sb-health-item {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-}
-
-.sb-label {
-    color: var(--text-dim);
-}
-
-.sb-value {
-    color: var(--text);
 }
 
 /* -- Measurement progress ------------------------------------------------ */
@@ -209,7 +216,7 @@ html, body {
 }
 
 .sb-measure-step {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--yellow);
     white-space: nowrap;
@@ -240,31 +247,7 @@ html, body {
     text-align: right;
 }
 
-/* -- Right zone ---------------------------------------------------------- */
-
-.sb-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-left: auto;
-    flex-shrink: 0;
-}
-
-.sb-temp {
-    font-size: 9px;
-}
-
-.sb-cpu {
-    font-size: 9px;
-}
-
-.sb-sep {
-    width: 1px;
-    height: 12px;
-    background: var(--border);
-}
-
-/* -- Inline DSP load gauge (status bar) ---------------------------------- */
+/* -- Inline gauge (status bar) ------------------------------------------- */
 
 .sb-gauge {
     display: inline-flex;
@@ -295,24 +278,18 @@ html, body {
     line-height: 10px;
 }
 
-.sb-safety-sep {
-    width: 1px;
-    height: 12px;
-    background: var(--border);
-    margin: 0 2px;
-}
+/* -- Anchor (right-aligned: panic button + mode badge) ------------------- */
 
-.sb-mem {
-    font-size: 9px;
-}
-
-.sb-uptime {
-    font-size: 9px;
-    color: var(--text-dim);
+.sb-anchor {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-shrink: 0;
 }
 
 .sb-mode-badge {
-    font-size: 9px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -323,9 +300,9 @@ html, body {
     line-height: 1.4;
 }
 
-/* -- ABORT button -------------------------------------------------------- */
+/* -- Panic button (MUTE / ABORT) ----------------------------------------- */
 
-.sb-abort-btn {
+.sb-panic-btn {
     font-family: inherit;
     font-size: 10px;
     font-weight: 700;
@@ -337,17 +314,34 @@ html, body {
     background: rgba(229, 69, 58, 0.15);
     color: var(--red);
     cursor: pointer;
-    min-width: 48px;
-    min-height: 28px;
+    min-width: 56px;
+    min-height: 30px;
     transition: background 0.15s;
 }
 
-.sb-abort-btn:hover {
+.sb-panic-btn:hover {
     background: rgba(229, 69, 58, 0.3);
 }
 
-.sb-abort-btn:active {
+.sb-panic-btn:active {
     background: rgba(229, 69, 58, 0.5);
+}
+
+.sb-panic-btn.muted {
+    background: var(--red);
+    color: #fff;
+    animation: pulse-panic 1.5s ease-in-out infinite;
+}
+
+.sb-panic-btn.aborting {
+    background: rgba(229, 69, 58, 0.4);
+    color: #fff;
+    animation: pulse-panic 0.8s ease-in-out infinite;
+}
+
+@keyframes pulse-panic {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
 }
 
 /* -- Dashboard main area -------------------------------------------------- */
@@ -2009,6 +2003,17 @@ html, body {
 
 /* Mobile (phone at venue) — ensure touch targets */
 
+/* -- Responsive: narrow (tablet / small laptop) --------------------------- */
+
+@media (max-width: 900px) {
+    /* Hide items tagged sb-collapse-narrow */
+    .sb-collapse-narrow {
+        display: none;
+    }
+}
+
+/* -- Responsive: phone at venue ------------------------------------------- */
+
 @media (max-width: 600px) {
     /* Status bar: hide APP>DSP and PHYS IN mini meters on phone */
     #sb-mini-app,
@@ -2018,17 +2023,17 @@ html, body {
         display: none;
     }
 
-    /* Collapse promoted items at 600px */
-    .sb-collapse-600 {
+    /* Hide entire pipeline group on phone */
+    .sb-group-pipeline {
         display: none;
     }
 
-    /* Status bar: compress center zone to xruns only */
-    .sb-health-item:not(:last-child) {
+    /* Compress system group to gauges only (labels hidden) */
+    .sb-group-system .sb-label {
         display: none;
     }
 
-    .sb-abort-btn {
+    .sb-panic-btn {
         min-height: 40px;
         min-width: 56px;
         font-size: 11px;
@@ -2090,6 +2095,8 @@ html, body {
         overflow-y: auto;
     }
 }
+
+/* -- Responsive: ultra-compact -------------------------------------------- */
 
 @media (max-width: 400px) {
     /* Ultra-compact: MAIN + first 4 DSP>OUT only */

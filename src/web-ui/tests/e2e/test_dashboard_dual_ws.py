@@ -62,7 +62,7 @@ def test_connection_dot_turns_green(page):
         timeout=5000,
     )
     page.wait_for_function(
-        "document.getElementById('sb-cpu').textContent !== '--'",
+        "document.getElementById('sb-cpu-gauge-text').textContent !== '--'",
         timeout=5000,
     )
     dot = page.locator("#conn-dot")
@@ -134,19 +134,19 @@ def test_spectrum_canvas_exists(page):
 
 def test_system_cpu_updates(page):
     """CPU in status bar shows a value (from system WS), not '--'."""
-    cpu_text = page.locator("#sb-cpu")
+    cpu_text = page.locator("#sb-cpu-gauge-text")
     expect(cpu_text).not_to_have_text("--", timeout=5000)
 
 
 def test_system_temp_updates(page):
     """Temperature in status bar shows a value (from system WS)."""
-    temp_text = page.locator("#sb-temp")
+    temp_text = page.locator("#sb-temp-gauge-text")
     expect(temp_text).not_to_have_text("--", timeout=5000)
 
 
 def test_system_mem_updates(page):
     """Memory in status bar shows a value (from system WS)."""
-    mem_text = page.locator("#sb-mem")
+    mem_text = page.locator("#sb-mem-gauge-text")
     expect(mem_text).not_to_have_text("--", timeout=5000)
 
 
@@ -170,15 +170,15 @@ def test_both_data_sources_render(page):
     expect(db_readout).not_to_have_text("-inf", timeout=5000)
 
     # System source: CPU changes from '--'
-    cpu_text = page.locator("#sb-cpu")
+    cpu_text = page.locator("#sb-cpu-gauge-text")
     expect(cpu_text).not_to_have_text("--", timeout=5000)
 
     # System source: temp changes from '--'
-    temp_text = page.locator("#sb-temp")
+    temp_text = page.locator("#sb-temp-gauge-text")
     expect(temp_text).not_to_have_text("--", timeout=5000)
 
     # System source: mem changes from '--'
-    mem_text = page.locator("#sb-mem")
+    mem_text = page.locator("#sb-mem-gauge-text")
     expect(mem_text).not_to_have_text("--", timeout=5000)
 
 
@@ -193,7 +193,7 @@ def test_reconnect_overlay_hidden_when_connected(page):
         timeout=5000,
     )
     page.wait_for_function(
-        "document.getElementById('sb-cpu').textContent !== '--'",
+        "document.getElementById('sb-cpu-gauge-text').textContent !== '--'",
         timeout=5000,
     )
 
@@ -211,7 +211,7 @@ def test_connection_dot_green_when_both_connected(page):
         timeout=5000,
     )
     page.wait_for_function(
-        "document.getElementById('sb-cpu').textContent !== '--'",
+        "document.getElementById('sb-cpu-gauge-text').textContent !== '--'",
         timeout=5000,
     )
 

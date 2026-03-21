@@ -32,19 +32,19 @@ def test_sb_dsp_state_updates(page):
 
 def test_sb_cpu_updates(page):
     """CPU in status bar updates from '--' within 3 s."""
-    cpu_text = page.locator("#sb-cpu")
+    cpu_text = page.locator("#sb-cpu-gauge-text")
     expect(cpu_text).not_to_have_text("--", timeout=3000)
 
 
 def test_sb_mem_updates(page):
     """Memory in status bar updates from '--' within 3 s."""
-    mem_text = page.locator("#sb-mem")
+    mem_text = page.locator("#sb-mem-gauge-text")
     expect(mem_text).not_to_have_text("--", timeout=3000)
 
 
 def test_sb_temp_updates(page):
     """Temperature in status bar updates from '--' within 3 s."""
-    temp_text = page.locator("#sb-temp")
+    temp_text = page.locator("#sb-temp-gauge-text")
     expect(temp_text).not_to_have_text("--", timeout=3000)
 
 
@@ -70,7 +70,7 @@ def test_mode_badge_updates(page):
 
 def test_sb_temp_value_updates(page):
     """Status bar temperature updates from '--' within 3 s."""
-    temp = page.locator("#sb-temp")
+    temp = page.locator("#sb-temp-gauge-text")
     expect(temp).not_to_have_text("--", timeout=3000)
 
 

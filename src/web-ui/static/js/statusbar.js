@@ -47,17 +47,22 @@
     // -- Group rendering configs --
 
     var groups = {
-        main:   { channels: [0, 1],                   stateArr: captureState,  barW: 6, gap: 2, color: "#8a94a4" },
-        app:    { channels: [2, 3, 4, 5, 6, 7],       stateArr: captureState,  barW: 4, gap: 1, color: "#00838f" },
-        dspout: { channels: [0, 1, 2, 3, 4, 5, 6, 7], stateArr: playbackState, barW: 4, gap: 1, color: "#2e7d32" },
-        physin: { channels: [0, 1, 2, 3, 4, 5, 6, 7], stateArr: physinState,   barW: 4, gap: 1, color: "#c17900" }
+        main:   { channels: [0, 1],                   stateArr: captureState,  barW: 7, gap: 2, color: "#8a94a4" },
+        app:    { channels: [2, 3, 4, 5, 6, 7],       stateArr: captureState,  barW: 5, gap: 1, color: "#00838f" },
+        dspout: { channels: [0, 1, 2, 3, 4, 5, 6, 7], stateArr: playbackState, barW: 5, gap: 1, color: "#2e7d32" },
+        physin: { channels: [0, 1, 2, 3, 4, 5, 6, 7], stateArr: physinState,   barW: 5, gap: 1, color: "#c17900" }
     };
 
     var animating = false;
 
-    // -- Measurement state tracking for ABORT visibility --
+    // -- Measurement state tracking --
 
     var ACTIVE_MEASUREMENT_STATES = ["setup", "gain_cal", "measuring", "filter_gen", "deploy", "verify"];
+
+    // -- Panic button state --
+
+    var isMuted = false;
+    var isMeasuring = false;
 
     // -- Helpers --
 
@@ -180,22 +185,27 @@
     }
 
     function onSystem(data) {
-        // Temperature
+        // Temperature gauge (scale 40-90°C to 0-100%)
         var temp = data.cpu.temperature;
-        PiAudio.setText("sb-temp", Math.round(temp) + "\u00b0C",
-            PiAudio.tempColor(temp));
+        var tempPct = Math.min(100, Math.max(0, (temp - 40) / 50 * 100));
+        PiAudio.setGauge("sb-temp-gauge",
+            tempPct,
+            Math.round(temp) + "\u00b0C",
+            PiAudio.tempColorRaw(temp));
 
-        // CPU usage (normalize total to per-core average)
+        // CPU usage gauge (normalize total to per-core average)
         var cpuTotal = data.cpu.total_percent;
         var cpuCores = data.cpu.per_core.length || 4;
         var cpuPct = Math.min(100, cpuTotal / cpuCores);
-        PiAudio.setText("sb-cpu", Math.round(cpuPct) + "%",
-            PiAudio.cpuColor(cpuPct));
+        PiAudio.setGauge("sb-cpu-gauge",
+            cpuPct,
+            Math.round(cpuPct) + "%",
+            PiAudio.cpuColorRaw(cpuPct));
 
         // Quantum
         PiAudio.setText("sb-quantum", String(data.pipewire.quantum));
 
-        // Xrun count (from PipeWireCollector via /ws/system — real pw-top data)
+        // Xrun count (from PipeWireCollector via /ws/system — pw-cli data)
         // Three-tier coloring per UX spec: green=0, yellow=1-5, red>5
         var xruns = data.camilladsp.xruns || 0;
         PiAudio.setText("sb-xruns", String(xruns),
@@ -209,11 +219,13 @@
         var fifoColor = (pwFifo && cdspFifo) ? "c-green" : "c-red";
         PiAudio.setText("sb-fifo", fifoText, fifoColor);
 
-        // Memory % (promoted from health bar)
+        // Memory gauge
         var mem = data.memory;
         var memPct = (mem.used_mb / mem.total_mb) * 100;
-        PiAudio.setText("sb-mem", memPct.toFixed(0) + "%",
-            PiAudio.memColor(memPct));
+        PiAudio.setGauge("sb-mem-gauge",
+            memPct,
+            memPct.toFixed(0) + "%",
+            PiAudio.memColorRaw(memPct));
 
         // Uptime (promoted from health bar)
         if (data.uptime_seconds != null) {
@@ -233,20 +245,19 @@
 
     function onMeasurement(data) {
         var progressEl = document.getElementById("sb-measure-progress");
-        var abortBtn = document.getElementById("sb-abort-btn");
-        if (!progressEl || !abortBtn) return;
+        if (!progressEl) return;
 
         var state = data.state;
+        var wasActive = isMeasuring;
+        isMeasuring = !!(state && ACTIVE_MEASUREMENT_STATES.indexOf(state) >= 0);
 
-        // ABORT button visibility
-        if (state && ACTIVE_MEASUREMENT_STATES.indexOf(state) >= 0) {
-            abortBtn.classList.remove("hidden");
-        } else {
-            abortBtn.classList.add("hidden");
+        // Update panic button when measurement state changes
+        if (wasActive !== isMeasuring) {
+            updatePanicButton();
         }
 
         // Measurement progress display
-        if (state && state !== "idle" && ACTIVE_MEASUREMENT_STATES.indexOf(state) >= 0) {
+        if (isMeasuring) {
             progressEl.classList.remove("hidden");
 
             // Step label
@@ -279,14 +290,40 @@
         }
     }
 
-    // -- ABORT button handler --
+    // -- Panic button (MUTE / ABORT) --
 
-    function onAbortClick() {
-        // Send abort via REST (same as measure.js)
-        fetch("/api/v1/measurement/abort", { method: "POST" })
-            .catch(function () {
-                // Best effort
-            });
+    function updatePanicButton() {
+        var btn = document.getElementById("sb-panic-btn");
+        if (!btn) return;
+
+        btn.classList.remove("muted", "aborting");
+
+        if (isMeasuring) {
+            btn.textContent = "ABORT";
+            btn.classList.add("aborting");
+        } else if (isMuted) {
+            btn.textContent = "UNMUTE";
+            btn.classList.add("muted");
+        } else {
+            btn.textContent = "MUTE";
+        }
+    }
+
+    function onPanicClick() {
+        if (isMeasuring) {
+            // Abort measurement
+            fetch("/api/v1/measurement/abort", { method: "POST" })
+                .catch(function () { /* best effort */ });
+        } else {
+            // Toggle mute
+            var endpoint = isMuted ? "/api/v1/audio/unmute" : "/api/v1/audio/mute";
+            fetch(endpoint, { method: "POST" })
+                .then(function () {
+                    isMuted = !isMuted;
+                    updatePanicButton();
+                })
+                .catch(function () { /* best effort */ });
+        }
     }
 
     // -- Initialization --
@@ -303,10 +340,10 @@
         if (dspoutCanvas) canvases.dspout = dspoutCanvas.getContext("2d");
         if (physinCanvas) canvases.physin = physinCanvas.getContext("2d");
 
-        // Bind ABORT button
-        var abortBtn = document.getElementById("sb-abort-btn");
-        if (abortBtn) {
-            abortBtn.addEventListener("click", onAbortClick);
+        // Bind panic button (MUTE / ABORT)
+        var panicBtn = document.getElementById("sb-panic-btn");
+        if (panicBtn) {
+            panicBtn.addEventListener("click", onPanicClick);
         }
 
         // Start render loop
