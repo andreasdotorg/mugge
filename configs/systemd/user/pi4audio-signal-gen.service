@@ -15,7 +15,7 @@ ExecStart=%h/bin/pi4audio-signal-gen \
     --capture-target UMIK-1 \
     --channels 8 \
     --listen tcp:127.0.0.1:4001 \
-    --max-level-dbfs -20.0
+    --max-level-dbfs=-20.0
 
 Restart=on-failure
 RestartSec=2
@@ -35,10 +35,9 @@ OOMScoreAdjust=-500
 LimitMEMLOCK=infinity
 LimitRTPRIO=88
 
-# Security hardening (SEC-D037-02)
+# Security hardening — PipeWire client profile (SEC-PW-CLIENT)
+# See F-035 for rationale.
 NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=read-only
 PrivateTmp=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 CapabilityBoundingSet=
@@ -48,7 +47,9 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
-SystemCallFilter=~@privileged @resources
+SystemCallFilter=~@privileged
+ProtectSystem=full
+ProtectHome=read-only
 
 [Install]
 WantedBy=default.target

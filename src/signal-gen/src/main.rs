@@ -75,7 +75,7 @@ struct Args {
     listen: String,
 
     /// Hard output level cap in dBFS (immutable after startup).
-    #[arg(long, default_value_t = -20.0)]
+    #[arg(long, default_value_t = -20.0, allow_hyphen_values = true)]
     max_level_dbfs: f64,
 
     /// Fade ramp duration in milliseconds.
