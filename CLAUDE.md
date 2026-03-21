@@ -298,7 +298,7 @@ Pi: `ela@192.168.178.185` (hostname: mugge), key-based auth, passwordless sudo.
 - **OS:** Debian 13 Trixie. **Currently booted: PREEMPT_RT kernel (`6.12.62+rpt-rpi-v8-rt`)**. Upgraded from `6.12.47` via `apt upgrade`. `config.txt` has `kernel=kernel8_rt.img`.
 - **Desktop:** labwc (Wayland) with **hardware V3D GL compositor** (D-022). No pixman override. lightdm disabled, labwc runs as systemd user service.
 - **V3D:** Hardware V3D GL active on PREEMPT_RT. No blacklist needed (D-022). Upstream fix for ABBA deadlock (commit `09fb2c6f4093`) included in `6.12.62+rpt-rpi-v8-rt`. F-012/F-017 RESOLVED.
-- **Audio:** PipeWire 1.4.9 at SCHED_FIFO 88 (systemd override, F-020 workaround deployed). PW filter-chain convolver handles all FIR processing (FFTW3/NEON, 16k taps, 4ch). CamillaDSP 3.0.1 installed but **service stopped** (D-040: abandoned in favor of PW convolver). **Known issue:** PW 1.4.9 `config.gain` silently ignored — runtime `pw-cli` volume workaround (-30 dB) must be re-applied after every PW restart.
+- **Audio:** PipeWire 1.4.9 at SCHED_FIFO 88 (systemd override, F-020 workaround deployed). PW filter-chain convolver handles all FIR processing (FFTW3/NEON, 16k taps, 4ch). Four `linear` builtin gain nodes provide per-channel attenuation (Mult params, persist across PW restarts via C-009). CamillaDSP 3.0.1 installed but **service stopped** (D-040: abandoned in favor of PW convolver). GraphManager (port 4002) manages link topology and mode transitions. Signal-gen (port 4001) provides RT measurement audio. pcm-bridge (port 9100) provides lock-free level metering.
 - **Quantum:** Production config at `~/.config/pipewire/pipewire.conf.d/10-audio-settings.conf` sets quantum 256. DJ mode needs quantum 1024 (set at runtime via `pw-metadata -n settings 0 clock.force-quantum 1024`).
 - **99-no-rt.conf:** DELETED (was Test 3 artifact forcing PipeWire to SCHED_OTHER).
 - **Mixxx:** Runs with hardware V3D GL on PREEMPT_RT (D-022). `pw-jack mixxx` — no `LIBGL_ALWAYS_SOFTWARE=1` needed. CPU ~85% with hardware GL (vs 142-166% with llvmpipe).
@@ -306,7 +306,7 @@ Pi: `ela@192.168.178.185` (hostname: mugge), key-based auth, passwordless sudo.
 - **UMIK-1 calibration:** `/home/ela/7161942.txt` (magnitude-only, serial 7161942, -1.378dB sensitivity)
 - **Firewall:** nftables active (US-000a). Default DROP inbound. Allowed: SSH (22/tcp), VNC (5900/tcp), Web UI (8080/tcp), mDNS (5353/udp), ICMP, loopback, established/related. Port 8080 persistent (TK-140 confirmed).
 - **SSH:** Password auth disabled (TK-056 verified), key-based only
-- **Listening ports:** SSH (22/tcp, all interfaces), CamillaDSP websocket (1234/tcp, localhost only), avahi/mDNS (5353/udp, all interfaces), wayvnc (5900/tcp when active, password auth). rpcbind and CUPS disabled (TK-012).
+- **Listening ports:** SSH (22/tcp, all interfaces), avahi/mDNS (5353/udp, all interfaces), wayvnc (5900/tcp when active, password auth), Web UI (8080/tcp, HTTPS, all interfaces, F-037: no auth). Localhost only: GraphManager RPC (4002/tcp), signal-gen RPC (4001/tcp), pcm-bridge levels (9100/tcp). CamillaDSP websocket (1234/tcp) — service stopped (D-040). rpcbind and CUPS disabled (TK-012).
 - **Installed:** CamillaDSP 3.0.1, Mixxx 2.5.0 (2.5.4 blocked — requires Qt 6.9, Trixie has 6.8.2), PipeWire 1.4.9 (trixie-backports), Reaper 7.64, wayvnc 0.9.1. RustDesk removed (D-018). 148 system packages upgraded (TK-066, 2026-03-10).
 
 ## Owner Preferences (from session 2026-03-08)
@@ -465,21 +465,21 @@ Original assumptions tracked in the Test Plan (SETUP-MANUAL.md section 6.13):
 | A7 | Mixxx runs adequately on Pi 4 with OpenGL ES via Xvfb/V3D | MEDIUM | Manual test |
 | A8 | APCmini mk2 Mixxx mapping exists or can be created | UNKNOWN | Research |
 
-## Test Plan Summary (run these FIRST)
+## Test Plan Summary
 
-The tests are defined in detail in SETUP-MANUAL.md section 6.13. Run them in this order:
+**Note (D-040):** T1 and its decision tree were designed for CamillaDSP and are
+**superseded by BM-2** (PW filter-chain benchmark, 2026-03-16). A1-A3 are VALIDATED.
+T2-T5 remain relevant. The original plan from SETUP-MANUAL.md section 6.13:
 
-1. **T1a-e**: CamillaDSP CPU consumption at various chunksize/filter-length combos
-   (synthetic dirac filters, no real audio needed). This gates everything else.
+1. ~~**T1a-e**: CamillaDSP CPU consumption~~ — SUPERSEDED by BM-2 (PW convolver: 1.70% at q1024, 3.47% at q256)
 2. **T2a-b**: End-to-end latency measurement (loopback cable on ADA8200)
 3. **T3a-b**: 30-minute stability tests (xruns, CPU, temperature)
 4. **T4**: Thermal test in actual flight case
 5. **T5**: Verify 16k-tap FIR correction effectiveness at 20Hz (needs real room measurements)
 
-**Decision tree:**
-- T1b PASS (16k @ chunksize 512 < 45% CPU) → proceed with 16k taps for both modes
-- T1b FAIL, T1d PASS (8k @ chunksize 512 < 30%) → use 8k taps for live mode, 16k for DJ
-- T1b FAIL, T1d FAIL → increase live chunksize to 1024 (21ms) and retest
+~~**Decision tree (superseded):**~~
+~~T1b PASS → 16k taps; T1b FAIL, T1d PASS → 8k live / 16k DJ; both FAIL → chunksize 1024.~~
+**D-040 outcome:** 16k taps validated for both modes. No chunksize parameter (PW quantum only).
 
 ## Next Steps — Automated Room Correction Pipeline
 
@@ -535,7 +535,7 @@ accompanying scripts. The pipeline automates:
 10. Convolve (multiply in frequency domain) the crossover with the room correction
 11. Convert the result to minimum-phase (Hilbert transform of log magnitude)
 12. Truncate/window to target length (16,384 taps)
-13. Export as WAV files to `/etc/camilladsp/coeffs/`
+13. Export as WAV files to `/etc/pi4audio/coeffs/`
 
 ### Automation Goal
 The end goal: arrive at venue, set up speakers, place mic, press one button (or run
@@ -544,15 +544,15 @@ automatically. The script should:
 - Guide the user through mic placement
 - Run all measurements automatically
 - Generate and deploy filters
-- Update CamillaDSP delay values
-- Restart CamillaDSP with new filters
+- Update PipeWire filter-chain delay values
+- Reload filter-chain config (or trigger GraphManager mode transition)
 - Run a mandatory verification measurement to confirm correction effectiveness (per design principle #7)
 
 ### Tools
 - Python with scipy, numpy, soundfile for DSP
 - Possibly REW for measurement (if it works on Pi ARM — needs verification)
 - Or: implement measurement entirely in Python (generate sweep, record, deconvolve)
-- CamillaDSP Python API (`pycamilladsp`) for live configuration updates
+- GraphManager RPC for mode transitions; `pw-cli` for runtime parameter changes (D-040: `pycamilladsp` obsolete)
 
 ### Key Challenges
 - **Multiple measurement positions**: Take 3-5 measurements in a cluster around the
@@ -584,7 +584,7 @@ automatically. The script should:
 - [ ] Determine if `gpu_mem=128` is needed for Mixxx or if Xvfb works with `gpu_mem=16`
 - [x] ~~Check if Raspberry Pi OS Trixie ships a PREEMPT_RT kernel package~~ YES. D-013 + D-022: PREEMPT_RT mandatory with hardware V3D GL (upstream fix in `6.12.62+rpt-rpi-v8-rt`).
 - [ ] Test whether PipeWire or native JACK gives better latency/stability on Pi 4
-- [ ] Investigate CamillaDSP's websocket API for runtime filter hot-swapping
+- [x] ~~Investigate CamillaDSP's websocket API for runtime filter hot-swapping~~ OBSOLETE (D-040: CamillaDSP abandoned). PW filter-chain conf reload or GraphManager mode transitions replace this.
 - [ ] Flight case design: ventilation, cable routing, power distribution
 - [ ] Write the automated room correction pipeline document + scripts
 - [x] ~~**F-020:** Investigate PipeWire RT module self-promotion failure on PREEMPT_RT. Persist workaround (systemd override or ExecStartPost chrt).~~ RESOLVED (workaround): systemd user service drop-in deployed (commit `9c6f3b1`). PipeWire at FIFO/88 after reboot.
@@ -599,7 +599,8 @@ automatically. The script should:
    correction pipeline. If the Pi 4 can't handle the load, we need to know before
    writing complex DSP code.
 2. **Two modes, one system**: DJ/PA and Live share the same hardware and audio stack.
-   Only the CamillaDSP config and the application (Mixxx vs Reaper) change.
+   GraphManager handles mode transitions (link topology changes). The application
+   changes (Mixxx vs Reaper) but the PipeWire filter-chain convolver runs in all modes.
 3. **Transient fidelity for psytrance**: The combined minimum-phase FIR approach was
    chosen specifically for crisp kick transients. This is a non-negotiable requirement.
 4. **20Hz correction headroom**: 16,384-tap filters give 6.8 cycles at 20Hz. This

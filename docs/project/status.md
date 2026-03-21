@@ -34,7 +34,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
-| User stories | active | 67 stories (US-000 through US-064 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039-043): driver database. US-044: bypass protection. US-045-049: measurement safety + Path A + visualization (owner planning brief 2026-03-13). US-050: measurement mock backend / E2E test harness (owner directive 2026-03-14, scope expanded 2026-03-15). **Tier 9 (US-051-053): observable tooling (owner strategic pivot 2026-03-15).** US-051: persistent status bar. US-052: RT signal generator (Rust). US-053: manual test tool page. **Tier 10 (US-054-055): ADA8200 mic input for measurements (AE calibration transfer assessment 2026-03-15).** US-054: ADA8200 mic channel selection. US-055: calibration transfer from UMIK-1 to ADA8200 mic. **Tier 11 (US-056-061): architecture evolution (owner directive 2026-03-16, D-040 pivot).** US-056: CANCELLED (D-040). US-057: CANCELLED (D-040). US-058: DONE (BM-2 PASS: 1.70% CPU, triggered D-040 abandon CamillaDSP). US-059: GraphManager Core + Production Filter-Chain, Phase A (D-039+D-040, selected). US-060: PipeWire Monitoring Replacement, Phase B (draft, depends US-059). US-061: Measurement Pipeline Adaptation, Phase C (draft, depends US-059). US-011b and US-012 amended with power budget validation and automated gain calibration. US-047/048/049 implementation gated on UX design validation (TK-160 -> TK-161 -> TK-162). **US-063: PW Metadata Collector (pw-top replacement, satisfies US-060 AC #2/#3/#7, selected 2026-03-21).** **US-064: PW Graph Visualization Tab (supersedes US-038, draft 2026-03-21).** |
+| User stories | active | 68 stories (US-000 through US-065 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039-043): driver database. US-044: bypass protection. US-045-049: measurement safety + Path A + visualization (owner planning brief 2026-03-13). US-050: measurement mock backend / E2E test harness (owner directive 2026-03-14, scope expanded 2026-03-15). **Tier 9 (US-051-053): observable tooling (owner strategic pivot 2026-03-15).** US-051: persistent status bar. US-052: RT signal generator (Rust). US-053: manual test tool page. **Tier 10 (US-054-055): ADA8200 mic input for measurements (AE calibration transfer assessment 2026-03-15).** US-054: ADA8200 mic channel selection. US-055: calibration transfer from UMIK-1 to ADA8200 mic. **Tier 11 (US-056-061): architecture evolution (owner directive 2026-03-16, D-040 pivot).** US-056: CANCELLED (D-040). US-057: CANCELLED (D-040). US-058: DONE (BM-2 PASS: 1.70% CPU, triggered D-040 abandon CamillaDSP). US-059: GraphManager Core + Production Filter-Chain, Phase A (D-039+D-040, selected). US-060: PipeWire Monitoring Replacement, Phase B (draft, depends US-059). US-061: Measurement Pipeline Adaptation, Phase C (draft, depends US-059). US-011b and US-012 amended with power budget validation and automated gain calibration. US-047/048/049 implementation gated on UX design validation (TK-160 -> TK-161 -> TK-162). **US-063: PW Metadata Collector (pw-top replacement, satisfies US-060 AC #2/#3/#7, selected 2026-03-21).** **US-064: PW Graph Visualization Tab (supersedes US-038, draft 2026-03-21).** **US-065: Configuration Tab — Gain, Quantum, Filter Info (selected 2026-03-21, worker-1 assigned).** |
 | CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | done (TK-071) | `src/room-correction/` — 13 modules (sweep, deconvolution, correction, crossover, combine, export, verify), mock room simulator, CLI runner, spatial averaging. Bose FIR generator (`generate_bose_filters.py`). All verification tests pass (D-009 compliant). |
@@ -67,8 +67,10 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-057 | CANCELLED | 0/0 | **cancelled** (owner directive 2026-03-16, D-040: CamillaDSP abandoned. PW-native investigation no longer relevant.) |
 | US-058 | done | 7/7 | **done** (owner-accepted 2026-03-16). PW filter-chain FIR benchmark (BM-2). BM2-4 PASS: q1024 1.70% CPU, q256 3.47% CPU. FFTW3 NEON 3-5.6x more efficient than CamillaDSP ALSA. **Triggered D-040: abandon CamillaDSP.** Lab note: `LN-BM2-pw-filter-chain-benchmark.md`. |
 | US-059 | done | **14/14** | **done** (owner-accepted 2026-03-21). GraphManager Core + Production Filter-Chain (Phase A). Clean reboot demo PASS (S-004, 17/17 checks). Pi boots into working DJ mode on pure PW filter-chain pipeline (D-040/D-043). Follow-ups: F-033, I-1 CI wiring, spectral verification (AC 3141), D-042 lifting. |
-| US-060 | VERIFY | 2/7 | **VERIFY PASS** (S-002 2026-03-21). FilterChainCollector running, GraphManager RPC working, 0 xruns. US-050/US-051 unblocked. Known gap resolved: PI4AUDIO_MEAS_DIR env var committed (`3dcccc2`). |
+| US-060 | VERIFY | 3/7 | **VERIFY PASS** (S-002 2026-03-21). FilterChainCollector running, GM RPC working, 0 xruns. `56ef3f0` LevelsCollector adds PW-native level data for meters. DoD #1 (collectors replaced) advancing. Known gaps: AC #3 (processing load, F-039), AC #7 (xrun counter from PW metadata, needs US-063). |
 | US-061 | VERIFY | 1/8 | **VERIFY PASS** (S-002 2026-03-21). Client files deployed, imports OK on Pi. Known gaps resolved: deploy.py path fixed (`3dcccc2`), measure_nearfield.py pycamilladsp removed (`d368c76`). |
+| US-064 | IMPLEMENT | 3/8 | **in progress** (worker-4). `graph.js` view module implemented (#2), SVG layout working (#3), mock mode rendering (#6). **Blocked:** 600px responsive bug needs fix before UX review (#8). Remaining: GM RPC extension (#1), unit tests (#4), E2E test (#5), architect review (#7), UX review (#8). |
+| US-065 | IMPLEMENT | 5/10 | **code complete** (worker-1). Config Tab: `config.js` + `config_routes.py` + CSS + mock data + `main.py` router. Blocks: F-040 `audio_mute.py` uncommitted (shared `pw_helpers.py`), UX screenshot gate (#7). Remaining: E2E test (#6), Pi integration test (#8), architect sign-off (#9), safety review (#10). |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -84,11 +86,16 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **O-018 overnight soak** (2026-03-21): 13h 39m uptime, **zero xruns** after 7-min startup settling. 66.7C, 0x0 throttle, 1.0 GiB memory, zero swap. All services healthy. Strong pre-deployment baseline for GM deployment. Validates US-062 boot-to-DJ stability over extended unattended operation.
 - **D-002 DEPLOY + VERIFY sessions** (**CLOSED** — 2026-03-21): US-052/US-060/US-061 deployed and verified. **S-001:** US-052 PASS (F-034/F-035 workarounds), US-060/US-061 BLOCKED (production path gap). **S-002:** US-060 PASS (redeployed to `~/web-ui/`), US-061 PASS (redeployed to `~/room-correction/`). US-062 regression PASS both sessions. F-034/F-035 repo fixes committed (`33b5577`). HEAD: `ddd7f67`.
 - **US-052** (Phase: **VERIFY, DoD 4/6** — S-001 PASS 2026-03-21): RT Signal Generator. Running on Pi, responds to RPC. F-034/F-035 repo fixes committed (`33b5577`). SG-13 deferred (graceful startup). US-053 unblocked.
-- **US-060** (Phase: **VERIFY, DoD 2/7** — S-002 PASS 2026-03-21): PipeWire Monitoring Replacement (Phase B). FilterChainCollector running, GraphManager RPC working, 0 xruns. US-050/US-051 unblocked. Known gap resolved: PI4AUDIO_MEAS_DIR env var committed (`3dcccc2`).
+- **US-060** (Phase: **VERIFY, DoD 3/7** — S-002 PASS 2026-03-21): PipeWire Monitoring Replacement (Phase B). FilterChainCollector running, GM RPC working, 0 xruns. `56ef3f0` LevelsCollector adds PW-native level data. Known gaps: AC #3 processing load (F-039, needs US-063 pw-top parsing), AC #7 xrun counter (needs US-063 PW metadata).
 - **US-061** (Phase: **VERIFY, DoD 1/8** — S-002 PASS 2026-03-21): Measurement Pipeline Adaptation (Phase C). Client files deployed, imports OK on Pi. Known gaps resolved: deploy.py path fixed (`3dcccc2`), measure_nearfield.py pycamilladsp removed (`d368c76`).
 - **US-050** (Phase: **TEST, DoD 6/6** — advanced 2026-03-21): Measurement Pipeline Mock Backend. QE test plan delivered: T-050-1 (CI regression), T-050-2 (E2E harness on Linux+PW), T-050-3 (D-040 inspection), T-050-4 (AC coverage). QE will review T-050-3/4 on commit. T-050-1/2: worker evidence from implementation may suffice. Stale AC (line 2718 "Real CamillaDSP") flagged as doc cleanup. CM committing code.
 - **US-051** (Phase: **TEST, DoD 4/4** — advanced 2026-03-21): Persistent System Status Bar. QE test plan delivered: T-051-1 (Playwright E2E, 20+ tests in `test_status_bar.py`), T-051-2 (CI regression), T-051-3 (D-040 inspection — QE reviewing), T-051-4 (Pi hardware — deferred to VERIFY per QE recommendation). TP-003 protocol exists. Committed `8975b5b`. T-051-1/2 need worker execution.
 - **US-053** (Phase: **IMPLEMENT, DoD 4/6** — code complete 2026-03-21): Manual Test Tool Page. Code committed (`94103c3`): 7 UX spec fixes, signal-gen env var. Remaining DoD: #3 integration test (Pi), #4 hot-plug test (Pi), #5 AD sign-off (safety controls), #6 AE sign-off (signal quality). All remaining items need Pi access.
+- **US-065** (Phase: **IMPLEMENT, DoD 5/10** — code complete 2026-03-21): Configuration Tab. `config.js` view module, `config_routes.py` backend, CSS, mock data, `main.py` router all implemented (worker-1). **Blocked:** F-040 `audio_mute.py` uncommitted (shares `pw_helpers.py` — both must commit together). Remaining DoD: E2E test (#6), UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10).
+- **US-064** (Phase: **IMPLEMENT, DoD 3/8** — worker-4): PW Graph Visualization Tab. `graph.js` + CSS + HTML tab implemented. SVG layout working for production topology. Mock mode renders representative graph. **Blocked:** 600px responsive layout bug needs fix before UX specialist can review screenshot. F-040 commit also needed (shared index.html changes). Remaining: GM RPC port info extension (Rust, ~20 lines), unit tests, E2E test, architect review, UX review.
+- **F-040** (Phase: **code complete, UNCOMMITTED** — worker-3): Panic MUTE/UNMUTE backend (`audio_mute.py`) + frontend error handling (`statusbar.js`). Shares `pw_helpers.py` with US-065. **BLOCKING:** US-065 and US-064 commits depend on F-040 being committed first. Needs CM commit.
+- **F-041** (**RESOLVED** — `3a1e6bb`, worker-2): Mock server crash fix. Health-check + stderr capture in conftest.py. E2E suite now reliable.
+- **F-042** (**RESOLVED** — `3a1e6bb`, worker-2): 5 E2E assertion fixes. Stale selectors updated, timing adjusted.
 - **Rule 13 retrospective** (2026-03-20): 12 code commits (`ff40766`..`3a6fabb`) committed without pre-approval. Architect: **12/12 APPROVED.** AE: **4/4 APPROVED.** AD: no blockers. TW: documentation in progress. All high/medium items resolved. **Resolved items:**
   - ~~TODO (low): u32 saturation comment on `LevelTracker::sample_count`~~ DONE (sg-worker, awaiting commit)
   - ~~VERIFY (medium): Signal-gen per-channel selection RPC~~ CONFIRMED (gm-worker: `set_channel` RPC fully implemented across Rust command/RPC/RT + Python client. US-061 dependency satisfied.)
@@ -108,9 +115,60 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **US-004** (**DONE** — owner-accepted 2026-03-21): Assumption register (A1-A28). CLAUDE.md reference corrected.
 - **US-000a** (**DONE** — owner-accepted 2026-03-21): Platform security hardening. F-002/F-011 resolved, reboot-verified.
 
-### Session Wrap-Up (2026-03-21)
+### Session Wrap-Up (2026-03-21, continued session)
 
-**Accomplishments this session (2026-03-20 to 2026-03-21):**
+**Accomplishments this session (continued from earlier 2026-03-21 session):**
+- US-059: moved to **done** (owner-accepted, S-004 clean reboot demo PASS, 17/17 checks)
+- US-004, US-000a: moved to **done** (owner-accepted)
+- F-038 defect filed + code fix implemented (8 files, dashboard duplicate status bar consolidated)
+- F-039 defect filed (DSP load gauge 0%, FilterChainCollector hardcodes processing_load)
+- F-040 defect filed + **backend + frontend implemented** (worker-3): `audio_mute.py`, `pw_helpers.py`, `statusbar.js` error handling. **UNCOMMITTED — blocking US-065 and US-064.**
+- F-041 defect filed + **RESOLVED** (`3a1e6bb`, worker-2): mock server crash fix
+- F-042 defect filed + **RESOLVED** (`3a1e6bb`, worker-2): 5 E2E test assertion fixes
+- US-060: `56ef3f0` LevelsCollector, `2217bd2` port fix — DoD 2/7 -> 3/7
+- US-064: `graph.js` view module implemented (worker-4), SVG layout working, mock mode. DoD 0/8 -> 3/8. **Blocked:** 600px responsive bug.
+- US-065: **code complete** (worker-1): `config.js`, `config_routes.py`, CSS, mock data, `main.py` router. DoD 0/10 -> 5/10. **Blocked:** F-040 uncommitted (shared `pw_helpers.py`).
+- UX visual verification gate: added to global DoD section, US-051 and US-053 DoD items updated
+- E2E test fixes committed (`3a1e6bb`): suite now passes 59/60 (was 54 pass, 5 fail, 23 error)
+- Safety doc updated: new Section 8 (Config tab gain controls, D-009 hard cap), D-040 updates to Sections 1-2
+- TW memory entries: S-007 protocol violations, D-040 architecture knowledge (7 entries), security findings (F-036/F-037)
+- CHANGE sessions tracked: S-004 (reboot), S-005 (web UI), S-007 (quantum, 2 protocol violations), S-008 (F-038), S-015 (quantum revert), S-018 (PW collector), S-019 (metadata+status bar), S-020 (bugs 2-6)
+
+**Key commits this session:**
+- `56ef3f0` — LevelsCollector: PW-native level data for meters (US-060)
+- `2217bd2` — Port fix for LevelsCollector (US-060)
+- `3a1e6bb` — E2E test fixes: conftest.py health-check + stderr capture, test assertion fixes (F-041/F-042)
+- F-040 audio_mute.py + pw_helpers.py + statusbar.js — **UNCOMMITTED** (worker-3, blocking)
+
+**Worker state at session close (machine handoff preparation):**
+
+| Worker | Assignment | State | Blocker |
+|--------|-----------|-------|---------|
+| worker-1 | US-065 Config tab | Code complete, all files written | F-040 uncommitted (shared `pw_helpers.py`) + UX screenshot gate |
+| worker-2 | F-041/F-042 E2E fixes | **Done**, committed `3a1e6bb` | Available for new work |
+| worker-3 | F-040 MUTE/UNMUTE | Code complete, **UNCOMMITTED** | Needs CM commit — **CRITICAL BLOCKER** for US-064 and US-065 |
+| worker-4 | US-064 Graph viz | Implementation in progress | 600px responsive bug needs fix before UX review |
+| worker-5 | pcm-bridge nix build | Running on Pi (CHANGE session S-022) | Build in progress |
+| worker-6 | linux-builder investigation | Background research | No blocker (background task) |
+
+**Critical path for next session:**
+1. **FIRST:** Commit F-040 (worker-3's `audio_mute.py` + `pw_helpers.py` + `statusbar.js`) — this unblocks US-065 and US-064 commits
+2. Commit US-065 Config tab (worker-1, blocked on F-040)
+3. Fix US-064 600px responsive bug (worker-4), then UX screenshot review
+4. Complete pcm-bridge nix build on Pi (worker-5, CHANGE session S-022 may still be active)
+5. US-060 DoD advancement: processing load (F-039) needs US-063 pw-top parsing
+
+**Open at session close:**
+- F-040 `audio_mute.py` UNCOMMITTED — critical blocker
+- US-064 600px responsive bug — blocks UX review
+- pcm-bridge nix build (S-022) — may be in progress on Pi
+- 44 decisions, 68 stories
+- Rule 13: 4 low-priority TODOs remaining
+- AE safety item: IIR HPF excursion protection documentation (D-031)
+
+### Previous Session Wrap-Up (2026-03-21, early session)
+
+**Accomplishments (2026-03-20 to 2026-03-21 early):**
 - US-062 Boot-to-DJ: completed 0/7 -> **7/7 DONE** (owner accepted). Pi boots into DJ mode.
 - D-043 filed: WirePlumber retained for device management, linking disabled (D-039 amendment)
 - US-050/051/052/053: un-deferred per owner directive, all active
@@ -121,23 +179,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - O-018 overnight soak: 13h 39m, zero steady-state xruns, 66.7C
 - Rule 13 retrospective: 12/12 architect approved, 4/4 AE approved, 4 low TODOs remain
 - L-040: Communication & Responsiveness rules added to all role prompts (global + local)
-- Role prompt reconciliation: global -> local sync (Memory Reporting, protocol violation detection, access tier classification)
 - config.md updated: co-author line `Co-Authored-By: Claude <noreply@anthropic.com>` (no model version)
-- Co-author history rewrite: requested from CM, **status unknown** (CM comms issue)
-
-**Open at session close:**
-- D-002 DEPLOY session: **CLOSED, successful.** Files deployed, services NOT yet restarted. VERIFY phase next (restart + observation, owner go-ahead needed for USBStreamer transient risk).
-- Cargo.toml clap env feature fix committed (`834b939`). HEAD: `834b939`.
-- Rule 13: 4 low-priority TODOs remaining
-- AE safety item: IIR HPF excursion protection documentation (D-031, before production measurement)
-- Co-author history rewrite: requested from CM, status unknown
-- 43 decisions, 66 stories, 168+ tests
-
-**Next session priorities:**
-1. VERIFY phase: restart services on Pi (owner go-ahead needed), observe US-052/US-060/US-061
-2. Check co-author history rewrite status (CM)
-3. TW documentation for D-043, US-060, US-061, US-052 D-040 adaptation, D-001
-4. Continue DoD advancement for US-052 (3/6), US-060 (1/7), US-061 (0/8)
 
 ### Key Findings from Brain Dump (2026-03-09)
 - **CamillaDSP levels API correction:** pycamilladsp `client.levels.levels_since_last()` provides per-channel peak+RMS for both capture and playback (8+8 channels). This informs D-020 metering design.
@@ -350,9 +392,15 @@ See `docs/project/defects.md` for full details.
 | F-035 | High | Resolved | US-052: seccomp SIGSYS. Repo fix: SEC-PW-CLIENT profile applied to all 3 service files (`33b5577`). |
 | F-036 | Medium | Open | VNC RFB password auth insufficient for guest device access. Becomes High when US-018 deployed. Security specialist finding. |
 | F-037 | High | Open | Web UI on port 8080 has no authentication. Signal generator controllable by unauthenticated network clients. Tracked for venue deployment, not blocking current work. |
-| F-038 | Medium | Open | Dashboard tab has duplicate status bar — not consolidated into persistent bar (US-051). Owner wants ONE unified bar. |
+| F-038 | Medium | In progress | Dashboard duplicate status bar: code fix implemented (8 files), PM approved Rule 13. Awaiting UX + architect approvals for CM commit. |
 | F-039 | Medium | Open | DSP load gauge shows 0% — FilterChainCollector hardcodes processing_load. Needs pw-top BUSY parsing (US-060 AC #3). |
-| F-040 | High | Open | Panic MUTE/UNMUTE backend endpoints missing — button silently fails (safety). US-051 frontend calls `/api/v1/audio/mute` which returns 404. |
+| F-040 | High | In progress | Panic MUTE/UNMUTE: backend `audio_mute.py` + frontend error handling implemented (worker-3). **UNCOMMITTED** — blocks US-065 and US-064 commits (shared `pw_helpers.py`). |
+| F-041 | High | Resolved | Mock server crash: `conftest.py` fix committed (`3a1e6bb`, worker-2). Server health-check + stderr capture added. |
+| F-042 | Medium | Resolved | 5 E2E assertion failures: test fixes committed (`3a1e6bb`, worker-2). Stale selectors + timing adjustments. |
+| F-043 | Low | Open | GM SCHED_OTHER shown red in System tab — GM is control plane, SCHED_OTHER is correct. `system.js:387` color logic. |
+| F-044 | Low | Open | Status bar "Links 100" unclear — shows link health % (actual/desired), not link count. Needs label/format fix. |
+| F-045 | Low | Open | "Mode" vs "GM Mode" in System tab — both show mode, duplicate or unclear. One should be removed or labels clarified. |
+| ENH-001 | Low | Open | Owner requests sample rate in persistent status bar. Data already in `/ws/system`. Small addition. |
 | TK-249 | Medium | Open | PW `linear` Mult verified functional (owner confirmed during C-005). Downgraded from CRITICAL to calibration investigation — absolute SPL doesn't match theory, but gain mechanism works. Not a safety blocker. |
 
 ### Resolved

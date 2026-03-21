@@ -1344,10 +1344,110 @@ load" is not yet satisfied (DoD 2/7).
 **Related:** US-060 (PipeWire monitoring replacement — AC item #3), D-040
 (CamillaDSP removed), D-020 (web UI dashboard DSP load gauge).
 
-## F-040: Panic MUTE/UNMUTE backend endpoints missing — button silently fails (OPEN)
+## F-041: Mock server (uvicorn) crashes mid-E2E Playwright run — 23 cascading timeouts (RESOLVED)
+
+**Severity:** High (blocks E2E test suite reliability)
+**Status:** Resolved (`3a1e6bb` — worker-2 fix committed)
+**Found in:** E2E test run (2026-03-21)
+**Affects:** All E2E tests in `test_status_bar.py` and potentially other test files
+**Found by:** Team lead (test run analysis)
+
+**Description:** The mock backend server (uvicorn subprocess running `app.main:app`
+in mock mode) crashes or dies partway through the Playwright E2E test suite. All
+subsequent tests that need to create a new browser page fail with
+`Page.goto: Timeout 30000ms exceeded` because the server is no longer accepting
+connections. In the last run: 23 out of 82 tests errored with this timeout pattern,
+all in `test_status_bar.py`.
+
+**Root cause:** The `mock_server` fixture (`conftest.py:68`) is `session`-scoped —
+a single uvicorn subprocess serves all tests for the entire pytest session. The
+`page` fixture (`conftest.py:113`) is function-scoped and calls `pg.goto(mock_server)`
+for each test. When the uvicorn process crashes mid-session, the base URL becomes
+unreachable but the session fixture does not detect or restart it. Every subsequent
+`pg.goto()` hangs until the 30s Playwright navigation timeout expires.
+
+The uvicorn crash cause is unknown. Possible factors:
+1. Resource exhaustion from rapid WebSocket connect/disconnect cycles (each test
+   creates a new browser context with WebSocket connections)
+2. Unhandled exception in the FastAPI app under test load (mock data generators,
+   WebSocket handlers)
+3. Process killed by OS due to memory pressure or signal
+4. Race condition in the async lifespan handlers during concurrent WebSocket activity
+
+**Impact:** The E2E test suite is unreliable. A single server crash cascades into
+23+ test errors, making it impossible to distinguish real test failures from
+infrastructure failures. The 5 genuine test failures (see F-042) are buried in noise.
+
+**Fix candidates:**
+1. **Crash resilience:** Add health-check polling to the `mock_server` fixture with
+   automatic subprocess restart if the server becomes unresponsive. This requires
+   changing from session-scope to a fixture that can detect and recover from crashes.
+2. **Crash diagnosis:** Capture stdout/stderr from the uvicorn subprocess (currently
+   piped to `subprocess.PIPE` but never read). On crash, dump the captured output
+   to help identify the root cause.
+3. **Smaller blast radius:** Consider module-scoped or class-scoped server fixtures
+   so a crash only affects tests in the current module/class, not the entire session.
+4. **Root cause fix:** Once stderr is captured from the crash, fix the underlying
+   server bug (likely an unhandled exception or resource leak in the WebSocket
+   handlers under rapid connect/disconnect).
+
+**Files:**
+- `src/web-ui/tests/e2e/conftest.py` (mock_server fixture, lines 68-110)
+- `src/web-ui/app/main.py` (FastAPI app, WebSocket handlers)
+- `src/web-ui/tests/e2e/test_status_bar.py` (23 errors from cascading timeout)
+
+**Related:** F-042 (5 genuine assertion failures in same test run, separate from
+the server crash). D-020 (web UI). US-051 (status bar E2E coverage).
+
+---
+
+## F-042: 5 E2E test assertion failures (RESOLVED)
+
+**Severity:** Medium (test failures indicate possible UI or test regressions)
+**Status:** Resolved (`3a1e6bb` — worker-2 fix committed)
+**Found in:** E2E test run (2026-03-21)
+**Affects:** E2E test suite reliability, potentially US-050/US-051 implementation
+**Found by:** Team lead (test run analysis)
+
+**Description:** In the same test run that produced F-041 (server crash), 5 tests
+failed with assertion errors — these tests got a running server and loaded the page
+successfully but their assertions did not pass. These are distinct from the 23
+timeout errors caused by F-041.
+
+The specific failing tests and their assertion details need investigation. The
+failures may be caused by:
+1. Legitimate regressions from recent code changes (F-038 fix, US-050/US-051
+   refactoring changed element IDs, removed DOM elements, moved health indicators)
+2. Test expectations that don't match the current UI state after the F-038 fix
+   (e.g., tests still expecting old `#hb-*` selectors or removed DOM elements)
+3. Timing issues (tests checking for WebSocket data before it arrives)
+4. Mock data mismatches (mock generators not producing the data shape that the
+   new status bar code expects)
+
+**Impact:** Cannot confirm whether the web UI is working correctly. The 5 failures
+may indicate real bugs in the deployed UI or stale test expectations. Both need
+resolution.
+
+**Investigation needed:**
+1. Run the E2E suite in isolation (headed mode) to reproduce the 5 failures
+   without F-041 server crash interference
+2. Identify exact test names and assertion messages for each failure
+3. For each failure, determine: regression in app code vs stale test expectation
+4. Fix accordingly (update tests or fix app code)
+
+**Files:**
+- `src/web-ui/tests/e2e/` (all test files — failing tests not yet identified by name)
+- `src/web-ui/static/` (app code that may have regressed)
+
+**Related:** F-041 (server crash in same run — separate issue), F-038 (recent
+refactoring that changed element IDs and removed DOM elements), US-051 (status bar).
+
+---
+
+## F-040: Panic MUTE/UNMUTE backend endpoints missing — button silently fails (IN PROGRESS)
 
 **Severity:** High (safety-related — panic mute button silently fails)
-**Status:** Open
+**Status:** In progress (backend `audio_mute.py` + frontend error handling implemented by worker-3, UNCOMMITTED — blocks other workers)
 **Found in:** Status bar v2 review (2026-03-21)
 **Affects:** US-051 (persistent status bar), all web UI views (global consumer)
 **Found by:** Architect (status bar v2 review)
@@ -1398,3 +1498,165 @@ gain nodes. Not viable in an emergency at a venue.
 TK-249 (PW `linear` Mult verified functional), C-009 (Mult persistence
 across PW restart), `measure_nearfield.py` `set_convolver_gain()` (reference
 implementation for pw-cli gain setting).
+
+---
+
+## F-043: GraphManager SCHED_OTHER shown as red in System tab process list (OPEN)
+
+**Severity:** Low (cosmetic — misleading color, no functional impact)
+**Status:** Open
+**Found in:** Owner UI review (2026-03-21)
+**Affects:** System tab (system.js), D-020 (web UI)
+**Found by:** Owner
+
+**Description:** The System tab's process scheduling display colors the
+GraphManager's `SCHED_OTHER` scheduling policy in red, implying a problem.
+However, GraphManager is a control-plane process (JSON-RPC, link management)
+— it does NOT participate in the real-time audio graph and SCHED_OTHER is
+the correct scheduling policy for it. Only PipeWire daemon threads and JACK
+client bridge threads need SCHED_FIFO for audio deadline compliance.
+
+The status bar was already fixed for this (bug 5 in the current session),
+but the System tab has the same incorrect logic at `system.js:387`:
+```
+sched.graphmgr_policy === "SCHED_FIFO" ? "c-green" : "c-red"
+```
+
+**Root cause:** The color logic was copied from the PipeWire scheduling
+indicator (which correctly requires SCHED_FIFO) without considering that
+GraphManager has different scheduling requirements. The condition should
+be: SCHED_OTHER = green (correct for control plane), SCHED_FIFO = neutral
+(acceptable but unnecessary).
+
+**Fix:** Change the color logic at `system.js:387` to treat SCHED_OTHER as
+the expected state for GraphManager. Either always green (it's informational)
+or remove the color coding entirely for this indicator.
+
+**Files:**
+- `src/web-ui/static/js/system.js` (line 386-387)
+
+**Related:** US-060 (PW monitoring replacement), D-040 (GraphManager replaces
+CamillaDSP as the process being monitored).
+
+---
+
+## F-044: Status bar "Links 100" label and value unclear to operator (OPEN)
+
+**Severity:** Low (cosmetic — confusing label, no functional impact)
+**Status:** Open
+**Found in:** Owner UI review (2026-03-21)
+**Affects:** US-051 (persistent status bar), D-020 (web UI)
+**Found by:** Owner
+
+**Description:** The status bar shows "Links 100" which is unclear to the
+operator. The label was renamed from "Buf" to "Links" during the D-040
+transition, but the underlying data source is `buffer_level` from the
+FilterChainCollector, which is calculated as:
+```python
+buffer_level = round(100 * actual_links / desired_links)
+```
+
+The value "100" means "100% of desired PipeWire links are connected" — a
+link health percentage. However, the operator sees "Links 100" and
+reasonably interprets it as "100 links exist" rather than "links are at
+100% health."
+
+**Root cause:** The `buffer_level` field was repurposed during D-040 from
+CamillaDSP buffer utilization to GraphManager link health percentage, but
+the presentation was not updated to communicate what the value means.
+
+**Fix options:**
+1. **Change label + format:** "Links 12/12" (actual/desired) instead of
+   percentage — immediately understandable
+2. **Change label:** "Link%" with the value "100%" — at least signals it's
+   a percentage
+3. **Add tooltip or hover text:** Keep "Links" but show "12/12 links
+   connected (100%)" on hover
+
+The FilterChainCollector already has `gm_links_desired` and `gm_links_actual`
+fields (used in the status bar's `sb-mode` badge area). Displaying these
+directly would be clearer than a derived percentage.
+
+**Files:**
+- `src/web-ui/static/index.html` (line 64, label "Links")
+- `src/web-ui/static/js/statusbar.js` (line 173, `sb-buf` populated with
+  `cdsp.buffer_level`)
+- `src/web-ui/app/collectors/filterchain_collector.py` (line 155, percentage
+  calculation)
+
+**Related:** US-051 (status bar), US-060 (monitoring replacement), D-040
+(link health replaces buffer utilization).
+
+---
+
+## F-045: "Mode" vs "GM Mode" in System tab — duplicate or unclear (OPEN)
+
+**Severity:** Low (cosmetic — confusing duplicate display)
+**Status:** Open
+**Found in:** Owner UI review (2026-03-21)
+**Affects:** System tab (system.js), D-020 (web UI)
+**Found by:** Owner
+
+**Description:** The System tab header strip shows two mode indicators:
+- "Mode" (`sys-mode`, line 200-201 in index.html) — populated from
+  `data.mode` (top-level field in `/ws/system` payload)
+- "GM Mode" (`sys-chunksize`, line 208-209) — populated from
+  `data.camilladsp.gm_mode` (GraphManager mode via FilterChainCollector)
+
+The owner asks: "What is the difference?" If they always show the same
+value (e.g., both "DJ"), one should be removed. If they can differ (e.g.,
+during a mode transition), the distinction needs clear labeling explaining
+when and why they diverge.
+
+**Root cause:** During D-040, the "Chunksize" display (`sys-chunksize`)
+was repurposed to show GraphManager mode instead. A separate "Mode" display
+already existed from the system collector. Both now show mode information
+from different sources — the system collector's `mode` field and the
+FilterChainCollector's `gm_mode` field. These are likely always identical
+because both ultimately come from GraphManager state, but they arrive via
+different WebSocket endpoints (`/ws/system` vs `/ws/monitoring`).
+
+**Fix options:**
+1. **Remove one:** If they always agree, remove "GM Mode" (it's the
+   repurposed chunksize element with a confusing element ID `sys-chunksize`)
+   and keep "Mode" as the single source of truth
+2. **Differentiate:** If they can diverge during transitions, label them
+   clearly: "Active Mode" (what's currently running) vs "Target Mode"
+   (what GM is transitioning to)
+3. **Merge:** Show one "Mode" with a transitioning indicator (e.g.,
+   "DJ → LIVE" during a mode switch)
+
+**Files:**
+- `src/web-ui/static/index.html` (lines 200-201, 208-209)
+- `src/web-ui/static/js/system.js` (lines 334, 337-338)
+
+**Related:** US-060 (monitoring replacement), D-040 (GraphManager mode
+replaces CamillaDSP chunksize).
+
+---
+
+## ENH-001: Add sample rate to the persistent status bar (OPEN)
+
+**Type:** Enhancement (owner request)
+**Priority:** Low
+**Status:** Open (not yet assigned — owner directive: let current tracks finish first)
+**Found in:** Owner UI review (2026-03-21)
+**Affects:** US-051 (persistent status bar)
+**Requested by:** Owner
+
+**Description:** Owner requests that the PipeWire sample rate be displayed
+in the persistent status bar. The sample rate (typically 48000 Hz / "48 kHz")
+is already available in the `/ws/system` payload as `data.pipewire.sample_rate`
+and is displayed in the System tab header strip (`sys-rate`, `system.js:339`).
+
+**Implementation:** Add a small `sb-rate` element in the Pipeline group of the
+status bar (near the Quantum indicator — they are closely related). The
+`onSystem()` handler in `statusbar.js` should format and display it (e.g.,
+"48k" or "48 kHz"). No new data source needed — the value already arrives
+via `/ws/system`.
+
+**Files:**
+- `src/web-ui/static/index.html` (add `sb-rate` element in Pipeline group)
+- `src/web-ui/static/js/statusbar.js` (add `onSystem` line for sample rate)
+
+**Related:** US-051 (status bar), US-060 (PW monitoring data sources).

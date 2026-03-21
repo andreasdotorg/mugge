@@ -3212,9 +3212,9 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 - [ ] Level metering tap point: peak level data reflects post-DSP signal levels (after filter-chain processing) for all speaker output channels. If post-DSP metering is not achievable, the metering tap point is documented and the operator is informed which signal stage is being displayed
 
 **DoD:**
-- [ ] All pycamilladsp collectors replaced with PW-native equivalents
-- [ ] Dashboard and status bar display correct data from the PW filter-chain pipeline
-- [ ] Statically validated (lint, type check)
+- [ ] All pycamilladsp collectors replaced with PW-native equivalents (partial: FilterChainCollector + LevelsCollector done; processing load F-039 and xruns need US-063)
+- [ ] Dashboard and status bar display correct data from the PW filter-chain pipeline (partial: DSP state, buffer, levels working; DSP load reads 0% per F-039)
+- [x] Statically validated (lint, type check) — S-002 VERIFY confirmed
 - [ ] Automated regression tests: data collectors return valid data when PW filter-chain is running
 - [ ] Playwright E2E tests updated for new data sources
 - [ ] AE sign-off: level metering accuracy equivalent to pycamilladsp
@@ -3367,7 +3367,7 @@ All three are non-invasive: they query PipeWire's registry or kernel interfaces 
 **I want** a "Graph" tab in the web UI showing the PipeWire node topology as a visual diagram with live state indicators,
 **so that** I can see the actual audio routing at a glance, verify correct link topology, and diagnose routing problems without running pw-dump on the command line.
 
-**Status:** draft
+**Status:** in-progress (worker-4, DoD 3/8. `graph.js` + CSS + HTML tab implemented. Blocked on 600px responsive bug fix for UX review.)
 **Depends on:** US-059 (GraphManager RPC operational), US-060 (monitoring replacement -- shares data layer)
 **Blocks:** none
 **Decisions:** D-040 (pure PW pipeline), D-039/D-043 (GraphManager is sole link manager)
@@ -3393,13 +3393,62 @@ All three are non-invasive: they query PipeWire's registry or kernel interfaces 
 
 **DoD:**
 - [ ] GraphManager RPC extended with port info in `get_links`/`get_state` responses (~20 lines Rust)
-- [ ] `graph.js` view module implemented and registered
-- [ ] SVG layout algorithm handles the production topology (6-10 nodes, 12-20 links)
+- [x] `graph.js` view module implemented and registered
+- [x] SVG layout algorithm handles the production topology (6-10 nodes, 12-20 links)
 - [ ] Unit tests for SVG layout logic (node positioning, link routing)
 - [ ] E2E Playwright test: Graph tab renders with mock GM data, node/link counts correct
-- [ ] Mock mode: renders a representative topology when GM is unreachable (development/testing)
+- [x] Mock mode: renders a representative topology when GM is unreachable (development/testing)
 - [ ] Architect review: topology accurately represents the GM-managed graph
-- [ ] UX specialist review: diagram is scannable, not cluttered, consistent with existing views
+- [ ] UX specialist review: diagram is scannable, not cluttered, consistent with existing views (blocked: 600px responsive bug)
+
+---
+
+## US-065: Configuration Tab — Gain, Quantum, and Filter Info
+
+**As** the live sound engineer,
+**I want** a "Config" tab in the web UI with live gain controls for all 4 output channels, a quantum selector with ALSA mismatch handling, and read-only filter info,
+**so that** I can adjust channel gains in real time during soundcheck, switch between DJ/Live quantum without SSH, and verify which FIR filters are loaded.
+
+**Status:** in-progress (worker-1, DoD 5/10. Code complete: `config.js`, `config_routes.py`, CSS, mock data, `main.py` router. Blocked on F-040 uncommitted — shared `pw_helpers.py`. UX screenshot gate pending.)
+**Depends on:** US-059 (GraphManager operational), US-051 (persistent status bar — shared SPA infrastructure)
+**Blocks:** none
+**Decisions:** D-040 (pure PW pipeline — gains via pw-cli Mult, not CamillaDSP)
+
+**The problem:** Gain adjustments, quantum changes, and filter verification currently
+require SSH access and manual pw-cli / pw-metadata commands. During soundcheck at a
+venue, the engineer needs to adjust individual channel gains (mains L/R, sub 1, sub 2)
+quickly. Quantum switching (1024 for DJ, 256 for Live) requires two commands and
+risks ALSA period-size mismatch (F-028 root cause). Filter file info is only
+available via pw-dump inspection. All three operations should be accessible from
+the web UI.
+
+**Acceptance criteria:**
+- [ ] New "Config" tab registered via `PiAudio.registerView("config", ...)` in the web UI
+- [ ] 4 gain sliders (Left Main, Right Main, Sub 1, Sub 2) controlling PipeWire filter-chain `linear` builtin Mult values in real time via `pw-cli`
+- [ ] Gain range displayed in dBFS with current value label; slider changes take effect within 200ms
+- [ ] Quantum selector (256 / 1024 presets, or custom) setting `clock.force-quantum` via `pw-metadata`
+- [ ] Quantum change triggers ALSA period-size coordination: if loopback node period-size mismatches the new quantum, warn the operator or auto-adjust (prevents F-028 class defects)
+- [ ] Read-only filter info panel showing: loaded FIR filter filenames, tap count, sample rate for each convolver instance
+- [ ] All controls use CSS prefix `cfg-*` for element IDs and class names
+- [ ] Dark theme consistent with existing web UI views
+- [ ] Responsive: usable on 1920x1080 kiosk and 600px phone width
+
+**REST endpoints (3 new):**
+- `POST /api/v1/config/gain` — Set gain for a named channel (`{"channel": "left_main", "mult": 0.001}`)
+- `POST /api/v1/config/quantum` — Set quantum (`{"quantum": 1024}`) with ALSA coordination
+- `GET /api/v1/config/filters` — Return loaded filter info (filenames, taps, sample rate)
+
+**DoD:**
+- [x] `config.js` view module implemented and registered
+- [x] Three REST endpoints implemented in web UI backend (FastAPI router: `config_routes.py`)
+- [x] Gain control uses `pw-cli s <node-id> Props '{ params = [ "Mult" <value> ] }'` (same pattern as measure_nearfield.py `set_convolver_gain()`, shared via `pw_helpers.py`)
+- [x] Quantum endpoint sets `pw-metadata -n settings 0 clock.force-quantum <value>` and verifies ALSA period-size compatibility
+- [x] Filter info endpoint reads convolver node properties (filter filename, blocksize) from PipeWire
+- [ ] E2E Playwright test: Config tab renders, gain sliders present, filter info populated in mock mode
+- [ ] UX visual verification: screenshot at 1280px reviewed and approved by UX specialist before DEPLOY (owner directive 2026-03-21)
+- [ ] Integration test on Pi: gain slider changes audible output level
+- [ ] Architect sign-off: pw-cli interaction patterns correct, no race conditions with GraphManager
+- [ ] Safety review: gain slider range limited (D-009 compliance — max Mult corresponds to <= -0.5 dBFS)
 
 ---
 
@@ -3517,5 +3566,6 @@ US-059 ──> US-061 (Measurement Pipeline Adaptation, Phase C)
 US-060 and US-061 are independent of each other (can be parallelized after US-059)
 US-059 ──> US-063 (PW Metadata Collector, pw-top replacement) ──> US-060 AC #2/#3/#7 satisfied
 US-059 + US-060 ──> US-064 (PW Graph Visualization Tab, supersedes US-038)
+US-059 + US-051 ──> US-065 (Configuration Tab — Gain, Quantum, Filter Info)
 US-059 ──> US-062 (Boot-to-DJ Mode, minimum viable auto-launch)
 ```

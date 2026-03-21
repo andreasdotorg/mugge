@@ -20,11 +20,14 @@ damage speakers and risk hearing.
 ### Actions That Cause Transients
 
 - Rebooting the Pi
-- `systemctl restart camilladsp`
 - `systemctl --user restart pipewire.service`
-- Any action that causes PipeWire or CamillaDSP to drop the USBStreamer ALSA
-  playback stream
+- Any action that causes PipeWire to drop the USBStreamer playback stream
 - USB bus resets affecting the USBStreamer
+
+**Note (D-040):** CamillaDSP is no longer in the audio path. The previous
+risk from `systemctl restart camilladsp` no longer applies. All audio
+processing is now within PipeWire's filter-chain — the only transient risk
+is from PipeWire restarts or USB interruptions.
 
 ### Required Procedure
 
@@ -49,9 +52,11 @@ This applies to all team members: workers, Change Manager, everyone.
 
 ## 2. Driver Protection Filters (D-031)
 
-**All production CamillaDSP configs MUST include driver protection filters
+**All production audio pipeline configs MUST include driver protection filters
 for every speaker channel.** This is a safety requirement to prevent mechanical
-damage from out-of-band content.
+damage from out-of-band content. Post-D-040, the filter-chain convolver
+(PipeWire native) provides FIR-based crossover and HPF protection; the IIR
+safety-net concept from D-031 applies to any future config generation.
 
 ### Why This Matters
 
@@ -328,15 +333,75 @@ confirmation.
 
 ---
 
+## 8. Web UI Gain Controls (US-065, Config Tab)
+
+The Config tab provides per-channel gain sliders controlling the four PipeWire
+filter-chain `linear` builtin gain nodes. These are the same gain nodes used
+by the panic MUTE button (Section 7, F-040) and the measurement pipeline.
+
+### Two-Layer Gain Cap
+
+| Layer | Cap | Mechanism | Bypass possible? |
+|-------|-----|-----------|------------------|
+| **Server hard cap** | Mult <= 1.0 (0 dB) | `config_routes.py` `GainRequest` validator + `min(mult, MULT_HARD_CAP)` before every `pw-cli` call | No — enforced on every API call regardless of client |
+| **UI soft cap** | Mult <= 0.1 (-20 dB) | `config.js` slider max = 0.1 | Yes — a crafted API call can set Mult up to 1.0. This is by design: the hard cap at 0 dB prevents boost, the soft cap prevents accidental high-level output from the UI |
+
+The server hard cap enforces D-009: no gain node in the pipeline may produce
+net gain. Mult = 1.0 is unity (0 dB). Values above 1.0 are silently clamped
+to 1.0. Values below 0.0 are rejected by the validator.
+
+### Gain Increase Safety (S-012 Interaction)
+
+The S-012 safety rule ("never increase gain without owner confirmation")
+applies to **automated and SSH-based gain changes** — not to the owner using
+the Config tab UI directly. When the owner adjusts a slider and presses Apply,
+they are explicitly choosing to change the gain. However:
+
+- The UI soft cap at -20 dB means casual slider adjustment cannot produce
+  dangerous levels through the current amplifier chain
+- The Apply/Reset workflow (dirty state tracking, explicit Apply button)
+  prevents accidental gain changes from slider touches
+- Workers and automated scripts MUST still follow S-012 for any `pw-cli`
+  gain changes outside the owner's direct UI interaction
+
+### Quantum Changes and Transient Risk
+
+The Config tab allows runtime quantum changes via `pw-metadata`. Quantum
+changes do NOT restart PipeWire and do NOT cause USBStreamer transients
+(Section 1). The change takes effect on the next PipeWire graph cycle. The
+UI shows a latency indicator (ms) for each quantum value so the operator
+understands the impact.
+
+### Panic MUTE Integration (F-040)
+
+The MUTE button (always visible in the status bar) sets all four gain node
+Mult values to 0.0. Pre-mute values are stored in memory by
+`AudioMuteManager`. UNMUTE restores the stored values. The MUTE operation
+does NOT drop the PipeWire stream — this is critical for USBStreamer transient
+safety (Section 1). The audio path remains connected; only the gain is zeroed.
+
+### Cross-References
+
+- D-009: Cut-only correction, -0.5 dB safety margin (hard cap basis)
+- S-012: No gain increase without owner confirmation
+- F-040: Panic MUTE/UNMUTE endpoint implementation
+- US-065: Configuration Tab story
+- `src/web-ui/app/config_routes.py`: Server-side gain cap enforcement
+- `src/web-ui/app/audio_mute.py`: MUTE/UNMUTE logic
+- `src/web-ui/app/pw_helpers.py`: Shared PipeWire subprocess helpers
+
+---
+
 ## Summary of Safety Decisions
 
 | Decision | Summary | Section |
 |----------|---------|---------|
-| D-009 | Cut-only correction, -0.5 dB safety margin | 4 |
+| D-009 | Cut-only correction, -0.5 dB safety margin | 4, 8 |
 | D-013 | PREEMPT_RT mandatory for production | 6 |
 | D-029 | Per-speaker boost budget + mandatory HPF framework | 2 |
 | D-031 | IIR Butterworth HPF in all production configs | 2 |
-| S-012 | No gain increase without owner confirmation | 7 |
+| S-012 | No gain increase without owner confirmation | 7, 8 |
+| F-040 | Panic MUTE sets gain to 0.0 without dropping PW stream | 8 |
 
 ## Safety Incident Register
 
