@@ -127,7 +127,7 @@ async def lifespan(app: FastAPI):
             SystemCollector,
         )
         levels_host = os.environ.get("PI4AUDIO_LEVELS_HOST", "127.0.0.1")
-        levels_port = int(os.environ.get("PI4AUDIO_LEVELS_PORT", "9091"))
+        levels_port = int(os.environ.get("PI4AUDIO_LEVELS_PORT", "9100"))
         app.state.levels = LevelsCollector(host=levels_host, port=levels_port)
         await app.state.levels.start()
         app.state.cdsp = FilterChainCollector()
