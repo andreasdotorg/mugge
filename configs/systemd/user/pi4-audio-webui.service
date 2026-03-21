@@ -9,6 +9,7 @@ NotifyAccess=main
 WorkingDirectory=/home/ela/web-ui
 ExecStart=/home/ela/audio-workstation-venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 1 --ssl-keyfile /home/ela/web-ui/key.pem --ssl-certfile /home/ela/web-ui/cert.pem
 Environment=PI_AUDIO_MOCK=0
+Environment=PI4AUDIO_SIGGEN=1
 Environment=PI4AUDIO_PRODUCTION_CONFIG=/etc/camilladsp/active.yml
 Environment=PI4AUDIO_RC_DIR=/home/ela/room-correction
 Environment=XDG_RUNTIME_DIR=/run/user/1000

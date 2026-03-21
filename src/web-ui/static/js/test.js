@@ -311,7 +311,20 @@
         }
     }
 
-    // -- Frequency slider (logarithmic) --
+    // -- Frequency slider (logarithmic with snap points) --
+
+    var FREQ_SNAP_POINTS = [20, 50, 80, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+    var FREQ_SNAP_THRESHOLD = 0.05; // ~5% on log scale
+
+    function snapFreq(logVal) {
+        for (var i = 0; i < FREQ_SNAP_POINTS.length; i++) {
+            var snapLog = Math.log10(FREQ_SNAP_POINTS[i]);
+            if (Math.abs(logVal - snapLog) < FREQ_SNAP_THRESHOLD) {
+                return snapLog;
+            }
+        }
+        return logVal;
+    }
 
     function initFreqSlider() {
         var slider = $("tt-freq-slider");
@@ -319,8 +332,9 @@
         if (!slider) return;
 
         slider.addEventListener("input", function () {
-            // Slider value is log10(freq).
-            var logVal = parseFloat(this.value);
+            // Slider value is log10(freq); snap to standard test frequencies.
+            var logVal = snapFreq(parseFloat(this.value));
+            this.value = logVal;
             currentFreq = Math.round(Math.pow(10, logVal));
             if (display) display.textContent = formatFreq(currentFreq);
 
@@ -339,6 +353,44 @@
             return (hz / 1000).toFixed(hz >= 10000 ? 0 : 1) + " kHz";
         }
         return hz + " Hz";
+    }
+
+    // -- Tappable readout for precise entry --
+
+    function initTappableReadout(displayId, sliderId, opts) {
+        var display = $(displayId);
+        if (!display) return;
+        display.style.cursor = "pointer";
+        display.addEventListener("click", function () {
+            if (display.querySelector("input")) return;
+            var input = document.createElement("input");
+            input.type = "number";
+            input.className = "tt-inline-input";
+            input.min = opts.min;
+            input.max = opts.max;
+            input.step = opts.step || "any";
+            input.value = opts.getValue();
+            display.textContent = "";
+            display.appendChild(input);
+            input.focus();
+            input.select();
+
+            function commit() {
+                var val = parseFloat(input.value);
+                if (isNaN(val)) val = opts.getValue();
+                val = Math.max(opts.min, Math.min(opts.max, val));
+                opts.setValue(val);
+                display.textContent = opts.format(val);
+            }
+            input.addEventListener("blur", commit);
+            input.addEventListener("keydown", function (e) {
+                if (e.key === "Enter") { commit(); e.preventDefault(); }
+                if (e.key === "Escape") {
+                    display.textContent = opts.format(opts.getValue());
+                    e.preventDefault();
+                }
+            });
+        });
     }
 
     // -- Duration controls --
@@ -409,6 +461,10 @@
         if (stopBtn) {
             stopBtn.addEventListener("click", function () {
                 sendCmd({ cmd: "stop" });
+                stopBtn.classList.add("flash-stop");
+                setTimeout(function () {
+                    stopBtn.classList.remove("flash-stop");
+                }, 300);
             });
         }
     }
@@ -445,9 +501,9 @@
     var SPEC_SAMPLE_RATE = 48000;
     var SPEC_FFT_SIZE = 2048;
     var SPEC_NUM_CHANNELS = 3;
-    var SPEC_DB_MIN = -60;
+    var SPEC_DB_MIN = -80;
     var SPEC_DB_MAX = 0;
-    var SPEC_FREQ_LO = 30;
+    var SPEC_FREQ_LO = 20;
     var SPEC_FREQ_HI = 20000;
     var SPEC_LOG_LO = Math.log10(SPEC_FREQ_LO);
     var SPEC_LOG_HI = Math.log10(SPEC_FREQ_HI);
@@ -663,7 +719,7 @@
         // dB grid lines
         specCtx.strokeStyle = "rgba(200, 205, 214, 0.08)";
         specCtx.lineWidth = 1;
-        var gridDB = [-12, -24, -36, -48];
+        var gridDB = [-12, -24, -36, -48, -60, -72];
         for (var i = 0; i < gridDB.length; i++) {
             var y = specDbToY(gridDB[i]);
             specCtx.beginPath();
@@ -697,7 +753,7 @@
 
         // Frequency labels
         var fLabels = [
-            { freq: 30, text: "30" }, { freq: 100, text: "100" },
+            { freq: 20, text: "20" }, { freq: 100, text: "100" },
             { freq: 1000, text: "1k" }, { freq: 10000, text: "10k" },
             { freq: 20000, text: "20k" }
         ];
@@ -847,14 +903,21 @@
 
     function updateMicStatus(status, source) {
         var el = $("tt-mic-state");
+        var overlay = $("tt-spectrum-no-mic");
         if (!el) return;
         var label = source || "unknown";
         if (status === "connected") {
             el.textContent = label + " (streaming)";
             el.className = "c-green";
+            if (overlay) overlay.classList.add("hidden");
         } else {
             el.textContent = label + " (not available)";
             el.className = "c-red";
+            // Show mic-specific overlay when UMIK-1 source is disconnected.
+            if (overlay) {
+                var isMicSource = source === "umik1" || source === "capture-usb";
+                overlay.classList.toggle("hidden", !isMicSource);
+            }
         }
     }
 
@@ -960,6 +1023,29 @@
             initPlayStop();
             initEmergencyStop();
             initSourceSelector();
+            initTappableReadout("tt-freq-value", "tt-freq-slider", {
+                min: 20, max: 20000, step: 1,
+                getValue: function () { return currentFreq; },
+                setValue: function (val) {
+                    currentFreq = Math.round(val);
+                    var slider = $("tt-freq-slider");
+                    if (slider) slider.value = Math.log10(currentFreq);
+                    if (isPlaying) sendCmd({ cmd: "set_freq", freq: currentFreq });
+                },
+                format: formatFreq
+            });
+            initTappableReadout("tt-level-value", "tt-level-slider", {
+                min: -60, max: HARD_CAP_DBFS, step: 0.1,
+                getValue: function () { return currentLevel; },
+                setValue: function (val) {
+                    currentLevel = Math.min(val, HARD_CAP_DBFS);
+                    var slider = $("tt-level-slider");
+                    if (slider) slider.value = currentLevel;
+                    updateLevelColor(currentLevel);
+                    if (isPlaying) sendCmd({ cmd: "set_level", level_dbfs: currentLevel });
+                },
+                format: function (v) { return v.toFixed(1) + " dBFS"; }
+            });
             // Start with correct frequency section visibility.
             selectSignal("sine");
         },

@@ -1952,6 +1952,25 @@ html, body {
     cursor: default;
 }
 
+.tt-stop-btn.flash-stop {
+    background: rgba(239, 83, 80, 0.3);
+    border-color: var(--red);
+    color: var(--red);
+}
+
+/* Tappable readout inline input */
+.tt-inline-input {
+    font-family: inherit;
+    font-size: inherit;
+    color: var(--text);
+    background: var(--bg-card);
+    border: 1px solid var(--blue);
+    border-radius: 3px;
+    padding: 2px 4px;
+    width: 6em;
+    outline: none;
+}
+
 /* Signal generator status line */
 
 .tt-siggen-status {
