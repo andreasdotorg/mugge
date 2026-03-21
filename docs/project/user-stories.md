@@ -1301,7 +1301,7 @@ FIR filter length),
 chain a problem is occurring, and verify correct routing without memorizing the
 signal path from documentation.
 
-**Status:** future (owner request 2026-03-11, not yet scheduled)
+**Status:** superseded by US-064 (2026-03-21). US-038 was written pre-D-040 with hardcoded CamillaDSP/Loopback component blocks. US-064 replaces it with a data-driven GraphManager RPC topology view.
 **Depends on:** US-022 (web UI platform), US-023 (engineer dashboard — shared
 infrastructure), US-027a (health monitoring backend — per-component stats),
 US-035 (ADA8200 input meters — PHYS IN data for diagram)
@@ -3319,6 +3319,90 @@ attenuation at boot. See `docs/operations/safety.md` Section 1
 
 ---
 
+## US-063: PipeWire Metadata Collector (pw-top Replacement)
+
+**As** the system builder,
+**I want** PipeWire graph state (quantum, xrun count, scheduling policy) collected via lightweight PW-native APIs instead of the pw-top subprocess,
+**so that** the web UI status bar and system view display live PipeWire data without causing xruns (F-030 / PI4AUDIO_PW_TOP gate).
+
+**Status:** selected (owner-authorized 2026-03-21. Worker-2 implementing per architect task decomposition.)
+**Depends on:** US-059 (GraphManager + filter-chain operational)
+**Blocks:** none (but satisfies US-060 AC #2 quantum, AC #3 processing load, AC #7 xrun counter, and removes the PI4AUDIO_PW_TOP gate)
+**Decisions:** D-040 (CamillaDSP removed), F-030 (pw-top subprocess causes xruns under DJ load)
+
+**The problem:** The PipeWireCollector (`pipewire_collector.py`) spawns `pw-top -b -n 2` as a subprocess every poll cycle to obtain graph state (quantum, sample rate, scheduling policy, xrun count, DSP busy/wait times). This subprocess joins the PipeWire graph as a profiler client, causing xruns under DJ load (F-030). The collector is gated off in production (`PI4AUDIO_PW_TOP != 1`), leaving the web UI with no live PipeWire data: quantum shows "--", xrun count is stale, scheduling info is absent.
+
+**The solution (architect recommendation):** Hybrid approach using three lightweight data sources that do NOT join the PW graph as active clients:
+
+1. **`pw-metadata -n settings`** -- reads PW global metadata (current quantum, sample rate, force-quantum state). One-shot subprocess, does not join the graph.
+2. **`pw-cli info <driver-node-id>`** -- reads per-node properties including driver error counters (xrun count). One-shot subprocess, does not join the graph.
+3. **`/proc/{pid}/stat`** -- scheduling policy and priority for key PipeWire processes. Zero-cost filesystem read. Consolidates into the existing SystemCollector (which already scans /proc).
+
+All three are non-invasive: they query PipeWire's registry or kernel interfaces without becoming graph participants, unlike pw-top which registers as a profiler node.
+
+**Acceptance criteria:**
+- [ ] New `MetadataCollector` (or renamed `PipeWireCollector`) replaces the pw-top-based implementation
+- [ ] Current PipeWire quantum value displayed in the status bar (sb-quantum element) -- sourced from `pw-metadata` or equivalent
+- [ ] Current sample rate displayed -- sourced from PW metadata
+- [ ] Xrun count displayed in the status bar (sb-xruns element) -- sourced from PW driver error counters via `pw-cli info`, NOT from pw-top
+- [ ] Scheduling info (policy, priority) for key PipeWire processes available in the system view -- sourced from `/proc/{pid}/stat` via SystemCollector consolidation
+- [ ] No pw-top subprocess spawned at any point -- the PI4AUDIO_PW_TOP gate and associated code path removed
+- [ ] Collector poll interval <= 2s for quantum/xrun data (status bar refresh rate)
+- [ ] Zero xruns attributable to the collector under DJ load (the F-030 root cause is eliminated)
+- [ ] Collector degrades gracefully if pw-metadata or pw-cli are unavailable (returns defaults, logs warning -- same pattern as current PipeWireCollector fallback)
+
+**DoD:**
+- [ ] MetadataCollector implemented and integrated into web UI backend
+- [ ] Scheduling reads consolidated into SystemCollector (/proc-based)
+- [ ] PI4AUDIO_PW_TOP gate removed from main.py; PipeWire data always available
+- [ ] Unit tests for metadata/pw-cli output parsing (same pattern as existing test_collectors.py pw-top parser tests)
+- [ ] Integration test: collector returns valid data when PW filter-chain is running
+- [ ] Verified on Pi under DJ load: zero collector-induced xruns in 10-minute soak
+
+---
+
+## US-064: PipeWire Graph Visualization Tab
+
+**As** the live sound engineer,
+**I want** a "Graph" tab in the web UI showing the PipeWire node topology as a visual diagram with live state indicators,
+**so that** I can see the actual audio routing at a glance, verify correct link topology, and diagnose routing problems without running pw-dump on the command line.
+
+**Status:** draft
+**Depends on:** US-059 (GraphManager RPC operational), US-060 (monitoring replacement -- shares data layer)
+**Blocks:** none
+**Decisions:** D-040 (pure PW pipeline), D-039/D-043 (GraphManager is sole link manager)
+**Supersedes:** US-038 (Signal Flow Diagram View, pre-D-040)
+
+**The problem:** The GraphManager manages all PipeWire link topology (D-039/D-043), but the only visibility into routing state is the status bar's link count summary (gm_links_desired/actual/missing from FilterChainCollector). When links are missing or unexpected, the operator has no way to see WHICH links are affected without SSH access and `pw-dump`/`pw-link -l`. During venue troubleshooting (USB hot-unplug, mode transitions, JACK bypass cleanup), a visual topology view would immediately show the problem.
+
+**The solution (architect recommendation):** New "Graph" tab rendering PipeWire node topology as inline SVG. Data sourced from GraphManager RPC with a small extension (~20 lines Rust) to include port names and directions in the existing `get_links` / `get_state` responses. Fixed left-to-right layout: Sources (Mixxx/Reaper) -> DSP (filter-chain convolver) -> Outputs (USBStreamer channels). Event-driven updates via GraphManager push events (not polled). No external JS dependencies. Xrun/error counts are NOT sourced from GraphManager (wrong architectural layer -- GM is a topology engine, not a monitoring system); xruns remain in US-063's MetadataCollector via pw-cli.
+
+**Acceptance criteria:**
+- [ ] New "Graph" tab registered via `PiAudio.registerView("graph", ...)` in the web UI
+- [ ] SVG rendering of PipeWire node topology with left-to-right layout: source nodes -> DSP nodes -> output nodes
+- [ ] Nodes display: name, type (source/filter/sink), port count
+- [ ] Node color reflects state: active (green), absent/suspended (yellow), error (red)
+- [ ] Links between nodes displayed with directional arrows showing audio flow
+- [ ] Link color reflects status: connected (green), pending/expected but missing (dashed yellow), failed/unexpected (red)
+- [ ] Port names and direction (in/out) visible on hover or as labels on nodes
+- [ ] Event-driven updates from GraphManager push events -- topology changes reflected within 500ms
+- [ ] Mode transitions (DJ <-> Live) update the diagram to show the correct routing topology for the active mode
+- [ ] No external JavaScript dependencies (no D3.js, no vis.js) -- pure DOM/SVG
+- [ ] Dark theme consistent with existing web UI views
+- [ ] Responsive: readable on 1920x1080 kiosk and usable on 600px phone width
+
+**DoD:**
+- [ ] GraphManager RPC extended with port info in `get_links`/`get_state` responses (~20 lines Rust)
+- [ ] `graph.js` view module implemented and registered
+- [ ] SVG layout algorithm handles the production topology (6-10 nodes, 12-20 links)
+- [ ] Unit tests for SVG layout logic (node positioning, link routing)
+- [ ] E2E Playwright test: Graph tab renders with mock GM data, node/link counts correct
+- [ ] Mock mode: renders a representative topology when GM is unreachable (development/testing)
+- [ ] Architect review: topology accurately represents the GM-managed graph
+- [ ] UX specialist review: diagram is scannable, not cluttered, consistent with existing views
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -3392,7 +3476,7 @@ US-017 + US-028 ──> US-030 (Live Vocal UAT) ───────┤
 
 US-022/TK-063 ──> US-037 (Playwright test scaffolding) — enables test coverage for all web UI stories
 
-US-022 + US-023 + US-027a + US-035 ──> US-038 (signal flow diagram view)
+US-038 (signal flow diagram view) — SUPERSEDED by US-064 (PW graph visualization tab)
 
 US-039 (driver schema) ──+──> US-040 (loudspeakerdatabase.com scraper)
                          +──> US-041 (soundimports.eu scraper)
@@ -3431,5 +3515,7 @@ US-058 ──> US-059 (GraphManager Core + Production Filter-Chain, Phase A)
 US-059 ──> US-060 (PW Monitoring Replacement, Phase B)
 US-059 ──> US-061 (Measurement Pipeline Adaptation, Phase C)
 US-060 and US-061 are independent of each other (can be parallelized after US-059)
+US-059 ──> US-063 (PW Metadata Collector, pw-top replacement) ──> US-060 AC #2/#3/#7 satisfied
+US-059 + US-060 ──> US-064 (PW Graph Visualization Tab, supersedes US-038)
 US-059 ──> US-062 (Boot-to-DJ Mode, minimum viable auto-launch)
 ```
