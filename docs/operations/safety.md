@@ -84,6 +84,23 @@ HPF in the CamillaDSP pipeline as a safety net, regardless of enclosure type:
 This IIR filter is present from first deploy and remains until replaced by the
 combined FIR filter (which embeds the HPF into the crossover shape).
 
+### Known Gap: Signal-Gen Measurement Path (D-040)
+
+Post-D-040, the RT signal generator replaces CamillaDSP for measurement I/O.
+The signal-gen does NOT include a subsonic HPF. Safety analysis:
+
+- **Log sweeps (20-20kHz):** Safe. No subsonic content.
+- **Pink noise (gain calibration):** The Voss-McCartney generator produces
+  energy to near-DC. At the -20 dBFS hard cap (SEC-D037-04), this delivers
+  approximately 0.14W into 4 ohms -- negligible for all drivers in inventory.
+- **Risk scenario:** If `--max-level-dbfs` is increased above -20 dBFS in a
+  future configuration change, subsonic pink noise could damage small-excursion
+  sub drivers (e.g., Bose PS28 III, `mandatory_hpf_hz: 42`).
+
+**Status:** Known gap, safe under current -20 dBFS cap. If the measurement
+level cap is ever raised, a digital HPF in the signal-gen (before the hard
+clip) is required. Tracked as a D-031 future safety item.
+
 ### Cross-References
 
 - D-031: Formal decision mandating IIR protection filters
@@ -98,67 +115,82 @@ combined FIR filter (which embeds the HPF into the crossover shape).
 ## 3. Measurement Safety
 
 Near-field and room measurements send audio signals through the amplifier chain
-to the speakers. The measurement pipeline includes safety attenuation in
-CamillaDSP, but this protection depends on CamillaDSP being in the signal path.
+to the speakers. The RT signal generator (`pi4audio-signal-gen`) provides all
+measurement safety attenuation. CamillaDSP is no longer in the measurement
+signal path (D-040).
 
-### The S-010 Safety Incident
+### The S-010 Safety Incident (Historical)
 
-On 2026-03-13, a measurement test sent a -20 dBFS sweep to the ALSA
-`sysdefault` device (128-channel fallback), bypassing CamillaDSP entirely.
-The -40dB safety attenuation was NOT in the signal path. No speaker damage
-occurred because `sysdefault` did not route to a physical output -- but the
-safety model was violated.
+On 2026-03-13, under the pre-D-040 architecture, a measurement test sent a
+-20 dBFS sweep to the ALSA `sysdefault` device (128-channel fallback),
+bypassing CamillaDSP entirely. The -40 dB safety attenuation was NOT in the
+signal path. No speaker damage occurred because `sysdefault` did not route to
+a physical output -- but the safety model was violated.
 
 **Root cause:** The `sounddevice` library resolved the device name "default" to
-`sysdefault` (ALSA) instead of the PipeWire default sink. This is a known
-ambiguity on systems with both ALSA and PipeWire.
+`sysdefault` (ALSA) instead of the PipeWire default sink.
+
+**Structural resolution (D-040):** This class of failure is eliminated. The
+signal-gen is a native PipeWire stream -- there is no `sounddevice` library and
+no ALSA device name ambiguity. The lesson still applies conceptually: verify
+the signal reaches the intended destination.
 
 **Full details:** `docs/lab-notes/change-S-010-measurement-test-failed.md`
 
 ### Measurement Safety Rules
 
-1. **CamillaDSP must be in the signal path.** The measurement script's safety
-   model (attenuation, channel muting, HPF) depends entirely on CamillaDSP
-   processing the audio. Any routing that bypasses CamillaDSP negates all
-   safety attenuation.
+1. **The RT signal generator must be the sole audio output path.** Measurement
+   audio is produced by `pi4audio-signal-gen`, which enforces an immutable hard
+   cap (`--max-level-dbfs`, default -20.0 dBFS) and per-sample `active_channels`
+   isolation in the RT callback. Any measurement audio that bypasses the
+   signal-gen bypasses all safety attenuation.
 
 2. **Pre-flight checks must not be skipped for audio-producing measurements.**
-   The `--skip-preflight` flag bypasses safety verification. At minimum, output
-   device routing verification should be mandatory and not skippable.
+   Verify that `pi4audio-signal-gen` is running and reachable on
+   `127.0.0.1:4001` via `SignalGenClient.status()`. Verify PipeWire is at
+   FIFO/88.
 
-3. **Device names must be explicit.** Do not use "default" as an output device
-   name. Use the specific PipeWire device name or verify the routing before
-   playing audio.
-
-4. **Owner go-ahead required before each audio-producing command.** The owner
+3. **Owner go-ahead required before each audio-producing command.** The owner
    must confirm that amplifiers are at a safe level and that the measurement
    microphone is positioned before any sweep or noise signal is played.
 
-5. **Verify CamillaDSP config path before measurement.** The AD-TK143-7 bug
-   showed that CamillaDSP can be pointing to a stale temp file from a prior
-   failed session. Pre-flight checks should verify the config path points to
-   the expected production config.
+4. **Verify signal-gen hard cap at startup.** Confirm the signal-gen's
+   `--max-level-dbfs` value via the RPC `status` response. The hard cap is
+   immutable after startup (set from CLI flag, no runtime setter), so this is a
+   startup verification rather than a per-measurement check.
 
 ### Measurement Attenuation Budget
 
-The TK-143 measurement config applies safety attenuation in CamillaDSP:
+The RT signal generator enforces safety attenuation at the source:
 
-| Parameter | Value | Purpose |
-|-----------|-------|---------|
-| Test channel gain | -20 dB | Reduce sweep level at the speaker |
-| Non-test channels | -100 dB | Silence all other channels |
-| IIR HPF | Per speaker identity `mandatory_hpf_hz` | Subsonic protection during measurement |
+| Parameter | Value | Mechanism | Notes |
+|-----------|-------|-----------|-------|
+| Hard amplitude cap | -20 dBFS (immutable) | `safety.rs` `hard_clip()`, set via `--max-level-dbfs` CLI flag | Every sample clamped to 0.1 linear. Cannot be changed at runtime. |
+| Active channel isolation | 0.0 on inactive channels | `generator.rs` `active_channels` bitmask in RT callback | Only the specified channel(s) receive signal; all others are silence. |
+| Subsonic HPF | **Not present** | Known gap (D-031) | Safe at -20 dBFS (0.14W). Required if cap is ever raised. See Section 2 known gap. |
 
-With a -20 dBFS sweep and -20dB CamillaDSP attenuation, the signal at the
-amplifier input is -40 dBFS, delivering approximately 0.14W into a 4-ohm load
-(safe for any driver in the inventory).
+With a -20 dBFS sweep, the signal-gen output goes through GraphManager links
+directly to the USBStreamer. The signal at the amplifier input is -20 dBFS,
+delivering approximately 1.4W into a 4-ohm load (safe for all drivers in the
+inventory).
+
+**Power comparison with pre-D-040 architecture:** The old pipeline applied -20
+dB in CamillaDSP on top of the -20 dBFS source signal, yielding -40 dBFS at
+the amplifier (0.014W). The current pipeline delivers -20 dBFS directly to the
+amplifier (1.4W) -- 100x more power. This is still safe: 1.4W into a typical
+87 dB/W/m speaker produces approximately 88.5 dB SPL at 1 meter (moderate
+conversation level). Operators should be aware that measurement SPL is higher
+than under the previous architecture.
 
 ### Cross-References
 
-- `docs/lab-notes/change-S-010-measurement-test-failed.md` -- safety incident
+- `src/signal-gen/src/safety.rs` -- hard amplitude cap implementation
+- `src/measurement/signal_gen_client.py` -- SignalGenClient RPC interface
+- `docs/architecture/rt-signal-generator.md` -- signal generator architecture
+- `docs/lab-notes/change-S-010-measurement-test-failed.md` -- historical safety
+  incident (pre-D-040, structurally resolved)
 - `docs/lab-notes/change-S-013-chn50p-nearfield-measurement.md` -- first
-  successful measurement through TK-143 safety path
-- TK-143: CamillaDSP measurement config hot-swap implementation
+  successful measurement (pre-D-040 architecture)
 
 ---
 
@@ -188,36 +220,40 @@ with measurement uncertainty.
 
 Before running any measurement that produces audio output, verify all of the
 following. This checklist was compiled from lab notes documenting reliability
-constraints discovered during system testing.
+constraints discovered during system testing, updated for D-040 architecture
+(AE sign-off 2026-03-21).
 
 ### Mandatory Checks (must pass before audio plays)
 
 | # | Check | How to verify | Failure consequence |
 |---|-------|---------------|---------------------|
-| 1 | Web UI service stopped | `systemctl --user status webui-monitor` | F-030: SCHED_OTHER JACK client causes xruns under load |
+| 1 | Web UI monitor service stopped (if using JACK backend) | `systemctl --user status pi4audio-webui-monitor` | F-030: SCHED_OTHER JACK client causes xruns under load. US-060 replaces JACK monitoring with PW-native data sources -- retire this check after US-060 validation. |
 | 2 | Mixxx not running | `pgrep -x mixxx` | CPU competition, PipeWire resource contention |
-| 3 | CamillaDSP running at FIFO/80 | `chrt -p $(pgrep -x camilladsp)` | Audio processing not real-time |
+| 3 | Signal generator running and reachable | `echo '{"cmd":"status"}' \| nc -q1 127.0.0.1 4001` | Measurement audio I/O unavailable. Signal-gen is the sole measurement output path (D-040). |
 | 4 | PipeWire running at FIFO/88 | `chrt -p $(pgrep -x pipewire)` | Graph clock not real-time (F-020) |
-| 5 | Correct PipeWire quantum | `pw-metadata -n settings \| grep quantum` | Buffer mismatch with CamillaDSP |
-| 6 | CamillaDSP config path is production | pycamilladsp `config.file_path()` | Stale config from prior failed session (AD-TK143-7) |
-| 7 | Output device routes through CamillaDSP | Verify PipeWire default sink | S-010: bypass risk with "default" device |
-| 8 | ada8200-in capture adapter stopped | `pw-cli ls \| grep ada8200` | F-015: USB bandwidth contention |
-| 9 | ALSA Loopback buffer adequate | Check period-size/period-num | F-028: period mismatch causes xruns |
-| 10 | Owner confirmed amp level safe | Verbal/written confirmation | Transient/excursion damage risk |
+| 5 | Correct PipeWire quantum for measurement mode | `pw-metadata -n settings \| grep quantum` | Quantum affects convolver processing latency and CPU load. Measurement typically uses quantum 256 (live mode). |
+| 6 | Signal-gen hard cap is -20 dBFS | `echo '{"cmd":"status"}' \| nc -q1 127.0.0.1 4001` -- check `max_level_dbfs` in response | Safety cap incorrect or missing. The -20 dBFS cap is immutable after startup but verify at pre-flight to confirm correct startup flag. |
+| 7 | Signal-gen ports visible in PipeWire graph | `pw-cli ls Node \| grep signal-gen` | Signal-gen not registered as PW node. In managed mode, GraphManager creates links -- if ports are missing, no audio can flow. |
+| 8 | ADA8200 capture adapter stopped (if not needed) | `pw-cli ls \| grep ada8200` | F-015: USB bandwidth contention between capture and playback streams on USBStreamer |
+| 9 | Owner confirmed amp level safe | Verbal/written confirmation | Transient/excursion damage risk |
+
+**Note:** The old check #9 (ALSA Loopback buffer adequate, F-028) has been
+removed. D-040 eliminates the ALSA Loopback from the signal path -- PipeWire
+native graph handles all audio routing. F-028 cannot recur.
 
 ### Source Lab Notes for Each Constraint
 
 | # | Source |
 |---|--------|
-| 1 | `docs/lab-notes/change-S-005-stop-webui-xruns.md`, F-030 |
+| 1 | `docs/lab-notes/change-S-005-stop-webui-xruns.md`, F-030. Retirement: after US-060 validation. |
 | 2 | `docs/lab-notes/change-S-013-chn50p-nearfield-measurement.md` (attempt 1) |
-| 3-4 | `docs/lab-notes/TK-039-T3d-dj-stability.md` (Phase 0) |
-| 5 | `docs/lab-notes/change-S-003-dj-mode-quantum.md` |
-| 6 | `docs/lab-notes/change-S-013-chn50p-nearfield-measurement.md` (AD-TK143-7) |
-| 7 | `docs/lab-notes/change-S-010-measurement-test-failed.md` |
+| 3 | D-040 architecture. `src/signal-gen/src/safety.rs`, `docs/architecture/rt-signal-generator.md` |
+| 4 | `docs/lab-notes/TK-039-T3d-dj-stability.md` (Phase 0), F-020 |
+| 5 | D-040 (quantum is sole latency parameter). `docs/lab-notes/change-S-003-dj-mode-quantum.md` (historical) |
+| 6 | D-040, D-009. `src/signal-gen/src/safety.rs` (hard cap implementation) |
+| 7 | D-040. S-010 structural resolution. `src/signal-gen/src/main.rs` (PW stream registration) |
 | 8 | F-015: `docs/lab-notes/F-015-playback-stalls.md` |
-| 9 | F-028: `docs/lab-notes/TK-039-restore-session.md` |
-| 10 | CLAUDE.md "Safety Rules", Section 1 of this document |
+| 9 | CLAUDE.md "Safety Rules", Section 1 of this document |
 
 ---
 

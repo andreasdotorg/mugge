@@ -68,3 +68,58 @@ updated. pcm-bridge and signal-gen standalone architecture docs are item #6
 (low priority, deferred).
 **Source:** TW gap analysis, team lead prioritization.
 **Tags:** setup-manual, camilladsp, stale-references, documentation-debt
+
+## Topic: Python module deployment gap — no deploy procedure for web UI/measurement code (2026-03-21)
+
+**Context:** S-002 redeployment session discovered that D-002 deployment only
+covered Rust binaries, systemd units, and PipeWire configs. Python web UI code
+and measurement modules were NOT deployed to their production paths.
+**Learning:** Production path mapping for Python modules:
+- Web UI app: `src/web-ui/app/` → `~/web-ui/app/`
+- Web UI static: `src/web-ui/static/` → `~/web-ui/static/`
+- Measurement clients: `src/measurement/` → `~/measurement/`
+- Room correction: `src/room-correction/` → `~/room-correction/`
+No formal deploy procedure existed for these — only the git checkout was updated.
+Rsync used as interim solution in S-002.
+**Source:** worker-verify S-002 session report.
+**Tags:** deployment, production-paths, python-modules, D-002, rsync
+
+## Topic: _MEAS_DIR path resolution differs between session.py and mode_manager.py (2026-03-21)
+
+**Context:** Discovered during S-002 that relative path resolution for the
+measurement directory differs between two files.
+**Learning:** `_MEAS_DIR` in `session.py` resolves 3 levels up from its location
+(correct: → `~/measurement/` from production path). `_MEAS_DIR` in
+`mode_manager.py` resolves only 2 levels up (wrong: → `~/web-ui/measurement/`
+from production). Fix: `PI4AUDIO_MEAS_DIR` env var overrides both, set in the
+webui systemd service file.
+**Source:** worker-verify S-002 session report.
+**Tags:** path-resolution, measurement, session, mode-manager, env-var, production-paths
+
+## Topic: deploy.py stale DEFAULT_COEFFS_DIR path (2026-03-21)
+
+**Context:** Noted during S-002 that `room_correction/deploy.py` still references
+the pre-D-040 CamillaDSP coefficients path.
+**Learning:** `DEFAULT_COEFFS_DIR = "/etc/camilladsp/coeffs"` in deploy.py is
+stale. D-040 path is `/etc/pi4audio/coeffs/`. Not yet fixed — needs updating
+when room correction pipeline is adapted for D-040.
+**Source:** worker-verify S-002 session report.
+**Tags:** deploy, coefficients, stale-path, D-040, room-correction
+
+## Topic: Subsonic HPF gap in signal-gen measurement path (D-031 scope) (2026-03-21)
+
+**Context:** AE reviewed D-040 measurement pipeline migration and identified that
+the RT signal generator (replacing CamillaDSP for measurement I/O) does not include
+a subsonic HPF. The old pipeline had CamillaDSP provide an IIR Butterworth HPF per
+`mandatory_hpf_hz` during measurement.
+**Learning:** Post-D-040, signal-gen pink noise (Voss-McCartney, 16 rows) produces
+energy down to near-DC. At the -20 dBFS hard cap (SEC-D037-04), this delivers
+~0.14W into 4 ohms -- negligible, safe for all inventory drivers. Log sweeps
+(20-20kHz) are inherently safe (no subsonic content). Risk scenario: if
+`--max-level-dbfs` is ever increased above -20 dBFS, subsonic pink noise energy
+could damage small-excursion sub drivers (e.g., Bose PS28 III, mandatory_hpf_hz: 42).
+AE recommendation: track as known D-031 gap; current -20 dBFS cap makes it safe
+today; if measurement level cap is increased, add a digital HPF in signal-gen
+before the hard clip.
+**Source:** Audio Engineer safety review of D-040 measurement pipeline.
+**Tags:** d031, d040, signal-gen, subsonic, hpf, measurement, safety, pink-noise, driver-protection
