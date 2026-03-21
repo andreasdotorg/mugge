@@ -47,8 +47,21 @@
         <span class="sb-health-item">
             <span class="sb-label">DSP:</span><span class="sb-value" id="sb-dsp-state">--</span>
         </span>
+        <span class="sb-health-item sb-collapse-600">
+            <span class="sb-label">Load:</span>
+            <span class="sb-gauge" id="sb-dsp-load-gauge">
+                <span class="sb-gauge-fill" id="sb-dsp-load-gauge-fill"></span>
+                <span class="sb-gauge-text" id="sb-dsp-load-gauge-text">--</span>
+            </span>
+        </span>
         <span class="sb-health-item">
             <span class="sb-label">Q:</span><span class="sb-value" id="sb-quantum">--</span>
+        </span>
+        <span class="sb-health-item sb-collapse-600">
+            <span class="sb-label">Buf:</span><span class="sb-value" id="sb-buf">--</span>
+        </span>
+        <span class="sb-health-item sb-collapse-600">
+            <span class="sb-label">FIFO</span><span class="sb-value" id="sb-fifo">--</span>
         </span>
         <span class="sb-health-item">
             <span class="sb-label">Clip:</span><span class="sb-value" id="sb-clip">0</span>
@@ -57,6 +70,7 @@
             <span class="sb-label">Xr:</span><span class="sb-value" id="sb-xruns">0</span>
         </span>
     </div>
+    <span class="sb-safety-sep sb-collapse-600"></span>
 
     <!-- Center: measurement progress (hidden when not measuring) -->
     <div class="sb-measure-progress hidden" id="sb-measure-progress">
@@ -67,8 +81,10 @@
         <span class="sb-measure-pct" id="sb-measure-pct">--%</span>
     </div>
 
-    <!-- Right: temp, CPU, mode, ABORT -->
+    <!-- Right: mem, uptime, temp, CPU, mode, ABORT -->
     <div class="sb-right">
+        <span class="sb-value sb-mem sb-collapse-600" id="sb-mem">--</span>
+        <span class="sb-value sb-uptime sb-collapse-600" id="sb-uptime">--</span>
         <span class="sb-value sb-temp" id="sb-temp">--</span>
         <span class="sb-value sb-cpu" id="sb-cpu">--</span>
         <div class="sb-sep"></div>
@@ -80,47 +96,7 @@
 <!-- VIEW: Dashboard — Dense single-screen engineer view -->
 <div class="view active" id="view-dashboard">
 
-    <!-- Health bar (20px) -->
-    <div class="health-bar" id="health-bar">
-        <span class="hb-group">
-            <span class="hb-label">DSP:</span><span class="hb-value" id="hb-dsp-state">--</span>
-            <span class="hb-label">Load:</span>
-            <span class="hb-gauge" id="hb-dsp-load-gauge">
-                <span class="hb-gauge-fill" id="hb-dsp-load-gauge-fill"></span>
-                <span class="hb-gauge-text" id="hb-dsp-load-gauge-text">--</span>
-            </span>
-            <span class="hb-label">Q:</span><span class="hb-value" id="hb-pw-quantum">--</span>
-            <span class="hb-label">Buf:</span><span class="hb-value" id="hb-dsp-buffer">--</span>
-            <span class="hb-label">FIFO</span><span class="hb-value" id="hb-fifo">--</span>
-            <span class="hb-label">Clip:</span><span class="hb-value" id="hb-dsp-clip">--</span>
-            <span class="hb-label">Xruns:</span><span class="hb-value" id="hb-dsp-xruns">--</span>
-        </span>
-        <span class="hb-sep">|</span>
-        <span class="hb-group">
-            <span class="hb-label">SPL:</span><span class="hb-value" id="hb-spl">--</span>
-        </span>
-        <span class="hb-sep">|</span>
-        <span class="hb-group">
-            <span class="hb-label">CPU:</span>
-            <span class="hb-gauge" id="hb-cpu-gauge">
-                <span class="hb-gauge-fill" id="hb-cpu-gauge-fill"></span>
-                <span class="hb-gauge-text" id="hb-cpu-gauge-text">--</span>
-            </span>
-            <span class="hb-label">Temp:</span>
-            <span class="hb-gauge" id="hb-temp-gauge">
-                <span class="hb-gauge-fill" id="hb-temp-gauge-fill"></span>
-                <span class="hb-gauge-text" id="hb-temp-gauge-text">--</span>
-            </span>
-            <span class="hb-label">Mem:</span>
-            <span class="hb-gauge" id="hb-mem-gauge">
-                <span class="hb-gauge-fill" id="hb-mem-gauge-fill"></span>
-                <span class="hb-gauge-text" id="hb-mem-gauge-text">--</span>
-            </span>
-            <span class="hb-label">Up:</span><span class="hb-value" id="hb-uptime">--</span>
-        </span>
-    </div>
-
-    <!-- Top row: meters (left) + right column (system health + SPL/LUFS) -->
+    <!-- Top row: meters (left) + right column (SPL/LUFS) -->
     <div class="dashboard-main">
         <!-- Left: Level meters -->
         <div class="meters-area">
@@ -158,46 +134,8 @@
             </div>
         </div>
 
-        <!-- Right column: system health + SPL + LUFS -->
+        <!-- Right column: SPL + LUFS -->
         <div class="right-panel">
-            <!-- System health panel -->
-            <div class="sys-health-panel" id="sys-health-panel">
-                <div class="sys-health-row">
-                    <span class="sys-health-label">DSP</span>
-                    <span class="sys-health-dot" id="sh-dsp-dot"></span>
-                    <span class="sys-health-value" id="sh-dsp-state">--</span>
-                </div>
-                <div class="sys-health-row">
-                    <span class="sys-health-label">DSP Load</span>
-                    <span class="sys-health-gauge" id="sh-dsp-load">
-                        <span class="sys-health-gauge-fill" id="sh-dsp-load-fill"></span>
-                        <span class="sys-health-gauge-text" id="sh-dsp-load-text">--</span>
-                    </span>
-                </div>
-                <div class="sys-health-row">
-                    <span class="sys-health-label">CPU Temp</span>
-                    <span class="sys-health-gauge" id="sh-cpu-temp">
-                        <span class="sys-health-gauge-fill" id="sh-cpu-temp-fill"></span>
-                        <span class="sys-health-gauge-text" id="sh-cpu-temp-text">--</span>
-                    </span>
-                </div>
-                <div class="sys-health-row">
-                    <span class="sys-health-label">Buffer</span>
-                    <span class="sys-health-gauge" id="sh-buffer">
-                        <span class="sys-health-gauge-fill" id="sh-buffer-fill"></span>
-                        <span class="sys-health-gauge-text" id="sh-buffer-text">--</span>
-                    </span>
-                </div>
-                <div class="sys-health-row">
-                    <span class="sys-health-label">Xruns</span>
-                    <span class="sys-health-value" id="sh-xruns">0</span>
-                </div>
-                <div class="sys-health-row">
-                    <span class="sys-health-label">Clipped</span>
-                    <span class="sys-health-value" id="sh-clipped">0</span>
-                </div>
-            </div>
-
             <!-- SPL hero -->
             <div class="spl-hero" id="spl-hero">
                 <div class="spl-hero-label">SPL</div>

@@ -1,10 +1,13 @@
 """Dashboard view tests for the D-020 Web UI.
 
-Verifies the dense single-screen dashboard: health bar, level meter groups
+Verifies the dense single-screen dashboard: level meter groups
 (Main, APP->DSP, DSP->OUT, PHYS IN), LUFS placeholder, SPL hero,
 silent channel dimming, and WebSocket data flow.
 
 24-channel layout (4 groups): MAIN (2), APP->DSP (6), DSP->OUT (8), PHYS IN (8).
+
+Note: Health bar and sys-health-panel were removed in F-038 (status bar
+unification). Their data is now in the persistent status bar.
 """
 
 import pytest
@@ -13,61 +16,61 @@ from playwright.sync_api import expect
 pytestmark = pytest.mark.browser
 
 
-# -- Health bar --
+# -- Status bar health indicators --
 
-def test_health_bar_visible(page):
-    """The health bar is visible in the dashboard."""
-    health_bar = page.locator(".health-bar")
-    expect(health_bar).to_be_visible()
+def test_status_bar_visible(page):
+    """The persistent status bar is visible on the dashboard."""
+    sb = page.locator("#status-bar")
+    expect(sb).to_be_visible()
 
 
-def test_health_bar_dsp_state_updates(page):
-    """DSP state in health bar updates from '--' within 3 s."""
-    dsp_state = page.locator("#hb-dsp-state")
+def test_sb_dsp_state_updates(page):
+    """DSP state in status bar updates from '--' within 3 s."""
+    dsp_state = page.locator("#sb-dsp-state")
     expect(dsp_state).not_to_have_text("--", timeout=3000)
 
 
-def test_health_bar_cpu_gauge_updates(page):
-    """CPU gauge in health bar updates from '--' within 3 s."""
-    cpu_text = page.locator("#hb-cpu-gauge-text")
+def test_sb_cpu_updates(page):
+    """CPU in status bar updates from '--' within 3 s."""
+    cpu_text = page.locator("#sb-cpu")
     expect(cpu_text).not_to_have_text("--", timeout=3000)
 
 
-def test_health_bar_mem_gauge_updates(page):
-    """Memory gauge in health bar updates from '--' within 3 s."""
-    mem_text = page.locator("#hb-mem-gauge-text")
+def test_sb_mem_updates(page):
+    """Memory in status bar updates from '--' within 3 s."""
+    mem_text = page.locator("#sb-mem")
     expect(mem_text).not_to_have_text("--", timeout=3000)
 
 
-def test_health_bar_temp_gauge_updates(page):
-    """Temperature gauge in health bar updates from '--' within 3 s."""
-    temp_text = page.locator("#hb-temp-gauge-text")
+def test_sb_temp_updates(page):
+    """Temperature in status bar updates from '--' within 3 s."""
+    temp_text = page.locator("#sb-temp")
     expect(temp_text).not_to_have_text("--", timeout=3000)
 
 
-def test_health_bar_dsp_load_gauge_updates(page):
-    """DSP Load gauge in health bar updates from '--' within 3 s."""
-    load_text = page.locator("#hb-dsp-load-gauge-text")
+def test_sb_dsp_load_gauge_updates(page):
+    """DSP Load gauge in status bar updates from '--' within 3 s."""
+    load_text = page.locator("#sb-dsp-load-gauge-text")
     expect(load_text).not_to_have_text("--", timeout=3000)
 
 
-# -- Nav bar indicators --
+# -- Status bar indicators --
 
 def test_mode_badge_visible(page):
-    """The mode badge is visible in the nav bar."""
-    badge = page.locator("#mode-badge")
+    """The mode badge is visible in the status bar."""
+    badge = page.locator("#sb-mode")
     expect(badge).to_be_visible()
 
 
 def test_mode_badge_updates(page):
     """Mode badge updates from '--' within 3 s."""
-    badge = page.locator("#mode-badge")
+    badge = page.locator("#sb-mode")
     expect(badge).not_to_have_text("--", timeout=3000)
 
 
-def test_nav_temp_updates(page):
-    """Nav bar temperature updates from '--' within 3 s."""
-    temp = page.locator("#nav-temp")
+def test_sb_temp_value_updates(page):
+    """Status bar temperature updates from '--' within 3 s."""
+    temp = page.locator("#sb-temp")
     expect(temp).not_to_have_text("--", timeout=3000)
 
 
@@ -207,9 +210,9 @@ def test_spl_hero_placeholder(page):
     expect(value).to_have_text("--")
 
 
-def test_spl_health_bar_element(page):
-    """SPL element exists in the health bar."""
-    spl = page.locator("#hb-spl")
+def test_spl_hero_element(page):
+    """SPL hero value element exists."""
+    spl = page.locator("#spl-value")
     expect(spl).to_have_count(1)
 
 

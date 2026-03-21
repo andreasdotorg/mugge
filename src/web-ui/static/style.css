@@ -28,8 +28,6 @@
 
     --nav-height: 28px;
     --status-bar-height: 32px;
-    --health-bar-height: 20px;
-
     --font-body: "Inter", "JetBrains Mono", system-ui, sans-serif;
     --font-numeric: "Space Mono", "JetBrains Mono", "Fira Code", monospace;
 }
@@ -266,6 +264,53 @@ html, body {
     background: var(--border);
 }
 
+/* -- Inline DSP load gauge (status bar) ---------------------------------- */
+
+.sb-gauge {
+    display: inline-flex;
+    align-items: center;
+    width: 48px;
+    height: 10px;
+    background: var(--bg-bar);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+    vertical-align: middle;
+}
+
+.sb-gauge-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease, background-color 0.5s ease;
+}
+
+.sb-gauge-text {
+    position: absolute;
+    right: 3px;
+    font-size: 8px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 2px rgba(0,0,0,0.8);
+    font-variant-numeric: tabular-nums;
+    line-height: 10px;
+}
+
+.sb-safety-sep {
+    width: 1px;
+    height: 12px;
+    background: var(--border);
+    margin: 0 2px;
+}
+
+.sb-mem {
+    font-size: 9px;
+}
+
+.sb-uptime {
+    font-size: 9px;
+    color: var(--text-dim);
+}
+
 .sb-mode-badge {
     font-size: 9px;
     font-weight: 700;
@@ -303,42 +348,6 @@ html, body {
 
 .sb-abort-btn:active {
     background: rgba(229, 69, 58, 0.5);
-}
-
-/* -- Health bar (20px) ---------------------------------------------------- */
-
-.health-bar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: var(--health-bar-height);
-    padding: 0 8px;
-    background: var(--bg-panel);
-    flex-shrink: 0;
-    gap: 4px;
-    font-size: 9px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    font-family: var(--font-numeric);
-}
-
-.hb-group {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.hb-label {
-    color: var(--text-dim);
-}
-
-.hb-value {
-    color: var(--text);
-}
-
-.hb-sep {
-    color: var(--text-micro);
-    margin: 0 4px;
 }
 
 /* -- Dashboard main area -------------------------------------------------- */
@@ -565,10 +574,10 @@ html, body {
     pointer-events: none;
 }
 
-/* -- Right panel: system health + SPL + LUFS (280px) ---------------------- */
+/* -- Right panel: SPL + LUFS (200px) -------------------------------------- */
 
 .right-panel {
-    width: 280px;
+    width: 200px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -790,37 +799,6 @@ html, body {
     line-height: 1.5;
 }
 
-/* -- Health bar gauges ---------------------------------------------------- */
-
-.hb-gauge {
-    display: inline-flex;
-    align-items: center;
-    width: 48px;
-    height: 10px;
-    background: var(--bg-bar, #262626);
-    border-radius: 2px;
-    overflow: hidden;
-    position: relative;
-    vertical-align: middle;
-}
-
-.hb-gauge-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.5s ease, background-color 0.5s ease;
-}
-
-.hb-gauge-text {
-    position: absolute;
-    right: 3px;
-    font-size: 8px;
-    font-weight: 700;
-    color: #fff;
-    text-shadow: 0 0 2px rgba(0,0,0,0.8);
-    font-variant-numeric: tabular-nums;
-    line-height: 10px;
-}
-
 /* -- SPL hero display ---------------------------------------------------- */
 
 .spl-hero {
@@ -852,86 +830,6 @@ html, body {
     font-weight: 600;
     color: var(--text-dim);
     margin-top: -2px;
-}
-
-/* -- System health panel (right column) ----------------------------------- */
-
-.sys-health-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 6px 8px;
-    background: var(--bg-meter);
-    border-radius: 3px;
-    flex-shrink: 0;
-}
-
-.sys-health-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-}
-
-.sys-health-label {
-    width: 56px;
-    flex-shrink: 0;
-    color: var(--text-dim);
-    font-weight: 600;
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.sys-health-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.sys-health-value {
-    font-family: var(--font-numeric);
-    font-variant-numeric: tabular-nums;
-    font-weight: 600;
-    font-size: 10px;
-    color: var(--text);
-}
-
-.sys-health-gauge {
-    flex: 1;
-    height: 14px;
-    background: var(--bg-bar);
-    border-radius: 2px;
-    overflow: hidden;
-    position: relative;
-}
-
-.sys-health-gauge-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.5s ease, background-color 0.5s ease;
-}
-
-.sys-health-gauge-text {
-    position: absolute;
-    right: 3px;
-    top: 0;
-    font-size: 7px;
-    font-weight: 700;
-    font-family: var(--font-numeric);
-    color: #fff;
-    text-shadow: 0 0 2px rgba(0,0,0,0.8);
-    line-height: 14px;
-}
-
-@keyframes pulse-alert {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
-
-.sys-health-pulse {
-    animation: pulse-alert 1s ease-in-out infinite;
 }
 
 /* -- Color utilities ------------------------------------------------------ */
@@ -2117,6 +2015,11 @@ html, body {
     #sb-mini-physin,
     .sb-meters .sb-meter-sep:nth-child(2),
     .sb-meters .sb-meter-sep:nth-child(6) {
+        display: none;
+    }
+
+    /* Collapse promoted items at 600px */
+    .sb-collapse-600 {
         display: none;
     }
 

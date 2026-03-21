@@ -95,7 +95,7 @@ class TestHealthIndicators:
     """Health indicators must be populated (not empty, not just '--' forever)."""
 
     def test_health_indicators_populated(self, page):
-        """AC-2.1-2.6: All 6 health indicator elements have content."""
+        """AC-2.1-2.6: All health indicator elements have content."""
         _wait_for_ws_data(page)
 
         indicators = {
@@ -115,6 +115,47 @@ class TestHealthIndicators:
                 assert text in expected_values, (
                     f"{elem_id}: expected one of {expected_values}, got '{text}'"
                 )
+
+    def test_sb_dsp_load_gauge_populated(self, page):
+        """F-038: DSP Load gauge text in status bar updates from '--'."""
+        _wait_for_ws_data(page)
+        page.wait_for_timeout(1000)
+        loc = page.locator("#sb-dsp-load-gauge-text")
+        text = loc.text_content().strip()
+        assert text != "--", "sb-dsp-load-gauge-text still shows '--'"
+        assert text != "", "sb-dsp-load-gauge-text is empty"
+
+    def test_sb_buf_populated(self, page):
+        """F-038: Buffer level in status bar updates from '--'."""
+        _wait_for_ws_data(page)
+        page.wait_for_timeout(1000)
+        loc = page.locator("#sb-buf")
+        text = loc.text_content().strip()
+        assert text != "--", "sb-buf still shows '--'"
+
+    def test_sb_fifo_populated(self, page):
+        """F-038: FIFO status in status bar updates from '--'."""
+        _wait_for_ws_data(page)
+        page.wait_for_timeout(1000)
+        loc = page.locator("#sb-fifo")
+        text = loc.text_content().strip()
+        assert text != "--", "sb-fifo still shows '--'"
+
+    def test_sb_mem_populated(self, page):
+        """F-038: Memory % in status bar updates from '--'."""
+        _wait_for_ws_data(page)
+        page.wait_for_timeout(1000)
+        loc = page.locator("#sb-mem")
+        text = loc.text_content().strip()
+        assert text != "--", "sb-mem still shows '--'"
+
+    def test_sb_uptime_populated(self, page):
+        """F-038: Uptime in status bar updates from '--'."""
+        _wait_for_ws_data(page)
+        page.wait_for_timeout(1500)
+        loc = page.locator("#sb-uptime")
+        text = loc.text_content().strip()
+        assert text != "--", "sb-uptime still shows '--'"
 
 
 # ---------------------------------------------------------------------------
@@ -403,16 +444,13 @@ class TestResponsiveBreakpoints:
 class TestDashboardRegression:
     """Existing Dashboard functionality must not regress."""
 
-    def test_health_bar_renders(self, page):
-        """D3.1: #health-bar visible and populated on Dashboard."""
+    def test_no_health_bar_in_dom(self, page):
+        """F-038: #health-bar and #sys-health-panel must not exist."""
         _switch_tab(page, "dashboard")
-        hb = page.locator("#health-bar")
-        expect(hb).to_be_visible()
-
-        # At least one value should be populated.
-        _wait_for_ws_data(page)
-        dsp_state = page.locator("#hb-dsp-state").text_content().strip()
-        assert dsp_state != "", "Dashboard health bar DSP state empty"
+        assert page.locator("#health-bar").count() == 0, \
+            "#health-bar should be deleted"
+        assert page.locator("#sys-health-panel").count() == 0, \
+            "#sys-health-panel should be deleted"
 
     def test_full_meters_render(self, page):
         """D3.2: Dashboard meter containers exist."""
@@ -462,33 +500,7 @@ class TestAbortIdleState:
 
 
 # ---------------------------------------------------------------------------
-# 10. Buffer Display (AC-3: 3.1)
-# ---------------------------------------------------------------------------
-
-
-class TestBufferDisplay:
-    """Dashboard buffer display shows utilization, not raw sample count."""
-
-    def test_buffer_shows_utilization(self, page):
-        """AC-3.1: #hb-dsp-buffer shows percentage or bar, not raw count."""
-        _switch_tab(page, "dashboard")
-        _wait_for_ws_data(page)
-
-        # Wait a bit for buffer data to populate.
-        page.wait_for_timeout(1000)
-        text = page.locator("#hb-dsp-buffer").text_content().strip()
-        if text == "--":
-            pytest.skip("Buffer value not populated in mock mode")
-
-        # Should contain '%' or be a recognizable utilization format.
-        # Must NOT be a raw number like "8189" or "2048".
-        assert "%" in text or not text.isdigit(), (
-            f"Buffer shows raw count '{text}' instead of utilization"
-        )
-
-
-# ---------------------------------------------------------------------------
-# 11. Screenshot Suite
+# 10. Screenshot Suite
 # ---------------------------------------------------------------------------
 
 

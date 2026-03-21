@@ -1,11 +1,13 @@
-"""E2E tests for dual WebSocket data flow in the dashboard view.
+"""E2E tests for dual WebSocket data flow in the Web UI.
 
-The dashboard subscribes to BOTH WebSocket endpoints:
+The UI subscribes to BOTH WebSocket endpoints:
     /ws/monitoring -- 10 Hz: level meters, spectrum, CamillaDSP status
     /ws/system     --  1 Hz: CPU, temperature, memory, scheduling, processes
 
+After F-038 (status bar unification), system health data (CPU, temp, mem)
+is rendered in the persistent status bar, not the dashboard health bar.
 These tests verify that data from both endpoints arrives and renders
-correctly in the dashboard DOM.
+correctly in the DOM.
 """
 
 import re
@@ -56,11 +58,11 @@ def test_connection_dot_turns_green(page):
     """Connection dot turns green when both WebSockets are connected."""
     # Wait for data from both endpoints to confirm connections are live
     page.wait_for_function(
-        "document.getElementById('hb-dsp-state').textContent !== '--'",
+        "document.getElementById('sb-dsp-state').textContent !== '--'",
         timeout=5000,
     )
     page.wait_for_function(
-        "document.getElementById('hb-cpu-gauge-text').textContent !== '--'",
+        "document.getElementById('sb-cpu').textContent !== '--'",
         timeout=5000,
     )
     dot = page.locator("#conn-dot")
@@ -77,23 +79,23 @@ def test_monitoring_meters_have_nonzero_values(page):
 
 
 def test_monitoring_dsp_state_updates(page):
-    """CamillaDSP state in health bar updates (from monitoring WS)."""
-    dsp_state = page.locator("#hb-dsp-state")
+    """DSP state in status bar updates (from monitoring WS)."""
+    dsp_state = page.locator("#sb-dsp-state")
     expect(dsp_state).not_to_have_text("--", timeout=5000)
 
 
 def test_monitoring_dsp_load_updates(page):
-    """DSP load gauge updates (from monitoring WS)."""
-    load_text = page.locator("#hb-dsp-load-gauge-text")
+    """DSP load gauge in status bar updates (from monitoring WS)."""
+    load_text = page.locator("#sb-dsp-load-gauge-text")
     expect(load_text).not_to_have_text("--", timeout=5000)
 
 
 def test_spectrum_canvas_has_content(page):
     """Spectrum canvas renders non-blank content after monitoring data arrives."""
     # Wait for monitoring data to arrive first
-    page.locator("#hb-dsp-state").wait_for(state="visible")
+    page.locator("#sb-dsp-state").wait_for(state="visible")
     page.wait_for_function(
-        "document.getElementById('hb-dsp-state').textContent !== '--'",
+        "document.getElementById('sb-dsp-state').textContent !== '--'",
         timeout=5000,
     )
     # Give spectrum a couple frames to render
@@ -130,59 +132,53 @@ def test_spectrum_canvas_exists(page):
 # -- System data renders (health bar CPU/temp/mem) --
 
 
-def test_system_cpu_gauge_updates(page):
-    """CPU gauge in health bar shows a value (from system WS), not '--'."""
-    cpu_text = page.locator("#hb-cpu-gauge-text")
+def test_system_cpu_updates(page):
+    """CPU in status bar shows a value (from system WS), not '--'."""
+    cpu_text = page.locator("#sb-cpu")
     expect(cpu_text).not_to_have_text("--", timeout=5000)
 
 
-def test_system_temp_gauge_updates(page):
-    """Temperature gauge in health bar shows a value (from system WS)."""
-    temp_text = page.locator("#hb-temp-gauge-text")
+def test_system_temp_updates(page):
+    """Temperature in status bar shows a value (from system WS)."""
+    temp_text = page.locator("#sb-temp")
     expect(temp_text).not_to_have_text("--", timeout=5000)
 
 
-def test_system_mem_gauge_updates(page):
-    """Memory gauge in health bar shows a value (from system WS)."""
-    mem_text = page.locator("#hb-mem-gauge-text")
+def test_system_mem_updates(page):
+    """Memory in status bar shows a value (from system WS)."""
+    mem_text = page.locator("#sb-mem")
     expect(mem_text).not_to_have_text("--", timeout=5000)
 
 
 def test_system_mode_badge_updates(page):
-    """Mode badge in nav bar updates from system WS data."""
-    badge = page.locator("#mode-badge")
+    """Mode badge in status bar updates from system WS data."""
+    badge = page.locator("#sb-mode")
     expect(badge).not_to_have_text("--", timeout=5000)
-
-
-def test_system_nav_temp_updates(page):
-    """Nav bar temperature updates from system WS data."""
-    temp = page.locator("#nav-temp")
-    expect(temp).not_to_have_text("--", timeout=5000)
 
 
 # -- Both data sources simultaneously --
 
 
 def test_both_data_sources_render(page):
-    """Both monitoring and system data render in the same dashboard view.
+    """Both monitoring and system data render in the UI.
 
-    Verifies that meter dB readouts (monitoring) AND CPU gauge (system)
+    Verifies that meter dB readouts (monitoring) AND CPU/temp/mem (system)
     both update from their placeholder values, confirming dual WS flow.
     """
     # Monitoring source: meter dB readout changes from '-inf'
     db_readout = page.locator("#meters-main-db-0")
     expect(db_readout).not_to_have_text("-inf", timeout=5000)
 
-    # System source: CPU gauge changes from '--'
-    cpu_text = page.locator("#hb-cpu-gauge-text")
+    # System source: CPU changes from '--'
+    cpu_text = page.locator("#sb-cpu")
     expect(cpu_text).not_to_have_text("--", timeout=5000)
 
-    # System source: temp gauge changes from '--'
-    temp_text = page.locator("#hb-temp-gauge-text")
+    # System source: temp changes from '--'
+    temp_text = page.locator("#sb-temp")
     expect(temp_text).not_to_have_text("--", timeout=5000)
 
-    # System source: mem gauge changes from '--'
-    mem_text = page.locator("#hb-mem-gauge-text")
+    # System source: mem changes from '--'
+    mem_text = page.locator("#sb-mem")
     expect(mem_text).not_to_have_text("--", timeout=5000)
 
 
@@ -193,11 +189,11 @@ def test_reconnect_overlay_hidden_when_connected(page):
     """Reconnect overlay is hidden when both WebSockets are connected."""
     # Wait for connections to establish first
     page.wait_for_function(
-        "document.getElementById('hb-dsp-state').textContent !== '--'",
+        "document.getElementById('sb-dsp-state').textContent !== '--'",
         timeout=5000,
     )
     page.wait_for_function(
-        "document.getElementById('hb-cpu-gauge-text').textContent !== '--'",
+        "document.getElementById('sb-cpu').textContent !== '--'",
         timeout=5000,
     )
 
@@ -211,11 +207,11 @@ def test_connection_dot_green_when_both_connected(page):
     """Connection dot is green when both WebSockets are connected."""
     # Wait for both WS to connect (data from both endpoints)
     page.wait_for_function(
-        "document.getElementById('hb-dsp-state').textContent !== '--'",
+        "document.getElementById('sb-dsp-state').textContent !== '--'",
         timeout=5000,
     )
     page.wait_for_function(
-        "document.getElementById('hb-cpu-gauge-text').textContent !== '--'",
+        "document.getElementById('sb-cpu').textContent !== '--'",
         timeout=5000,
     )
 

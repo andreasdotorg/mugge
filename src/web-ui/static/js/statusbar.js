@@ -164,6 +164,16 @@
         PiAudio.setText("sb-dsp-state", dspText,
             dspOk ? "c-green" : dspWarn ? "c-yellow" : "c-red");
 
+        // DSP Load gauge (promoted from health bar)
+        var dspLoadPct = cdsp.processing_load;
+        PiAudio.setGauge("sb-dsp-load-gauge",
+            dspLoadPct,
+            dspLoadPct.toFixed(1) + "%",
+            dspLoadPct < 50 ? "#79e25b" : dspLoadPct < 75 ? "#e2c039" : "#e5453a");
+
+        // Buffer level (promoted from health bar)
+        PiAudio.setText("sb-buf", String(cdsp.buffer_level));
+
         // Clip count
         PiAudio.setText("sb-clip", String(cdsp.clipped_samples),
             cdsp.clipped_samples > 0 ? "c-red" : "c-green");
@@ -190,6 +200,29 @@
         var xruns = data.camilladsp.xruns || 0;
         PiAudio.setText("sb-xruns", String(xruns),
             xruns > 5 ? "c-red" : xruns > 0 ? "c-yellow" : "c-green");
+
+        // FIFO status (promoted from health bar)
+        var sched = data.pipewire.scheduling;
+        var pwFifo = sched.pipewire_policy === "SCHED_FIFO";
+        var cdspFifo = sched.graphmgr_policy === "SCHED_FIFO";
+        var fifoText = sched.pipewire_priority + "/" + sched.graphmgr_priority;
+        var fifoColor = (pwFifo && cdspFifo) ? "c-green" : "c-red";
+        PiAudio.setText("sb-fifo", fifoText, fifoColor);
+
+        // Memory % (promoted from health bar)
+        var mem = data.memory;
+        var memPct = (mem.used_mb / mem.total_mb) * 100;
+        PiAudio.setText("sb-mem", memPct.toFixed(0) + "%",
+            PiAudio.memColor(memPct));
+
+        // Uptime (promoted from health bar)
+        if (data.uptime_seconds != null) {
+            var secs = data.uptime_seconds;
+            var h = Math.floor(secs / 3600);
+            var m = Math.floor((secs % 3600) / 60);
+            var uptext = h > 0 ? h + "h" + (m < 10 ? "0" : "") + m + "m" : m + "m";
+            PiAudio.setText("sb-uptime", uptext);
+        }
 
         // Mode badge (from GraphManager via FilterChainCollector)
         var modeEl = document.getElementById("sb-mode");

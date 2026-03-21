@@ -1,13 +1,14 @@
 /**
  * D-020 Web UI — Dashboard view module.
  *
- * Renders the dense single-screen engineer dashboard. Subscribes to BOTH
- * /ws/monitoring and /ws/system WebSocket endpoints.
+ * Renders the dense single-screen engineer dashboard. Subscribes to
+ * /ws/monitoring for level meters, spectrum, and event detection.
+ * System health data (CPU, temp, memory, scheduling) is handled by the
+ * persistent status bar module (statusbar.js).
  *
  * 24-channel layout (4 groups, signal-flow order):
- *   - Health bar (20px) — condensed system health from /ws/system
  *   - MAIN (2ch capture), APP→DSP (6ch capture), DSP→OUT (8ch playback), PHYS IN (8ch placeholder)
- *   - SPL hero + LUFS panel (180px right)
+ *   - SPL hero + LUFS panel (200px right)
  */
 
 "use strict";
@@ -100,24 +101,6 @@
         if (db >= -3) return "#e5453a";
         if (db >= -12) return "#e2c039";
         return "#79e25b";
-    }
-
-    function setHealthGauge(id, pct, text, color) {
-        var fill = document.getElementById(id + "-fill");
-        var txt = document.getElementById(id + "-text");
-        if (fill) {
-            fill.style.width = Math.min(100, Math.max(0, pct)) + "%";
-            fill.style.backgroundColor = color;
-        }
-        if (txt) txt.textContent = text;
-    }
-
-    function formatUptime(seconds) {
-        if (!seconds || seconds < 0) return "--";
-        var h = Math.floor(seconds / 3600);
-        var m = Math.floor((seconds % 3600) / 60);
-        if (h > 0) return h + "h" + (m < 10 ? "0" : "") + m + "m";
-        return m + "m";
     }
 
     // -- Meter building --
@@ -394,64 +377,8 @@
             }
         }
 
-        // Health bar: DSP section (D-040: FilterChainCollector via GM RPC)
-        var cdsp = data.camilladsp;
-        var dspState = cdsp.state.toLowerCase();
-        var dspOk = dspState === "running";
-        var dspWarn = dspState === "degraded";
-        PiAudio.setText("hb-dsp-state", cdsp.state,
-            dspOk ? "c-green" : dspWarn ? "c-yellow" : "c-red");
-
-        // DSP Load gauge
-        var dspLoadPct = cdsp.processing_load;
-        PiAudio.setGauge("hb-dsp-load-gauge",
-            dspLoadPct,
-            dspLoadPct.toFixed(1) + "%",
-            PiAudio.dspLoadColorRaw(dspLoadPct));
-
-        PiAudio.setText("hb-dsp-buffer", String(cdsp.buffer_level));
-        PiAudio.setText("hb-dsp-clip", String(cdsp.clipped_samples),
-            cdsp.clipped_samples > 0 ? "c-red" : "c-green");
-        PiAudio.setText("hb-dsp-xruns", String(cdsp.xruns),
-            cdsp.xruns > 0 ? "c-red" : "c-green");
-
-        // System health panel — DSP state
-        var shDspDot = document.getElementById("sh-dsp-dot");
-        if (shDspDot) {
-            shDspDot.style.backgroundColor = dspOk ? "#79e25b" : dspWarn ? "#e2c039" : "#e5453a";
-        }
-        PiAudio.setText("sh-dsp-state", cdsp.state,
-            dspOk ? "c-green" : dspWarn ? "c-yellow" : "c-red");
-
-        // System health panel — DSP load gauge
-        setHealthGauge("sh-dsp-load", dspLoadPct,
-            dspLoadPct.toFixed(1) + "%",
-            dspLoadPct < 50 ? "#79e25b" : dspLoadPct < 80 ? "#e2c039" : "#e5453a");
-
-        // System health panel — Link health gauge
-        // D-040: buffer_level is now a percentage of actual/desired links (0-100)
-        var linkPct = Math.min(100, Math.max(0, cdsp.buffer_level));
-        setHealthGauge("sh-buffer", linkPct,
-            linkPct + "%",
-            linkPct >= 100 ? "#79e25b" : linkPct > 50 ? "#e2c039" : "#e5453a");
-
-        // System health panel — Xruns
-        var shXruns = document.getElementById("sh-xruns");
-        if (shXruns) {
-            shXruns.textContent = String(cdsp.xruns);
-            shXruns.style.color = cdsp.xruns > 0 ? "#e5453a" : "#79e25b";
-            shXruns.classList.toggle("sys-health-pulse", cdsp.xruns > 0);
-        }
-
-        // System health panel — Clipped
-        var shClipped = document.getElementById("sh-clipped");
-        if (shClipped) {
-            shClipped.textContent = String(cdsp.clipped_samples);
-            shClipped.style.color = cdsp.clipped_samples > 0 ? "#e5453a" : "#79e25b";
-            shClipped.classList.toggle("sys-health-pulse", cdsp.clipped_samples > 0);
-        }
-
         // Push events for xrun/clip increments (monitoring data has higher update rate)
+        var cdsp = data.camilladsp;
         if (window._piAudioPushEvent) {
             if (prevMonXruns !== null && cdsp.xruns > prevMonXruns) {
                 window._piAudioPushEvent("xrun", "error",
@@ -478,53 +405,7 @@
                 heroVal.textContent = Math.round(data.spl);
                 heroVal.style.color = PiAudio.splColorRaw(data.spl);
             }
-            PiAudio.setText("hb-spl", Math.round(data.spl), PiAudio.splColor(data.spl));
         }
-    }
-
-    function onSystemData(data) {
-        // Health bar: CPU gauge (normalize to 0-100% by dividing by core count)
-        var cpuTotal = data.cpu.total_percent;
-        var cpuCores = data.cpu.per_core.length || 4;
-        var cpuPct = Math.min(100, cpuTotal / cpuCores);
-        PiAudio.setGauge("hb-cpu-gauge",
-            cpuPct,
-            cpuPct.toFixed(0) + "%",
-            PiAudio.cpuColorRaw(cpuPct));
-
-        // Health bar: Temperature gauge (map 30-85C to 0-100%)
-        var tempPct = Math.min(100, Math.max(0, (temp - 30) / (85 - 30) * 100));
-        PiAudio.setGauge("hb-temp-gauge",
-            tempPct,
-            temp.toFixed(0) + "\u00b0",
-            PiAudio.tempColorRaw(temp));
-
-        // System health panel — CPU temperature gauge
-        setHealthGauge("sh-cpu-temp", tempPct,
-            temp.toFixed(0) + "\u00b0C",
-            temp < 75 ? "#79e25b" : temp < 80 ? "#e2c039" : "#e5453a");
-
-        // Health bar: Memory gauge
-        var mem = data.memory;
-        var memPct = (mem.used_mb / mem.total_mb) * 100;
-        PiAudio.setGauge("hb-mem-gauge",
-            memPct,
-            memPct.toFixed(0) + "%",
-            PiAudio.memColorRaw(memPct));
-
-        PiAudio.setText("hb-pw-quantum", "Q" + data.pipewire.quantum);
-
-        // FIFO status
-        var sched = data.pipewire.scheduling;
-        var pwFifo = sched.pipewire_policy === "SCHED_FIFO";
-        var cdspFifo = sched.graphmgr_policy === "SCHED_FIFO";
-        var fifoText = sched.pipewire_priority + "/" + sched.graphmgr_priority;
-        var fifoColor = (pwFifo && cdspFifo) ? "c-green" : "c-red";
-        PiAudio.setText("hb-fifo", fifoText, fifoColor);
-
-        // Uptime
-        var elapsed = (performance.now() - startTime) / 1000;
-        PiAudio.setText("hb-uptime", formatUptime(Math.floor(elapsed)));
     }
 
     // -- View lifecycle --
@@ -552,9 +433,8 @@
         // Initialize spectrum analyzer
         PiAudioSpectrum.init("spectrum-canvas");
 
-        // Connect both WebSocket endpoints
+        // Connect monitoring WebSocket endpoint
         PiAudio.connectWebSocket("/ws/monitoring", onMonitoringData, function () {});
-        PiAudio.connectWebSocket("/ws/system", onSystemData, function () {});
     }
 
     function onShow() {
