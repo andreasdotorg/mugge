@@ -2128,3 +2128,570 @@ html, body {
     }
 }
 
+/* -- Graph Visualization (US-064) ---------------------------------------- */
+
+:root {
+    --gv-color-app: #00838f;
+    --gv-color-dsp: #2e7d32;
+    --gv-color-hw: #c17900;
+    --gv-color-main: #8a94a4;
+    --gv-node-bg: #1a1d23;
+    --gv-border: #556;
+    --gv-border-absent: #778;
+    --gv-border-ghost: #667;
+    --gv-link-connected: #aab;
+    --gv-link-missing: #997;
+    --gv-port-idle: #667;
+    --gv-text-port: #aab;
+    --gv-text-ghost: #667;
+    --gv-bypass: var(--blue);
+}
+
+.gv-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 8px;
+}
+
+.gv-svg {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+/* -- Nodes -- */
+
+.gv-node {
+    transition: opacity 0.3s ease;
+}
+
+.gv-node-rect {
+    fill: var(--gv-node-bg);
+    stroke: var(--gv-border);
+    stroke-width: 1.5;
+    rx: 6;
+    ry: 6;
+}
+
+.gv-node-header {
+    rx: 6;
+    ry: 6;
+}
+
+.gv-node-header-mask {
+    fill: var(--gv-node-bg);
+}
+
+.gv-node-label {
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    fill: #fff;
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+
+.gv-node-sublabel {
+    font-family: var(--font-body);
+    font-size: 10px;
+    fill: var(--text-dim);
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+
+/* Node state modifiers */
+
+.gv-node--active .gv-node-rect {
+    stroke: var(--gv-border);
+    fill-opacity: 1;
+}
+
+.gv-node--active .gv-node-label,
+.gv-node--active .gv-node-sublabel {
+    fill-opacity: 1;
+}
+
+.gv-node--absent .gv-node-rect {
+    stroke: var(--gv-border-absent);
+    stroke-dasharray: 6 3;
+    fill-opacity: 0.35;
+}
+
+.gv-node--absent .gv-node-header {
+    fill-opacity: 0.35;
+}
+
+.gv-node--absent .gv-node-label {
+    fill-opacity: 0.5;
+}
+
+.gv-node--absent .gv-node-sublabel {
+    fill-opacity: 0.5;
+}
+
+.gv-node--error .gv-node-rect {
+    stroke: var(--red);
+    stroke-width: 2;
+}
+
+.gv-node--ghost .gv-node-rect {
+    stroke: var(--gv-border-ghost);
+    stroke-dasharray: 6 3;
+    fill-opacity: 0.15;
+}
+
+.gv-node--ghost .gv-node-label {
+    fill: var(--gv-text-ghost);
+    font-style: italic;
+    font-size: 12px;
+    fill-opacity: 0.4;
+}
+
+/* -- Ports -- */
+
+.gv-port {
+    transition: fill 0.3s ease;
+}
+
+.gv-port--connected {
+    fill: var(--gv-link-connected);
+    stroke: none;
+}
+
+.gv-port--idle {
+    fill: var(--gv-node-bg);
+    stroke: var(--gv-port-idle);
+    stroke-width: 1.5;
+}
+
+.gv-port-label {
+    font-family: var(--font-numeric);
+    font-size: 11px;
+    fill: var(--gv-text-port);
+    dominant-baseline: central;
+}
+
+.gv-port-label--input {
+    text-anchor: start;
+}
+
+.gv-port-label--output {
+    text-anchor: end;
+}
+
+/* -- Links -- */
+
+.gv-link {
+    fill: none;
+    transition: opacity 0.3s ease, stroke 0.3s ease;
+}
+
+.gv-link--connected {
+    stroke: var(--gv-link-connected);
+    stroke-width: 2;
+}
+
+.gv-link--missing {
+    stroke: var(--gv-link-missing);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+}
+
+.gv-link--failed {
+    stroke: var(--red);
+    stroke-width: 2;
+    stroke-dasharray: 4 3;
+}
+
+/* -- Y-Junction (mono sum merge point) -- */
+
+.gv-yjunction {
+    fill: var(--gv-link-connected);
+}
+
+/* -- Bypass arcs (HP/IEM direct paths) -- */
+
+.gv-bypass-arc {
+    fill: none;
+    stroke: var(--gv-bypass);
+    stroke-width: 2;
+}
+
+/* -- Mode label -- */
+
+.gv-mode-label {
+    font-family: var(--font-body);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    fill: var(--gv-text-ghost);
+    text-transform: uppercase;
+}
+
+/* -- Error icon -- */
+
+.gv-error-icon circle {
+    fill: var(--red);
+}
+
+.gv-error-icon text {
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 700;
+    fill: #fff;
+    text-anchor: middle;
+    dominant-baseline: central;
+}
+
+/* -- SVG marker definitions -- */
+
+.gv-arrowhead {
+    fill: var(--gv-link-connected);
+}
+
+.gv-arrowhead-blue {
+    fill: var(--gv-bypass);
+}
+
+.gv-arrowhead-red {
+    fill: var(--red);
+}
+
+/* -- Fade transitions for mode switching -- */
+
+.gv-template-group {
+    transition: opacity 0.3s ease;
+}
+
+.gv-template-group.gv-fade-out {
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+}
+
+.gv-template-group.gv-fade-in {
+    opacity: 1;
+    transition: opacity 0.3s ease-in;
+}
+
+/* -- Graph responsive: compact (< 900px) -- */
+
+@media (max-width: 899px) {
+    .gv-svg {
+        /* Switch to compact viewBox via JS — CSS can't change viewBox.
+           These rules style the compact variant's elements. */
+    }
+
+    .gv-port-label {
+        display: none;
+    }
+}
+
+/* -- Graph responsive: phone (< 600px) -- */
+
+@media (max-width: 599px) {
+    .gv-container {
+        padding: 4px;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   VIEW: Config — Gain, quantum, filter-chain settings
+   ═══════════════════════════════════════════════════════════════════ */
+
+.cfg-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding: 16px;
+    max-width: 1200px;
+}
+
+.cfg-column {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.cfg-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+}
+
+.cfg-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+}
+
+/* -- Gain sliders -- */
+
+.cfg-gain-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.cfg-gain-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cfg-gain-row.cfg-gain-missing {
+    opacity: 0.4;
+}
+
+.cfg-gain-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.cfg-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cfg-slider {
+    flex: 1;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-bar);
+    border-radius: 3px;
+    outline: none;
+}
+
+.cfg-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--blue);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+}
+
+.cfg-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--blue);
+    cursor: pointer;
+    border: 2px solid var(--bg);
+}
+
+.cfg-slider:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.cfg-slider:disabled::-webkit-slider-thumb {
+    cursor: default;
+}
+
+.cfg-slider-value {
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    min-width: 80px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+/* -- Gain action buttons -- */
+
+.cfg-gain-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.cfg-apply-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 12px 20px;
+    min-height: 44px;
+    flex: 2;
+    border: 2px solid rgba(66, 165, 245, 0.5);
+    border-radius: 4px;
+    background: rgba(66, 165, 245, 0.12);
+    color: var(--blue);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.cfg-apply-btn:hover:not(:disabled) {
+    background: rgba(66, 165, 245, 0.25);
+    border-color: rgba(66, 165, 245, 0.7);
+}
+
+.cfg-apply-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.cfg-reset-btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 12px 16px;
+    min-height: 44px;
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-bar);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.cfg-reset-btn:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+.cfg-reset-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.cfg-gain-status,
+.cfg-quantum-status {
+    font-size: 11px;
+    margin-top: 8px;
+    min-height: 16px;
+}
+
+.cfg-status {
+    font-size: 11px;
+}
+
+/* -- Quantum selector -- */
+
+.cfg-quantum-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cfg-quantum-btns {
+    display: flex;
+    gap: 6px;
+}
+
+.cfg-quantum-btn {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 16px;
+    min-height: 40px;
+    min-width: 64px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--bg-bar);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.cfg-quantum-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+.cfg-quantum-btn.active {
+    background: rgba(66, 165, 245, 0.15);
+    color: var(--blue);
+    border-color: var(--blue);
+}
+
+.cfg-quantum-latency {
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--font-numeric);
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+}
+
+.cfg-quantum-warning {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    border-radius: 3px;
+    background: rgba(255, 193, 7, 0.05);
+    line-height: 1.4;
+}
+
+/* -- Filter chain info (read-only key-value grid) -- */
+
+.cfg-kv-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+}
+
+.cfg-kv-item {
+    display: contents;
+}
+
+.cfg-kv-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 700;
+}
+
+.cfg-kv-value {
+    font-size: 12px;
+    color: var(--text);
+    font-family: var(--font-numeric);
+}
+
+/* -- Config responsive: single column (< 900px) -- */
+
+@media (max-width: 899px) {
+    .cfg-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* -- Config responsive: compact (< 600px) -- */
+
+@media (max-width: 599px) {
+    .cfg-layout {
+        padding: 8px;
+        gap: 12px;
+    }
+
+    .cfg-section {
+        padding: 12px;
+    }
+
+    .cfg-quantum-btns {
+        flex-wrap: wrap;
+    }
+}
+

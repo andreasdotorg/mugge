@@ -16,6 +16,8 @@
     <div class="nav-tabs">
         <button class="nav-tab active" data-view="dashboard">Dashboard</button>
         <button class="nav-tab" data-view="system">System</button>
+        <button class="nav-tab" data-view="graph">Graph</button>
+        <button class="nav-tab" data-view="config">Config</button>
         <button class="nav-tab" data-view="measure">Measure</button>
         <button class="nav-tab" data-view="test">Test</button>
         <button class="nav-tab" data-view="midi">MIDI</button>
@@ -279,6 +281,74 @@
             <div class="event-log-list" id="event-log-list"></div>
         </div>
 
+    </div>
+</div>
+
+<!-- VIEW: Graph — PipeWire node topology (US-064) -->
+<div class="view" id="view-graph">
+    <div class="gv-container">
+        <svg class="gv-svg" id="gv-svg" viewBox="0 0 860 480" preserveAspectRatio="xMidYMid meet">
+            <!-- SVG content populated by graph.js -->
+        </svg>
+    </div>
+</div>
+
+<!-- VIEW: Config — Gain, quantum, and filter-chain settings -->
+<div class="view" id="view-config">
+    <div class="cfg-layout">
+        <!-- Left column: Gain controls -->
+        <div class="cfg-column cfg-gains">
+            <div class="cfg-section">
+                <div class="cfg-section-title">CHANNEL GAINS</div>
+                <div class="cfg-gain-list" id="cfg-gain-list">
+                    <!-- Populated by config.js -->
+                </div>
+                <div class="cfg-gain-actions">
+                    <button class="cfg-apply-btn" id="cfg-gain-apply" disabled>APPLY</button>
+                    <button class="cfg-reset-btn" id="cfg-gain-reset" disabled>RESET</button>
+                </div>
+                <div class="cfg-gain-status" id="cfg-gain-status"></div>
+            </div>
+        </div>
+
+        <!-- Right column: Engine settings -->
+        <div class="cfg-column cfg-engine">
+            <div class="cfg-section">
+                <div class="cfg-section-title">QUANTUM</div>
+                <div class="cfg-quantum-row">
+                    <div class="cfg-quantum-btns" id="cfg-quantum-btns">
+                        <button class="cfg-quantum-btn" data-q="256">256</button>
+                        <button class="cfg-quantum-btn" data-q="512">512</button>
+                        <button class="cfg-quantum-btn" data-q="1024">1024</button>
+                        <button class="cfg-quantum-btn" data-q="2048">2048</button>
+                    </div>
+                    <span class="cfg-quantum-latency" id="cfg-quantum-latency">-- ms</span>
+                </div>
+                <div class="cfg-quantum-warning" id="cfg-quantum-warning">
+                    Changing quantum affects all audio paths.
+                    DJ mode: 1024 recommended. Live mode: 256 recommended.
+                </div>
+                <div class="cfg-quantum-status" id="cfg-quantum-status"></div>
+            </div>
+
+            <div class="cfg-section">
+                <div class="cfg-section-title">FILTER CHAIN</div>
+                <div class="cfg-kv-grid" id="cfg-filter-info">
+                    <div class="cfg-kv-item">
+                        <span class="cfg-kv-label">Node</span>
+                        <span class="cfg-kv-value" id="cfg-fc-node">--</span>
+                    </div>
+                    <div class="cfg-kv-item">
+                        <span class="cfg-kv-label">ID</span>
+                        <span class="cfg-kv-value" id="cfg-fc-id">--</span>
+                    </div>
+                    <div class="cfg-kv-item">
+                        <span class="cfg-kv-label">Description</span>
+                        <span class="cfg-kv-value" id="cfg-fc-desc">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -638,6 +708,8 @@
 <script src="/static/js/spectrum.js"></script>
 <script src="/static/js/dashboard.js"></script>
 <script src="/static/js/system.js"></script>
+<script src="/static/js/graph.js"></script>
+<script src="/static/js/config.js"></script>
 <script src="/static/js/measure.js"></script>
 <script src="/static/js/test.js"></script>
 <script src="/static/js/midi.js"></script>
