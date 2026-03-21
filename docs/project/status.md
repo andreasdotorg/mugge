@@ -61,14 +61,14 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-006 | done | 3/3 | **done** (implicitly validated — owner actively DJing on Mixxx with Hercules on Pi 2026-03-12.) |
 | US-050 | IMPLEMENT | 5/6 | **active** (resumed 2026-03-20). CI tier done, E2E tier needs D-040 adaptation. Blocked on US-060. |
 | US-051 | IMPLEMENT | 2/4 | **active** (resumed 2026-03-20). UI structure done (SB-1-7), data source wiring blocked on US-060. |
-| US-052 | IMPLEMENT | 3/6 | **active** (resumed 2026-03-20). D-040 adaptation in progress. SG-12 blocker resolved by D-040. Worker assigned. |
+| US-052 | DEPLOY | 3/6 | **deployed** (D-002 2026-03-21). Files + binary on Pi, services not yet restarted. VERIFY phase next (requires owner go-ahead for restart). |
 | US-053 | IMPLEMENT | 3/6 | **active** (resumed 2026-03-20). TT-2 + PCM-MODE-3 code preserved. Blocked on US-052. |
 | US-056 | CANCELLED | 0/0 | **cancelled** (owner directive 2026-03-16, D-040: CamillaDSP abandoned. JACK backend migration no longer needed.) |
 | US-057 | CANCELLED | 0/0 | **cancelled** (owner directive 2026-03-16, D-040: CamillaDSP abandoned. PW-native investigation no longer relevant.) |
 | US-058 | done | 7/7 | **done** (owner-accepted 2026-03-16). PW filter-chain FIR benchmark (BM-2). BM2-4 PASS: q1024 1.70% CPU, q256 3.47% CPU. FFTW3 NEON 3-5.6x more efficient than CamillaDSP ALSA. **Triggered D-040: abandon CamillaDSP.** Lab note: `LN-BM2-pw-filter-chain-benchmark.md`. |
 | US-059 | IMPLEMENT | **14/14** | **IMPLEMENT COMPLETE.** All 14 DoD items satisfied. (#1 GM-0 PASS, #2 filter-chain on Pi, #3 GM written+integrated, #4 dual-mode support, #5 WP removed, #6 statically validated, #7 regression tests, #8 stability PASS, #9 latency documented, #10 Architect, #11 Security, #12 AD, #13 QE signed off, #14 lab note). GM tasks: 14/15 (GM-8 CamillaDSP removal tracked separately). HEAD: `8a7a736`. Follow-ups: F-033, I-1 CI wiring, spectral verification (AC 3141), D-042 lifting. **Next phase: TEST.** |
-| US-060 | IMPLEMENT | 1/7 | **active** (owner-authorized 2026-03-20). PW Monitoring Replacement. Architect scoped 6 tasks (US060-1 to US060-6). US060-2 DONE (`0611394`). Track A (US060-1, US060-3) parallelizable. Blocks US-050, US-051. |
-| US-061 | IMPLEMENT | 0/8 | **active** (owner-authorized 2026-03-20). Measurement Pipeline Adaptation. Independent of US-060, parallelizable. |
+| US-060 | DEPLOY | 1/7 | **deployed** (D-002 2026-03-21). PW Monitoring Replacement. Files on Pi, services not yet restarted. US060-1 through US060-4 committed. VERIFY phase next. Blocks US-050, US-051. |
+| US-061 | DEPLOY | 0/8 | **deployed** (D-002 2026-03-21). Measurement Pipeline Adaptation. Files on Pi, services not yet restarted. VERIFY phase next. |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`5bb87b1`), DJ routing service (`5bb87b1`+`487bc5d`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -82,12 +82,12 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **US-059** (Phase: **IMPLEMENT COMPLETE, DoD 14/14** — owner-authorized 2026-03-16, D-040): GraphManager Core + Production Filter-Chain (Phase A). **DoD: 14/14 — ALL ITEMS SATISFIED.** #1 GM-0 PASS, #2 filter-chain on Pi, #3 GM written+integrated (GM-13/GM-14 reconciler fix, 142 tests), #4 dual-mode support (signal-gen + pcm-bridge), #5 WP removed (C-008: stopped+masked, graph intact), #6 statically validated, #7 regression tests (QE approved S-1-S-4 + I-1 `92b5120`), #8 stability PASS (conditional — Mixxx 11h+44m + Reaper 1 xrun in 34 min at q256 FIFO/80, owner accepted), #9 latency documented (C-006: PA ~6.3ms PASS), #10 Architect APPROVED, #11 Security APPROVED, #12 AD CLOSED, #13 QE SIGNED OFF (unconditional, 168 tests + I-1 green, all 4 gaps resolved), #14 lab note complete (5/5 topics). **Tracked follow-ups:** F-033 (Reaper JACK bridge RT), I-1 CI wiring, spectral verification (AC line 3141), D-042 lifting (q256 stability). GM tasks: 14/15 (GM-8 CamillaDSP removal tracked separately). HEAD: `8a7a736`. **Next phase: TEST** (L-022 phase gate: DECOMPOSE -> PLAN -> IMPLEMENT -> **TEST** -> DEPLOY -> VERIFY -> REVIEW).
 - **US-062** (**DONE** — owner-accepted 2026-03-20): Boot-to-DJ Mode (minimum viable auto-launch). **DoD: 7/7 — ALL ITEMS SATISFIED.** #1 q1024 static config (D-042), #2 Mult persistence verified (C-009), #3 Mixxx systemd service (`5bb87b1`), #4 DJ routing script + service (`5bb87b1`+`487bc5d`), #5 reboot test PASS (D-001: 6 iterations, 12 links, zero bypass, q1024, ERR=0), #6 safety review SAFE (architect), #7 owner accepted (sound playing, levels OK). D-001 deployment findings: CamillaDSP system service disabled, WirePlumber unmasked with auto-link suppression (D-039 amendment needed), Mixxx JACK bypass cleanup handled by routing script.
 - **O-018 overnight soak** (2026-03-21): 13h 39m uptime, **zero xruns** after 7-min startup settling. 66.7C, 0x0 throttle, 1.0 GiB memory, zero swap. All services healthy. Strong pre-deployment baseline for GM deployment. Validates US-062 boot-to-DJ stability over extended unattended operation.
-- **GraphManager deployment / D-002 DEPLOY session** (in-progress — 2026-03-21): GM-7 DONE (`eaf28ae`). GM systemd service committed (`f9473b0`). pcm-bridge env retargeting committed (`0611394`). **D-002 DEPLOY session granted to gm-worker** for US-052/US-060/US-061 deployment to Pi. Owner authorized ("PA is off and safe"). **Deployment status: UNKNOWN** — gm-worker was busy, no results received before session wrap-up. O-018 confirms pre-deployment baseline is clean. Next session must check D-002 outcome first.
-- **US-060** (Phase: **IMPLEMENT, DoD 1/7** — owner-authorized 2026-03-20): PipeWire Monitoring Replacement (Phase B). Architect scoped into 6 tasks (US060-1 through US060-6). US060-2 (pcm-bridge retarget) DONE (`0611394`). Track A: US060-1, US060-3 parallelizable. Track B: US060-4, US060-5 sequential after A. Track C: US060-6 cleanup last. Blocks US-050 and US-051.
-- **US-061** (Phase: **IMPLEMENT, DoD 0/8** — owner-authorized 2026-03-20): Measurement Pipeline Adaptation (Phase C). Adapts D-036 measurement daemon from CamillaDSP to PW filter-chain. Independent of US-060 (parallelizable).
+- **D-002 DEPLOY session** (**CLOSED, successful** — 2026-03-21): US-052/US-060/US-061 files + binaries deployed to Pi. Cargo.toml clap env feature fix committed (`f923cfc`). Services NOT yet restarted — VERIFY phase requires restart + observation, needs owner go-ahead (USBStreamer transient risk). HEAD: `f923cfc`.
+- **US-060** (Phase: **DEPLOY, DoD 1/7** — D-002 2026-03-21): PipeWire Monitoring Replacement (Phase B). Files deployed to Pi. US060-1 through US060-4 committed. Services not yet restarted. VERIFY phase next (restart + observation). Blocks US-050 and US-051.
+- **US-061** (Phase: **DEPLOY, DoD 0/8** — D-002 2026-03-21): Measurement Pipeline Adaptation (Phase C). Files deployed to Pi. Services not yet restarted. VERIFY phase next.
 - **US-050** (ACTIVE — resumed per owner directive 2026-03-20): Measurement Pipeline Mock Backend. CI tier done, E2E tier needs D-040 adaptation. Blocked on US-060.
 - **US-051** (ACTIVE — resumed per owner directive 2026-03-20): Persistent System Status Bar. UI structure done (SB-1-7), data source wiring blocked on US-060.
-- **US-052** (ACTIVE — resumed per owner directive 2026-03-20): RT Signal Generator. D-040 adaptation: 3 fixes committed (`4796a46`, sg-worker). sg-worker checking remaining DoD items. Graceful startup AC deferred as SG-13 (architect recommendation: systemd Restart=on-failure provides equivalent retry). gm-worker on flake.nix Playwright fix. Was IMPLEMENT 3/6 (6,183 lines, 193 tests).
+- **US-052** (Phase: **DEPLOY, DoD 3/6** — D-002 2026-03-21): RT Signal Generator. D-040 adaptation committed (`4796a46`). Files + binary deployed to Pi. Services not yet restarted. SG-13 deferred (graceful startup). VERIFY phase next. Was IMPLEMENT 3/6 (6,183 lines, 193 tests).
 - **US-053** (ACTIVE — resumed per owner directive 2026-03-20): Manual Test Tool Page. TT-2 + PCM-MODE-3 code preserved. Blocked on US-052. Was IMPLEMENT 3/6.
 - **Rule 13 retrospective** (2026-03-20): 12 code commits (`487bc5d`..`02f44cf`) committed without pre-approval. Architect: **12/12 APPROVED.** AE: **4/4 APPROVED.** AD: no blockers. TW: documentation in progress. All high/medium items resolved. **Resolved items:**
   - ~~TODO (low): u32 saturation comment on `LevelTracker::sample_count`~~ DONE (sg-worker, awaiting commit)
@@ -126,16 +126,18 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - Co-author history rewrite: requested from CM, **status unknown** (CM comms issue)
 
 **Open at session close:**
-- D-002 DEPLOY session: granted to gm-worker, **deployment status UNKNOWN** (check first next session)
+- D-002 DEPLOY session: **CLOSED, successful.** Files deployed, services NOT yet restarted. VERIFY phase next (restart + observation, owner go-ahead needed for USBStreamer transient risk).
+- Cargo.toml clap env feature fix committed (`f923cfc`). HEAD: `f923cfc`.
 - Rule 13: 4 low-priority TODOs remaining
 - AE safety item: IIR HPF excursion protection documentation (D-031, before production measurement)
+- Co-author history rewrite: requested from CM, status unknown
 - 43 decisions, 66 stories, 168+ tests
 
 **Next session priorities:**
-1. Check D-002 deployment outcome (gm-worker)
+1. VERIFY phase: restart services on Pi (owner go-ahead needed), observe US-052/US-060/US-061
 2. Check co-author history rewrite status (CM)
-3. Continue US-052/US-060/US-061 implementation
-4. TW documentation for D-043, US-060, US-061, US-052 D-040 adaptation, D-001
+3. TW documentation for D-043, US-060, US-061, US-052 D-040 adaptation, D-001
+4. Continue DoD advancement for US-052 (3/6), US-060 (1/7), US-061 (0/8)
 
 ### Key Findings from Brain Dump (2026-03-09)
 - **CamillaDSP levels API correction:** pycamilladsp `client.levels.levels_since_last()` provides per-channel peak+RMS for both capture and playback (8+8 channels). This informs D-020 metering design.
