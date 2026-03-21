@@ -124,6 +124,9 @@
     var peakEnvelope = null;   // Float32Array(plotW) — peak dB per x pixel
     var peakTimes = null;      // Float64Array(plotW) — last peak time per x pixel
 
+    // Dirty flag: set by onmessage, consumed by render() (F-026 fix)
+    var dirty = false;
+
     // Legacy 1/3-octave fallback
     var legacyBands = null;
 
@@ -394,7 +397,7 @@
                 accumPos++;
 
                 if (accumPos >= FFT_SIZE) {
-                    processFFT();
+                    dirty = true;
                     // 50% overlap: keep last half
                     accumBuf.copyWithin(0, FFT_SIZE / 2);
                     accumPos = FFT_SIZE / 2;
@@ -647,6 +650,11 @@
         }
 
         drawBackground();
+
+        if (dirty) {
+            processFFT();
+            dirty = false;
+        }
 
         if (freqData && pcmConnected) {
             drawMountainRange(now);
