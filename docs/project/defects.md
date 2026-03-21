@@ -1026,3 +1026,107 @@ that PipeWire does not override with `PTHREAD_EXPLICIT_SCHED`.
 - F-020: Same root cause class (PW daemon threads, RESOLVED with systemd override)
 - `docs/lab-notes/change-C-007-reaper-fifo-promotion.md`: Full investigation
 - TP-006: Reaper stability test protocol (q256 soak with FIFO active)
+
+---
+
+## F-034: Signal generator --max-level-dbfs negative value fails clap parsing in systemd service (OPEN)
+
+**Severity:** High (service cannot start without workaround)
+**Status:** Open (workaround applied on Pi)
+**Found in:** VERIFY phase S-001 for US-052, 2026-03-21
+**Affects:** US-052 (signal generator deployment), pi4audio-signal-gen.service startup
+**Found by:** worker-verify (Pi VERIFY session)
+
+**Description:** The systemd service file `configs/systemd/user/pi4audio-signal-gen.service`
+passes `--max-level-dbfs -20.0` with a space separator. Clap 4 interprets `-20.0` as a
+separate flag (starts with `-`), not as the value for `--max-level-dbfs`, causing a parse
+error on startup. The service fails to start with the committed service file as-is.
+
+**Root cause:** Clap's argument parser treats tokens starting with `-` as option flags by
+default. Without `allow_hyphen_values = true` on the `max_level_dbfs` field's `#[arg]`
+attribute, or without using `=` assignment syntax, negative numeric values are misinterpreted.
+The `ExecStart` line uses space-separated syntax (`--max-level-dbfs -20.0`) which triggers
+this ambiguity.
+
+**Workaround (applied on Pi during S-001):** Use `=` assignment syntax in the service file:
+`--max-level-dbfs=-20.0`. Clap correctly parses the value when attached with `=` because
+the entire token is consumed as the option's value.
+
+**Fix (two options, either sufficient):**
+1. **Service file fix:** Change `--max-level-dbfs -20.0` to `--max-level-dbfs=-20.0` in
+   `configs/systemd/user/pi4audio-signal-gen.service` line 18.
+2. **Code fix:** Add `allow_hyphen_values = true` to the `max_level_dbfs` field in
+   `src/signal-gen/src/main.rs` (line 78-79): `#[arg(long, default_value_t = -20.0,
+   allow_hyphen_values = true)]`. This makes both syntax forms work.
+3. **Recommended:** Apply both fixes. The service file fix is the immediate unblock;
+   the code fix prevents the same issue for any future CLI invocation.
+
+**Files:**
+- `configs/systemd/user/pi4audio-signal-gen.service` (line 18)
+- `src/signal-gen/src/main.rs` (line 78-79, `max_level_dbfs` arg definition)
+
+**Related:** US-052 (RT signal generator), D-037 (signal generator design), SEC-D037-04
+(level cap validation — validation logic itself is correct, only the CLI parsing is broken).
+
+---
+
+## F-035: Seccomp SystemCallFilter kills signal generator on PipeWire client init (OPEN)
+
+**Severity:** High
+**Status:** Open (workaround available)
+**Found in:** VERIFY phase S-001 for US-052, 2026-03-21
+**Affects:** US-052 (signal generator deployment), pi4audio-signal-gen.service startup
+**Found by:** worker-verify (Pi VERIFY session)
+
+**Description:** The systemd service file `configs/systemd/user/pi4audio-signal-gen.service`
+includes security hardening directives `ProtectSystem=strict` and
+`SystemCallFilter=~@privileged @resources`. When the signal generator binary initializes its
+PipeWire client connection, the process receives SIGSYS (bad system call) and is killed. The
+service fails immediately on startup even after F-034 is worked around.
+
+**Root cause:** PipeWire client initialization requires system calls that are blocked by
+the seccomp filter. The `@resources` syscall group restricts calls like `setrlimit`,
+`prlimit64`, and memory-related calls that PipeWire's shared memory transport and RT thread
+setup require. `ProtectSystem=strict` mounts the filesystem read-only, which may also
+conflict with PipeWire's need to create runtime sockets/shared-memory segments in
+`$XDG_RUNTIME_DIR`. The combination of these restrictions is incompatible with PipeWire
+client operation.
+
+**Workaround (applied on Pi during S-001):** Remove or relax the conflicting directives.
+The specific directives that needed adjustment during S-001:
+- Remove `SystemCallFilter=~@privileged @resources` (or at minimum remove `@resources`
+  from the deny list)
+- Potentially relax `ProtectSystem=strict` to `ProtectSystem=full` or remove it
+
+**Fix:** The security hardening directives (SEC-D037-02) need to be tested against actual
+PipeWire client behavior. The fix should:
+1. Identify the minimum set of additional syscalls PipeWire clients need (likely `prlimit64`,
+   `memfd_create`, `mmap`-related calls from `@resources`)
+2. Either add specific syscall allowlists or remove `@resources` from the deny set
+3. Test `ProtectSystem=strict` vs `ProtectSystem=full` — PipeWire clients need write access
+   to `$XDG_RUNTIME_DIR/pipewire-0` for socket connection
+4. Re-validate with the security specialist to ensure the relaxed profile still meets
+   SEC-D037-02 intent
+
+**Impact:** Without the workaround, the signal generator cannot start at all on the Pi.
+This is a deployment blocker for US-052. The security hardening is desirable (SEC-D037-02)
+but must be compatible with PipeWire client requirements.
+
+**Broader scope:** The same incompatible hardening profile is present in
+`configs/systemd/user/pcm-bridge@.service` (lines 29-42). The pcm-bridge template
+service has identical `ProtectSystem=strict` + `SystemCallFilter=~@privileged @resources`
+directives and will hit the same SIGSYS on PipeWire client init. The GraphManager service
+(`pi4audio-graph-manager.service`) already discovered and fixed this issue -- lines 30-32
+document the finding and use a relaxed profile without these directives.
+
+**Files:**
+- `configs/systemd/user/pi4audio-signal-gen.service` (lines 39-51, security hardening block)
+- `configs/systemd/user/pcm-bridge@.service` (lines 29-42, same issue)
+- `configs/systemd/user/pi4audio-graph-manager.service` (lines 29-37, already fixed --
+  reference for correct relaxed profile)
+
+**Related:** US-052 (RT signal generator), SEC-D037-02 (systemd hardening requirement),
+D-037 (signal generator design). The security specialist should be consulted on the
+revised hardening profile. The GraphManager's relaxed profile (lines 29-37) should be
+the baseline for all PipeWire client services until syscall profiling (`strace
+--seccomp-bpf`) determines the minimum viable filter.
