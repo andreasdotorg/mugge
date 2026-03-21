@@ -351,6 +351,7 @@ See `docs/project/defects.md` for full details.
 | F-036 | Medium | Open | VNC RFB password auth insufficient for guest device access. Becomes High when US-018 deployed. Security specialist finding. |
 | F-037 | High | Open | Web UI on port 8080 has no authentication. Signal generator controllable by unauthenticated network clients. Tracked for venue deployment, not blocking current work. |
 | F-038 | Medium | Open | Dashboard tab has duplicate status bar — not consolidated into persistent bar (US-051). Owner wants ONE unified bar. |
+| F-039 | Medium | Open | DSP load gauge shows 0% — FilterChainCollector hardcodes processing_load. Needs pw-top BUSY parsing (US-060 AC #3). |
 | TK-249 | Medium | Open | PW `linear` Mult verified functional (owner confirmed during C-005). Downgraded from CRITICAL to calibration investigation — absolute SPL doesn't match theory, but gain mechanism works. Not a safety blocker. |
 
 ### Resolved

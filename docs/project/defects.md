@@ -1303,3 +1303,43 @@ the shared persistent bar.
 **Related:** US-051 (persistent status bar AC), TK-225 (persistent status bar
 ticket), TK-227 (dashboard label confusion — may be partially addressed by
 consolidation).
+
+---
+
+## F-039: DSP load gauge shows 0% — FilterChainCollector hardcodes processing_load (OPEN)
+
+**Severity:** Medium (cosmetic — gauge shows green/0% instead of actual load)
+**Status:** Open
+**Found in:** Web UI review post-D-040 (2026-03-21)
+**Affects:** US-060 (PipeWire monitoring replacement), D-020 (web UI dashboard)
+**Found by:** Team (D-040 transition gap analysis)
+
+**Description:** The DSP load gauge in the web UI dashboard and persistent
+status bar always shows 0%. The `FilterChainCollector` (US-060) hardcodes
+`processing_load` to `0.0` because the former data source (pycamilladsp
+`client.levels.levels_since_last()`) no longer exists after D-040 removed
+CamillaDSP.
+
+**Root cause:** The CamillaDSP websocket API provided per-chunk processing
+load as a percentage of the available time budget. With CamillaDSP removed,
+there is no equivalent single API call. The PipeWire filter-chain's DSP load
+is available via `pw-top` in the BUSY column (percentage of quantum deadline
+consumed by each node), but `FilterChainCollector` does not parse this data.
+
+**Impact:** The operator cannot see how much DSP headroom remains. The gauge
+shows a reassuring 0% (green) regardless of actual filter-chain load. This is
+misleading but not a safety issue — the filter-chain still processes audio
+correctly, and xrun detection (separate metric) would catch overload.
+
+**Fix required:** Parse `pw-top` output (or use PipeWire's profiler/metadata
+API) to extract the BUSY percentage for the filter-chain node. Map this to
+the `processing_load` field in `FilterChainCollector`. The BUSY column shows
+the fraction of the quantum deadline consumed, which is the direct equivalent
+of CamillaDSP's chunk budget percentage.
+
+**Note:** This is a known US-060 DoD gap — US-060 AC item "Processing load
+indicator shows PW graph DSP load — replacing the former CamillaDSP processing
+load" is not yet satisfied (DoD 2/7).
+
+**Related:** US-060 (PipeWire monitoring replacement — AC item #3), D-040
+(CamillaDSP removed), D-020 (web UI dashboard DSP load gauge).
