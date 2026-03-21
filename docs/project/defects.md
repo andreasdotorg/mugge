@@ -520,10 +520,10 @@ its prerequisite. TK-039 end-to-end audio validation can proceed.
 
 ---
 
-## F-021: Mixxx silently falls back from JACK to ALSA, persists incorrect backend (OPEN)
+## F-021: Mixxx silently falls back from JACK to ALSA, persists incorrect backend (RESOLVED)
 
 **Severity:** High
-**Status:** Open
+**Status:** Resolved (US-062 Boot-to-DJ Mode, 2026-03-21)
 **Found in:** TK-039 Phase 1 (end-to-end audio validation, 2026-03-10)
 **Affects:** US-029 (DJ UAT), TK-039 (audio validation), DJ mode audio routing
 **Found by:** TK-039 worker + audio engineer assessment
@@ -562,12 +562,21 @@ demonstrated that unversioned configs silently drift. The Mixxx ALSA fallback
 was undetectable without explicit verification of the audio backend before
 testing.
 
+**Resolution (2026-03-21):** Resolved by US-062 (Boot-to-DJ Mode). The Mixxx
+systemd user service (`pi4-audio-mixxx.service`, commits `0df1e56`, `ff40766`)
+launches Mixxx via `pw-jack mixxx`, ensuring PipeWire's JACK implementation is
+always loaded via `LD_PRELOAD`. The old unversioned labwc autostart entry is
+superseded by the systemd service. D-001 reboot test (6 iterations) confirmed
+Mixxx consistently connects via JACK bridge with correct routing. D-027
+(pw-jack as permanent solution) is the governing decision. TK-061 (libjack
+alternatives) remains won't-fix per D-027.
+
 ---
 
-## F-022: Mixxx auto-launches on boot without pw-jack wrapper (OPEN)
+## F-022: Mixxx auto-launches on boot without pw-jack wrapper (RESOLVED)
 
 **Severity:** High
-**Status:** Open
+**Status:** Resolved (US-062 Boot-to-DJ Mode, 2026-03-21)
 **Found in:** TK-039 post-reboot observation (2026-03-10)
 **Affects:** US-029 (DJ UAT), TK-039 (audio validation), F-021 (triggers ALSA fallback on every reboot)
 **Found by:** TK-039 worker (Pi restore session)
@@ -602,6 +611,15 @@ unfixable without also fixing F-022.
 **Related:** F-021 (Mixxx ALSA fallback root cause). F-022 is the trigger
 mechanism that re-introduces F-021 on every reboot. Both must be fixed
 together.
+
+**Resolution (2026-03-21):** Resolved by US-062 (Boot-to-DJ Mode). The old
+unversioned labwc/XDG autostart entry is superseded by the versioned systemd
+user service `pi4-audio-mixxx.service` (commits `0df1e56`, `ff40766`). The
+service launches Mixxx via `pw-jack mixxx` with a PipeWire JACK bridge
+readiness probe (per D-026), ensuring the JACK bridge is available before
+Mixxx starts. D-001 reboot test (6 iterations) confirmed Mixxx consistently
+launches with the pw-jack wrapper on every boot. The old bare autostart no
+longer triggers F-021.
 
 ---
 

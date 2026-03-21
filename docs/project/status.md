@@ -337,8 +337,8 @@ See `docs/project/defects.md` for full details.
 | F-013 | Medium | Partially resolved | US-018 |
 | F-016 | Medium | Open | Operational reliability |
 | F-019 | Medium | Open | US-000b (headless operation) |
-| F-021 | High | Open | TK-039, US-029 (DJ UAT), DJ mode audio routing |
-| F-022 | High | Open | F-021 (triggers ALSA fallback on every reboot) |
+| F-021 | High | Resolved | Resolved by US-062: Mixxx systemd service uses pw-jack (`0df1e56`, `ff40766`) |
+| F-022 | High | Resolved | Resolved by US-062: versioned systemd service supersedes old autostart (`0df1e56`, `ff40766`) |
 | F-025 | Critical | Resolved | Speaker protection — TK-107 + TK-108 done (`a237bc3`) |
 | F-026 | High | Open | TK-114 (spectrum validation), TK-115 (JS FFT pipeline in progress) |
 | F-030 | High | Open | D-020 (web UI), US-029 (DJ UAT). Workaround: stop web UI service. |
