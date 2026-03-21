@@ -94,7 +94,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **US-065** (Phase: **IMPLEMENT, DoD 5/10** — code complete 2026-03-21): Configuration Tab. `config.js` view module, `config_routes.py` backend, CSS, mock data, `main.py` router all implemented (worker-1). **Blocked:** F-040 `audio_mute.py` uncommitted (shares `pw_helpers.py` — both must commit together). Remaining DoD: E2E test (#6), UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10).
 - **US-064** (Phase: **IMPLEMENT, DoD 3/8** — worker-4): PW Graph Visualization Tab. `graph.js` + CSS + HTML tab implemented. SVG layout working for production topology. Mock mode renders representative graph. **Blocked:** 600px responsive layout bug needs fix before UX specialist can review screenshot. F-040 commit also needed (shared index.html changes). Remaining: GM RPC port info extension (Rust, ~20 lines), unit tests, E2E test, architect review, UX review.
 - **F-040** (Phase: **code complete, UNCOMMITTED** — worker-3): Panic MUTE/UNMUTE backend (`audio_mute.py`) + frontend error handling (`statusbar.js`). Shares `pw_helpers.py` with US-065. **BLOCKING:** US-065 and US-064 commits depend on F-040 being committed first. Needs CM commit.
-- **F-041** (**RESOLVED** — `3a1e6bb`, worker-2): Mock server crash fix. Health-check + stderr capture in conftest.py. E2E suite now reliable.
+- **F-041** (**RESOLVED, pending verification** — `3a1e6bb` + `c76b882`): Mock server crash fix. Health-check + stderr capture in conftest.py. Additional fix `c76b882`: subprocess.PIPE replaced with tempfile (deadlock prevention). **E2E verification run needed before proceeding with implementation work.**
 - **F-042** (**RESOLVED** — `3a1e6bb`, worker-2): 5 E2E assertion fixes. Stale selectors updated, timing adjusted.
 - **Rule 13 retrospective** (2026-03-20): 12 code commits (`ff40766`..`3a6fabb`) committed without pre-approval. Architect: **12/12 APPROVED.** AE: **4/4 APPROVED.** AD: no blockers. TW: documentation in progress. All high/medium items resolved. **Resolved items:**
   - ~~TODO (low): u32 saturation comment on `LevelTracker::sample_count`~~ DONE (sg-worker, awaiting commit)
@@ -403,7 +403,7 @@ See `docs/project/defects.md` for full details.
 | F-038 | Medium | In progress | Dashboard duplicate status bar: code fix implemented (8 files), PM approved Rule 13. Awaiting UX + architect approvals for CM commit. |
 | F-039 | Medium | Open | DSP load gauge shows 0% — FilterChainCollector hardcodes processing_load. Needs pw-top BUSY parsing (US-060 AC #3). |
 | F-040 | High | In progress | Panic MUTE/UNMUTE: backend `audio_mute.py` + frontend error handling implemented (worker-3). **UNCOMMITTED** — blocks US-065 and US-064 commits (shared `pw_helpers.py`). |
-| F-041 | High | Resolved | Mock server crash: `conftest.py` fix committed (`3a1e6bb`, worker-2). Server health-check + stderr capture added. |
+| F-041 | High | Resolved (pending verification) | Mock server crash: `3a1e6bb` health-check + `c76b882` PIPE deadlock fix. **E2E verification run needed.** |
 | F-042 | Medium | Resolved | 5 E2E assertion failures: test fixes committed (`3a1e6bb`, worker-2). Stale selectors + timing adjustments. |
 | F-043 | Low | Open | GM SCHED_OTHER shown red in System tab — GM is control plane, SCHED_OTHER is correct. `system.js:387` color logic. |
 | F-044 | Low | Open | Status bar "Links 100" unclear — shows link health % (actual/desired), not link count. Needs label/format fix. |

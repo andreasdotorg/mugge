@@ -1344,10 +1344,10 @@ load" is not yet satisfied (DoD 2/7).
 **Related:** US-060 (PipeWire monitoring replacement — AC item #3), D-040
 (CamillaDSP removed), D-020 (web UI dashboard DSP load gauge).
 
-## F-041: Mock server (uvicorn) crashes mid-E2E Playwright run — 23 cascading timeouts (RESOLVED)
+## F-041: Mock server (uvicorn) crashes mid-E2E Playwright run — 23 cascading timeouts (RESOLVED — pending verification)
 
 **Severity:** High (blocks E2E test suite reliability)
-**Status:** Resolved (`3a1e6bb` — worker-2 fix committed)
+**Status:** Resolved (`3a1e6bb` initial fix, `c76b882` subprocess.PIPE deadlock fix — **pending E2E verification run**)
 **Found in:** E2E test run (2026-03-21)
 **Affects:** All E2E tests in `test_status_bar.py` and potentially other test files
 **Found by:** Team lead (test run analysis)
@@ -1398,6 +1398,18 @@ infrastructure failures. The 5 genuine test failures (see F-042) are buried in n
 
 **Related:** F-042 (5 genuine assertion failures in same test run, separate from
 the server crash). D-020 (web UI). US-051 (status bar E2E coverage).
+
+### Update 2026-03-21: subprocess.PIPE deadlock fix (`c76b882`)
+
+Additional fix landed via rebase: replaced `subprocess.PIPE` with tempfile for
+uvicorn stdout/stderr capture. The original `subprocess.PIPE` approach could
+deadlock when the pipe buffer filled (uvicorn writing to stdout/stderr with no
+reader draining the pipe), causing the server process to block and become
+unresponsive — matching the observed F-041 crash pattern.
+
+**Verification pending:** E2E test suite needs a full run to confirm the fix
+eliminates the cascading timeout pattern. Owner requested verification before
+proceeding with further implementation work.
 
 ---
 
