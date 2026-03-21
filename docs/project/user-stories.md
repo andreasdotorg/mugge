@@ -53,6 +53,28 @@ wired into the regression harness do NOT satisfy DoD. Specifically:
 - Tests that cannot run headlessly (e.g., perceptual audio quality) must be explicitly
   marked as manual-only with justification; all others must be automated
 
+### UX Visual Verification Gate (owner directive 2026-03-21)
+
+**All stories that modify the web UI** must include a UX screenshot review step
+before deployment to the Pi. This gate was added after the US-051 status bar was
+deployed without the UX specialist ever seeing the rendered result.
+
+**Requirements:**
+
+- A screenshot of the **actual rendered UI** (browser or Playwright capture) must
+  be provided to the UX specialist for review before DEPLOY phase
+- The screenshot must show the change in context (full page, not just the changed
+  element) at the minimum supported viewport width (1280px)
+- The UX specialist must explicitly sign off: APPROVED or NEEDS CHANGES
+- If NEEDS CHANGES, the feedback must be addressed and a new screenshot provided
+  before re-review
+- This is a **blocking gate** — no UI change proceeds to DEPLOY without UX sign-off
+  on the visual result
+
+**Applies to:** Any story or defect fix that modifies files in `src/web-ui/static/`
+(HTML, CSS, JS that affect rendering). Does not apply to backend-only changes,
+test-only changes, or documentation.
+
 ---
 
 ## Tier 0 — Core Software Installation
@@ -2780,7 +2802,7 @@ essential (2026-03-15 strategic pivot). UX design complete — see
 
 **DoD:**
 - [ ] Status bar visible and functional on all existing pages
-- [ ] UX specialist sign-off on layout
+- [ ] UX visual verification: screenshot at 1280px reviewed and approved by UX specialist before DEPLOY (owner directive 2026-03-21)
 - [ ] No regressions in existing Dashboard functionality
 - [ ] Verified at 1280px viewport width
 
@@ -2872,6 +2894,7 @@ does NOT depend on TK-231 being resolved first. UX design complete — see
 **DoD:**
 - [ ] Page implemented and functional
 - [ ] UX spec reviewed (lighter process: UX spec + architect feasibility, not full 5-phase gate)
+- [ ] UX visual verification: screenshot at 1280px reviewed and approved by UX specialist before DEPLOY (owner directive 2026-03-21)
 - [ ] Integration test: set level, select channel, start signal, verify SPL readout responds, verify spectrum shows expected content
 - [ ] Hot-plug test: start with no UMIK-1, plug in during session, verify SPL readout activates
 - [ ] AD sign-off: safety controls (hard cap, pre-action warning, emergency stop) verified

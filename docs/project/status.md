@@ -62,7 +62,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-050 | TEST | 6/6 | **TEST phase (advanced 2026-03-21).** QE test plan: T-050-1 (CI regression), T-050-2 (E2E harness self-validation on Linux+PW), T-050-3 (D-040 adaptation inspection), T-050-4 (AC coverage check). QE reviewing T-050-3/4 on commit. CM committing code. |
 | US-051 | TEST | 4/4 | **TEST phase (advanced 2026-03-21).** QE test plan: T-051-1 (Playwright E2E, 20+ tests), T-051-2 (CI regression), T-051-3 (D-040 inspection), T-051-4 (Pi hardware, deferred to VERIFY). TP-003 protocol exists. Committed `8975b5b`. |
 | US-052 | VERIFY | 4/6 | **VERIFY PASS** (S-001 2026-03-21). Signal-gen running on Pi. F-034/F-035 repo fixes committed (`33b5577`). Responds to RPC. |
-| US-053 | IMPLEMENT | 4/6 | Code complete (`94103c3`). 7 UX spec fixes applied. Remaining: integration test (#3), hot-plug test (#4), AD sign-off (#5), AE sign-off (#6) — all need Pi access. |
+| US-053 | IMPLEMENT | 4/7 | Code complete (`94103c3`). 7 UX spec fixes applied. Remaining: UX visual verification (#3, new gate), integration test (#4), hot-plug test (#5), AD sign-off (#6), AE sign-off (#7) — all need Pi access. |
 | US-056 | CANCELLED | 0/0 | **cancelled** (owner directive 2026-03-16, D-040: CamillaDSP abandoned. JACK backend migration no longer needed.) |
 | US-057 | CANCELLED | 0/0 | **cancelled** (owner directive 2026-03-16, D-040: CamillaDSP abandoned. PW-native investigation no longer relevant.) |
 | US-058 | done | 7/7 | **done** (owner-accepted 2026-03-16). PW filter-chain FIR benchmark (BM-2). BM2-4 PASS: q1024 1.70% CPU, q256 3.47% CPU. FFTW3 NEON 3-5.6x more efficient than CamillaDSP ALSA. **Triggered D-040: abandon CamillaDSP.** Lab note: `LN-BM2-pw-filter-chain-benchmark.md`. |
