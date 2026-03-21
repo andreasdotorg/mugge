@@ -121,10 +121,15 @@ async def lifespan(app: FastAPI):
         log.info("Starting real data collectors...")
         from .collectors import (
             FilterChainCollector,
+            LevelsCollector,
             PcmStreamCollector,
             PipeWireCollector,
             SystemCollector,
         )
+        levels_host = os.environ.get("PI4AUDIO_LEVELS_HOST", "127.0.0.1")
+        levels_port = int(os.environ.get("PI4AUDIO_LEVELS_PORT", "9091"))
+        app.state.levels = LevelsCollector(host=levels_host, port=levels_port)
+        await app.state.levels.start()
         app.state.cdsp = FilterChainCollector()
         await app.state.cdsp.start()
         if PCM_JACK_MODE:
@@ -157,7 +162,7 @@ async def lifespan(app: FastAPI):
         _sd_notify("STOPPING=1")
     if not MOCK_MODE:
         log.info("Stopping collectors...")
-        for name in ("cdsp", "pcm", "system_collector", "pw"):
+        for name in ("levels", "cdsp", "pcm", "system_collector", "pw"):
             collector = getattr(app.state, name, None)
             if collector is not None:
                 await collector.stop()
