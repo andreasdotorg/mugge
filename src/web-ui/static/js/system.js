@@ -31,6 +31,23 @@
     var lastEventTime = {};
     var DEBOUNCE_MS = 30000;
 
+    // Track previous color per indicator for color-change event detection.
+    // Values are PiAudio CSS class strings ("c-green", "c-yellow", "c-red").
+    // null = not yet initialized.
+    var prevColors = {
+        cpu: null,
+        temp: null,
+        mem: null,
+        dspLoad: null
+    };
+
+    // Map PiAudio CSS color class to event severity.
+    function colorToSeverity(cssColor) {
+        if (cssColor === "c-red") return "error";
+        if (cssColor === "c-yellow") return "warning";
+        return null;
+    }
+
     function formatTime() {
         var d = new Date();
         var hh = d.getHours();
@@ -45,7 +62,7 @@
         var now = Date.now();
 
         // Debounce continuous conditions
-        var debounceCategories = ["dsp_load", "temp", "system"];
+        var debounceCategories = ["cpu", "dsp_load", "temp", "system"];
         if (debounceCategories.indexOf(category) !== -1) {
             var lastTime = lastEventTime[category] || 0;
             if (now - lastTime < DEBOUNCE_MS) return;
@@ -156,9 +173,20 @@
     // ── Event detection from system data ─────────────────────
 
     function detectSystemEvents(data) {
+        // Compute current indicator values
+        var numCores = data.cpu.per_core.length || 4;
+        var cpuNorm = Math.min(100, data.cpu.total_percent / numCores);
+        var memPct = (data.memory.used_mb / data.memory.total_mb) * 100;
+
         if (!prevSystemData) {
-            // First tick — record session start
+            // First tick — record session start and snapshot color state
             pushEvent("session", null, "Session started (" + data.mode.toUpperCase() + " mode)");
+
+            prevColors.cpu = PiAudio.cpuColor(cpuNorm);
+            prevColors.temp = PiAudio.tempColor(data.cpu.temperature);
+            prevColors.mem = PiAudio.memColor(memPct);
+            prevColors.dspLoad = PiAudio.dspLoadColor(data.camilladsp.processing_load);
+
             prevSystemData = data;
             return;
         }
@@ -179,42 +207,47 @@
                 "Mode: " + prev.mode.toUpperCase() + " \u2192 " + data.mode.toUpperCase());
         }
 
-        // CPU total threshold (normalized: total / num_cores)
-        var numCores = data.cpu.per_core.length || 4;
-        var cpuNorm = data.cpu.total_percent / numCores;
-        var prevCpuNorm = prev.cpu.total_percent / (prev.cpu.per_core.length || 4);
-        if (cpuNorm >= 80 && prevCpuNorm < 80) {
-            pushEvent("dsp_load", "warning", "CPU crossed 80% (" + cpuNorm.toFixed(0) + "%)");
-        } else if (cpuNorm < 60 && prevCpuNorm >= 60) {
-            pushEvent("dsp_load", null, "CPU dropped below 60% (" + cpuNorm.toFixed(0) + "%)");
+        // CPU — fire event only on color change (uses PiAudio.cpuColor thresholds)
+        var cpuColor = PiAudio.cpuColor(cpuNorm);
+        if (cpuColor !== prevColors.cpu) {
+            pushEvent("cpu", colorToSeverity(cpuColor),
+                "CPU: " + cpuNorm.toFixed(0) + "%");
+            prevColors.cpu = cpuColor;
         }
 
-        // Temperature threshold (Pi 4 throttles at 80C; warn at 75C for 5C margin)
-        if (data.cpu.temperature >= 75 && prev.cpu.temperature < 75) {
-            pushEvent("temp", "warning",
-                "Temperature crossed 75\u00b0C (" + data.cpu.temperature.toFixed(1) + "\u00b0C)");
-        } else if (data.cpu.temperature < 70 && prev.cpu.temperature >= 70) {
-            pushEvent("temp", null,
-                "Temperature dropped below 70\u00b0C (" + data.cpu.temperature.toFixed(1) + "\u00b0C)");
+        // Temperature — fire event only on color change (uses PiAudio.tempColor thresholds)
+        var tempColor = PiAudio.tempColor(data.cpu.temperature);
+        if (tempColor !== prevColors.temp) {
+            pushEvent("temp", colorToSeverity(tempColor),
+                "Temperature: " + data.cpu.temperature.toFixed(1) + "\u00b0C");
+            prevColors.temp = tempColor;
         }
 
-        // Memory threshold
-        var memPct = (data.memory.used_mb / data.memory.total_mb) * 100;
-        var prevMemPct = (prev.memory.used_mb / prev.memory.total_mb) * 100;
-        if (memPct >= 85 && prevMemPct < 85) {
-            pushEvent("system", "warning", "Memory crossed 85% (" + memPct.toFixed(0) + "%)");
-        } else if (memPct < 70 && prevMemPct >= 70) {
-            pushEvent("system", null, "Memory dropped below 70% (" + memPct.toFixed(0) + "%)");
+        // Memory — fire event only on color change (uses PiAudio.memColor thresholds)
+        var memColor = PiAudio.memColor(memPct);
+        if (memColor !== prevColors.mem) {
+            pushEvent("system", colorToSeverity(memColor),
+                "Memory: " + memPct.toFixed(0) + "%");
+            prevColors.mem = memColor;
         }
 
-        // Xrun count increment
+        // DSP load — fire event only on color change (uses PiAudio.dspLoadColor thresholds)
+        var dspLoad = data.camilladsp.processing_load;
+        var dspColor = PiAudio.dspLoadColor(dspLoad);
+        if (dspColor !== prevColors.dspLoad) {
+            pushEvent("dsp_load", colorToSeverity(dspColor),
+                "DSP load: " + dspLoad.toFixed(1) + "%");
+            prevColors.dspLoad = dspColor;
+        }
+
+        // Xrun count increment (value-based, not color-based)
         if (data.camilladsp.xruns > prev.camilladsp.xruns) {
             var delta = data.camilladsp.xruns - prev.camilladsp.xruns;
             pushEvent("xrun", "error",
                 "Xruns: +" + delta + " (total: " + data.camilladsp.xruns + ")");
         }
 
-        // Clipped samples increment
+        // Clipped samples increment (value-based, not color-based)
         if (data.camilladsp.clipped_samples > prev.camilladsp.clipped_samples) {
             var clipDelta = data.camilladsp.clipped_samples - prev.camilladsp.clipped_samples;
             pushEvent("clip", "error",
