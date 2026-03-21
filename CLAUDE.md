@@ -162,13 +162,97 @@ three access tiers. See orchestration protocol for full details.
 **This project's deployment target:** Pi audio workstation
 (`ela@192.168.178.185`, SSH). Declared in `.claude/team/config.md`.
 
-### Worker Communication (L-009)
+### *** STOP — DO NOT PILE UP MESSAGES (L-009, L-040) ***
 
-- Send ONE message to a worker, then WAIT for their response.
-- Do NOT pile up messages. Workers executing long commands cannot read
-  messages until the command completes.
-- Never report "all quiet" unless every active worker has explicitly
-  acknowledged.
+**Theory of mind for agents:** Agents do NOT read your messages while they
+are executing a tool call. Messages queue in their inbox and are only seen
+when the current tool call completes and the agent's next turn begins. A
+worker running a 10-minute `nix build` or SSH deployment will not see ANY
+messages you send during that time. When they finish, they see ALL queued
+messages at once — possibly contradictory, outdated, or confusing.
+
+**This has caused repeated problems:** The orchestrator sends message 1
+("status?"), waits 30 seconds, sends message 2 ("are you stuck?"), then
+message 3 ("I'll handle this myself"). The worker finishes their build,
+sees three messages, gets confused, and the orchestrator has already
+created a conflict by acting on impatience.
+
+**HARD RULES for the orchestrator:**
+
+1. **Send ONE message, then WAIT.** No follow-ups, no "just checking,"
+   no rephrasing the same question. The worker WILL eventually respond.
+2. **Silence ≠ death.** A non-responding agent is almost always busy
+   executing a long tool call. They are alive and working.
+3. **"Idle" ≠ available.** An agent shown as idle may be waiting for human
+   permission approval, blocked on a tool confirmation prompt, or between
+   turns. An idle notification is NOT an invitation to pile on messages.
+4. **Never pile up messages.** Multiple messages to the same agent create
+   confusion when they finally read their inbox. If your second message
+   contradicts or supersedes the first, the agent has to guess which to
+   follow.
+5. **Never "just do it yourself" because an agent is slow.** Every single
+   time this has happened, it caused repo access conflicts, system
+   conflicts, or wasted work. The pattern "let me just quickly..." has a
+   100% catastrophe rate in this project.
+6. **Never spin up a replacement worker** while the original may still be
+   active. Two workers on the same task = race conditions, git conflicts,
+   SSH conflicts on the Pi.
+7. **ALWAYS wait for human judgment** before concluding an agent is dead.
+   In rare cases agents do die or comms break — but you cannot reliably
+   distinguish "dead" from "busy on a 15-minute tool call." Only the
+   owner can make this call.
+8. **Never report "all quiet"** unless every active worker has explicitly
+   acknowledged.
+
+**Develop a sense of time.** Before acting on silence, ask: how long has
+it actually been? 10 seconds of silence after a ping is nothing — the
+agent hasn't even had a turn yet. 5 minutes is normal for a build or
+deployment. 30 minutes might warrant a single status question to the
+owner. Half a day with no response from any agent is genuinely unusual.
+Calibrate your response to the actual elapsed time, not to your internal
+sense of urgency. Most "the agent isn't responding" panics happen within
+seconds or minutes — far too soon to draw any conclusion.
+
+**Keep a cool head under pressure.** The urge to bypass process is
+strongest when things feel urgent — a deployment is running, the owner
+is waiting, a test is failing. This is exactly when process matters most.
+Rushing under pressure is how every past catastrophe happened. Slow down.
+Follow the protocol. **Process override is the sole privilege of the
+owner, at their explicit request.** The orchestrator never overrides
+process on its own authority, no matter how urgent the situation feels.
+
+**When an agent hasn't responded and you're getting impatient:**
+- Ask yourself: "Could they be in the middle of a long tool call?" (Almost
+  always yes.)
+- Ask yourself: "How long has it actually been?" (Probably less than you
+  think.)
+- Do NOTHING. Wait for the owner to ask, or for the agent to respond.
+- If the owner asks about progress, say: "Agent X has not responded yet
+  (sent message ~N minutes ago). They may be executing a long operation.
+  Shall I wait or intervene?"
+
+**RULES for workers and advisory agents:**
+
+1. **Check and answer messages approximately every 5 minutes.** If you are
+   about to start a tool call you expect to take longer than 5 minutes,
+   find a way to run it in the background first (e.g., `run_in_background`
+   parameter on Bash, or a tmux session for long SSH operations), then
+   check messages before resuming.
+2. **Report status proactively** to the team lead and relevant stakeholders
+   when you complete a significant step, even if nobody asked. Don't wait
+   for a ping.
+3. **Theory of mind (workers → other agents):** Other agents also don't
+   read your messages until their current tool call finishes. If you
+   message the CM or architect and don't hear back, they're busy — not
+   ignoring you. Send one message and continue with other work.
+4. **Background long operations.** SSH deployments, nix builds, large test
+   suites — use `run_in_background: true` on Bash calls or run commands
+   inside tmux (`tmux new-session -d -s build 'nix build ...'`) so you
+   remain responsive to messages.
+5. **Acknowledge received messages.** When you finish a tool call and find
+   messages in your inbox, acknowledge them promptly — even if just
+   "received, working on it." Silence from your side triggers the
+   orchestrator's impatience loop.
 
 ## Project Summary
 
