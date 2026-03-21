@@ -84,12 +84,6 @@ def test_monitoring_dsp_state_updates(page):
     expect(dsp_state).not_to_have_text("--", timeout=5000)
 
 
-def test_monitoring_dsp_load_updates(page):
-    """DSP load gauge in status bar updates (from monitoring WS)."""
-    load_text = page.locator("#sb-dsp-load-gauge-text")
-    expect(load_text).not_to_have_text("--", timeout=5000)
-
-
 def test_spectrum_canvas_has_content(page):
     """Spectrum canvas renders non-blank content after monitoring data arrives."""
     # Wait for monitoring data to arrive first

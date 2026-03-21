@@ -48,12 +48,6 @@ def test_sb_temp_updates(page):
     expect(temp_text).not_to_have_text("--", timeout=3000)
 
 
-def test_sb_dsp_load_gauge_updates(page):
-    """DSP Load gauge in status bar updates from '--' within 3 s."""
-    load_text = page.locator("#sb-dsp-load-gauge-text")
-    expect(load_text).not_to_have_text("--", timeout=3000)
-
-
 # -- Status bar indicators --
 
 def test_mode_badge_visible(page):

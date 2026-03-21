@@ -65,8 +65,13 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(scope="session")
-def mock_server():
-    """Start the FastAPI app on a free port and yield its base URL."""
+def mock_server(request):
+    """Start the FastAPI app on a free port and yield its base URL.
+
+    Captures stderr so crash diagnostics are available in test output.
+    Stores the subprocess on the pytest session so the ``page`` fixture
+    can check liveness before navigating (F-041).
+    """
     # Find a free port
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -93,11 +98,25 @@ def mock_server():
             with socket.create_connection(("127.0.0.1", port), timeout=0.5):
                 break
         except OSError:
+            if proc.poll() is not None:
+                # Server exited during startup — dump stderr immediately.
+                stderr = proc.stderr.read().decode(errors="replace")
+                pytest.fail(
+                    f"mock_server exited during startup (rc={proc.returncode})"
+                    f"\n--- stderr ---\n{stderr}"
+                )
             time.sleep(0.1)
     else:
         proc.terminate()
         proc.wait(timeout=5)
-        pytest.fail(f"mock_server did not start within 10 s on port {port}")
+        stderr = proc.stderr.read().decode(errors="replace")
+        pytest.fail(
+            f"mock_server did not start within 10 s on port {port}"
+            f"\n--- stderr ---\n{stderr}"
+        )
+
+    # Stash proc on the session so page fixture can check liveness.
+    request.config._mock_server_proc = proc
 
     base_url = f"http://127.0.0.1:{port}"
     yield base_url
@@ -109,15 +128,40 @@ def mock_server():
         proc.kill()
         proc.wait(timeout=5)
 
+    # Dump stderr if the server crashed during the session.
+    stderr = proc.stderr.read().decode(errors="replace")
+    if proc.returncode not in (0, -15, None):
+        # -15 = SIGTERM (normal teardown); anything else is a crash.
+        print(
+            f"\n=== mock_server crashed (rc={proc.returncode}) ===\n{stderr}",
+            file=sys.stderr,
+        )
+
+
+def _assert_server_alive(config):
+    """Fail fast if the mock server process has died (F-041)."""
+    proc = getattr(config, "_mock_server_proc", None)
+    if proc is not None and proc.poll() is not None:
+        stderr = proc.stderr.read().decode(errors="replace")
+        pytest.fail(
+            f"mock_server crashed before this test (rc={proc.returncode})"
+            f"\n--- stderr ---\n{stderr}"
+        )
+
 
 @pytest.fixture()
-def page(browser, mock_server):
+def page(browser, mock_server, request):
     """Create a fresh browser context and page, navigated to the mock server.
 
     Overrides pytest-playwright's page fixture to add console error capture
     and auto-navigate to the mock server.  Resets measurement state before
     each test so the wizard always starts from IDLE.
+
+    Checks server liveness before navigating to avoid 30 s timeout cascades
+    when the server has crashed (F-041).
     """
+    _assert_server_alive(request.config)
+
     import urllib.request
 
     # Reset measurement state so each test starts from clean IDLE.
@@ -145,13 +189,14 @@ def page(browser, mock_server):
 
 
 @pytest.fixture()
-def frozen_page(browser, mock_server):
+def frozen_page(browser, mock_server, request):
     """Page with freeze_time=true for deterministic visual regression tests.
 
     Navigates to scenario A with frozen mock data so screenshots are
     identical across runs. Waits for WebSocket data to populate the UI
     before yielding.
     """
+    _assert_server_alive(request.config)
     context = browser.new_context(viewport={"width": 1280, "height": 720})
     pg = context.new_page()
     console_errors = []

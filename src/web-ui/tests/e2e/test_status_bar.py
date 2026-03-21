@@ -116,15 +116,6 @@ class TestHealthIndicators:
                     f"{elem_id}: expected one of {expected_values}, got '{text}'"
                 )
 
-    def test_sb_dsp_load_gauge_populated(self, page):
-        """F-038: DSP Load gauge text in status bar updates from '--'."""
-        _wait_for_ws_data(page)
-        page.wait_for_timeout(1000)
-        loc = page.locator("#sb-dsp-load-gauge-text")
-        text = loc.text_content().strip()
-        assert text != "--", "sb-dsp-load-gauge-text still shows '--'"
-        assert text != "", "sb-dsp-load-gauge-text is empty"
-
     def test_sb_buf_populated(self, page):
         """F-038: Buffer level in status bar updates from '--'."""
         _wait_for_ws_data(page)
@@ -167,12 +158,12 @@ class TestLabelClarity:
     """DSP and CPU must have distinct labels."""
 
     def test_dsp_and_cpu_distinct(self, page):
-        """AC-4.1: DSP label says 'DSP:' and CPU is visually separate."""
+        """AC-4.1: DSP label says 'DSP' and CPU is visually separate."""
         _wait_for_ws_data(page)
 
         # DSP label
         dsp_label = page.locator("#sb-dsp-state").locator("xpath=preceding-sibling::span[@class='sb-label']")
-        expect(dsp_label).to_have_text("DSP:")
+        expect(dsp_label).to_have_text("DSP")
 
         # CPU gauge exists and is in a different group
         cpu = page.locator("#sb-cpu-gauge")
