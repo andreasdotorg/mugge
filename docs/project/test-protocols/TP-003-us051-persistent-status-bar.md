@@ -33,7 +33,7 @@ The test has two phases: Phase A (local, no Pi) and Phase B (Pi hardware).
 |-----------|---------------|--------------|
 | Web UI server | Running in mock mode | `nix run .#serve` or `PI_AUDIO_MOCK=1 uvicorn` |
 | Browser | Chromium (Playwright) or manual | Playwright for automated, manual for visual |
-| Git commit | `22401b2` or later | Includes SB-1 through SB-7a + e2e fix |
+| Git commit | `0035320` or later | Includes SB-1 through SB-7a + e2e fix |
 
 **Phase B — Pi hardware:**
 
@@ -186,7 +186,7 @@ Covered by AC-1 tests (1.1-1.6) + AC-2 tests (2.1-2.6) + AC-6 tests (6.1-6.2).
 | D3.1 | Dashboard health bar still renders | Navigate to Dashboard, inspect `#health-bar` | Health bar visible, all indicators populated | Health bar missing, empty, or overlapped by status bar | UX spec Section 11: "Keep the Dashboard health bar" |
 | D3.2 | Dashboard full meters still render | Navigate to Dashboard with data flowing | 24-channel meter bars animate | Meters frozen, missing, or at wrong positions |  |
 | D3.3 | Dashboard spectrum still renders | Navigate to Dashboard | Spectrum canvas visible (if audio flowing: shows data) | Spectrum missing or black | |
-| D3.4 | Existing Playwright e2e tests pass | Run `nix run .#test-e2e` (or code review) | All existing tests pass, including the 3 abort tests (fixed in `22401b2`) | Any test failure | DoD: "no regressions" |
+| D3.4 | Existing Playwright e2e tests pass | Run `nix run .#test-e2e` (or code review) | All existing tests pass, including the 3 abort tests (fixed in `0035320`) | Any test failure | DoD: "no regressions" |
 
 #### DoD-4: Verified at 1280px viewport width
 
@@ -200,7 +200,7 @@ Covered by AC-10 test 10.1.
 |---|-----------|-------------------|----------------|----------------|---------------|
 | M1 | No stale element references in JS | Grep for `mw-abort-btn`, `nav-temp`, `mode-badge` in `static/js/` | Zero matches | Any match | SB-6 removed these elements; JS referencing them would cause silent failures |
 | M2 | No stale element references in HTML | Grep for `mw-abort-btn`, `nav-temp`, `mode-badge` in `index.html` | Zero matches | Any match | Same |
-| M3 | All e2e `data-testid` selectors resolve | Cross-reference all `data-testid` values in `test_measurement_wizard.py` against `index.html` | All 8 selectors present in HTML | Any missing | SB-6 regression (caught and fixed in `22401b2`) |
+| M3 | All e2e `data-testid` selectors resolve | Cross-reference all `data-testid` values in `test_measurement_wizard.py` against `index.html` | All 8 selectors present in HTML | Any missing | SB-6 regression (caught and fixed in `0035320`) |
 | M4 | Exactly one ABORT button in DOM | DOM query `[data-testid="abort-measurement"]` | Returns exactly 1 element | Returns 0 or >1 | UX spec Section 3.4: "exactly one ABORT button" |
 
 ---
@@ -318,7 +318,7 @@ nix run .#test-e2e
 ```
 
 If Nix is blocked, perform code review verification (already done for the 3
-abort tests in `22401b2` review).
+abort tests in `0035320` review).
 
 #### Phase B: Pi Hardware Validation (When Deployment Available)
 
@@ -392,7 +392,7 @@ With audio flowing, rapidly switch between all 5 tabs. Verify:
 
 ### Phase A — Code Review Results (Steps 1, 14)
 
-Executed by QE during session 2026-03-15 against commit `22401b2`.
+Executed by QE during session 2026-03-15 against commit `0035320`.
 
 **M1: No stale JS references to removed elements**
 ```
@@ -414,7 +414,7 @@ grep mode-badge index.html   → 0 matches  PASS
 |----------|----------------|-----------|---------|--------|
 | `start-measurement` | 54, 94, 111, 123, 149, 180, 216, 248, 346, 362 | 360 | `#mw-start-btn` | PASS |
 | `measurement-state` | 63, 103, 233, 331 | 336 | `#mw-state-text` | PASS |
-| `abort-measurement` | 72, 114, 251 | 75 | `#sb-abort-btn` | PASS (fixed in `22401b2`) |
+| `abort-measurement` | 72, 114, 251 | 75 | `#sb-abort-btn` | PASS (fixed in `0035320`) |
 | `progress-pre` | 131 | 339 | `#mw-progress-pre` | PASS |
 | `progress-sweep` | 132 | 342 | `#mw-progress-sweep` | PASS |
 | `progress-post` | 133 | 345 | `#mw-progress-post` | PASS |

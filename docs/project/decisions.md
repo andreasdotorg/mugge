@@ -556,7 +556,7 @@ is generated once on the Pi with a 10-year validity period.
 
 ## D-032 Amendment: AudioWorklet superseded by JS FFT (2026-03-12)
 
-**Context:** TK-115 (commit `1dc737f`) replaced the AudioWorklet/AnalyserNode
+**Context:** TK-115 (commit `3dac6df`) replaced the AudioWorklet/AnalyserNode
 spectrum pipeline with a direct JavaScript FFT on WebSocket PCM data,
 eliminating the browser AudioContext entirely. The original D-032 rationale
 stated that HTTPS was required because "the Web Audio API's AudioWorklet
@@ -701,7 +701,7 @@ and testing (mock backend can inject at function level, not subprocess level).
 - AD recommendation: systemd watchdog integration for the daemon process.
 
 **Supersedes:** Subprocess model from TK-162 original breakdown (Sections 10.1,
-10.2 of `measurement-workflow-ux.md`). TK-167 committed code (`1509010`) will
+10.2 of `measurement-workflow-ux.md`). TK-167 committed code (`459fbc8`) will
 be replaced.
 
 **Related:** D-035 (measurement safety), D-020 (web UI architecture), TK-162.

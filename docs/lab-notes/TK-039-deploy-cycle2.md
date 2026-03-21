@@ -30,7 +30,7 @@ deployment (S-004, documented in `docs/lab-notes/TK-039-deploy-cycle1.md`).
 | CM session | S-005 (DEPLOY) |
 | Session holder | pi-recovery-worker |
 | Deployment target | Pi audio workstation (`ela@192.168.178.185`) |
-| Deploy commit | `1f0ce53` |
+| Deploy commit | `ca006f8` |
 | Deploy script | `configure-libjack-alternatives.sh` |
 | Scope | Register libjack alternatives + ldconfig + reboot |
 | Rollback | `update-alternatives --set` to JACK2 or `--remove-all` |
@@ -90,7 +90,7 @@ with the correct library paths from the Pi before Cycle 2 can be retried.
 
 | ID | Source | Severity | Description | Status |
 |----|--------|----------|-------------|--------|
-| C2-1 | S-005 Step 1 | Medium | Hardcoded libjack paths in `configure-libjack-alternatives.sh` don't match Pi library versions. Script fail-safe worked correctly. | Resolved -- paths corrected in `4aeb138` |
+| C2-1 | S-005 Step 1 | Medium | Hardcoded libjack paths in `configure-libjack-alternatives.sh` don't match Pi library versions. Script fail-safe worked correctly. | Resolved -- paths corrected in `0669fc8` |
 | C2-2 | S-006 Step 3 | High | Package-owned symlink (`/usr/lib/.../libjack.so.0`) bypasses alternatives chain. `update-alternatives` registration is ineffective -- system still resolves to JACK2. | Superseded by C2-3 (deeper root cause) |
 | C2-3 | S-007 Step 3 | High | `ldconfig` soname management fundamentally incompatible with `update-alternatives` for shared libraries. `ldconfig` recreates soname symlink from JACK2 `.so.0.1.0` file regardless of alternatives/divert. Entire approach abandoned. | Resolved -- D-027: `pw-jack` is permanent solution, TK-061 won't-fix |
 
@@ -103,7 +103,7 @@ retry.*
 
 # S-006: Cycle 2 Retry (Corrected Library Paths)
 
-Script updated with correct library paths from the Pi (commit `4aeb138`).
+Script updated with correct library paths from the Pi (commit `0669fc8`).
 S-006 is a retry of the same scope as S-005.
 
 ### Session Metadata (S-006)
@@ -113,7 +113,7 @@ S-006 is a retry of the same scope as S-005.
 | CM session | S-006 (DEPLOY) |
 | Session holder | pi-recovery-worker |
 | Deployment target | Pi audio workstation (`ela@192.168.178.185`) |
-| Deploy commit | `4aeb138` |
+| Deploy commit | `0669fc8` |
 | Deploy script | `configure-libjack-alternatives.sh` (corrected paths) |
 | Scope | Register libjack alternatives + ldconfig + reboot |
 | Rollback | `update-alternatives --set` to JACK2 or `--remove-all` |
@@ -190,7 +190,7 @@ deployed in a new session (Cycle 2 final retry).
 # S-007: Cycle 2 Final Retry (dpkg-divert Fix)
 
 Script updated with `dpkg-divert` to take ownership of the master symlink
-from the JACK2 package before registering alternatives (commit `b1c049f`).
+from the JACK2 package before registering alternatives (commit `0b6d714`).
 This addresses Finding C2-2 from S-006.
 
 ### Session Metadata (S-007)
@@ -200,7 +200,7 @@ This addresses Finding C2-2 from S-006.
 | CM session | S-007 (DEPLOY) |
 | Session holder | pi-recovery-worker |
 | Deployment target | Pi audio workstation (`ela@192.168.178.185`) |
-| Deploy commit | `b1c049f` |
+| Deploy commit | `0b6d714` |
 | Deploy script | `configure-libjack-alternatives.sh` (dpkg-divert fix) |
 | Scope | Divert package symlink + register alternatives + ldconfig + reboot |
 | Rollback | `dpkg-divert --remove` + `update-alternatives --remove-all` |

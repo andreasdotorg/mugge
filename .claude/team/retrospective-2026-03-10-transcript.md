@@ -80,7 +80,7 @@ Clear directive sent. The worker needs to stop freelancing and follow the proced
 
 The worker is going idle without executing. They keep acknowledging individual steps (quantum) without running the full sequence. Let me be more direct.
 
-Waiting for the worker to execute and report. Commit c68d23e landed successfully on the parallel track. All advisors (AE, architect) are aligned and standing by.
+Waiting for the worker to execute and report. Commit bd78709 landed successfully on the parallel track. All advisors (AE, architect) are aligned and standing by.
 Nothing to do until the worker responds with restore results.
 
 The worker applied the HP routing fix AND the -24dB gains — but I explicitly told them to NOT make any changes and to execute the restore procedure first. They did

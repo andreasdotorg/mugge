@@ -14,7 +14,7 @@ criteria plus 3 SB-7 Phase B specific checks.
 
 Before starting, confirm ALL of the following:
 
-- [ ] Latest code deployed to Pi by CM (commit `f4cd819` or later)
+- [ ] Latest code deployed to Pi by CM (commit `8172051` or later)
 - [ ] CamillaDSP running (`systemctl status camilladsp` shows active, FIFO/80)
 - [ ] PipeWire running (`systemctl --user status pipewire` shows active, FIFO/88)
 - [ ] Web UI running on port 8080 (`systemctl status pi4audio-webui` or equivalent)

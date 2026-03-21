@@ -8,7 +8,7 @@
 
 First formal deployment to the Pi using the version-controlled deploy script
 (`scripts/deploy/deploy.sh`). This deploys the full config manifest from git
-commit `ac43007` and configures the Pi for DJ mode. This is the D-023
+commit `ac2f22f` and configures the Pi for DJ mode. This is the D-023
 reproducible deployment process in action.
 
 ### Ground Truth Hierarchy
@@ -26,8 +26,8 @@ reproducible deployment process in action.
 | CM session | S-004 (DEPLOY) |
 | Session holder | pi-recovery-worker |
 | Deployment target | Pi audio workstation (`ela@192.168.178.185`) |
-| Deploy commit | `1f0ce53` (originally `ac43007`, shifted after quick commit to resolve dirty-tree block) |
-| Deploy script | `scripts/deploy/deploy.sh --mode dj` (commit `96e45f5`) |
+| Deploy commit | `ca006f8` (originally `ac2f22f`, shifted after quick commit to resolve dirty-tree block) |
+| Deploy script | `scripts/deploy/deploy.sh --mode dj` (commit `4916e92`) |
 | Scope | Full config manifest deployment + DJ mode activation |
 | Rollback | Reboot |
 
@@ -52,7 +52,7 @@ Dry-run output clean. No issues found.
 
 | Section | Contents | Result |
 |---------|----------|--------|
-| 1 (Prerequisites) | Commit `ac43007`, 43 source files present | PASS |
+| 1 (Prerequisites) | Commit `ac2f22f`, 43 source files present | PASS |
 | 2-3 (User configs) | 14 user configs | All paths correct |
 | 4 (Mode selection) | `active.yml` symlink -> `dj-pa.yml` | Correct for DJ mode |
 | 5 (System configs) | 3 system configs | All paths correct |
@@ -84,8 +84,8 @@ required for deploy) and the TW's contemporaneous recording duty (which
 creates untracked files during the deploy session).
 
 **Resolution:** Option (a) — quick commit. CM committed both files:
-- `350c0f7` — initial lab note + tasks.md
-- `1f0ce53` — additional lab note content
+- `018a599` — initial lab note + tasks.md
+- `ca006f8` — additional lab note content
 
 Working tree clean. Deploy unblocked. TW held further file writes until
 deploy completed to avoid re-dirtying the tree.
@@ -103,7 +103,7 @@ exclude `docs/lab-notes/` from the clean-tree check.
 $ scripts/deploy/deploy.sh --mode dj --reboot
 ```
 
-Deploy executed from commit `1f0ce53`. **43 files deployed.**
+Deploy executed from commit `ca006f8`. **43 files deployed.**
 
 | Section | Action | Result |
 |---------|--------|--------|
@@ -149,7 +149,7 @@ All verification checks PASS.
 
 ## Session Outcome
 
-**S-004 CLOSED — PASS.** 43 files deployed from commit `1f0ce53`. Pi at
+**S-004 CLOSED — PASS.** 43 files deployed from commit `ca006f8`. Pi at
 clean, version-controlled DJ mode baseline. Zero errors.
 
 **Key outcomes:**

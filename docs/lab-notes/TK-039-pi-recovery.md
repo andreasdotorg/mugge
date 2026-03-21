@@ -29,7 +29,7 @@ plan, TW notified in real time.
 | Deployment target | Pi audio workstation (`ela@192.168.178.185`) |
 | Scope | Runtime changes only. No persistent config writes. |
 | Rollback | Reboot |
-| Git baseline | Commit `c68d23e` |
+| Git baseline | Commit `bd78709` |
 
 ### Approved Plan (architect-approved)
 

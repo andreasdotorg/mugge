@@ -50,7 +50,7 @@ uninterrupted audio in both operational modes on the production kernel?
 | PipeWire loopback | 8ch sink on Loopback device | `configs/pipewire/25-loopback-8ch.conf` |
 | Mixxx version | 2.5.0 | Pre-installed |
 | Mixxx audio backend | JACK (via PipeWire bridge) | `configs/mixxx/soundconfig.xml` deployed by `scripts/deploy/deploy.sh` |
-| Mixxx launch method | `~/bin/start-mixxx` (pw-jack + D-026 readiness probe) | `scripts/launch/start-mixxx.sh` deployed by `scripts/deploy/deploy.sh` (commit `467cc1e`) |
+| Mixxx launch method | `~/bin/start-mixxx` (pw-jack + D-026 readiness probe) | `scripts/launch/start-mixxx.sh` deployed by `scripts/deploy/deploy.sh` (commit `e264faf`) |
 | Reaper version | 7.31 | Pre-installed |
 | Reaper audio backend | JACK | `reaper.ini` `linux_audio_srate=48000` (TK-046) |
 | Reaper launch method | TBD (`pw-jack reaper` or bare `reaper`) | Launch script (TODO: Phase A) |
@@ -103,12 +103,12 @@ The audio signal path has multiple stages where state can deviate silently:
 | 7 | Signal levels within valid range | pycamilladsp playback peak levels | All active channels > -40dBFS. No channel > 0dBFS. | Active channel <= -40dBFS (too quiet) or any channel > 0dBFS (clipping) | Levels below -40dBFS suggest a gain staging error or routing problem. Levels above 0dBFS indicate clipping, which causes distortion. The 0dBFS ceiling is a hard digital limit. |
 | 8 | Owner confirms audio output via VNC | Owner observation during test execution | Owner verbally or in writing confirms audible audio output for both Mixxx and Reaper | Owner does not confirm, or reports no audio / wrong audio | Electronic measurement confirms signal presence; owner confirmation confirms the signal reaches the physical output and sounds correct. This is a process requirement: worker electronic checks are necessary but not sufficient (established after TK-040 premature closure). |
 | 9 | Reaper stable on `6.12.62+rpt-rpi-v8-rt` | Process liveness check every 60s for 300s total. Kernel error check (`dmesg` grep for v3d/lockup/BUG). CamillaDSP state check. | Reaper process alive for 300+ seconds. Zero kernel errors. CamillaDSP remains Running throughout. | Reaper crashes, kernel error detected, or CamillaDSP fails | 300s (5 min) provides >3x margin over the old kernel's worst-case lockup time (~2.5 min on `6.12.47`). The previous kernel produced 11 lockup events, all within the first few minutes. If Reaper survives 5 minutes with hardware V3D GL on the new kernel, the upstream fix (D-022) is confirmed effective for Reaper (already confirmed for Mixxx in TK-055's 37+ min test). |
-| 10 | F-020 workaround survives reboot | `chrt -p` on PipeWire and CamillaDSP processes after clean reboot | PipeWire: SCHED_FIFO/88. CamillaDSP: SCHED_FIFO/80. | Either process not at expected priority | MANDATORY STOP GATE. The systemd override (F-020, commit `536f631`) must persist across reboot. Without FIFO scheduling, PipeWire falls back to nice=-11 (SCHED_OTHER), causing audible glitches under load. All subsequent test results are invalid if this gate fails. |
+| 10 | F-020 workaround survives reboot | `chrt -p` on PipeWire and CamillaDSP processes after clean reboot | PipeWire: SCHED_FIFO/88. CamillaDSP: SCHED_FIFO/80. | Either process not at expected priority | MANDATORY STOP GATE. The systemd override (F-020, commit `9c6f3b1`) must persist across reboot. Without FIFO scheduling, PipeWire falls back to nice=-11 (SCHED_OTHER), causing audible glitches under load. All subsequent test results are invalid if this gate fails. |
 | 11 | CamillaDSP config switch works cleanly | Websocket API `set_active()` for both dj-pa.yml and live.yml | Both configs load without error. CamillaDSP enters Running state after each switch. | Config load error or CamillaDSP not Running after switch | Config switching via websocket API is the production method for mode changes (TK-005). If it fails, the fallback (systemctl restart) risks ALSA device races and requires re-verification of scheduling priorities. |
 
 ### 1.6 Execution Procedure
 
-**Test script:** `scripts/test/tk039-audio-validation.sh --phase both` (commit `8ab9aa9`)
+**Test script:** `scripts/test/tk039-audio-validation.sh --phase both` (commit `bd2206a`)
 
 The script automates criteria 1-7 and 9-11. Criterion 8 requires interactive owner
 confirmation (script pauses with a prompt).

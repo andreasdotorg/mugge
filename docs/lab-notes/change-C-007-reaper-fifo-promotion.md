@@ -18,7 +18,7 @@ data from OBSERVE O-007 through O-011 and CHANGE C-007.
 | Decision | D-011: Dual quantum (1024 DJ / 256 live) |
 | Prior bug | F-020: PW RT module fails to promote PW daemon threads on PREEMPT_RT |
 | New bug | F-033: PW RT module fails to promote JACK client threads on PREEMPT_RT |
-| Prior data | C-006 latency characterization (`5e6398c`): q256 xruns documented |
+| Prior data | C-006 latency characterization (`9941cd2`): q256 xruns documented |
 | Test protocol | TP-006: Reaper stability test protocol |
 
 ### Reproducibility

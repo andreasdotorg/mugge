@@ -309,4 +309,4 @@ to ~7 kHz vs ~6 kHz for the Jewel).
 - **RT audio stack:** `docs/architecture/rt-audio-stack.md` "SAFETY: Driver
   Protection Filters in Production Configs"
 - **Measurement script:** `src/room-correction/measure_nearfield.py`
-  (commit a32c8fe: S-013 session fixes)
+  (commit f3df4cf: S-013 session fixes)

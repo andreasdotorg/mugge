@@ -282,7 +282,7 @@ conflicted with CamillaDSP's exclusive ALSA access.
 (PID 3565188).
 
 **Note:** PipeWire nodes subsequently renamed to `ada8200-in` / `ada8200-out`
-(commit `8d9ec50`) for clarity in Reaper's port list. Reaper may need relaunch
+(commit `5439691`) for clarity in Reaper's port list. Reaper may need relaunch
 to pick up the new names.
 
 **Status:** Fix applied. Pending owner verification that all 8 channels appear
@@ -361,14 +361,14 @@ as the default source.
 
 ---
 
-## PipeWire Node Rename (commit 8d9ec50)
+## PipeWire Node Rename (commit 5439691)
 
 PipeWire nodes for the USBStreamer were renamed from generic `USBStreamer 8ch
 Input` to descriptive `ada8200-in` / `ada8200-out` names. This makes port
 identification clearer in Reaper and other JACK-aware applications.
 
 The rename was applied in the PipeWire configuration and committed as
-`8d9ec50`. Applications (Reaper, Mixxx) may need relaunch to pick up the new
+`5439691`. Applications (Reaper, Mixxx) may need relaunch to pick up the new
 port names.
 
 ---
@@ -543,7 +543,7 @@ reboot. System is ready for TK-039 (end-to-end audio validation).
 | TK-044 | Reboot verification | **ALL 12 PASS** (second reboot after fixes) |
 | TK-046 | Reaper sample rate | DONE -- owner set to 48000 via GUI, persisted across reboot |
 | -- | UMIK-1 WirePlumber rule | Applied |
-| -- | PipeWire node rename | Applied (commit 8d9ec50) |
+| -- | PipeWire node rename | Applied (commit 5439691) |
 | -- | USB hot-plug analysis | Documented (USBStreamer needs udev recovery rule) |
 | -- | wayvnc autostart + password | DONE -- auto-starts on boot, password auth verified across reboot |
 | -- | CamillaDSP systemctl enable | DONE -- service enabled and auto-starts on boot |

@@ -9,16 +9,16 @@ TW received command-level CC from CM in real time during session execution.
 **Date:** 2026-03-13
 **Operator:** worker-measurement (via CM DEPLOY session S-012)
 **Host:** mugge (Raspberry Pi 4B, Debian 13 Trixie, kernel 6.12.62+rpt-rpi-v8-rt)
-**Commit:** `a39e7b7` (from `0075142`)
+**Commit:** `5c4253a` (from `fef9c81`)
 **Safety precondition:** Non-audio operation (git pull + pip install). No
 speaker/amp risk. No PA safety precondition required.
-**Scope:** Deploy commit `a39e7b7` to Pi, ensure pycamilladsp available in venv.
+**Scope:** Deploy commit `5c4253a` to Pi, ensure pycamilladsp available in venv.
 
 ---
 
 ## Outcome: PASS
 
-All 3 steps passed. Pi updated to `a39e7b7` via fast-forward. pycamilladsp
+All 3 steps passed. Pi updated to `5c4253a` via fast-forward. pycamilladsp
 3.0.0 confirmed available in venv.
 
 ## Procedure
@@ -28,8 +28,8 @@ All 3 steps passed. Pi updated to `a39e7b7` via fast-forward. pycamilladsp
 ```bash
 $ cd /home/ela/pi4-audio-workstation && git pull
 From https://github.com/andreasdotorg/pi4-audio-workstation
-   0075142..a39e7b7  main -> origin/main
-Updating 0075142..a39e7b7
+   fef9c81..5c4253a  main -> origin/main
+Updating fef9c81..5c4253a
 Fast-forward
  docs/project/status.md                             |   3 +
  docs/project/tasks.md                              |   4 +-
@@ -39,7 +39,7 @@ Fast-forward
  create mode 100644 scripts/room-correction/tests/test_measurement_config.py
 ```
 
-Fast-forward from `0075142` to `a39e7b7`. 4 files changed:
+Fast-forward from `fef9c81` to `5c4253a`. 4 files changed:
 
 | File | Change |
 |------|--------|
@@ -81,7 +81,7 @@ Version: 3.0.0
 
 | Check | Expected | Actual | Result |
 |-------|----------|--------|--------|
-| Git pull | Fast-forward to `a39e7b7` | Fast-forward `0075142..a39e7b7` | PASS |
+| Git pull | Fast-forward to `5c4253a` | Fast-forward `fef9c81..5c4253a` | PASS |
 | pycamilladsp in venv | Installed, importable | 3.0.0, import OK | PASS |
 | CamillaClient available | Import succeeds | `CamillaClient OK` | PASS |
 
@@ -104,6 +104,6 @@ None.
 
 ## Post-Session State
 
-- Pi at commit `a39e7b7`
+- Pi at commit `5c4253a`
 - pycamilladsp 3.0.0 in `~/audio-workstation-venv`
 - Audio stack unchanged (no services restarted, no config swapped)

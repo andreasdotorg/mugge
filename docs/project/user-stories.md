@@ -2478,7 +2478,7 @@ the signal chain (amplifier, DAC/interface, measurement microphone),
 calibration, and thermal ceilings from actual hardware specifications instead
 of hardcoded constants.
 
-**Status:** in-review (TK-155, `45ea67e` — code + tests done, DoD sign-offs pending)
+**Status:** in-review (TK-155, `2a2a2f9` — code + tests done, DoD sign-offs pending)
 **Depends on:** none
 **Blocks:** US-046 (thermal ceiling needs hardware specs), US-012 (gain calibration needs mic sensitivity)
 **Decisions:** D-035 (measurement safety)
@@ -2514,7 +2514,7 @@ impedance combined with the hardware gain chain,
 **so that** the system enforces a hard power limit that prevents thermal
 damage to speakers regardless of CamillaDSP state or operator error.
 
-**Status:** in-review (TK-155, `45ea67e` — code + tests done, DoD sign-offs pending)
+**Status:** in-review (TK-155, `2a2a2f9` — code + tests done, DoD sign-offs pending)
 **Depends on:** US-045 (hardware config), US-039 (driver schema with Pe_max, impedance)
 **Blocks:** US-012 amended gain calibration (uses thermal ceiling as hard cap)
 **Decisions:** D-035 (measurement safety, Layer 1: digital hard cap)
@@ -3106,7 +3106,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** a GraphManager subsystem that is the sole authority over PipeWire application routing, and a production PW filter-chain configuration that replaces CamillaDSP for all FIR convolution,
 **so that** the entire audio pipeline runs as native PipeWire nodes with deterministic, centrally-managed routing -- eliminating the ALSA Loopback bridge, the CamillaDSP external process, and the class of integration bugs caused by distributed session management (BUG-SG12-1 through SG12-7, TK-224, TK-236).
 
-**Status:** in-progress (IMPLEMENT phase, 2026-03-16. GM-0 PASS. Workers staffed: GM-1 worker-mock-backend, GM-2 worker-signal-gen. Both in architect consultation.)
+**Status:** in-progress (TEST phase, advanced 2026-03-21. QE confirmed existing 168 regression tests + I-1 + hardware evidence satisfy formal test plan. DoD 14/14. DEPLOY gate next: QE test plan executed, all criteria pass.)
 **Depends on:** US-058 PASS (D-040: PW filter-chain replaces CamillaDSP, giving GraphManager linkable PW ports natively). **SATISFIED.**
 **Blocks:** US-060 (PW monitoring replacement), US-061 (measurement pipeline adaptation)
 **Decisions:** D-039 (owner corrections 2026-03-16: daemon subsystem, WHAT not HOW, sole session manager). D-040 (abandon CamillaDSP for PW filter-chain). Supersedes the original WP Lua scripts approach.
@@ -3165,7 +3165,7 @@ routing), BM-2 (filter-chain benchmark), PW-native investigation.
 **I want** all web UI monitoring (dashboard health indicators, real-time levels, spectrum data) to use PipeWire-native data sources instead of the CamillaDSP websocket API,
 **so that** the web UI dashboard and status bar function correctly after CamillaDSP removal (D-040), with equivalent or better data fidelity.
 
-**Status:** active (owner-authorized 2026-03-20. Architect scoped into 6 tasks: US060-1 through US060-6. US060-2 pcm-bridge retarget DONE at `0611394`. Track A: US060-1, US060-3 parallelizable. Track B: US060-4, US060-5 sequential after A. Track C: US060-6 cleanup last.)
+**Status:** active (owner-authorized 2026-03-20. Architect scoped into 6 tasks: US060-1 through US060-6. US060-2 pcm-bridge retarget DONE at `bd31889`. Track A: US060-1, US060-3 parallelizable. Track B: US060-4, US060-5 sequential after A. Track C: US060-6 cleanup last.)
 **Depends on:** US-059 (GraphManager core + production filter-chain must be operational)
 **Blocks:** US-050 (E2E tier D-040 adaptation), US-051 (data source wiring)
 **Decisions:** D-040 (CamillaDSP websocket API lost -- consequence #5). D-020 (web UI dashboard uses pycamilladsp collectors that must be replaced).

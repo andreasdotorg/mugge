@@ -172,7 +172,7 @@ Zero V3D renderD mappings in labwc process.
 activity is eliminated. The V3D kernel module may still be loaded but is never
 exercised, avoiding the deadlocking lock path entirely.
 
-**Remaining:** ~~D-021 formalization~~ DONE (committed 20ae9f0). 30-min T3d
+**Remaining:** ~~D-021 formalization~~ DONE (committed fb1654b). 30-min T3d
 stability test. V3D blacklist persistence on Pi.
 
 ### Update 2026-03-09: Test 5 LOCKUP -- V3D client triggers deadlock even with pixman compositor
@@ -399,7 +399,7 @@ goal (D-008 design principle #6: "power on -> audio stack auto-starts").
 All items verified to survive reboot by capture-verify-worker.
 
 **Item 1: CamillaDSP SCHED_FIFO 80.** Persisted via systemd service override
-(commit 6042138).
+(commit c00dbd0).
 ```
 [Service]
 CPUSchedulingPolicy=fifo
@@ -508,7 +508,7 @@ F-018 CamillaDSP fix).
 `~/.config/systemd/user/pipewire.service.d/override.conf` with
 `CPUSchedulingPolicy=fifo` and `CPUSchedulingPriority=88` (fix candidate #1).
 Same pattern as F-018 CamillaDSP fix. Config version-controlled in repo
-(commit `536f631`).
+(commit `9c6f3b1`).
 
 **Verification:** PipeWire confirmed running at SCHED_FIFO priority 88 after
 reboot. Root cause (why PipeWire RT module fails to self-promote on PREEMPT_RT)
@@ -677,7 +677,7 @@ different issue).
 ## F-025: Config generator missing subsonic driver protection filter (RESOLVED)
 
 **Severity:** Critical (risk of mechanical damage to speakers)
-**Status:** Resolved (TK-107 + TK-108 done, `ac0cbb8`)
+**Status:** Resolved (TK-107 + TK-108 done, `a237bc3`)
 **Found in:** Bose home deployment via config_generator.py (2026-03-11)
 **Affects:** US-011b, all speaker profiles using identities with `mandatory_hpf_hz`
 **Found by:** Team-lead during Bose deployment review
@@ -783,7 +783,7 @@ by this defect), TK-115 (fix task). Files: `src/web-ui/static/js/pcm-worklet.js`
 ## F-027: DSP load bar on dashboard health bar broken (RESOLVED)
 
 **Severity:** Medium (visual-only, does not affect audio)
-**Status:** Resolved (`244dd65`, TK-122)
+**Status:** Resolved (`d742fdf`, TK-122)
 **Found in:** Dashboard health bar on Pi, 2026-03-12
 **Affects:** TK-095 (health bar inline gauges), TK-063 (dashboard)
 **Found by:** Owner during dashboard review
@@ -812,7 +812,7 @@ affected load bar position), TK-063 (dashboard). Files:
 ## F-028: Test tone signal generation glitches via pw-play (RESOLVED)
 
 **Severity:** High (blocks room correction measurement pipeline)
-**Status:** Resolved (`f9ba574`, TK-120. Validated: 0 errors after 30+ seconds continuous tone)
+**Status:** Resolved (`b06d0e5`, TK-120. Validated: 0 errors after 30+ seconds continuous tone)
 **Found in:** Pi test tone playback via pw-play, 2026-03-12
 **Affects:** Room correction measurement pipeline, TK-114 (spectrum validation)
 **Found by:** Owner, 2026-03-12
@@ -837,7 +837,7 @@ node was then identified as the error source (917 xrun errors, climbing). F-015
 hardening (node.always-process, suspend-timeout=0, priority.driver=2000) addressed
 scheduling but not the period-size mismatch.
 
-**Fix committed and validated** (`f9ba574`): `api.alsa.period-size = 256`,
+**Fix committed and validated** (`b06d0e5`): `api.alsa.period-size = 256`,
 `api.alsa.period-num = 8` in `25-loopback-8ch.conf`. Deployed to Pi, PipeWire
 restarted (owner approved). **Validation: 0 errors** after 30+ seconds continuous
 tone playback (previously 917+ errors and climbing). RESOLVED.
@@ -865,7 +865,7 @@ self-test capability), TK-120 (fix task). Room correction pipeline
 ## F-029: Level bar fill height 3dB below numeric readout (RESOLVED)
 
 **Severity:** Medium (visual accuracy, does not affect audio)
-**Status:** Resolved (`244dd65`, TK-122)
+**Status:** Resolved (`d742fdf`, TK-122)
 **Found in:** Dashboard ML/MR level meters on Pi, 2026-03-12
 **Affects:** TK-095 (meter rendering accuracy), dashboard
 **Found by:** Owner, 2026-03-12 (screenshot captured via Playwright)

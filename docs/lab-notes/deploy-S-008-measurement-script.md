@@ -9,7 +9,7 @@ TW received command-level CC from CM in real time during session execution.
 **Date:** 2026-03-13
 **Operator:** worker-measurement (via CM DEPLOY session S-008)
 **Host:** mugge (Raspberry Pi 4B, Debian 13 Trixie, kernel 6.12.62+rpt-rpi-v8-rt)
-**Source commit:** `8766fed`
+**Source commit:** `c906dee`
 **Scope:** Deploy near-field measurement script (`measure_nearfield.py`) and
 deconvolution module changes to the Pi.
 
@@ -24,7 +24,7 @@ performed as part of this session.
 $ git clone https://github.com/andreasdotorg/pi4-audio-workstation.git
 ```
 
-Result: 2643 files, HEAD at `8766fed`.
+Result: 2643 files, HEAD at `c906dee`.
 
 Location: `/home/ela/pi4-audio-workstation`
 
@@ -39,7 +39,7 @@ scripts, configs, and documentation.
 
 ### Step 1: git pull
 
-N/A -- fresh clone already at target commit `8766fed`.
+N/A -- fresh clone already at target commit `c906dee`.
 
 ### Step 2: File Presence
 
@@ -118,7 +118,7 @@ Both required audio devices detected. PASS.
 
 | Step | Check | Result |
 |------|-------|--------|
-| 0 | Repository cloned | PASS (2643 files, HEAD at 8766fed) |
+| 0 | Repository cloned | PASS (2643 files, HEAD at c906dee) |
 | 1 | git pull | N/A (fresh clone) |
 | 2 | File presence (3 files) | PASS |
 | 3 | Syntax validation | PASS |
@@ -138,7 +138,7 @@ All 7 verification steps PASS.
 
 ## Post-Deployment State
 
-- Repository: `/home/ela/pi4-audio-workstation` at commit `8766fed`
+- Repository: `/home/ela/pi4-audio-workstation` at commit `c906dee`
 - Measurement script: ready to run via venv python
 - Both audio devices (USBStreamer, UMIK-1) detected and available
 

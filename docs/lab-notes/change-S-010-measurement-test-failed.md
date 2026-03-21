@@ -110,7 +110,7 @@ Verified restoration:
 - Line 96: `SWEEP_LEVEL_HARD_CAP_DBFS = -30.0` (restored)
 - Line 1245: `default="USBStreamer"` (restored)
 
-Pi restored to committed state (`8766fed`).
+Pi restored to committed state (`c906dee`).
 
 ## Validation Summary
 
@@ -152,7 +152,7 @@ Pi restored to committed state (`8766fed`).
 
 ## Post-Session State
 
-- Pi restored to committed state (`8766fed`)
+- Pi restored to committed state (`c906dee`)
 - No local edits remain
 - CamillaDSP: running with production config (not swapped -- the TK-143
   hot-swap was not part of this test; the test used the pre-TK-143 code path)

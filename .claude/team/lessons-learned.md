@@ -537,7 +537,7 @@ is signed off, regardless of schedule pressure.
 ## L-018: Always enforce PA-off safety protocol before ANY deployment — even hotfixes
 
 **Date:** 2026-03-15
-**Context:** Commits `300c636` and `3861ecf` deployed to Pi while PA was ON
+**Context:** Commits `b116d23` and `6c5c42a` deployed to Pi while PA was ON
 
 The CM deployed two commits to the Pi while the PA amplifier was on. Service
 restarts cause USBStreamer transients through the 4x450W amplifier chain —
@@ -578,7 +578,7 @@ D-025 (deployment sequencing). See also L-017 (don't deploy without DoD).
 ## L-019: When the owner says "don't touch X", immediately cancel ALL outstanding instructions related to X
 
 **Date:** 2026-03-15
-**Context:** Commit `3861ecf` (thermal ceiling fix) deployed after owner said "Keep your fingers off this thermal ceiling fix"
+**Context:** Commit `6c5c42a` (thermal ceiling fix) deployed after owner said "Keep your fingers off this thermal ceiling fix"
 
 The owner explicitly told the orchestrator not to deploy a thermal ceiling
 fix. However, the orchestrator had already sent deployment instructions to
@@ -656,14 +656,14 @@ is tracked as TK-229 for medium-term implementation.
 ## L-021: Rushed hotfixes without DoD cause cascading failures
 
 **Date:** 2026-03-15
-**Context:** Three rapid deployments to Pi (`300c636`, `3861ecf`, quantum fix) — each introducing new problems
+**Context:** Three rapid deployments to Pi (`b116d23`, `6c5c42a`, quantum fix) — each introducing new problems
 
 Three commits were deployed to the Pi in quick succession during a single
 evening session, each attempting to fix a problem introduced or exposed
 by the previous deployment:
 
-1. `300c636` — deployed without PA-off confirmation (L-018 safety violation)
-2. `3861ecf` — thermal ceiling fix deployed despite owner saying "don't touch
+1. `b116d23` — deployed without PA-off confirmation (L-018 safety violation)
+2. `6c5c42a` — thermal ceiling fix deployed despite owner saying "don't touch
    it" (L-019 unauthorized deploy)
 3. Quantum 2048 fix — caused routing race condition, making gain cal bursts
    play into silence, then thermal ceiling raised to compensate (L-020

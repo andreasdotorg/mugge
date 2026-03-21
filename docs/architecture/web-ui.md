@@ -81,7 +81,7 @@ client, no numpy, no Python audio code in the hot path.
 ## 4. Streams 1-2: Level Meters (pcm-bridge Level Server, US060-3)
 
 **Source:** The pcm-bridge Rust binary provides lock-free per-channel peak and
-RMS level metering via a TCP JSON server (US060-3, commit `634b877`). The
+RMS level metering via a TCP JSON server (US060-3, commit `bbe2b7b`). The
 level metering runs inside the pcm-bridge `monitor` instance, which taps the
 convolver input node (`TARGET=pi4audio-convolver`, 4 channels).
 
@@ -302,7 +302,7 @@ discontinuities.
 
 **Subscription model:** Only engineer clients receive PCM data. Singer clients never subscribe to this path.
 
-**No AudioContext required.** The JS FFT pipeline does not use the Web Audio API. No `AudioContext`, `AudioWorklet`, or `AnalyserNode` is created. This means no autoplay policy restrictions and no "click to start audio" overlay (removed in TK-125, commit `13e8c02`). The HTTPS requirement (D-032) remains for general security best practice (S6), but is no longer technically required by the spectrum display.
+**No AudioContext required.** The JS FFT pipeline does not use the Web Audio API. No `AudioContext`, `AudioWorklet`, or `AnalyserNode` is created. This means no autoplay policy restrictions and no "click to start audio" overlay (removed in TK-125, commit `725f3b9`). The HTTPS requirement (D-032) remains for general security best practice (S6), but is no longer technically required by the spectrum display.
 
 ## 6. Stream 4: DSP / Link Health (FilterChainCollector via GraphManager RPC)
 
@@ -642,7 +642,7 @@ Key behavior: on disconnect, the singer sees a clear "your mix is unchanged" mes
 HTTPS is required for security best practice on a LAN-accessible service
 (S6 security requirement). The original driver was the Web Audio API's
 `AudioWorklet` interface, which requires a secure context per the W3C
-specification. TK-115 (commit `1dc737f`) replaced AudioWorklet with a
+specification. TK-115 (commit `3dac6df`) replaced AudioWorklet with a
 direct JS FFT pipeline, eliminating the technical HTTPS dependency for
 the spectrum display. However, HTTPS remains the correct choice: it
 protects WebSocket traffic from eavesdropping on untrusted venue
@@ -714,7 +714,7 @@ to read.
 
 **Source:** Async TCP client connecting to GraphManager's JSON-over-TCP RPC
 at `127.0.0.1:4002`. Replaces the CamillaDSPCollector (D-040, commits
-`07e6e0a`, `60953c4`).
+`30afeac`, `bc28fae`).
 
 **Single polling loop at 2 Hz (500ms):**
 - `get_links`: returns `{mode, desired, actual, missing, links[]}`. Drives

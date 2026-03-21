@@ -9,7 +9,7 @@ TW received command-level CC from CM in real time during session execution.
 **Date:** 2026-03-12, ~22:35 CET
 **Operator:** worker-chn50p-deploy (via CM DEPLOY session S-007)
 **Host:** mugge (Raspberry Pi 4B, Debian 13 Trixie, kernel 6.12.62+rpt-rpi-v8-rt)
-**Source commit:** `27cc089`
+**Source commit:** `4473d66`
 **Safety precondition:** Owner confirmed PA is OFF prior to session grant.
 **Scope:** Deploy CHN-50P CamillaDSP config (`bose-home-chn50p.yml`) for
 speaker testing. Active config symlink updated.

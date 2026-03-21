@@ -23,7 +23,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 
 ## Overall Status
 
-**Tier 1 validation nearly complete. DJ mode gig-ready. Owner strategic pivot (2026-03-15): build observable, controllable tools before further automation.** US-001 (CPU), US-002 (latency), US-005 (Hercules MIDI), US-006 (Mixxx feasibility) all done. US-003 (stability): T3a PASS (owner approved 2026-03-12), T3b/T3c/T3e done, T3d unblocked (pending Reaper end-to-end), T4 requires physical hardware. US-029 (DJ UAT) now unblocked. D-011 confirmed: live mode chunksize 256 + quantum 256. F-012/F-017 RESOLVED (D-022: upstream V3D fix in `6.12.62+rpt-rpi-v8-rt`). PREEMPT_RT + hardware V3D GL for all modes. Room correction pipeline done (TK-071). Web UI dashboard deployed with real data, HTTPS, spectrum analyzer (D-020 Stage 1+2, D-032). F-030: web UI monitor causes xruns under DJ load (workaround: stop service). Bose speaker profiles measured (PS28 III sub, Jewel Double Cube satellite). Reaper upgraded to 7.64. Speaker driver database (Tier 5, US-039-043) in progress. **D-036 measurement daemon: TK-202 DoD review COMPLETE, then PAUSED.** 6 reviewers all APPROVED. 5 must-fix blockers resolved in `f6a0fc4`. TK-202 paused due to owner strategic pivot — RT signal generator will address TK-224 root cause architecturally. TK-224 and TK-229 also paused/superseded. **Owner strategic pivot (2026-03-15):** (1) Dedicated Rust RT signal generator (always-on audio graph pipe, RPC-controlled, replaces Python `sd.playrec()`). (2) Persistent status bar with mini meters in all views (TK-225/226 promoted to essential). (3) Manual test tool page in web UI. (4) Spectrum visualization of mic signal. Gating step: TK-151 (pcm-bridge) Pi deployment validates Rust-on-Pi build chain (AD-F006). **TK-231 RESOLVED:** AE confirmed 121.4 sensitivity constant correct — perceived loudness explained by pink noise crest factor (peaks 85-87 dB at 75 dB RMS) + Z-weighting vs A-weighting. Not a computation error. **Safety incident TK-228:** PA-on deployment + unauthorized thermal ceiling deploy. 4 lessons learned (L-018 through L-021). **Three parallel workstreams:** (1) TK-151 Pi validation (gates RT signal gen), (2) TK-225/226 status bar (no dependencies), (3) architect RT signal gen design.
+**Tier 1 validation nearly complete. DJ mode gig-ready. Owner strategic pivot (2026-03-15): build observable, controllable tools before further automation.** US-001 (CPU), US-002 (latency), US-005 (Hercules MIDI), US-006 (Mixxx feasibility) all done. US-003 (stability): T3a PASS (owner approved 2026-03-12), T3b/T3c/T3e done, T3d unblocked (pending Reaper end-to-end), T4 requires physical hardware. US-029 (DJ UAT) now unblocked. D-011 confirmed: live mode chunksize 256 + quantum 256. F-012/F-017 RESOLVED (D-022: upstream V3D fix in `6.12.62+rpt-rpi-v8-rt`). PREEMPT_RT + hardware V3D GL for all modes. Room correction pipeline done (TK-071). Web UI dashboard deployed with real data, HTTPS, spectrum analyzer (D-020 Stage 1+2, D-032). F-030: web UI monitor causes xruns under DJ load (workaround: stop service). Bose speaker profiles measured (PS28 III sub, Jewel Double Cube satellite). Reaper upgraded to 7.64. Speaker driver database (Tier 5, US-039-043) in progress. **D-036 measurement daemon: TK-202 DoD review COMPLETE, then PAUSED.** 6 reviewers all APPROVED. 5 must-fix blockers resolved in `81a7d26`. TK-202 paused due to owner strategic pivot — RT signal generator will address TK-224 root cause architecturally. TK-224 and TK-229 also paused/superseded. **Owner strategic pivot (2026-03-15):** (1) Dedicated Rust RT signal generator (always-on audio graph pipe, RPC-controlled, replaces Python `sd.playrec()`). (2) Persistent status bar with mini meters in all views (TK-225/226 promoted to essential). (3) Manual test tool page in web UI. (4) Spectrum visualization of mic signal. Gating step: TK-151 (pcm-bridge) Pi deployment validates Rust-on-Pi build chain (AD-F006). **TK-231 RESOLVED:** AE confirmed 121.4 sensitivity constant correct — perceived loudness explained by pink noise crest factor (peaks 85-87 dB at 75 dB RMS) + Z-weighting vs A-weighting. Not a computation error. **Safety incident TK-228:** PA-on deployment + unauthorized thermal ceiling deploy. 4 lessons learned (L-018 through L-021). **Three parallel workstreams:** (1) TK-151 Pi validation (gates RT signal gen), (2) TK-225/226 status bar (no dependencies), (3) architect RT signal gen design.
 
 ## Component Status
 
@@ -56,7 +56,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-001 | done | 4/4 | **done** (all 5 tests pass: T1a 5.23%, T1b 10.42%, T1c 19.25%, T1d 6.35%, T1e 6.61%. 16k taps both modes. A1/A2 validated.) |
 | US-002 | done | 4/4 | **done** (Pass 1 + Pass 2 complete, lab notes written, A3 updated. D-011 confirmed. IEM passthrough = net benefit.) |
 | US-003 | DEFERRED | 3/4 | **deferred** (owner directive 2026-03-16: deselected for Tier 11. Was IMPLEMENT 3/4 — T3a/b/e PASS. T3d and T4 pending. Work preserved.) |
-| US-004 | REVIEW | 3/4 | in-review (assumption register written with A1-A26, cross-references documented, CLAUDE.md updated. Accuracy corrections committed `0720f94`. **Gap:** AC mentions A27 but register only has A1-A26.) |
+| US-004 | REVIEW | 3/4 | in-review (assumption register written with A1-A26, cross-references documented, CLAUDE.md updated. Accuracy corrections committed `11d0292`. **Gap:** AC mentions A27 but register only has A1-A26.) |
 | US-005 | done | 3/3 | **done** (owner confirms basic DJ functionality works 2026-03-12. Residual mapping work deferred.) |
 | US-006 | done | 3/3 | **done** (implicitly validated — owner actively DJing on Mixxx with Hercules on Pi 2026-03-12.) |
 | US-050 | IMPLEMENT | 5/6 | **active** (resumed 2026-03-20). CI tier done, E2E tier needs D-040 adaptation. Blocked on US-060. |
@@ -66,30 +66,30 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-056 | CANCELLED | 0/0 | **cancelled** (owner directive 2026-03-16, D-040: CamillaDSP abandoned. JACK backend migration no longer needed.) |
 | US-057 | CANCELLED | 0/0 | **cancelled** (owner directive 2026-03-16, D-040: CamillaDSP abandoned. PW-native investigation no longer relevant.) |
 | US-058 | done | 7/7 | **done** (owner-accepted 2026-03-16). PW filter-chain FIR benchmark (BM-2). BM2-4 PASS: q1024 1.70% CPU, q256 3.47% CPU. FFTW3 NEON 3-5.6x more efficient than CamillaDSP ALSA. **Triggered D-040: abandon CamillaDSP.** Lab note: `LN-BM2-pw-filter-chain-benchmark.md`. |
-| US-059 | IMPLEMENT | **14/14** | **IMPLEMENT COMPLETE.** All 14 DoD items satisfied. (#1 GM-0 PASS, #2 filter-chain on Pi, #3 GM written+integrated, #4 dual-mode support, #5 WP removed, #6 statically validated, #7 regression tests, #8 stability PASS, #9 latency documented, #10 Architect, #11 Security, #12 AD, #13 QE signed off, #14 lab note). GM tasks: 14/15 (GM-8 CamillaDSP removal tracked separately). HEAD: `8a7a736`. Follow-ups: F-033, I-1 CI wiring, spectral verification (AC 3141), D-042 lifting. **Next phase: TEST.** |
+| US-059 | TEST | **14/14** | **TEST phase (advanced 2026-03-21).** QE confirmed existing test coverage satisfies formal test plan requirement (168 regression tests S-1-S-4 + I-1 green, DoD #8 stability + #9 latency with hardware evidence, QE sign-off #13 unconditional). All 14 DoD items satisfied. GM tasks: 14/15 (GM-8 CamillaDSP removal tracked separately). HEAD: `5fbd5f7`. Follow-ups: F-033, I-1 CI wiring, spectral verification (AC 3141), D-042 lifting. **Next phase: DEPLOY.** |
 | US-060 | DEPLOY | 1/7 | **deployed** (D-002 2026-03-21). PW Monitoring Replacement. Files on Pi, services not yet restarted. US060-1 through US060-4 committed. VERIFY phase next. Blocks US-050, US-051. |
 | US-061 | DEPLOY | 0/8 | **deployed** (D-002 2026-03-21). Measurement Pipeline Adaptation. Files on Pi, services not yet restarted. VERIFY phase next. |
-| US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`5bb87b1`), DJ routing service (`5bb87b1`+`487bc5d`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
+| US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
 
 - **TK-202** (PAUSED): All 6 reviewers APPROVED. Paused due to owner strategic pivot — RT signal generator will address TK-224 root cause architecturally. Deployment resumes after RT signal gen operational. Review results preserved.
 - **TK-224** (PAUSED, was HIGH deployment blocker): Root cause (per-burst stream opening / WirePlumber routing race) will be addressed by RT signal generator. Previous fixes retained (cosine taper, pre-gen noise, reverts).
-- **TK-151** (**DONE — S-001 Steps 3-9 ALL PASS**): pcm-bridge runtime validated on Pi. AD-F006 build chain + runtime both proven. **TK-236 VERIFIED (HIGH).** 8 AUX output ports created and linked to loopback-8ch-sink on Pi (build #8, commit `c3cf92a`). Fix: `audio.position` property in stream props + SPA format pod. Playback: AUX0-AUX7 (8 output ports matching loopback sink). Capture: MONO. 10 regression tests. pcm-bridge capture mode may need same fix (future item).
+- **TK-151** (**DONE — S-001 Steps 3-9 ALL PASS**): pcm-bridge runtime validated on Pi. AD-F006 build chain + runtime both proven. **TK-236 VERIFIED (HIGH).** 8 AUX output ports created and linked to loopback-8ch-sink on Pi (build #8, commit `5f353ed`). Fix: `audio.position` property in stream props + SPA format pod. Playback: AUX0-AUX7 (8 output ports matching loopback sink). Capture: MONO. 10 regression tests. pcm-bridge capture mode may need same fix (future item).
 - **US-056** (CANCELLED — D-040 2026-03-16): CamillaDSP abandoned. JACK backend migration no longer needed.
 - **US-057** (CANCELLED — D-040 2026-03-16): CamillaDSP abandoned. PW-native investigation no longer relevant.
 - **US-058** (**DONE** — owner-accepted 2026-03-16): PW filter-chain FIR benchmark. BM2-4 PASS: 1.70% q1024, 3.47% q256. Triggered D-040.
-- **US-059** (Phase: **IMPLEMENT COMPLETE, DoD 14/14** — owner-authorized 2026-03-16, D-040): GraphManager Core + Production Filter-Chain (Phase A). **DoD: 14/14 — ALL ITEMS SATISFIED.** #1 GM-0 PASS, #2 filter-chain on Pi, #3 GM written+integrated (GM-13/GM-14 reconciler fix, 142 tests), #4 dual-mode support (signal-gen + pcm-bridge), #5 WP removed (C-008: stopped+masked, graph intact), #6 statically validated, #7 regression tests (QE approved S-1-S-4 + I-1 `92b5120`), #8 stability PASS (conditional — Mixxx 11h+44m + Reaper 1 xrun in 34 min at q256 FIFO/80, owner accepted), #9 latency documented (C-006: PA ~6.3ms PASS), #10 Architect APPROVED, #11 Security APPROVED, #12 AD CLOSED, #13 QE SIGNED OFF (unconditional, 168 tests + I-1 green, all 4 gaps resolved), #14 lab note complete (5/5 topics). **Tracked follow-ups:** F-033 (Reaper JACK bridge RT), I-1 CI wiring, spectral verification (AC line 3141), D-042 lifting (q256 stability). GM tasks: 14/15 (GM-8 CamillaDSP removal tracked separately). HEAD: `8a7a736`. **Next phase: TEST** (L-022 phase gate: DECOMPOSE -> PLAN -> IMPLEMENT -> **TEST** -> DEPLOY -> VERIFY -> REVIEW).
-- **US-062** (**DONE** — owner-accepted 2026-03-20): Boot-to-DJ Mode (minimum viable auto-launch). **DoD: 7/7 — ALL ITEMS SATISFIED.** #1 q1024 static config (D-042), #2 Mult persistence verified (C-009), #3 Mixxx systemd service (`5bb87b1`), #4 DJ routing script + service (`5bb87b1`+`487bc5d`), #5 reboot test PASS (D-001: 6 iterations, 12 links, zero bypass, q1024, ERR=0), #6 safety review SAFE (architect), #7 owner accepted (sound playing, levels OK). D-001 deployment findings: CamillaDSP system service disabled, WirePlumber unmasked with auto-link suppression (D-039 amendment needed), Mixxx JACK bypass cleanup handled by routing script.
+- **US-059** (Phase: **TEST, DoD 14/14** — advanced 2026-03-21): GraphManager Core + Production Filter-Chain (Phase A). **DoD: 14/14 — ALL ITEMS SATISFIED.** QE confirmed TEST gate satisfied: 168 regression tests (S-1-S-4) + I-1 integration tests constitute the formal test plan; hardware stability (#8) and latency (#9) evidence already captured with owner acceptance. QE sign-off #13 unconditional. **Tracked follow-ups:** F-033 (Reaper JACK bridge RT), I-1 CI wiring, spectral verification (AC line 3141), D-042 lifting (q256 stability). GM tasks: 14/15 (GM-8 CamillaDSP removal tracked separately). HEAD: `5fbd5f7`. **Next phase: DEPLOY** (L-022: TEST -> **DEPLOY** -> VERIFY -> REVIEW). DEPLOY gate: "QE test plan executed, all criteria pass."
+- **US-062** (**DONE** — owner-accepted 2026-03-20): Boot-to-DJ Mode (minimum viable auto-launch). **DoD: 7/7 — ALL ITEMS SATISFIED.** #1 q1024 static config (D-042), #2 Mult persistence verified (C-009), #3 Mixxx systemd service (`0df1e56`), #4 DJ routing script + service (`0df1e56`+`ff40766`), #5 reboot test PASS (D-001: 6 iterations, 12 links, zero bypass, q1024, ERR=0), #6 safety review SAFE (architect), #7 owner accepted (sound playing, levels OK). D-001 deployment findings: CamillaDSP system service disabled, WirePlumber unmasked with auto-link suppression (D-039 amendment needed), Mixxx JACK bypass cleanup handled by routing script.
 - **O-018 overnight soak** (2026-03-21): 13h 39m uptime, **zero xruns** after 7-min startup settling. 66.7C, 0x0 throttle, 1.0 GiB memory, zero swap. All services healthy. Strong pre-deployment baseline for GM deployment. Validates US-062 boot-to-DJ stability over extended unattended operation.
-- **D-002 DEPLOY session** (**CLOSED, successful** — 2026-03-21): US-052/US-060/US-061 files + binaries deployed to Pi. Cargo.toml clap env feature fix committed (`f923cfc`). Services NOT yet restarted — VERIFY phase requires restart + observation, needs owner go-ahead (USBStreamer transient risk). HEAD: `f923cfc`.
+- **D-002 DEPLOY session** (**CLOSED, successful** — 2026-03-21): US-052/US-060/US-061 files + binaries deployed to Pi. Cargo.toml clap env feature fix committed (`834b939`). Services NOT yet restarted — VERIFY phase requires restart + observation, needs owner go-ahead (USBStreamer transient risk). HEAD: `834b939`.
 - **US-060** (Phase: **DEPLOY, DoD 1/7** — D-002 2026-03-21): PipeWire Monitoring Replacement (Phase B). Files deployed to Pi. US060-1 through US060-4 committed. Services not yet restarted. VERIFY phase next (restart + observation). Blocks US-050 and US-051.
 - **US-061** (Phase: **DEPLOY, DoD 0/8** — D-002 2026-03-21): Measurement Pipeline Adaptation (Phase C). Files deployed to Pi. Services not yet restarted. VERIFY phase next.
 - **US-050** (ACTIVE — resumed per owner directive 2026-03-20): Measurement Pipeline Mock Backend. CI tier done, E2E tier needs D-040 adaptation. Blocked on US-060.
 - **US-051** (ACTIVE — resumed per owner directive 2026-03-20): Persistent System Status Bar. UI structure done (SB-1-7), data source wiring blocked on US-060.
-- **US-052** (Phase: **DEPLOY, DoD 3/6** — D-002 2026-03-21): RT Signal Generator. D-040 adaptation committed (`4796a46`). Files + binary deployed to Pi. Services not yet restarted. SG-13 deferred (graceful startup). VERIFY phase next. Was IMPLEMENT 3/6 (6,183 lines, 193 tests).
+- **US-052** (Phase: **DEPLOY, DoD 3/6** — D-002 2026-03-21): RT Signal Generator. D-040 adaptation committed (`7e7522a`). Files + binary deployed to Pi. Services not yet restarted. SG-13 deferred (graceful startup). VERIFY phase next. Was IMPLEMENT 3/6 (6,183 lines, 193 tests).
 - **US-053** (ACTIVE — resumed per owner directive 2026-03-20): Manual Test Tool Page. TT-2 + PCM-MODE-3 code preserved. Blocked on US-052. Was IMPLEMENT 3/6.
-- **Rule 13 retrospective** (2026-03-20): 12 code commits (`487bc5d`..`02f44cf`) committed without pre-approval. Architect: **12/12 APPROVED.** AE: **4/4 APPROVED.** AD: no blockers. TW: documentation in progress. All high/medium items resolved. **Resolved items:**
+- **Rule 13 retrospective** (2026-03-20): 12 code commits (`ff40766`..`3a6fabb`) committed without pre-approval. Architect: **12/12 APPROVED.** AE: **4/4 APPROVED.** AD: no blockers. TW: documentation in progress. All high/medium items resolved. **Resolved items:**
   - ~~TODO (low): u32 saturation comment on `LevelTracker::sample_count`~~ DONE (sg-worker, awaiting commit)
   - ~~VERIFY (medium): Signal-gen per-channel selection RPC~~ CONFIRMED (gm-worker: `set_channel` RPC fully implemented across Rust command/RPC/RT + Python client. US-061 dependency satisfied.)
   - ~~TODO (medium): IIR HPF excursion protection~~ tracked separately (safety.md update, US-061/D-031 scope)
@@ -115,9 +115,9 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - D-043 filed: WirePlumber retained for device management, linking disabled (D-039 amendment)
 - US-050/051/052/053: un-deferred per owner directive, all active
 - US-060/061: activated per owner directive, architect scoped US-060 into 6 tasks
-- US-052 D-040 adaptation: 3 fixes committed (`4796a46`), SG-13 deferred
-- US-060: US060-1 (`07e6e0a`), US060-2 (`0611394`), US060-3 (`634b877`), US060-4 (`60953c4`) committed
-- US-061: measurement pipeline adaptation committed (`02f44cf`)
+- US-052 D-040 adaptation: 3 fixes committed (`7e7522a`), SG-13 deferred
+- US-060: US060-1 (`30afeac`), US060-2 (`bd31889`), US060-3 (`bbe2b7b`), US060-4 (`bc28fae`) committed
+- US-061: measurement pipeline adaptation committed (`3a6fabb`)
 - O-018 overnight soak: 13h 39m, zero steady-state xruns, 66.7C
 - Rule 13 retrospective: 12/12 architect approved, 4/4 AE approved, 4 low TODOs remain
 - L-040: Communication & Responsiveness rules added to all role prompts (global + local)
@@ -127,7 +127,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 
 **Open at session close:**
 - D-002 DEPLOY session: **CLOSED, successful.** Files deployed, services NOT yet restarted. VERIFY phase next (restart + observation, owner go-ahead needed for USBStreamer transient risk).
-- Cargo.toml clap env feature fix committed (`f923cfc`). HEAD: `f923cfc`.
+- Cargo.toml clap env feature fix committed (`834b939`). HEAD: `834b939`.
 - Rule 13: 4 low-priority TODOs remaining
 - AE safety item: IIR HPF excursion protection documentation (D-031, before production measurement)
 - Co-author history rewrite: requested from CM, status unknown
@@ -163,39 +163,39 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - D-029 per-speaker-identity boost budget + mandatory HPF framework filed and implemented.
 - Dashboard review findings (TK-095) persisted into architecture docs: auto-hide rejection, MAIN meters, signal path clarification, SPL metering design.
 - Spectrum visual polish: grid lines, frequency labels, overlay, smoothing adjustments (TK-112 color approach pending).
-- F-027 RESOLVED: DSP load display showed 2185% (double `* 100` in dashboard.js). Fix: `244dd65`.
-- F-028 RESOLVED: Loopback glitches from ALSA period-size mismatch (1024 vs quantum 256, 4:1 rebuffering). Fix: period-size=256, period-num=8 in `25-loopback-8ch.conf`. Commit `f9ba574`. Validated 0 errors after 30+ seconds continuous tone (previously 917+).
-- F-029 RESOLVED: Level bar 3dB below readout — RMS vs Peak crest factor mismatch. Fix: aligned to same metric. Commit `244dd65`.
-- TK-112 code committed (`d149620`): Per-bin uniform amplitude coloring in spectrum display. 256-entry color LUT, per-column fillRect. **NOT confirmed by owner** — needs visual validation with audio signal flowing. Deployment to Pi and owner confirmation pending next session.
-- TK-124 DONE: system.js `* 100` double multiplication fix (`13e8c02`).
-- TK-125 DONE: Dead "click to start audio" overlay removed from HTML/JS/CSS (`13e8c02`). Cleanup after AudioContext elimination (TK-115).
-- TK-126 DONE: Tone generator (`jack-tone-generator.py`) enhanced with `--continuous`, `--waveform {sine,white,pink,sweep}`, `--channels` (`6a66254`). Backward-compatible.
+- F-027 RESOLVED: DSP load display showed 2185% (double `* 100` in dashboard.js). Fix: `d742fdf`.
+- F-028 RESOLVED: Loopback glitches from ALSA period-size mismatch (1024 vs quantum 256, 4:1 rebuffering). Fix: period-size=256, period-num=8 in `25-loopback-8ch.conf`. Commit `b06d0e5`. Validated 0 errors after 30+ seconds continuous tone (previously 917+).
+- F-029 RESOLVED: Level bar 3dB below readout — RMS vs Peak crest factor mismatch. Fix: aligned to same metric. Commit `d742fdf`.
+- TK-112 code committed (`cbdcf9d`): Per-bin uniform amplitude coloring in spectrum display. 256-entry color LUT, per-column fillRect. **NOT confirmed by owner** — needs visual validation with audio signal flowing. Deployment to Pi and owner confirmation pending next session.
+- TK-124 DONE: system.js `* 100` double multiplication fix (`725f3b9`).
+- TK-125 DONE: Dead "click to start audio" overlay removed from HTML/JS/CSS (`725f3b9`). Cleanup after AudioContext elimination (TK-115).
+- TK-126 DONE: Tone generator (`jack-tone-generator.py`) enhanced with `--continuous`, `--waveform {sine,white,pink,sweep}`, `--channels` (`7c98c9c`). Backward-compatible.
 - Spectrum Playwright investigation: No bug — spectrum works correctly, was empty due to no audio signal playing.
 - ~~TK-124/TK-125 web UI fixes committed but NOT YET DEPLOYED to Pi (Pi offline until tonight). Deploy next session.~~ **DEPLOYED** — TK-124/TK-125 web UI fixes deployed and verified on Pi.
-- User journeys document (`docs/user-journeys.md`) committed (`81046f2`). 10 operational flow user journeys, 1259 lines. 5 `[TODO: AE input needed]` placeholders remain — AE providing answers.
+- User journeys document (`docs/user-journeys.md`) committed (`9059b63`). 10 operational flow user journeys, 1259 lines. 5 `[TODO: AE input needed]` placeholders remain — AE providing answers.
 - D-031 HPF filters deployed to both dj-pa.yml and live.yml on Pi, validated.
 - TK-140 closed: nftables port 8080 rule was already persistent. CLAUDE.md firewall section corrected.
-- Tier 5 stories filed: US-039 through US-043 (speaker driver database) committed (`ed9a3e5`).
+- Tier 5 stories filed: US-039 through US-043 (speaker driver database) committed (`f2b2b25`).
 - F-030 filed: Web UI monitor JACK client causes xruns under DJ load (HIGH). Workaround: stop web UI service.
 - US-005 DONE: Owner confirms Hercules USB-MIDI basic DJ functionality works. Residual mapping deferred.
 - US-006 DONE: Implicitly validated — owner actively DJing on Mixxx with Hercules on Pi.
 - US-003 T3a PASS: Owner approved based on real-world DJ use. US-029 (DJ UAT) now unblocked.
-- CHN-50P speaker identity, profile, and CamillaDSP config committed (`27cc089`).
-- Driver database: initial scrape data committed (`18af87c`), Soundimports decimal fix (`3f63e5a`).
-- TK-141 DONE: Near-field measurement script (`measure_nearfield.py`, 1412 lines) committed (`8766fed`). AE approved. Safety cap, pre-flight checks, xrun detection. 8 deferred follow-ups filed (TK-142 through TK-149).
-- TK-143 DONE: CamillaDSP measurement config generation + pycamilladsp hot-swap (`21a8fc7`). 15 new tests. All-hands review passed. Hard cap updated to -20 dBFS per AD defense-in-depth (S-010 near-miss). Follow-up review fixes pending commit.
+- CHN-50P speaker identity, profile, and CamillaDSP config committed (`4473d66`).
+- Driver database: initial scrape data committed (`36386c7`), Soundimports decimal fix (`3a1643c`).
+- TK-141 DONE: Near-field measurement script (`measure_nearfield.py`, 1412 lines) committed (`c906dee`). AE approved. Safety cap, pre-flight checks, xrun detection. 8 deferred follow-ups filed (TK-142 through TK-149).
+- TK-143 DONE: CamillaDSP measurement config generation + pycamilladsp hot-swap (`6c65d9b`). 15 new tests. All-hands review passed. Hard cap updated to -20 dBFS per AD defense-in-depth (S-010 near-miss). Follow-up review fixes pending commit.
 - D-033 Stage 1 COMPLETE: Multi-user Nix 2.34.1 installed on Pi (S-011). All 5 checks pass. TK-139 unblocked.
 - S-010 near-miss reclassified: PA was off, no speaker damage. Defense-in-depth fixes implemented.
 - US-044 filed: CamillaDSP bypass protection (safety story). OS-level protections against accidental circumvention of CamillaDSP gain staging. Relates to D-014, S-010.
 - D-034 filed: Temporary bass shelf on Bose sub — LowShelf 70 Hz +6 dB Q=0.7 on sub ch [2,3]. Owner approved ("Much better"). AE Rule 13 safe (0.69W vs 62W). Temporary — remove when Path A FIR corrections deployed.
-- TK-150 DONE (`6394ab7`): Bass shelf deployed via pycamilladsp, persisted to disk and pushed.
+- TK-150 DONE (`130849b`): Bass shelf deployed via pycamilladsp, persisted to disk and pushed.
 - D-035 filed: Measurement safety is software-only (4-layer architecture). Production safety remains D-014 scope. AD recommended, owner approved.
 - Owner planning brief work packages filed: US-045 (hardware config schema), US-046 (thermal ceiling), US-047 (Path A measurement), US-048 (post-measurement viz), US-049 (real-time viz websocket). US-011b amended (power budget validation). US-012 amended (automated gain calibration ramp). TK-151-154 filed (F-030 fix, JACK CPU investigation, runtime power monitoring, D-034 removal tracker). Story count 48->53. Dependency graph updated.
 - Phase 1 completed (WP-1, WP-2, WP-8):
-  - TK-155 DONE (`45ea67e`): Hardware config schema + thermal ceiling computation. 18 tests. Covers US-045 + US-046.
+  - TK-155 DONE (`2a2a2f9`): Hardware config schema + thermal ceiling computation. 18 tests. Covers US-045 + US-046.
   - TK-156 DONE: nixGL Mixxx 2.5.4 wrapper in flake. Needs Pi hardware test (TK-139).
-  - TK-157 DONE (`c2c44f6`): Config power budget validator. 29 tests. Sub margin +1.7 dB — **AE APPROVED** (worst-case envelope, real-world margin ~11.7 dB). 3 dB minimum margin requirement deferred to Path A.
-- TK-158 DONE (`a148190`): Safety + architecture doc restructure by TW. New `docs/operations/safety.md`, `rt-audio-stack.md` restructured.
+  - TK-157 DONE (`3367857`): Config power budget validator. 29 tests. Sub margin +1.7 dB — **AE APPROVED** (worst-case envelope, real-world margin ~11.7 dB). 3 dB minimum margin requirement deferred to Path A.
+- TK-158 DONE (`cc3f552`): Safety + architecture doc restructure by TW. New `docs/operations/safety.md`, `rt-audio-stack.md` restructured.
 - TK-152 SUBSUMED by TK-151: architect root cause analysis identified JACK client as active RT graph node problem.
 - AE approved sub margin (+1.7 dB). Phase 2 UNBLOCKED. WP-3 (gain cal) and WP-4 (pcm-bridge) can start.
 - PO gaps addressed: US-011b 3 dB margin deferred per AE, TK-154 DoD updated (AE Rule 13 + power revalidation), US-044 phase flag for owner.
@@ -203,29 +203,29 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - L-039: Task tool `isolation: "worktree"` is broken. Do not use.
 - AE detailed margin analysis: Option A (sub_speaker_trim -19.0 -> -20.5) recommended for 3 dB margin. PO decision pending.
 - Owner directive (2026-03-14): measurement UI must follow UX-driven development cycle. 5-phase process gate on US-047/048/049. US-050 filed (measurement mock backend). TK-160 (UX design, GATE), TK-161 (specialist validation), TK-162 (architect task breakdown) filed. Story count 53->54.
-- TK-159 DONE (`6c00446`): AE Option A applied — sub_speaker_trim -19.0 -> -20.5 dB, profile power_limit_db aligned to -20.5. 3.0 dB margin achieved.
-- WP-3 DONE: TK-163 (`c902c40`) — automated gain calibration ramp. 437 lines Python + 460 lines tests. 4-layer safety, 20 unit tests. Needs Pi validation.
+- TK-159 DONE (`b51e87b`): AE Option A applied — sub_speaker_trim -19.0 -> -20.5 dB, profile power_limit_db aligned to -20.5. 3.0 dB margin achieved.
+- WP-3 DONE: TK-163 (`64f2d99`) — automated gain calibration ramp. 437 lines Python + 460 lines tests. 4-layer safety, 20 unit tests. Needs Pi validation.
 - WP-4 code written: TK-151 — Rust pcm-bridge in `src/pcm-bridge/` (281 lines). Architect reviewed favorably. Pending CM commit + Pi deployment test.
-- TK-160 DONE (`7e5b127` + uncommitted updates): UX measurement workflow design (1040+ lines). AE 3 must-fix + 5 recs all applied by UX specialist.
+- TK-160 DONE (`caee7d5` + uncommitted updates): UX measurement workflow design (1040+ lines). AE 3 must-fix + 5 recs all applied by UX specialist.
 - TK-161 DONE: All 4 specialist reviews complete with sign-off (AE all accepted, AD all 11 resolved, QE 9/10 resolved + 1 non-blocking residual, architect feasibility confirmed). TK-162 UNBLOCKED for architect task breakdown.
 - TK-164 filed (HIGH): 3 required gain cal fixes (GC-01 verification burst, GC-02 xrun detection, GC-07/11 CamillaDSP config verification). Gates TK-163 field deployment.
 - US-050 mock backend: architect design delivered (mock at measurement script level, ~200 lines, room simulator reuse). Implementation as TK-165.
 - QE non-blocking residual: Section 5.1 gain cal xrun behavior specification (invalidate + retry). Routed to UX specialist.
 - OQ1 resolved: `config.reload()` glitch-free for FIR deployment. Caveat: versioned filenames needed (TK-166).
 - TK-162 DONE: Architect delivered 8 work packages (WP-A through WP-H) across 4 phases. Filed as TK-165 through TK-172. Phase 1 complete (TK-164, TK-165, TK-166 all done). TK-167 (WP-C) completed but SUPERSEDED by D-036.
-- Implementation phase 1 COMPLETE: TK-164 (gain cal fixes), TK-165 (mock backend), TK-166 (versioned FIR filenames, `6459f32`). TK-167 (WP-C ws_server) completed but superseded.
+- Implementation phase 1 COMPLETE: TK-164 (gain cal fixes), TK-165 (mock backend), TK-166 (versioned FIR filenames, `e5ee386`). TK-167 (WP-C ws_server) completed but superseded.
 - **D-036 filed (2026-03-14): Central daemon architecture for measurement workflow.** Subprocess model rejected. FastAPI backend becomes unified control system. Decision count 35->36.
 - **D-036 revised breakdown filed (2026-03-14).** TK-167-172 reused with new scope. Critical path: TK-167 -> TK-168 -> TK-169 -> TK-170 -> TK-172.
 - **D-036 architecture review COMPLETE (2026-03-14).** All 4 sign-offs: AE APPROVED (non-negotiables met), AD APPROVED (6 findings resolved, 0 residuals), QE APPROVED (testability confirmed, 5 additional test scenarios), architect accepted all corrections. Key refinements: two CamillaDSP connections, `sd.abort()` for mid-playrec interrupt (CP-0), two-tier watchdog (10s software + 30s systemd), startup recovery blocks API/WS via FastAPI lifespan, pcm-bridge in WP-C, 8 cancellation points (CP-0-7) as explicit API contract, 10 test scenarios in WP-H. **TK-167 UNBLOCKED for implementation.**
-- **D-036 mock/test milestone COMPLETE (2026-03-14).** 10 commits on main: TK-167 (`9184065`), TK-168 (`02de836`), TK-169 (`babf4b6`), TK-170 (`5aaa596`), TK-171 (`2489cea`), TK-172 (`031923f` — WP-H + 11 FIX NOW review fixes), TK-186 (`d01b0a5` — terminal state latching), TK-187 (`3305e51` — Playwright e2e tests), mock fix (`2a3c27d`), e2e test fixes (`1ee8737`). 23/23 integration tests pass, 14 pass + 1 skip Playwright e2e, 263/263 room-correction pass. All FIX NOW items done (12/12). Code review complete (21 findings, 4 reviewers). TK-173 (`96e08f4`), TK-174 (`96e08f4`), TK-175 done. TK-189 filed (MEDIUM): replace MockCamillaClient with real CamillaDSP + null I/O.
-- **D-036 Pi deployment blockers RESOLVED (2026-03-14).** 11th commit `a545c0b`: TK-177 (CamillaDSP config swap), TK-190 (mic clipping detection), TK-191 (recording integrity), TK-192 (config re-verification). All 4 FIX BEFORE PRODUCTION safety items done. 58 tests passing (worker-config-swap verified). **Deployment readiness assessment delivered:** 2 infrastructure gaps identified (sounddevice pip install, room-correction scripts in deploy manifest). Supervised first measurement protocol defined (13 steps, PA off mandatory). TK-181 (fragile type checking) and TK-184 (mock abort) remain as non-blocking follow-ups — not safety-critical for supervised first measurement.
+- **D-036 mock/test milestone COMPLETE (2026-03-14).** 10 commits on main: TK-167 (`037aabc`), TK-168 (`e364203`), TK-169 (`a801e45`), TK-170 (`d1848f4`), TK-171 (`4889c28`), TK-172 (`7e4bf8f` — WP-H + 11 FIX NOW review fixes), TK-186 (`7a81959` — terminal state latching), TK-187 (`12cd511` — Playwright e2e tests), mock fix (`83bbcc3`), e2e test fixes (`3b5c15f`). 23/23 integration tests pass, 14 pass + 1 skip Playwright e2e, 263/263 room-correction pass. All FIX NOW items done (12/12). Code review complete (21 findings, 4 reviewers). TK-173 (`a28cbc6`), TK-174 (`a28cbc6`), TK-175 done. TK-189 filed (MEDIUM): replace MockCamillaClient with real CamillaDSP + null I/O.
+- **D-036 Pi deployment blockers RESOLVED (2026-03-14).** 11th commit `ecaa485`: TK-177 (CamillaDSP config swap), TK-190 (mic clipping detection), TK-191 (recording integrity), TK-192 (config re-verification). All 4 FIX BEFORE PRODUCTION safety items done. 58 tests passing (worker-config-swap verified). **Deployment readiness assessment delivered:** 2 infrastructure gaps identified (sounddevice pip install, room-correction scripts in deploy manifest). Supervised first measurement protocol defined (13 steps, PA off mandatory). TK-181 (fragile type checking) and TK-184 (mock abort) remain as non-blocking follow-ups — not safety-critical for supervised first measurement.
 
 ### Completed (2026-03-15 session)
-- **TK-202 DoD review COMPLETE.** All 6 reviewers APPROVED: AE, Architect, QE (re-verified after conditional reject), AD (re-verified after conditional approve), TW, UX. 5 must-fix blockers resolved in `f6a0fc4`: TK-204 (setup_warning WS handler), TK-209 (unit test _build_measurement_config), TK-210 (unit test _check_recording_integrity), TK-211 (unit test ambient baseline), TK-217 (hard RuntimeError if pycamilladsp missing in production). 20 tickets filed from review (TK-204 through TK-223).
-- **TK-224 filed, escalated, diagnosed, partially fixed.** Pink noise glitches during gain cal on Pi. AE identified 3 root causes: quantum mismatch, missing cosine taper, per-step noise regeneration. Cosine taper + pre-gen noise buffer committed. Quantum 2048 fix attempted but caused WirePlumber routing race — reverted (`96a5725`). Thermal ceiling revert (`28bc9ec`). Pre-roll silence fix (`28e26f4`). Medium-term fix deferred to TK-229 (persistent PortAudio stream). Owner escalated to HIGH deployment blocker.
+- **TK-202 DoD review COMPLETE.** All 6 reviewers APPROVED: AE, Architect, QE (re-verified after conditional reject), AD (re-verified after conditional approve), TW, UX. 5 must-fix blockers resolved in `81a7d26`: TK-204 (setup_warning WS handler), TK-209 (unit test _build_measurement_config), TK-210 (unit test _check_recording_integrity), TK-211 (unit test ambient baseline), TK-217 (hard RuntimeError if pycamilladsp missing in production). 20 tickets filed from review (TK-204 through TK-223).
+- **TK-224 filed, escalated, diagnosed, partially fixed.** Pink noise glitches during gain cal on Pi. AE identified 3 root causes: quantum mismatch, missing cosine taper, per-step noise regeneration. Cosine taper + pre-gen noise buffer committed. Quantum 2048 fix attempted but caused WirePlumber routing race — reverted (`cc3bbd3`). Thermal ceiling revert (`d4ef061`). Pre-roll silence fix (`9084339`). Medium-term fix deferred to TK-229 (persistent PortAudio stream). Owner escalated to HIGH deployment blocker.
 - **TK-228 INCIDENT filed.** PA-on deployment + unauthorized thermal ceiling deploy + cascading hotfixes without DoD review. 4 lessons learned: L-018 (PA-off mandatory), L-019 (cancel outstanding instructions), L-020 (never raise safety limit for functional workaround), L-021 (rushed hotfixes cascade).
 - **10 new tickets filed:** TK-224 (pink noise glitches), TK-225 (persistent status bar), TK-226 (mini 24-channel meters), TK-227 (dashboard labels), TK-228 (safety incident), TK-229 (persistent PortAudio stream), TK-230 (WirePlumber SCHED_OTHER), TK-231 (SPL computation wrong), TK-232 (SPL bar static), TK-233 (ramp overshoot).
-- **Nix flake improvements:** `nix flake check` outputs (`e524c65`), e2ePython for Playwright (`a15881d`), development HOWTO updated.
+- **Nix flake improvements:** `nix flake check` outputs (`381c7c0`), e2ePython for Playwright (`ec9181d`), development HOWTO updated.
 - **Owner Pi test results tracked:** 4 issues from pre-roll deployment — playback stutters (maps to TK-230), SPL feels louder than 75 dB (TK-231, HIGH), SPL bar doesn't move (TK-232), ramp may overshoot (TK-233).
 - **TK-231 RESOLVED:** AE confirmed 121.4 sensitivity constant correct. Perceived loudness explained by pink noise crest factor (peaks 85-87 dB at 75 dB RMS) + Z-weighting vs A-weighting. Not a computation error.
 - **Owner strategic pivot (2026-03-15):** Shift from "automate everything first" to "build observable, controllable tools first." Four new deliverables: (1) Rust RT signal generator (always-on audio graph pipe, RPC-controlled), (2) persistent status bar + mini meters (TK-225/226 promoted), (3) manual test tool page, (4) spectrum visualization. TK-202 PAUSED, TK-224 PAUSED, TK-229 SUPERSEDED. AD-F006 accepted: validate pcm-bridge (TK-151) on Pi first to prove Rust build chain. Three parallel workstreams: TK-151 Pi validation, TK-225/226 status bar, architect RT signal gen design.
@@ -238,7 +238,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - TK-054 wont-do: Hardware GL on RT makes software rendering DJ-A stability test unnecessary.
 - Kernel upgraded from `6.12.47+rpt-rpi-v8-rt` to `6.12.62+rpt-rpi-v8-rt` (stock RPi package, `apt upgrade`).
 - DJ-A / DJ-B decision tree collapsed: PREEMPT_RT + hardware GL for everything. Single-kernel operation confirmed.
-- F-020 RESOLVED (workaround): PipeWire FIFO/88 persisted via systemd user service drop-in (`~/.config/systemd/user/pipewire.service.d/override.conf`). Config in repo (commit `536f631`). T3d and TK-039 unblocked.
+- F-020 RESOLVED (workaround): PipeWire FIFO/88 persisted via systemd user service drop-in (`~/.config/systemd/user/pipewire.service.d/override.conf`). Config in repo (commit `9c6f3b1`). T3d and TK-039 unblocked.
 
 ### Completed (previous session, 2026-03-09)
 - F-015 diagnosis, workaround, and capture-only adapter design (Phases 1-9)
@@ -254,10 +254,10 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - US-035 story (Feedback Suppression for Live Vocal Performance)
 - F-015 lab note (9 phases), F-017 lab note
 - Defects log populated (F-002 through F-019)
-- D-020 PoC deployed and validated on Pi (8/8 PASS, P8 marginal). 6 bugs found/fixed. Lab note committed (29722c0).
+- D-020 PoC deployed and validated on Pi (8/8 PASS, P8 marginal). 6 bugs found/fixed. Lab note committed (4f166bf).
 - Persistent journald configured on Pi (unblocks all crash investigation)
 - F-019 filed (headless labwc regression)
-- labwc input fix committed (757e316)
+- labwc input fix committed (2764519)
 - F-012/F-017 root cause confirmed: V3D GPU driver deadlock on PREEMPT_RT
 - `LIBGL_ALWAYS_SOFTWARE=1` partially validated (stable without audio, FAILS with audio -- Event #9)
 - F-012/F-017 consolidated lab note committed
@@ -270,10 +270,10 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - Audio confirmed through Mixxx JACK: Master -> CamillaDSP ch 0-1 (mains), Headphones -> CamillaDSP ch 4-5 (engineer HP)
 - `99-no-rt.conf` (Test 3 artifact) removed from Pi -- was forcing PipeWire to SCHED_OTHER, causing glitches
 - F-020 filed: PipeWire RT module fails to self-promote to SCHED_FIFO on PREEMPT_RT
-- Test 5 committed (1ff916c): V3D client lockup confirms V3D blacklist is mandatory (not defense-in-depth)
+- Test 5 committed (0656fc2): V3D client lockup confirms V3D blacklist is mandatory (not defense-in-depth)
 - DJ-A strategy alignment (architect + audio-engineer consensus): DJ-A = PREEMPT_RT for BOTH modes (RT + V3D blacklisted + quantum 1024 for DJ, quantum 256 for live). DJ-B = stock PREEMPT for DJ mode (V3D available, hardware GL), PREEMPT_RT for live mode only. Scheduling math validated: audio work per quantum 1024 cycle = ~1.8ms out of 21.3ms deadline (8.5% utilization). FIFO 80-88 preempts llvmpipe SCHED_OTHER unconditionally on RT.
 - Pi recovered after Test 5 (watchdog reboot ~22:46 CET). 7-step recovery: PipeWire FIFO 88, quantum 1024, CamillaDSP FIFO 80, Mixxx launched with software rendering. System running stably when session crashed.
-- **Session crashed at ~22:48 CET.** Pi was fine -- Claude Code orchestration crashed. All team agents lost. Team state recovered from `~/.claude/teams/wondrous-riding-lerdorf/` inbox files. No uncommitted code was lost (all code changes were committed in 1ff916c or earlier). Lost items: in-flight team context and the planned DJ-A 15-minute stability test which had not yet started.
+- **Session crashed at ~22:48 CET.** Pi was fine -- Claude Code orchestration crashed. All team agents lost. Team state recovered from `~/.claude/teams/wondrous-riding-lerdorf/` inbox files. No uncommitted code was lost (all code changes were committed in 0656fc2 or earlier). Lost items: in-flight team context and the planned DJ-A 15-minute stability test which had not yet started.
 - **UPSTREAM V3D FIX FOUND (late evening).** `raspberrypi/linux#7035`: patch by Melissa Wen (Igalia, DRM/V3D maintainer) fixes the exact ABBA deadlock in `v3d_job_update_stats`. Confirmed by 2 reporters on Pi 4B + Pi 5. Kernel trace from MmAaXx500 matches our F-012 root cause exactly (`6.12.47+rpt-rpi-v8-rt`, Pi 4B). TK-055 filed: apply patch and test RT + hardware GL. If it works, D-021 software rendering is no longer needed.
 
 ### Remaining TODOs
@@ -292,7 +292,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - 14-blind-spot monitoring map review (from researcher)
 - ~~Verify labwc process maps show V3D shared libraries loaded~~ CONFIRMED: 7 `/dev/dri/renderD128` mappings in labwc process, driver is v3d.
 - ~~D-021 (RT + GUI architecture)~~ SUPERSEDED by D-022: PREEMPT_RT + hardware V3D GL. No V3D blacklist, no pixman, no llvmpipe. D-021 clause 1 (RT mandatory) and clause 5 (stock for dev) remain.
-- ~~**F-020**~~ **RESOLVED (workaround).** PipeWire FIFO/88 persisted via systemd user service drop-in (commit `536f631`). Root cause uninvestigated but workaround reliable. T3d unblocked.
+- ~~**F-020**~~ **RESOLVED (workaround).** PipeWire FIFO/88 persisted via systemd user service drop-in (commit `9c6f3b1`). Root cause uninvestigated but workaround reliable. T3d unblocked.
 - F-019 Headless labwc startup regression (WLR_LIBINPUT_NO_DEVICES removed -- labwc may fail without input devices)
 - cloud-init ~3.3s boot overhead (TK-007)
 - Local `nix flake check` on macOS blocked by SQLite cache permission issue (non-blocking, QE report 2026-03-15)
@@ -324,7 +324,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **F-016: OPEN.** Audible glitches after PipeWire restart with capture adapter active. Root cause TBD.
 - **F-017: RESOLVED (D-022, same fix as F-012).** Mixxx hard lockup on PREEMPT_RT. Same V3D ABBA deadlock, fixed by same upstream commit in `6.12.62+rpt-rpi-v8-rt`. No workaround needed.
 - **F-018: RESOLVED.** All audio configs persist across reboot (CamillaDSP FIFO 80 via systemd override, PipeWire quantum 256 via static config + user service, RT kernel via config.txt). Verified.
-- **F-020: RESOLVED (workaround).** PipeWire RT module fails to self-promote to SCHED_FIFO on PREEMPT_RT. **Fix:** systemd user service drop-in with `CPUSchedulingPolicy=fifo` + `CPUSchedulingPriority=88`. PipeWire at FIFO/88 after reboot. Config in repo (commit `536f631`). T3d unblocked.
+- **F-020: RESOLVED (workaround).** PipeWire RT module fails to self-promote to SCHED_FIFO on PREEMPT_RT. **Fix:** systemd user service drop-in with `CPUSchedulingPolicy=fifo` + `CPUSchedulingPriority=88`. PipeWire at FIFO/88 after reboot. Config in repo (commit `9c6f3b1`). T3d unblocked.
 
 ## Defects Summary
 
@@ -339,7 +339,7 @@ See `docs/project/defects.md` for full details.
 | F-019 | Medium | Open | US-000b (headless operation) |
 | F-021 | High | Open | TK-039, US-029 (DJ UAT), DJ mode audio routing |
 | F-022 | High | Open | F-021 (triggers ALSA fallback on every reboot) |
-| F-025 | Critical | Resolved | Speaker protection — TK-107 + TK-108 done (`ac0cbb8`) |
+| F-025 | Critical | Resolved | Speaker protection — TK-107 + TK-108 done (`a237bc3`) |
 | F-026 | High | Open | TK-114 (spectrum validation), TK-115 (JS FFT pipeline in progress) |
 | F-030 | High | Open | D-020 (web UI), US-029 (DJ UAT). Workaround: stop web UI service. |
 | F-031 | Low | Open | None (UI-only, audio unaffected). Investigation deferred per owner. |
@@ -360,9 +360,9 @@ See `docs/project/defects.md` for full details.
 | F-017 | High | Resolved (D-022) | Same upstream fix as F-012 |
 | F-018 | High | Resolved | All audio configs persist across reboot |
 | F-020 | High | Resolved (workaround) | systemd drop-in: PipeWire FIFO/88 persisted |
-| F-027 | Medium | Resolved | DSP load `* 100` double multiplication (`244dd65`) |
-| F-028 | High | Resolved | ALSA period-size mismatch in loopback (`f9ba574`) |
-| F-029 | Medium | Resolved | Level bar RMS vs Peak alignment (`244dd65`) |
+| F-027 | Medium | Resolved | DSP load `* 100` double multiplication (`d742fdf`) |
+| F-028 | High | Resolved | ALSA period-size mismatch in loopback (`b06d0e5`) |
+| F-029 | Medium | Resolved | Level bar RMS vs Peak alignment (`d742fdf`) |
 
 ## External Dependencies
 

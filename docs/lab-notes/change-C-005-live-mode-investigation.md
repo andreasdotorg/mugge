@@ -17,7 +17,7 @@ structured summary after session completion.
 | Decision | D-040: Abandon CamillaDSP, pure PipeWire filter-chain pipeline |
 | Prior session | C-004 / GM-12: First DJ stability test on PW filter-chain |
 | Safety incident | S-012 / TK-242: Unauthorized gain increase while owner listening |
-| HEAD commit | `3bb39bc` |
+| HEAD commit | `4e9cafc` |
 
 ### Reproducibility
 
@@ -44,7 +44,7 @@ structured summary after session completion.
 | Quantum | 1024 (set at session start; was 256 from force-quantum service) |
 | CamillaDSP | Stopped (D-040) |
 | Application | Reaper (live-mode test) |
-| HEAD | `3bb39bc` |
+| HEAD | `4e9cafc` |
 
 ---
 
@@ -474,7 +474,7 @@ share the same ADAT link) must be in the same `node.group`. Their
 ## Summary
 
 **Session scope:** Reaper live-mode investigation on PW filter-chain at
-quantum 1024. CHANGE session C-005, HEAD `3bb39bc`.
+quantum 1024. CHANGE session C-005, HEAD `4e9cafc`.
 
 **Safety incident (S-012):** Worker applied +30 dB gain increase to live audio
 path while owner was monitoring on headphones. No injury occurred. New safety
@@ -515,5 +515,5 @@ path.
 **Session:** CHANGE C-005
 **Operator:** worker
 **Date:** 2026-03-17
-**HEAD:** `3bb39bc`
+**HEAD:** `4e9cafc`
 **Documented by:** technical-writer (2026-03-17, from team lead briefing)

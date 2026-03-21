@@ -48,7 +48,7 @@ D-023 (reproducible test protocol) was filed in response.
 
 | Artifact | Reference |
 |----------|-----------|
-| Git baseline | Commit `c68d23e` (D-023/D-024, TK-057-060, test protocol template, TP-001) |
+| Git baseline | Commit `bd78709` (D-023/D-024, TK-057-060, test protocol template, TP-001) |
 | CamillaDSP config | `/etc/camilladsp/production/dj-pa.yml` (on-disk, unchanged) |
 | Python venv | `/home/ela/audio-workstation-venv/bin/python3` |
 | Defects filed | F-021, F-022 |
@@ -287,7 +287,7 @@ JACK port connections to verify after launch:
 
 ## Git State
 
-- **Last commit:** `c68d23e` -- D-023/D-024 decisions, TK-057-060 tasks, test
+- **Last commit:** `bd78709` -- D-023/D-024 decisions, TK-057-060 tasks, test
   protocol template (TP-001), test script draft
 - **Uncommitted in working tree:** F-021, F-022, TK-061 documentation
 

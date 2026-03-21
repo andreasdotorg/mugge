@@ -16,23 +16,23 @@ to JACK2 instead of PipeWire), the AudioWorklet secure context requirement
 | Role | Path | Commit |
 |------|------|--------|
 | Architecture decision | `docs/architecture/web-ui.md` (D-020) | |
-| HTTPS requirement | `docs/architecture/web-ui.md` Section 12 (D-032) | `107d6bf` |
+| HTTPS requirement | `docs/architecture/web-ui.md` Section 12 (D-032) | `6b4d920` |
 | Collector architecture | `docs/architecture/web-ui.md` Section 13 | |
-| Backend collectors | `src/web-ui/app/collectors/` (4 modules) | `efd6934` |
-| Spectrum analyzer | `src/web-ui/static/js/spectrum.js` | `efd6934` |
-| PCM AudioWorklet | `src/web-ui/static/js/pcm-worklet.js` | `efd6934` |
-| systemd service | `configs/systemd/user/pi4-audio-webui.service` | `d976af2`, `3b2a669`, `42a87a5` |
+| Backend collectors | `src/web-ui/app/collectors/` (4 modules) | `511f409` |
+| Spectrum analyzer | `src/web-ui/static/js/spectrum.js` | `511f409` |
+| PCM AudioWorklet | `src/web-ui/static/js/pcm-worklet.js` | `511f409` |
+| systemd service | `configs/systemd/user/pi4-audio-webui.service` | `5b0c588`, `004dd87`, `605ef43` |
 | D-020 PoC lab note | `docs/lab-notes/D-020-poc-validation.md` | |
 
 ### Commit Trail
 
 | Commit | Summary |
 |--------|---------|
-| `d976af2` | JACK environment (XDG_RUNTIME_DIR, JACK_NO_START_SERVER, PI_AUDIO_MOCK=0) |
-| `3b2a669` | LD_LIBRARY_PATH for PipeWire libjack-pw |
-| `6497f83` | pycamilladsp 3.0.0 API compatibility (rate.playback removed, state enum UPPERCASE) |
-| `42a87a5` | HTTPS self-signed cert for AudioWorklet secure context |
-| `f2a5cdd` | DSP state case-insensitive, buffer display, pw-top `-n 2` fix |
+| `5b0c588` | JACK environment (XDG_RUNTIME_DIR, JACK_NO_START_SERVER, PI_AUDIO_MOCK=0) |
+| `004dd87` | LD_LIBRARY_PATH for PipeWire libjack-pw |
+| `2da8409` | pycamilladsp 3.0.0 API compatibility (rate.playback removed, state enum UPPERCASE) |
+| `605ef43` | HTTPS self-signed cert for AudioWorklet secure context |
+| `7a3d936` | DSP state case-insensitive, buffer display, pw-top `-n 2` fix |
 
 ---
 
@@ -72,7 +72,7 @@ PipeWire JACK), `PI_AUDIO_MOCK=0`, `Nice=10`.
 
 ---
 
-## Issue 1: JACK libjack-pw Library Resolution (`d976af2`, `3b2a669`)
+## Issue 1: JACK libjack-pw Library Resolution (`5b0c588`, `004dd87`)
 
 **Symptom:** PcmStreamCollector started but found 0 CamillaDSP monitor ports.
 `pw-jack jack_lsp` showed the correct ports, but the Python `jack` module
@@ -113,7 +113,7 @@ ports.
 
 ---
 
-## Issue 2: AudioWorklet Secure Context (D-032, `42a87a5`)
+## Issue 2: AudioWorklet Secure Context (D-032, `605ef43`)
 
 **Symptom:** Spectrum analyzer non-functional when accessed via plain HTTP.
 `audioContext.audioWorklet` was `undefined` in the browser.
@@ -167,7 +167,7 @@ initialization until after a user gesture.
 
 ---
 
-## Issue 4: pycamilladsp 3.0.0 API Differences (`6497f83`, `f2a5cdd`)
+## Issue 4: pycamilladsp 3.0.0 API Differences (`2da8409`, `7a3d936`)
 
 **Symptom:** CamillaDSPCollector status polling failed with
 `AttributeError` on `rate.playback()`. Additionally, DSP state comparison
@@ -189,7 +189,7 @@ rate and copies it to both `capture_rate` and `playback_rate` fields in the
 snapshot (they are the same on a synchronized system). The
 `levels_since_last()` API returns a plain dict, not an object with methods --
 all access uses dict indexing. DSP state comparison uses case-insensitive
-matching (`f2a5cdd`).
+matching (`7a3d936`).
 
 ```python
 # camilladsp_collector.py
@@ -203,7 +203,7 @@ rate_adjust = client.status.rate_adjust()
 
 ---
 
-## Issue 5: pw-top First-Pass Zero Output (`f2a5cdd`)
+## Issue 5: pw-top First-Pass Zero Output (`7a3d936`)
 
 **Symptom:** PipeWireCollector reported quantum=0, sample_rate=0, xruns=0
 on initial polls.

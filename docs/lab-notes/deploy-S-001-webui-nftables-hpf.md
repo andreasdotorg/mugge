@@ -18,7 +18,7 @@ explicit CC instructions for deploying workers in future sessions.
 **Date:** 2026-03-12, approximately 21:55-22:05 CET
 **Operator:** worker-deploy (via CM DEPLOY session S-001)
 **Host:** mugge (Raspberry Pi 4B, Debian 13 Trixie, kernel 6.12.62+rpt-rpi-v8-rt)
-**Source commit:** `e219ce3`
+**Source commit:** `eec9f2b`
 **Safety precondition:** Owner confirmed PA is OFF prior to session grant.
 
 ---

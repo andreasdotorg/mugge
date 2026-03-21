@@ -587,7 +587,7 @@ automatically. The script should:
 - [ ] Investigate CamillaDSP's websocket API for runtime filter hot-swapping
 - [ ] Flight case design: ventilation, cable routing, power distribution
 - [ ] Write the automated room correction pipeline document + scripts
-- [x] ~~**F-020:** Investigate PipeWire RT module self-promotion failure on PREEMPT_RT. Persist workaround (systemd override or ExecStartPost chrt).~~ RESOLVED (workaround): systemd user service drop-in deployed (commit `536f631`). PipeWire at FIFO/88 after reboot.
+- [x] ~~**F-020:** Investigate PipeWire RT module self-promotion failure on PREEMPT_RT. Persist workaround (systemd override or ExecStartPost chrt).~~ RESOLVED (workaround): systemd user service drop-in deployed (commit `9c6f3b1`). PipeWire at FIFO/88 after reboot.
 - [ ] **Mixxx perf:** Hardware GL restored (D-022) — ~85% CPU vs 142-166% with llvmpipe. Investigate further reduction if needed (lighter skin, waveform settings).
 - [ ] **T3d:** 30-min stability test on PREEMPT_RT `6.12.62+rpt-rpi-v8-rt` with hardware GL. F-020 prerequisite met.
 - [ ] **Watchdog reliability:** BCM2835 watchdog failed on Test 3 and Test 5 (2/11 lockups). Investigate.

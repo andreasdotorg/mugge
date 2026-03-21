@@ -33,8 +33,8 @@ safety incident.
 
 - S-010 safety incident: sweep bypassed CamillaDSP via `sysdefault` ALSA
   device. ALL STOP issued.
-- S-012: Deployed `a39e7b7` (TK-143 CamillaDSP hot-swap code) to Pi.
-- During S-013: Deployed `a32c8fe` (bug fixes: -40dB -> -20dB attenuation,
+- S-012: Deployed `5c4253a` (TK-143 CamillaDSP hot-swap code) to Pi.
+- During S-013: Deployed `f3df4cf` (bug fixes: -40dB -> -20dB attenuation,
   AD-TK143-7 stale config guard, non-interactive Phase 1).
 
 ## Pre-Flight Checks
@@ -72,7 +72,7 @@ Pipeline steps: 10
 OK
 ```
 
-PASS. Measurement config: -40dB on ch0 (later changed to -20dB in `a32c8fe`),
+PASS. Measurement config: -40dB on ch0 (later changed to -20dB in `f3df4cf`),
 -100dB on all other channels, IIR HPF 80 Hz.
 
 ## Measurement Attempts
@@ -150,13 +150,13 @@ current amp gain. SNR only 2.5 dB above threshold.
 -40dB attenuation). Confirmed UMIK-1 receiving strong signal -- low levels in
 attempt 4 were due to -40dB attenuation, not mic issues.
 
-### Mid-Session Deploy: `a32c8fe`
+### Mid-Session Deploy: `f3df4cf`
 
 ```bash
 $ git pull
 ```
 
-Deployed `a32c8fe` to Pi (from `a39e7b7`). Changes include:
+Deployed `f3df4cf` to Pi (from `5c4253a`). Changes include:
 - Attenuation reduced from -40dB to -20dB
 - AD-TK143-7 stale config guard
 - Non-interactive Phase 1 (10s, 2 blocks)
@@ -181,7 +181,7 @@ $ ~/audio-workstation-venv/bin/python3 -u measure_nearfield.py \
 | Phase 1 mic peak | -9.0 dBFS | -30 to -10 dBFS | FAIL (1 dB over) |
 
 Phase 2 skipped. CamillaDSP restored to `/etc/camilladsp/active.yml` (restore
-guard working correctly in `a32c8fe`).
+guard working correctly in `f3df4cf`).
 
 The -40dB to -20dB attenuation change swung levels from too low to slightly
 too high. Owner reduced amp gain before retry.
@@ -219,7 +219,7 @@ Analysis confirmed valid CHN-50P near-field measurement:
 |-------|-------|------------|
 | Mixxx blocking pre-flight | Mixxx still running | Owner closed Mixxx |
 | UMIK-1 not found | PipeWire timing delay after USB reconnect | Owner re-seated USB, device re-enumerated |
-| AD-TK143-7 stale config restore | S-010 left CamillaDSP pointing to `/tmp/` file | Manual restore + code guard in `a32c8fe` |
+| AD-TK143-7 stale config restore | S-010 left CamillaDSP pointing to `/tmp/` file | Manual restore + code guard in `f3df4cf` |
 | Phase 1 cal fail (-9.0 dBFS) | -20dB attenuation too hot at current amp level | Owner reduced amp gain |
 | `--list-devices` requires `--speaker-profile` | Argparse bug in TK-143 code | Non-blocking, bug filed |
 
@@ -227,14 +227,14 @@ Analysis confirmed valid CHN-50P near-field measurement:
 
 1. **AD-TK143-7 (stale config restore):** If CamillaDSP is already pointing to
    a stale/wrong config path when the measurement starts, the restore logic
-   preserves the wrong path. Fixed in `a32c8fe` with a config path guard.
+   preserves the wrong path. Fixed in `f3df4cf` with a config path guard.
 
 2. **`--list-devices` argparse bug:** `--speaker-profile` is globally required
    but `--list-devices` does not need it. Minor, non-blocking.
 
 ## Protocol Notes
 
-- **Mid-session deploy:** Commit `a32c8fe` was deployed via `git pull` within
+- **Mid-session deploy:** Commit `f3df4cf` was deployed via `git pull` within
   a CHANGE session. DEPLOY-tier operations normally require a DEPLOY session
   with commit hash declared at open. Low impact (bug fixes for the active
   measurement session) but noted for protocol consistency.
@@ -245,12 +245,12 @@ Analysis confirmed valid CHN-50P near-field measurement:
 
 - Six attempts needed (planned: one). Causes were environmental (Mixxx, UMIK-1
   USB) and level calibration (attenuation too aggressive, then too hot).
-- Mid-session code deploy (`a32c8fe`) was unplanned -- driven by the -40dB
+- Mid-session code deploy (`f3df4cf`) was unplanned -- driven by the -40dB
   attenuation being too aggressive and the AD-TK143-7 bug.
 
 ## Post-Session State
 
-- Pi at commit `a32c8fe`
+- Pi at commit `f3df4cf`
 - CamillaDSP running on production config (`/etc/camilladsp/active.yml`)
 - Measurement output at `./measurements/chn50p-left_20260313-180406/` (8 files)
 - pycamilladsp 3.0.0 in venv
