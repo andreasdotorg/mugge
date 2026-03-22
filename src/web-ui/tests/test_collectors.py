@@ -1,7 +1,7 @@
 """Tests for backend collectors — pipewire, filterchain, system, pcm.
 
 Covers:
-    - PipeWireCollector._parse_xruns() with sample pw-cli output
+    - PipeWireCollector RPC integration with mock GM TCP server (Phase 2a)
     - Wire-format shape validation (collector output vs MockDataGenerator)
     - _build_system_snapshot() shape validation
     - SystemCollector scheduling extraction with synthetic /proc data (TK-245)
@@ -60,64 +60,29 @@ def mock_gen_a():
     return MockDataGenerator(scenario="A", freeze_time=True)
 
 
-# ── Sample pw-cli info output for xrun parsing ───────────────
+# ── 1. PipeWireCollector RPC integration (Phase 2a) ──────────
+# Test class is at the end of this file (after helper functions).
 
-# Realistic pw-cli info output with xrun counter
-PW_CLI_INFO_WITH_XRUNS = """\
-	id: 34
-	permissions: r-xm
-	type: PipeWire:Interface:Node/3
-	  clock.xrun-count = "5"
-	  node.name = "alsa_output.usb-miniDSP_USBStreamer-00"
-"""
+# Standard GM get_graph_info response fixtures
+_GM_GRAPH_INFO_DJ = {
+    "type": "response", "cmd": "get_graph_info", "ok": True,
+    "quantum": 1024, "force_quantum": 0, "sample_rate": 48000,
+    "xruns": 3, "driver_node": "alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0",
+    "graph_state": "running",
+}
 
-# pw-cli info output without xrun properties
-PW_CLI_INFO_NO_XRUNS = """\
-	id: 34
-	permissions: r-xm
-	type: PipeWire:Interface:Node/3
-	  node.name = "alsa_output.usb-miniDSP_USBStreamer-00"
-"""
+_GM_GRAPH_INFO_FORCED_Q = {
+    "type": "response", "cmd": "get_graph_info", "ok": True,
+    "quantum": 256, "force_quantum": 1024, "sample_rate": 48000,
+    "xruns": 0, "driver_node": "alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0",
+    "graph_state": "running",
+}
 
-# pw-cli info all output with multiple nodes and xruns
-PW_CLI_INFO_ALL_XRUNS = """\
-	id: 28
-	  clock.xrun-count = "0"
-	  node.name = "Dummy-Driver"
-
-	id: 34
-	  clock.xrun-count = "3"
-	  node.name = "alsa_output.usb"
-
-	id: 42
-	  clock.xrun-count = "2"
-	  node.name = "filter-chain"
-"""
-
-
-# ── 1. PipeWireCollector._parse_xruns() ──────────────────────
-
-class TestParseXruns:
-
-    def test_single_node_xruns(self, pw_collector):
-        """Single node with clock.xrun-count = 5."""
-        result = pw_collector._parse_xruns(PW_CLI_INFO_WITH_XRUNS)
-        assert result == 5
-
-    def test_no_xrun_properties_returns_none(self, pw_collector):
-        """No xrun properties should return None (not found)."""
-        result = pw_collector._parse_xruns(PW_CLI_INFO_NO_XRUNS)
-        assert result is None
-
-    def test_multiple_nodes_xruns_accumulate(self, pw_collector):
-        """Multiple nodes: xruns sum across all nodes."""
-        result = pw_collector._parse_xruns(PW_CLI_INFO_ALL_XRUNS)
-        # 0 + 3 + 2 = 5
-        assert result == 5
-
-    def test_empty_output_returns_none(self, pw_collector):
-        result = pw_collector._parse_xruns("")
-        assert result is None
+_GM_GRAPH_INFO_EMPTY = {
+    "type": "response", "cmd": "get_graph_info", "ok": True,
+    "quantum": 0, "force_quantum": 0, "sample_rate": 0,
+    "xruns": 0, "driver_node": "", "graph_state": "unknown",
+}
 
 
 # ── 2. Wire-format: _build_system_snapshot vs MockDataGenerator ─
@@ -956,4 +921,135 @@ class TestFilterChainRPCIntegration:
                 assert fc._backoff == 1.0  # reset to base
                 fc._disconnect()
 
+        _run_async(_test())
+
+
+# ── 8. PipeWireCollector RPC integration (Phase 2a) ─────────
+
+class TestPipeWireCollectorRPC:
+    """PipeWireCollector talks to a mock GM TCP server (Phase 2a)."""
+
+    def test_poll_populates_snapshot(self):
+        """After one poll cycle, snapshot has GM data."""
+        async def _test():
+            server, port, _ = await _make_gm_server({
+                "get_graph_info": _GM_GRAPH_INFO_DJ,
+            })
+            async with server:
+                pw = PipeWireCollector(host="127.0.0.1", port=port)
+                await pw.start()
+                await asyncio.sleep(1.5)
+                snap = pw.snapshot()
+                await pw.stop()
+            assert snap["quantum"] == 1024
+            assert snap["sample_rate"] == 48000
+            assert snap["xruns"] == 3
+            assert snap["graph_state"] == "running"
+        _run_async(_test())
+
+    def test_force_quantum_preferred(self):
+        """force_quantum > 0 is used as effective quantum."""
+        async def _test():
+            server, port, _ = await _make_gm_server({
+                "get_graph_info": _GM_GRAPH_INFO_FORCED_Q,
+            })
+            async with server:
+                pw = PipeWireCollector(host="127.0.0.1", port=port)
+                await pw.start()
+                await asyncio.sleep(1.5)
+                snap = pw.snapshot()
+                await pw.stop()
+            assert snap["quantum"] == 1024  # force_quantum, not base quantum=256
+        _run_async(_test())
+
+    def test_fallback_on_zero_values(self):
+        """When GM returns zeros, fallback defaults are used."""
+        async def _test():
+            server, port, _ = await _make_gm_server({
+                "get_graph_info": _GM_GRAPH_INFO_EMPTY,
+            })
+            async with server:
+                pw = PipeWireCollector(host="127.0.0.1", port=port)
+                await pw.start()
+                await asyncio.sleep(1.5)
+                snap = pw.snapshot()
+                await pw.stop()
+            assert snap["quantum"] == 256  # fallback
+            assert snap["sample_rate"] == 48000  # fallback
+        _run_async(_test())
+
+    def test_disconnected_returns_fallback(self):
+        """When GM is unreachable, snapshot returns fallback data."""
+        async def _test():
+            pw = PipeWireCollector(host="127.0.0.1", port=19998)
+            await pw.start()
+            await asyncio.sleep(1.5)
+            snap = pw.snapshot()
+            await pw.stop()
+            assert snap["quantum"] == 256
+            assert snap["graph_state"] == "unknown"
+            assert snap["xruns"] == 0
+        _run_async(_test())
+
+    def test_reconnect_after_disconnect(self):
+        """After disconnect, collector reconnects and picks up new data."""
+        async def _test():
+            responses = {"get_graph_info": _GM_GRAPH_INFO_DJ}
+            server, port, clients = await _make_gm_server(responses)
+            pw = PipeWireCollector(host="127.0.0.1", port=port)
+
+            await pw.start()
+            await asyncio.sleep(1.5)
+            snap1 = pw.snapshot()
+            assert snap1["xruns"] == 3
+
+            # Simulate disconnect
+            pw._disconnect()
+
+            # Switch response
+            responses["get_graph_info"] = {
+                **_GM_GRAPH_INFO_DJ, "xruns": 10,
+            }
+            pw._backoff = 0.1
+
+            for _ in range(30):
+                await asyncio.sleep(0.2)
+                if pw._connected and pw._snapshot and pw._snapshot.get("xruns") == 10:
+                    break
+
+            snap2 = pw.snapshot()
+            await pw.stop()
+            for w in clients:
+                w.close()
+            server.close()
+            await server.wait_closed()
+
+            assert snap2["xruns"] == 10
+        _run_async(_test())
+
+    def test_backoff_increases_on_failure(self):
+        """Backoff doubles on each failed connection attempt, capped at 8s."""
+        from app.collectors.pipewire_collector import (
+            _BACKOFF_BASE, _BACKOFF_FACTOR, _BACKOFF_CAP,
+        )
+        pw = PipeWireCollector(host="127.0.0.1", port=19998)
+        assert pw._backoff == _BACKOFF_BASE
+
+        for expected in [2.0, 4.0, 8.0, 8.0]:
+            pw._backoff = min(pw._backoff * _BACKOFF_FACTOR, _BACKOFF_CAP)
+            assert pw._backoff == expected
+
+    def test_backoff_resets_on_connect(self):
+        """Backoff resets to base after successful connection."""
+        async def _test():
+            server, port, _ = await _make_gm_server({
+                "get_graph_info": _GM_GRAPH_INFO_DJ,
+            })
+            async with server:
+                pw = PipeWireCollector(host="127.0.0.1", port=port)
+                pw._backoff = 8.0
+                connected = await pw._connect()
+                assert connected is True
+                assert pw._backoff == 1.0
+                pw._disconnect()
         _run_async(_test())

@@ -5,7 +5,7 @@ Five singleton collectors poll actual system sources on the Pi:
     - LevelsCollector: peak/RMS metering from pcm-bridge levels server
     - PcmStreamCollector: JACK ring buffer for binary PCM streaming
     - SystemCollector: CPU, memory, temperature, scheduling from /proc and /sys
-    - PipeWireCollector: quantum/rate via pw-metadata, xruns via pw-cli (TK-245)
+    - PipeWireCollector: quantum/rate/xruns via GraphManager RPC (Phase 2a)
 
 On macOS (development), collectors return fallback/mock data.
 """
