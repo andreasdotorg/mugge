@@ -291,6 +291,28 @@ def find_quantum(pw_data: list) -> int | None:
     return None
 
 
+def find_sample_rate(pw_data: list) -> int:
+    """Read the PipeWire default sample rate from pw-dump metadata.
+
+    Looks for ``clock.rate`` in the settings metadata.
+    Returns 48000 as fallback if not found.
+    """
+    for obj in pw_data:
+        if obj.get("type") == "PipeWire:Interface:Metadata":
+            props = obj.get("info", {}).get("props", {})
+            if props.get("metadata.name") == "settings":
+                for entry in obj.get("info", {}).get("metadata", []):
+                    if entry.get("key") == "clock.rate":
+                        try:
+                            val = entry.get("value", {})
+                            if isinstance(val, dict):
+                                return int(val.get("value", 48000)) or 48000
+                            return int(val) or 48000
+                        except (TypeError, ValueError):
+                            pass
+    return 48000
+
+
 def find_filter_info(pw_data: list) -> dict:
     """Extract filter-chain convolver metadata from pw-dump.
 

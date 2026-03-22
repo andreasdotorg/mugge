@@ -35,6 +35,7 @@
     var currentGains = {};   // { node_name: mult } — last fetched from server
     var pendingGains = {};   // { node_name: mult } — slider positions (unsaved)
     var currentQuantum = null;
+    var currentSampleRate = 48000;
     var dirty = false;
 
     // -- Helpers --
@@ -134,18 +135,21 @@
 
     // -- Quantum buttons --
 
-    function updateQuantumButtons(quantum) {
+    function updateQuantumButtons(quantum, sampleRate) {
         currentQuantum = quantum;
+        if (sampleRate) currentSampleRate = sampleRate;
         var btns = document.querySelectorAll(".cfg-quantum-btn");
         for (var i = 0; i < btns.length; i++) {
             var q = parseInt(btns[i].getAttribute("data-q"), 10);
             btns[i].classList.toggle("active", q === quantum);
         }
-        // Update latency display
+        // Update latency display using actual sample rate
         var latencyEl = document.getElementById("cfg-quantum-latency");
         if (latencyEl && quantum) {
-            var ms = (quantum / 48000 * 1000).toFixed(1);
-            latencyEl.textContent = ms + " ms";
+            var rate = currentSampleRate || 48000;
+            var ms = (quantum / rate * 1000).toFixed(1);
+            var rateKhz = (rate / 1000).toFixed(0);
+            latencyEl.textContent = ms + " ms at " + rateKhz + " kHz";
         }
     }
 
@@ -167,7 +171,7 @@
             })
             .then(function (data) {
                 buildGainSliders(data.gains || {});
-                updateQuantumButtons(data.quantum);
+                updateQuantumButtons(data.quantum, data.sample_rate);
                 updateFilterInfo(data.filter_chain || {});
                 setStatus("cfg-gain-status", "", "");
             })
@@ -241,7 +245,7 @@
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data.ok) {
-                    updateQuantumButtons(data.quantum);
+                    updateQuantumButtons(data.quantum, currentSampleRate);
                     setStatus("cfg-quantum-status", "Quantum set to " + data.quantum, "c-green");
                 } else {
                     setStatus("cfg-quantum-status", "Error: " + (data.error || "unknown"), "c-red");

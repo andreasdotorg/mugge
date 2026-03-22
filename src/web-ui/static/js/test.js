@@ -288,7 +288,7 @@
             if (isPlaying) {
                 clearTimeout(levelDebounce);
                 levelDebounce = setTimeout(function () {
-                    sendCmd({ cmd: "set_level", level_dbfs: currentLevel });
+                    sendCmd({ cmd: "set_level", level_dbfs: Math.min(currentLevel, HARD_CAP_DBFS) });
                 }, DEBOUNCE_MS);
             }
         });
@@ -1043,7 +1043,7 @@
                     var slider = $("tt-level-slider");
                     if (slider) slider.value = currentLevel;
                     updateLevelColor(currentLevel);
-                    if (isPlaying) sendCmd({ cmd: "set_level", level_dbfs: currentLevel });
+                    if (isPlaying) sendCmd({ cmd: "set_level", level_dbfs: Math.min(currentLevel, HARD_CAP_DBFS) });
                 },
                 format: function (v) { return v.toFixed(1) + " dBFS"; }
             });

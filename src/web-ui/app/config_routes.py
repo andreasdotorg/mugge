@@ -23,7 +23,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from .pw_helpers import pw_dump, find_gain_node, read_mult, set_mult, find_quantum, find_filter_info
+from .pw_helpers import pw_dump, find_gain_node, read_mult, set_mult, find_quantum, find_sample_rate, find_filter_info
 
 log = logging.getLogger(__name__)
 
@@ -129,9 +129,12 @@ async def get_config():
     quantum = find_quantum(pw_data)
     filter_info = find_filter_info(pw_data)
 
+    sample_rate = find_sample_rate(pw_data)
+
     return {
         "gains": gains,
         "quantum": quantum,
+        "sample_rate": sample_rate,
         "filter_chain": filter_info,
     }
 
@@ -236,6 +239,7 @@ def _mock_config_response() -> dict:
     return {
         "gains": gains,
         "quantum": _mock_quantum,
+        "sample_rate": 48000,
         "filter_chain": {
             "node_name": "filter-chain-convolver",
             "node_id": 42,
