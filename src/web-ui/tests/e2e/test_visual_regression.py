@@ -26,7 +26,14 @@ from playwright.sync_api import expect
 
 pytestmark = pytest.mark.browser
 
-SCREENSHOT_DIR = Path(__file__).parent / "screenshots"
+# Reference screenshots (baselines) are read from the source tree.
+SCREENSHOT_REF_DIR = Path(__file__).parent / "screenshots"
+
+# Output screenshots (actuals, diffs) go to a writable temp dir
+# so tests work inside the read-only Nix store.
+SCREENSHOT_OUTPUT_DIR = Path("/tmp/pi4audio-e2e-screenshots")
+SCREENSHOT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 MAX_DIFF_PIXEL_RATIO = 0.01  # 1 % of pixels may differ
 
 
@@ -115,18 +122,25 @@ def _assert_screenshot(
     test always passes.  Otherwise the reference must exist; a pixel-level
     diff is computed and the test fails if the fraction of differing pixels
     exceeds *max_diff_pixel_ratio*.
+
+    Reference screenshots are READ from the source tree (SCREENSHOT_REF_DIR).
+    Actual screenshots and diffs are WRITTEN to SCREENSHOT_OUTPUT_DIR so that
+    tests work inside the read-only Nix store.
     """
-    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    ref_path = SCREENSHOT_DIR / name
+    ref_path = SCREENSHOT_REF_DIR / name
     actual_bytes = page.screenshot(full_page=True)
 
     if update:
+        # --update-snapshots writes to the source tree (must be run outside Nix)
+        SCREENSHOT_REF_DIR.mkdir(parents=True, exist_ok=True)
         ref_path.write_bytes(actual_bytes)
         return
 
     if not ref_path.exists():
-        ref_path.write_bytes(actual_bytes)
-        pytest.skip(f"Reference screenshot {name} created (first run)")
+        # First run: save to output dir and skip (source tree may be read-only)
+        actual_path = SCREENSHOT_OUTPUT_DIR / name
+        actual_path.write_bytes(actual_bytes)
+        pytest.skip(f"Reference screenshot {name} not found (actual saved to {actual_path})")
 
     ref_bytes = ref_path.read_bytes()
 
@@ -139,12 +153,12 @@ def _assert_screenshot(
     act_arr = _decode_png(actual_bytes)
 
     if ref_arr.shape != act_arr.shape:
-        actual_path = SCREENSHOT_DIR / f"{ref_path.stem}-actual{ref_path.suffix}"
+        actual_path = SCREENSHOT_OUTPUT_DIR / f"{ref_path.stem}-actual{ref_path.suffix}"
         actual_path.write_bytes(actual_bytes)
         pytest.fail(
             f"Screenshot {name}: size mismatch "
             f"(ref {ref_arr.shape} vs actual {act_arr.shape}). "
-            f"Actual saved to {actual_path.name}."
+            f"Actual saved to {actual_path}."
         )
 
     # Count pixels where any channel differs
@@ -152,12 +166,12 @@ def _assert_screenshot(
     diff_ratio = float(diff_mask.sum()) / float(diff_mask.size)
 
     if diff_ratio > max_diff_pixel_ratio:
-        actual_path = SCREENSHOT_DIR / f"{ref_path.stem}-actual{ref_path.suffix}"
+        actual_path = SCREENSHOT_OUTPUT_DIR / f"{ref_path.stem}-actual{ref_path.suffix}"
         actual_path.write_bytes(actual_bytes)
         pytest.fail(
             f"Screenshot {name} differs: {diff_ratio:.4%} of pixels changed "
             f"(threshold {max_diff_pixel_ratio:.2%}). "
-            f"Actual saved to {actual_path.name}. "
+            f"Actual saved to {actual_path}. "
             f"Run with --update-snapshots to accept."
         )
 

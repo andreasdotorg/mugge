@@ -20,14 +20,15 @@ from playwright.sync_api import expect
 
 pytestmark = pytest.mark.browser
 
-SCREENSHOTS_DIR = Path(__file__).parent / "screenshots"
+# Write screenshots to a writable temp dir (source tree is read-only in Nix sandbox).
+SCREENSHOTS_DIR = Path("/tmp/pi4audio-e2e-screenshots")
+SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Timeout for WebSocket data to arrive and FFT to process.
 PCM_DATA_TIMEOUT = 10_000  # ms
 
 
 def _screenshot(page, name: str) -> None:
-    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(SCREENSHOTS_DIR / name))
 
 

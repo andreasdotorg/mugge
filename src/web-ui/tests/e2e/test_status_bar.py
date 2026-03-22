@@ -17,7 +17,9 @@ from playwright.sync_api import expect
 
 pytestmark = pytest.mark.browser
 
-SCREENSHOTS_DIR = Path(__file__).parent / "screenshots"
+# Write screenshots to a writable temp dir (source tree is read-only in Nix sandbox).
+SCREENSHOTS_DIR = Path("/tmp/pi4audio-e2e-screenshots")
+SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # All tab identifiers in DOM order (excluding "test" which has a siggen
 # WebSocket that blocks Playwright's click actionability in mock mode).
@@ -25,8 +27,7 @@ ALL_TABS = ["dashboard", "system", "graph", "config", "measure", "midi"]
 
 
 def _screenshot(page, name: str) -> None:
-    """Save a screenshot to the screenshots directory."""
-    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    """Save a screenshot to the writable output directory."""
     page.screenshot(path=str(SCREENSHOTS_DIR / name))
 
 
