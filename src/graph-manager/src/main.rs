@@ -617,6 +617,123 @@ fn run_gain_integrity_check(
     }
 }
 
+/// Update the cached PipeWire graph info (quantum, sample rate, xruns).
+///
+/// Runs `pw-metadata -n settings` to read quantum/force-quantum/sample-rate,
+/// then finds the USBStreamer driver node from the graph state and runs
+/// `pw-cli info <node-id>` to read the xrun count.
+///
+/// Called every 1s on the PW main loop thread. Subprocess overhead is ~5-10ms
+/// each — acceptable for a 1s polling interval on the control plane.
+#[cfg(feature = "pipewire-backend")]
+fn update_graph_info_cache(
+    cache: &std::rc::Rc<std::cell::RefCell<rpc::GraphInfoSnapshot>>,
+    graph: &std::rc::Rc<std::cell::RefCell<graph::GraphState>>,
+) {
+    use std::process::Command;
+
+    // --- Step 1: Read metadata (quantum, sample_rate) via pw-metadata ---
+    let mut quantum: u32 = 0;
+    let mut force_quantum: u32 = 0;
+    let mut sample_rate: u32 = 0;
+
+    match Command::new("pw-metadata").arg("-n").arg("settings").output() {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                // Lines look like: update: id:0 key:'clock.quantum' value:'1024' type:''
+                if let Some(key_start) = line.find("key:'") {
+                    let rest = &line[key_start + 5..];
+                    if let Some(key_end) = rest.find('\'') {
+                        let key = &rest[..key_end];
+                        if let Some(val_start) = rest.find("value:'") {
+                            let val_rest = &rest[val_start + 7..];
+                            if let Some(val_end) = val_rest.find('\'') {
+                                let val = &val_rest[..val_end];
+                                match key {
+                                    "clock.quantum" => {
+                                        quantum = val.parse().unwrap_or(0);
+                                    }
+                                    "clock.force-quantum" => {
+                                        force_quantum = val.parse().unwrap_or(0);
+                                    }
+                                    "clock.rate" => {
+                                        sample_rate = val.parse().unwrap_or(0);
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log::debug!("pw-metadata exited with {}: {}", output.status, stderr.trim());
+        }
+        Err(e) => {
+            log::debug!("pw-metadata failed to execute: {}", e);
+        }
+    }
+
+    // --- Step 2: Find driver node and read xruns ---
+    let mut xruns: u64 = 0;
+    let mut driver_node_name = String::new();
+
+    // Extract driver node info from the graph (borrow scope).
+    let driver_info: Option<(String, u32)> = {
+        let g = graph.borrow();
+        let result = g.nodes()
+            .find(|n| n.name.starts_with("alsa_output.usb-MiniDSP_USBStreamer"))
+            .map(|n| (n.name.clone(), n.id));
+        result
+    };
+
+    if let Some((name, node_id)) = driver_info {
+        driver_node_name = name;
+        match Command::new("pw-cli").arg("info").arg(node_id.to_string()).output() {
+            Ok(output) if output.status.success() => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.contains("xrun") {
+                        // Parse lines like: clock.xrun-count = "3"
+                        if let Some(eq_pos) = trimmed.find('=') {
+                            let val_str = trimmed[eq_pos + 1..].trim().trim_matches('"');
+                            if let Ok(v) = val_str.parse::<u64>() {
+                                xruns += v;
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(_) => {
+                log::debug!("pw-cli info {} failed (node may have been removed)", node_id);
+            }
+            Err(e) => {
+                log::debug!("pw-cli info failed to execute: {}", e);
+            }
+        }
+    }
+
+    // --- Step 3: Determine graph state ---
+    let graph_state = if quantum > 0 || force_quantum > 0 {
+        "running".to_string()
+    } else {
+        "unknown".to_string()
+    };
+
+    // --- Step 4: Update cache ---
+    let mut snap = cache.borrow_mut();
+    snap.quantum = quantum;
+    snap.force_quantum = force_quantum;
+    snap.sample_rate = sample_rate;
+    snap.xruns = xruns;
+    snap.driver_node = driver_node_name;
+    snap.graph_state = graph_state;
+}
+
 /// Build a StateSnapshot from the current GraphState, mode, and component health.
 #[cfg(feature = "pipewire-backend")]
 fn build_state_snapshot(

@@ -944,6 +944,9 @@ pub fn handle_pw_command(cmd: RpcCommand, current_mode: &Mutex<String>) {
                 total_checks: 0,
             });
         }
+        RpcCommand::GetGraphInfo { reply } => {
+            let _ = reply.send(GraphInfoSnapshot::empty());
+        }
     }
 }
 
@@ -1734,6 +1737,47 @@ mod tests {
         assert_eq!(v["type"], "ack");
         assert_eq!(v["cmd"], "ping");
         assert_eq!(v["ok"], true);
+
+        shutdown.store(true, Ordering::Relaxed);
+        thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    #[test]
+    fn tcp_get_graph_info_roundtrip() {
+        use std::io::{BufRead, BufReader, Write};
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener);
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let addr_str = addr.to_string();
+        let _handle =
+            start_test_rpc_server(&addr_str, "monitoring", shutdown.clone());
+
+        thread::sleep(std::time::Duration::from_millis(100));
+
+        let mut stream = TcpStream::connect(&addr_str).unwrap();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        stream.write_all(b"{\"cmd\":\"get_graph_info\"}\n").unwrap();
+
+        let mut reader = BufReader::new(&stream);
+        let mut response = String::new();
+        reader.read_line(&mut response).unwrap();
+
+        let v: Value = serde_json::from_str(response.trim()).unwrap();
+        assert_eq!(v["type"], "response");
+        assert_eq!(v["cmd"], "get_graph_info");
+        assert_eq!(v["ok"], true);
+        // Stub returns empty snapshot defaults.
+        assert_eq!(v["quantum"], 0);
+        assert_eq!(v["force_quantum"], 0);
+        assert_eq!(v["sample_rate"], 0);
+        assert_eq!(v["xruns"], 0);
+        assert_eq!(v["driver_node"], "");
+        assert_eq!(v["graph_state"], "unknown");
 
         shutdown.store(true, Ordering::Relaxed);
         thread::sleep(std::time::Duration::from_millis(100));
