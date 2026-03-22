@@ -411,6 +411,41 @@
             ''}";
           };
 
+          test-everything = {
+            type = "app";
+            program = "${pkgs.writeShellScript "test-everything" ''
+              set -e
+              echo "========== test-all (unit + integration) =========="
+              export PI_AUDIO_MOCK=1
+              cd ${toString ./.}/src/web-ui
+              ${testPython}/bin/python -m pytest tests/ -v --ignore=tests/e2e/ --tb=short
+              echo ""
+              echo "=== room-correction tests ==="
+              cd ${toString ./.}/src/room-correction
+              ${testPython}/bin/python -m pytest tests/ -v --tb=short
+              echo ""
+              echo "=== midi tests ==="
+              cd ${toString ./.}/src/midi
+              ${testPython}/bin/python -m pytest tests/ -v --tb=short
+              echo ""
+              echo "=== drivers tests ==="
+              cd ${toString ./.}/scripts/drivers
+              ${testPython}/bin/python -m pytest tests/ -v --tb=short
+              echo ""
+              echo "=== graph-manager tests ==="
+              cd ${toString ./.}/src/graph-manager
+              HOME="''${HOME:-/tmp}" PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:$PATH" cargo test --no-default-features --release 2>&1
+              echo ""
+              echo "========== test-e2e (browser tests) =========="
+              export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+              export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+              cd ${toString ./.}/src/web-ui
+              ${e2ePython}/bin/python -m pytest tests/e2e/ -v --tb=short
+              echo ""
+              echo "All test suites passed (unit + integration + e2e)."
+            ''}";
+          };
+
           serve = {
             type = "app";
             program = "${pkgs.writeShellScript "serve" ''
