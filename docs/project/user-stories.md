@@ -4057,6 +4057,292 @@ diffraction phenomenon, not part of the lumped-parameter model. Phase 2:
 
 ---
 
+## ENH-002: Comprehensive Tooltips for All Dashboard Elements
+
+**As** the sound engineer operating the system at a gig,
+**I want** every UI element to have a tooltip explaining what it is, what
+good and bad values look like, and why it matters,
+**so that** I can quickly understand the significance of any indicator without
+consulting documentation, especially under time pressure during a live event.
+
+**Status:** draft (PO-drafted 2026-03-22 per owner request. UX specialist
+detailed guidance received 2026-03-22 — tap-to-reveal popover as primary
+mechanism, `title` fallback for VNC/mouse, structured three-line content.)
+**Depends on:** US-060 (status bar and dashboard must be stable before
+tooltipping all elements)
+**Blocks:** none
+**Decisions:** none
+
+**UX guidance (2026-03-22, detailed):** Primary mechanism is tap-to-reveal
+popover via `data-tip` attributes. Tap any `[data-tip]` element to show a
+styled popover; tap elsewhere to dismiss; one popover at a time; auto-dismiss
+after 8s. `title` attributes as fallback for VNC/mouse hover. NOT long-press
+(conflicts with sliders, buttons). NOT info icons (no room in 36px status
+bar). Optional: "?" button in nav bar for help overlay mode (Phase 2).
+Popover: `#1a1d23` bg, `1px solid #3a4050` border, max-width 280px, caret
+pointing to source element, z-index 90. Touch target: 44x44px minimum
+(expand small elements with `::after` padding). Popover text: 12px minimum
+on 7" screen (vs 11px on 1080p).
+
+**Note:** The UI currently has ~165 identified elements across all tabs
+(status bar, dashboard meters, spectrum, system view, graph, config, measure,
+MIDI). Not all require individual tooltips — many share group semantics (e.g.,
+24 meter bars share one explanation). Estimated tooltip count: 40-60 unique
+tooltip texts covering element groups.
+
+### Acceptance criteria
+
+**1. Tooltip mechanism (MVP: tap-to-reveal popover):**
+- [ ] All tooltippable elements carry a `data-tip` attribute containing the
+  tooltip text (structured three-line content per UX spec)
+- [ ] Tap any `[data-tip]` element to show a styled popover anchored to the
+  source element with a caret pointer
+- [ ] One popover visible at a time — tapping a different `[data-tip]` element
+  replaces the current popover
+- [ ] Tap outside the popover (or on any non-tip element) to dismiss
+- [ ] Auto-dismiss after 8 seconds of inactivity
+- [ ] Popover styling: `#1a1d23` background, `1px solid #3a4050` border,
+  `border-radius: 6px`, max-width 280px, z-index 90, caret pointing to source
+- [ ] Touch target: 44x44px minimum — expand small elements with `::after`
+  pseudo-element padding where needed
+- [ ] Popover text: 12px minimum font size (legible on 7" 1024x600 screen)
+- [ ] Fallback: HTML `title` attributes mirror `data-tip` content for
+  VNC/mouse hover (standard browser tooltip on desktop)
+- [ ] NOT long-press (conflicts with sliders and buttons)
+- [ ] NOT info icons (no room in 36px status bar height)
+
+**2. Tooltip content structure (three-line format per UX spec):**
+- [ ] Each tooltip follows a structured three-line format:
+  ```
+  LINE 1: ELEMENT NAME (bold/caps in popover rendering)
+  LINE 2: What it shows — one sentence description
+  LINE 3: Good/Bad — threshold values with color-coding explanation
+  ```
+  Example for xrun counter:
+  ```
+  XRUN COUNT
+  Audio buffer underruns since session start — each xrun is an audible glitch.
+  Good: 0 (green). Warning: 1-5 (yellow). Bad: >5 (red) — check CPU/scheduling.
+  ```
+- [ ] Tooltip content stored in a single structured data source (JS object
+  keyed by element ID or `data-tip-key` attribute), not scattered across
+  HTML — enables centralized maintenance and future i18n
+- [ ] Content reviewed by audio engineer for technical accuracy of
+  threshold descriptions and operational context
+
+**3. Coverage — Status bar elements:**
+- [ ] Mini meter canvases (sb-mini-main, sb-mini-app, sb-mini-dspout,
+  sb-mini-physin): signal flow position, what the group represents
+- [ ] DSP state (sb-dsp-state): "Run" = convolver processing, "Stop" = no DSP
+- [ ] Clip indicator (sb-clip): clipping count, 0 = good, >0 = gain too high
+- [ ] Xrun counter (sb-xruns): audio dropouts, 0 = good, >0 = CPU/scheduling
+  issue. Green/yellow/red thresholds (0, 1-5, >5)
+- [ ] Quantum (sb-quantum): buffer size, 256 = live mode (~5ms), 1024 = DJ
+  mode (~21ms)
+- [ ] Rate (sb-rate): sample rate, expected 48 kHz
+- [ ] Links (sb-buf): PipeWire link count, expected value depends on mode
+- [ ] FIFO (sb-fifo): RT scheduling status
+- [ ] CPU/Temp/Mem gauges: current value, warning thresholds
+- [ ] Uptime (sb-uptime): time since PipeWire started
+- [ ] Panic button: emergency mute, tap to mute all outputs immediately
+- [ ] Mode badge (sb-mode): current operating mode (DJ/Live)
+
+**4. Coverage — Dashboard tab:**
+- [ ] Meter groups: MAIN (L/R to speakers), APP>CONV (application to
+  convolver), CONV>OUT (convolver output), PHYS IN (physical inputs)
+- [ ] dB scale: reference levels (-60 to 0 dBFS)
+- [ ] Spectrum analyzer: frequency range, what the display shows
+- [ ] SPL/LUFS panel (if present)
+
+**5. Coverage — System tab:**
+- [ ] All sys-* elements: mode, quantum, rate, temp, CPU bars, CamillaDSP
+  state/load, scheduler policy, memory, process CPU percentages
+- [ ] Color coding explanation: green = normal, yellow = warning, red = critical
+
+**6. Coverage — Other tabs:**
+- [ ] Graph tab: node types (Convolver, Gain, USBStreamer), link colors,
+  layout meaning
+- [ ] Config tab: gain controls (what Mult values mean, dB conversion),
+  quantum selector
+- [ ] Measure tab: measurement workflow steps (when implemented)
+- [ ] MIDI tab: controller mapping status (when implemented)
+
+**7. Help mode (optional enhancement):**
+- [ ] Toggle button in status bar or tab bar to enter "help mode" — all
+  tooltippable elements get a subtle highlight, tap any to see tooltip.
+  Exit help mode to return to normal interaction
+
+### Definition of Done
+
+- [ ] `data-tip` attributes added to all status bar and dashboard elements
+  (minimum viable coverage ~30 elements); `title` attributes mirror content
+- [ ] Tap-to-reveal popover renders correctly on 1024x600 (7" kiosk) and
+  1920x1080 (VNC desktop) viewports
+- [ ] Each tooltip follows three-line format: NAME / description / thresholds
+- [ ] Tooltip content JS data source contains all ~40-60 unique tooltip texts
+- [ ] Tooltip content reviewed by audio engineer for technical accuracy of
+  threshold descriptions and operational context
+- [ ] UX specialist sign-off on popover appearance, positioning, dismiss
+  behavior, and content completeness
+- [ ] E2E test: tap element with `[data-tip]`, verify popover appears with
+  correct content, verify dismiss on outside tap
+- [ ] E2E test: verify only one popover visible at a time (tap second element
+  replaces first popover)
+- [ ] E2E test: verify `title` attribute is non-empty for at least 10
+  representative elements (VNC fallback)
+- [ ] No visual regression on existing UI (popover does not shift layout;
+  `::after` touch padding does not affect element positioning)
+- [ ] Popover does not obscure the panic/MUTE button (z-index and positioning
+  tested on 600px viewport)
+
+---
+
+## ENH-003: Latching Health Alarm Indicator
+
+**As** the sound engineer returning to the monitoring screen after being away
+from the Pi,
+**I want** a latching "problems occurred" indicator that persists until I
+manually acknowledge it,
+**so that** I can tell at a glance whether anything went wrong while I wasn't
+watching, even if the system has since recovered to a healthy state.
+
+**Status:** draft (PO-drafted 2026-03-22 per owner request. UX specialist
+guidance received 2026-03-22 — `[!N]` badge between system group and MUTE
+button, click-to-expand dropdown, manual CLEAR ALL.)
+**Depends on:** US-060 (status bar stable), US-055 (event log captures the
+events that trigger the alarm)
+**Blocks:** none
+**Decisions:** none
+
+**UX guidance (2026-03-22):** Latching alarm badge `[!N]` in the status bar,
+positioned between the system group (CPU/Temp/Mem/Uptime) and the MUTE
+button. Hidden when no problems (zero visual footprint in normal operation).
+Shows count N + worst severity color (yellow for warnings, red for errors).
+Click expands a dropdown with timestamped alarms. Manual "CLEAR ALL" to
+dismiss. Alarms latch — they never auto-clear. 8 trigger conditions defined
+by UX: xrun, clip, CPU >90%, temp >75C, links drop, DSP state != Running,
+WebSocket disconnect, GraphManager topology error.
+
+**Note:** Industrial control systems use "latching alarms" — indicators that
+activate when a fault occurs and stay active until an operator manually
+acknowledges them, even if the fault condition has cleared. This prevents
+transient problems from going unnoticed. The owner specifically requested this
+pattern for the audio workstation. Relates to S-012 (unauthorized gain
+incident — a latching indicator would have caught this).
+
+**Note:** The current status bar shows live state only: xrun counter, DSP
+state, CPU/temp gauges all reflect the current moment. If an xrun burst
+happened 10 minutes ago but the system recovered, there is no persistent
+visual indication that something went wrong. The event log (US-055) captures
+the history, but requires navigating to the dashboard and scrolling — it's
+not glanceable.
+
+### Acceptance criteria
+
+**1. Alarm trigger conditions (8 per UX spec) with severity assignment:**
+- [ ] Alarm latches on any of the following events:
+
+  | Trigger | WARNING | ERROR |
+  |---------|---------|-------|
+  | Xrun | 1-5 xruns in 60s window | >5 xruns in 60s window |
+  | Clip | — | Any clip detected |
+  | DSP state | — | State != "Running" |
+  | Temperature | 75-80C sustained >30s | >80C |
+  | CPU | >80% sustained >10s | >90% sustained >10s |
+  | Link drop | — | Links < expected for mode |
+  | WebSocket | Disconnect >5s then reconnect | Disconnect >30s |
+  | GM topology | — | Link topology error reported |
+
+- [ ] Each trigger is recorded with timestamp, event type, and severity
+- [ ] Alarm does NOT latch on normal operational events (mode switch, quantum
+  change, measurement start/stop)
+- [ ] **Severity escalation:** If a condition worsens (e.g., temp rises from
+  WARNING 76C to ERROR 81C), the existing alarm entry is upgraded in-place
+  from WARNING to ERROR — no duplicate entry created
+
+**2. Visual indicator (per UX spec):**
+- [ ] Alarm badge `[!N]` positioned in the status bar between the system
+  group (CPU/Temp/Mem/Uptime) and the MUTE button (sb-anchor area)
+- [ ] **Badge sizing:** pill shape, min-width 28px, height 20px, font-size
+  10px bold, border-radius 10px, padding 0 6px. Touch target expanded to
+  44x44px via `::after` pseudo-element
+- [ ] **Hidden when clear:** zero visual footprint during normal operation —
+  badge element is `display: none` when alarm count is 0
+- [ ] **Latched warning (non-critical events):** yellow/amber badge
+  background with dark text. Per severity table in AC #1
+- [ ] **Latched error (critical events):** red badge background with white
+  text, 2-second CSS pulse animation on initial latch. Per severity table
+  in AC #1
+- [ ] N shows total unacknowledged event count. Highest severity determines
+  badge color (red wins over yellow)
+- [ ] Badge is clickable — expands alarm dropdown (see AC #3)
+
+**3. Acknowledgment mechanism (per UX spec):**
+- [ ] Click the `[!N]` badge to expand a dropdown panel showing:
+  - List of unacknowledged alarms (newest first)
+  - Each alarm: timestamp, type, severity icon (color dot), brief description
+  - "CLEAR ALL" button at the bottom to acknowledge all alarms
+- [ ] **Maximum 10 entries** in the dropdown — oldest entries are evicted when
+  the cap is reached (FIFO). The badge count N reflects the capped list
+- [ ] **Deduplication/coalescing:** Repeated events of the same type within
+  30 seconds are coalesced into a single entry with a count suffix (e.g.,
+  "Xrun detected (x5)") rather than creating 5 separate entries
+- [ ] CLEAR ALL hides the badge (returns to zero visual footprint)
+- [ ] Clearing does NOT reset the live counters (xrun count, clip count) —
+  those continue to show cumulative session values
+- [ ] Alarms never auto-clear — only manual CLEAR ALL dismisses them
+- [ ] **No individual dismiss** — alarms are all-or-nothing to prevent
+  accidental partial acknowledgment of ongoing issues. CLEAR ALL is the
+  only dismiss action
+
+**4. Persistence:**
+- [ ] Alarm state persists across tab switches (stored in JS, not DOM state)
+- [ ] Alarm state survives page refresh within the same session (stored in
+  sessionStorage or equivalent)
+- [ ] Alarm state does NOT persist across browser sessions (fresh page load =
+  clean slate — the event log provides historical data)
+
+**5. Integration with event log:**
+- [ ] Alarm triggers generate corresponding entries in the event log (US-055)
+- [ ] Clicking an event in the alarm popover scrolls the event log to that
+  entry (if on the dashboard tab)
+- [ ] Event log filter buttons can filter by "unacknowledged" events
+
+**6. Audio/haptic alert (Phase 2):**
+- [ ] Optional audible notification when alarm transitions from clear to
+  latched (configurable, default off — the operator may be performing)
+- [ ] Browser notification API integration for when the tab is not focused
+
+### Definition of Done
+
+- [ ] Alarm indicator visible in status bar with three states (clear,
+  warning, error)
+- [ ] At least 3 trigger conditions implemented (xrun, clip, DSP state)
+- [ ] Acknowledgment flow functional: tap indicator, see summary, clear all
+- [ ] Alarm persists across tab switches and survives page refresh
+- [ ] E2E test: inject xrun event via mock data, verify alarm latches,
+  verify acknowledgment clears it
+- [ ] E2E test: verify alarm does NOT latch on normal events (mode switch)
+- [ ] UX specialist review: alarm visibility, acknowledgment flow, color
+  coding are clear and non-disruptive during normal operation
+- [ ] No false positives during normal DJ session (test scenario: 30 minutes
+  of clean playback should not trigger the alarm)
+
+### Risks
+
+1. **Alert fatigue:** If the alarm triggers too easily (e.g., on every
+   single xrun during a quantum change), operators will learn to ignore it.
+   Mitigation: severity table with thresholds (AC #1), deduplication/
+   coalescing (AC #3), and no latch on normal operational events
+2. **Touch target size:** RESOLVED by UX spec — pill badge 28x20px with
+   44x44px touch target via `::after` padding. Verified fit in sb-anchor
+   area between system group and MUTE button
+3. **Popover occlusion:** The alarm dropdown must not obscure the panic/MUTE
+   button — the panic button must always be immediately accessible.
+   Dropdown should open upward or to the left if space is constrained
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -4179,4 +4465,6 @@ US-067 ──> US-008..US-013 (room correction pipeline stories — regression t
 US-044 + US-059 ──> US-068 (Dedicated pi4audio service account — process isolation, udev ownership, deploy script update)
 US-039 + US-043 ──> US-069 (Speaker Setup & Design Tool — T/S modeling, plots, protection filters, target curves, pipeline export)
 US-069 ──> US-011b + US-010 + US-067 (design tool outputs feed profile schema, correction targets, and simulator models)
+US-060 ──> ENH-002 (Comprehensive Tooltips — touch-friendly tooltips for all dashboard elements)
+US-060 + US-055 ──> ENH-003 (Latching Health Alarm — persistent "problems occurred" indicator with acknowledgment)
 ```
