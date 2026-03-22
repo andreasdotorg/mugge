@@ -743,10 +743,10 @@ during filter generation.
 was not wired into the config generator). TK-107 (filed for generator fix). TK-108
 (filed for validation hardening + audit).
 
-## F-026: Spectrum display unstable on steady tone — PCM worklet ring buffer discontinuities from clock drift (OPEN)
+## F-026: Spectrum display unstable on steady tone — PCM worklet ring buffer discontinuities from clock drift (RESOLVED)
 
 **Severity:** High (blocks TK-114 spectrum validation)
-**Status:** Open
+**Status:** Resolved (`784c408` — render loop synchronization fix, 2026-03-22)
 **Found in:** Dashboard spectrum analyzer on Pi, 2026-03-12
 **Affects:** TK-099 (spectrum module), TK-114 (formal validation blocked)
 **Found by:** Owner during live testing with 1kHz test tone
@@ -1407,9 +1407,10 @@ deadlock when the pipe buffer filled (uvicorn writing to stdout/stderr with no
 reader draining the pipe), causing the server process to block and become
 unresponsive — matching the observed F-041 crash pattern.
 
-**Verification pending:** E2E test suite needs a full run to confirm the fix
-eliminates the cascading timeout pattern. Owner requested verification before
-proceeding with further implementation work.
+**VERIFIED (2026-03-21):** Full E2E suite completed — 124 passed, 41 failed,
+4 errors, 2 skipped (20m51s). No server crash. The cascading timeout pattern
+from F-041 is eliminated. The 41 failures are pre-existing test regressions
+(stale selectors, CSS visibility issues) unrelated to F-041. Tracked as F-048.
 
 ---
 
@@ -1513,10 +1514,10 @@ implementation for pw-cli gain setting).
 
 ---
 
-## F-043: GraphManager SCHED_OTHER shown as red in System tab process list (OPEN)
+## F-043: GraphManager SCHED_OTHER shown as red in System tab process list (RESOLVED)
 
 **Severity:** Low (cosmetic — misleading color, no functional impact)
-**Status:** Open
+**Status:** Resolved (`ef7a063`, 2026-03-22)
 **Found in:** Owner UI review (2026-03-21)
 **Affects:** System tab (system.js), D-020 (web UI)
 **Found by:** Owner
@@ -1552,10 +1553,10 @@ CamillaDSP as the process being monitored).
 
 ---
 
-## F-044: Status bar "Links 100" label and value unclear to operator (OPEN)
+## F-044: Status bar "Links 100" label and value unclear to operator (RESOLVED)
 
 **Severity:** Low (cosmetic — confusing label, no functional impact)
-**Status:** Open
+**Status:** Resolved (`ef7a063`, 2026-03-22)
 **Found in:** Owner UI review (2026-03-21)
 **Affects:** US-051 (persistent status bar), D-020 (web UI)
 **Found by:** Owner
@@ -1601,10 +1602,10 @@ directly would be clearer than a derived percentage.
 
 ---
 
-## F-045: "Mode" vs "GM Mode" in System tab — duplicate or unclear (OPEN)
+## F-045: "Mode" vs "GM Mode" in System tab — duplicate or unclear (RESOLVED)
 
 **Severity:** Low (cosmetic — confusing duplicate display)
-**Status:** Open
+**Status:** Resolved (`ef7a063`, 2026-03-22)
 **Found in:** Owner UI review (2026-03-21)
 **Affects:** System tab (system.js), D-020 (web UI)
 **Found by:** Owner
@@ -1647,11 +1648,11 @@ replaces CamillaDSP chunksize).
 
 ---
 
-## ENH-001: Add sample rate to the persistent status bar (OPEN)
+## ENH-001: Add sample rate to the persistent status bar (RESOLVED)
 
 **Type:** Enhancement (owner request)
 **Priority:** Low
-**Status:** Open (not yet assigned — owner directive: let current tracks finish first)
+**Status:** Resolved (`ef7a063`, 2026-03-22)
 **Found in:** Owner UI review (2026-03-21)
 **Affects:** US-051 (persistent status bar)
 **Requested by:** Owner
@@ -1708,10 +1709,10 @@ lower priority — separate from this MUST-FIX item).
 
 ---
 
-## F-046: Config tab quantum buttons fire immediately with no confirmation dialog (OPEN)
+## F-046: Config tab quantum buttons fire immediately with no confirmation dialog (RESOLVED)
 
 **Severity:** High (safety-relevant — quantum change during live performance causes audible glitches)
-**Status:** Open
+**Status:** Resolved (`30a25e1`, 2026-03-22)
 **Found in:** UX specialist initial review of Config tab (2026-03-21)
 **Affects:** US-065 (Configuration Tab), live performance safety
 **Found by:** UX specialist (P1 finding)
@@ -1758,10 +1759,10 @@ impact of wrong quantum setting).
 
 ---
 
-## F-047: Web UI has no visible keyboard focus indicators (OPEN)
+## F-047: Web UI has no visible keyboard focus indicators (RESOLVED)
 
 **Severity:** Low (accessibility / usability, no functional impact)
-**Status:** Open
+**Status:** Resolved (`5dad57e`, 2026-03-22)
 **Found in:** UX specialist initial review (2026-03-21)
 **Affects:** Web UI generally (all tabs)
 **Found by:** UX specialist (P3 finding)
@@ -1794,3 +1795,104 @@ keyboard navigation, not mouse clicks.
 
 **Related:** D-020 (web UI architecture), US-051 (status bar — has
 interactive elements like MUTE button that should be keyboard-accessible).
+
+---
+
+## F-048: 41 E2E test failures — stale selectors and CSS visibility issues (IN PROGRESS)
+
+**Severity:** Medium (test suite unreliable — cannot gate deployments)
+**Status:** In progress — 38 of 41 fixed (pending commit). Remaining ~1-8 are F-049 (measurement wizard state isolation).
+**Found in:** E2E verification run (2026-03-21, post-F-041 fix)
+**Affects:** E2E test suite (`src/web-ui/tests/e2e/`), US-050/US-051 TEST phase
+**Found by:** worker-1 (E2E verification run)
+
+**Description:** After F-041 fix (`c76b882`) eliminated the server crash,
+a full E2E run completed: 124 passed, 41 failed, 4 errors, 2 skipped
+(20m51s). The 41 failures are pre-existing test regressions caused by UI
+changes (F-038 status bar consolidation, US-051 v2 redesign, US-064/US-065
+new tabs) that outpaced test maintenance. Five categories:
+
+1. **Test tab click obscured** (12 tests in `test_capture_spectrum.py`):
+   `.nav-tab[data-view="test"]` click times out. Button found, visible,
+   stable, but click never completes. Likely obscured by status bar or
+   another overlay element (z-index / position issue).
+
+2. **`#sb-dsp-state` hidden** (8+ tests across `test_status_bar.py`,
+   `test_dashboard_dual_ws.py`, `test_visual_regression.py`): Element
+   resolves with correct text "Run" but reports hidden. CSS visibility
+   issue — element exists in DOM but not rendered visible.
+
+3. **System tab elements hidden** (14 tests in `test_system_view.py`):
+   All `#sys-*` elements resolve with correct mock data values but report
+   hidden. Tests may not be clicking the System tab first, or the System
+   view's header strip has a display issue.
+
+4. **Measurement wizard stale tests** (7 tests in `test_measurement_wizard.py`):
+   Abort button not found by `[data-testid="abort-measurement"]`, screens
+   staying hidden during state transitions. Test expectations may not match
+   current wizard implementation.
+
+5. **Event time hidden** (1 test): `.event-time` element hidden.
+
+**Root cause:** UI refactoring (F-038 consolidation, US-051 status bar v2,
+US-064/US-065 new tabs with shared `index.html` changes) changed element
+visibility, z-index stacking, and DOM structure. Tests were not updated in
+lockstep.
+
+**Fix approach:** Categories 1-3 are likely fixable with small CSS or test
+adjustments (z-index, tab-click-before-assert, visibility checks). Category
+4 may need deeper investigation of the measurement wizard state machine.
+
+**Files:**
+- `src/web-ui/tests/e2e/test_capture_spectrum.py` (category 1)
+- `src/web-ui/tests/e2e/test_status_bar.py` (category 2)
+- `src/web-ui/tests/e2e/test_dashboard_dual_ws.py` (category 2)
+- `src/web-ui/tests/e2e/test_visual_regression.py` (category 2)
+- `src/web-ui/tests/e2e/test_system_view.py` (category 3)
+- `src/web-ui/tests/e2e/test_measurement_wizard.py` (category 4)
+- `src/web-ui/tests/e2e/test_event_log.py` (category 5)
+- Possibly `src/web-ui/static/style.css` or `index.html` if fixes are in app code
+
+**Related:** F-041 (server crash — now verified fixed), F-042 (previous
+round of 5 E2E fixes), F-038 (status bar consolidation that changed DOM),
+US-050 (TEST phase needs green suite), US-051 (TEST phase needs green suite).
+
+### Update 2026-03-22: 38 of 41 fixed
+
+- 25 fixes: system_view, status_bar, visual_regression, event_log (pending commit)
+- 13 fixes: capture_spectrum, measurement_wizard (pending commit)
+- Remaining: ~1-8 tests in measurement_wizard that hang when run sequentially → F-049
+
+---
+
+## F-049: Measurement wizard mock session state isolation in E2E tests (OPEN)
+
+**Severity:** Medium (test reliability — sequential test runs hang)
+**Status:** Open
+**Found in:** F-048 fix session (2026-03-22)
+**Affects:** `src/web-ui/tests/e2e/test_measurement_wizard.py`
+**Found by:** Worker (E2E fix effort)
+
+**Description:** 8 measurement wizard E2E tests hang when run sequentially.
+The measurement wizard's mock session state (start/stop/abort transitions)
+is not properly isolated between test cases. When tests run in sequence,
+shared state from a previous test's mock session leaks into the next test,
+causing state machine transitions to block indefinitely.
+
+**Root cause:** Likely the mock measurement session (in conftest.py or the
+mock backend) maintains state across test cases that should be reset. The
+wizard's abort/stop handlers may not fully clean up, leaving the session
+in a state that prevents the next test from starting a new session.
+
+**Fix approach:** Ensure mock session state is fully reset between test
+cases — either via a pytest fixture that reinitializes the mock session,
+or by adding explicit cleanup in each test's teardown. May also need
+timeout protection so hung tests fail fast rather than blocking the suite.
+
+**Files:**
+- `src/web-ui/tests/e2e/test_measurement_wizard.py`
+- `src/web-ui/tests/e2e/conftest.py` (mock session fixtures)
+- Possibly `src/web-ui/app/mock/mock_data.py` (mock session state)
+
+**Related:** F-048 (parent defect for E2E failures), US-050 (TEST phase
+needs green suite).

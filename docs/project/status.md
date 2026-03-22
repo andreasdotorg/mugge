@@ -69,8 +69,8 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-059 | done | **14/14** | **done** (owner-accepted 2026-03-21). GraphManager Core + Production Filter-Chain (Phase A). Clean reboot demo PASS (S-004, 17/17 checks). Pi boots into working DJ mode on pure PW filter-chain pipeline (D-040/D-043). Follow-ups: F-033, I-1 CI wiring, spectral verification (AC 3141), D-042 lifting. |
 | US-060 | VERIFY | 3/7 | **VERIFY PASS** (S-002 2026-03-21). FilterChainCollector running, GM RPC working, 0 xruns. `56ef3f0` LevelsCollector adds PW-native level data for meters. DoD #1 (collectors replaced) advancing. Known gaps: AC #3 (processing load, F-039), AC #7 (xrun counter from PW metadata, needs US-063). |
 | US-061 | VERIFY | 1/8 | **VERIFY PASS** (S-002 2026-03-21). Client files deployed, imports OK on Pi. Known gaps resolved: deploy.py path fixed (`3dcccc2`), measure_nearfield.py pycamilladsp removed (`d368c76`). |
-| US-064 | IMPLEMENT | 3/8 | **committed** (`23a57c1`). `graph.js` view module (#2), SVG layout (#3), mock mode (#6). Remaining: GM RPC extension (#1), unit tests (#4), E2E test (#5), architect review (#7), UX review (#8, 600px responsive fix needed first). |
-| US-065 | IMPLEMENT | 5/10 | **committed** (`965f501`). Config Tab: `config.js` + `config_routes.py` + CSS + mock data + `main.py` router. Remaining: E2E test (#6), UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10). |
+| US-064 | IMPLEMENT | 4/8 | **committed** (`23a57c1` + `5dad57e`). `graph.js` view module (#2), SVG layout (#3), mock mode (#6), E2E test (#5, `5dad57e`). 600px responsive fixed. Remaining: GM RPC extension (#1), unit tests (#4), architect review (#7), UX review (#8). |
+| US-065 | IMPLEMENT | 6/10 | **committed** (`965f501` + `5dad57e`). Config Tab + E2E test (#6, `5dad57e`). F-046 quantum confirm dialog committed (`30a25e1`). Remaining: UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10). |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -91,10 +91,14 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **US-050** (Phase: **TEST, DoD 6/6** — advanced 2026-03-21): Measurement Pipeline Mock Backend. QE test plan delivered: T-050-1 (CI regression), T-050-2 (E2E harness on Linux+PW), T-050-3 (D-040 inspection), T-050-4 (AC coverage). QE will review T-050-3/4 on commit. T-050-1/2: worker evidence from implementation may suffice. Stale AC (line 2718 "Real CamillaDSP") flagged as doc cleanup. CM committing code.
 - **US-051** (Phase: **TEST, DoD 4/4** — advanced 2026-03-21): Persistent System Status Bar. QE test plan delivered: T-051-1 (Playwright E2E, 20+ tests in `test_status_bar.py`), T-051-2 (CI regression), T-051-3 (D-040 inspection — QE reviewing), T-051-4 (Pi hardware — deferred to VERIFY per QE recommendation). TP-003 protocol exists. Committed `8975b5b`. T-051-1/2 need worker execution.
 - **US-053** (Phase: **IMPLEMENT, DoD 4/6** — code complete 2026-03-21): Manual Test Tool Page. Code committed (`94103c3`): 7 UX spec fixes, signal-gen env var. Remaining DoD: #3 integration test (Pi), #4 hot-plug test (Pi), #5 AD sign-off (safety controls), #6 AE sign-off (signal quality). All remaining items need Pi access.
-- **US-065** (Phase: **IMPLEMENT, DoD 5/10** — committed `965f501` 2026-03-21): Configuration Tab. `config.js` view module, `config_routes.py` backend, CSS, mock data, `main.py` router. Committed with F-040 dependency resolved (`4c80c23`). Remaining DoD: E2E test (#6), UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10).
-- **US-064** (Phase: **IMPLEMENT, DoD 3/8** — committed `23a57c1` 2026-03-21): PW Graph Visualization Tab. `graph.js` + CSS + HTML tab implemented. SVG layout working for production topology. Mock mode renders representative graph. 600px responsive layout bug needs fix before UX review. Remaining: GM RPC port info extension (Rust, ~20 lines), unit tests, E2E test, architect review, UX review.
+- **US-065** (Phase: **IMPLEMENT, DoD 6/10** — committed `965f501` + `5dad57e` + `30a25e1`): Configuration Tab. Code + E2E test + F-046 quantum confirm dialog all committed. Remaining DoD: UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10).
+- **US-064** (Phase: **IMPLEMENT, DoD 4/8** — committed `23a57c1` + `5dad57e`): PW Graph Visualization Tab. `graph.js` + CSS + HTML + E2E test committed. 600px responsive fixed. Remaining: GM RPC port info extension (#1, Rust ~20 lines), unit tests (#4), architect review (#7), UX review (#8).
+- **US-066** (Phase: **IMPLEMENT** — T-066-1/2/3 complete): Spectrum and Meter Polish. Phase 1 complete: F-026 spectrum clock drift fix (`784c408`), T-066-2 D-040 label updates (APP→CONV, DSP→OUT, pending commit), T-066-3 PHYS IN group inactive state (pending commit). Phase 2: pcm-bridge deployment + TK-112 validation needs Pi CHANGE session.
+- **US-044** (Phase: **IMPLEMENT** — T-044-4 complete, T-044-1/2 in progress): CamillaDSP Bypass Protection (rewritten for D-040). T-044-4 watchdog implemented (native PW API, <21ms mute, pending commit). T-044-1 (ALSA lockout) and T-044-2 (WP hardening) in progress. T-044-3/5 blocked on earlier tasks. T-044-6/7/8 pending.
+- **F-049** (OPEN, Medium): Measurement wizard mock session state isolation — 8 E2E tests hang when run sequentially. Likely shared state between test cases in `test_measurement_wizard.py`.
 - **F-040** (**RESOLVED** — committed `4c80c23` 2026-03-21): Panic MUTE/UNMUTE backend (`audio_mute.py` + `pw_helpers.py`). US-065 and US-064 commits followed (`965f501`, `23a57c1`). No longer blocking.
-- **F-041** (**RESOLVED, pending verification** — `3a1e6bb` + `c76b882`): Mock server crash fix. Health-check + stderr capture in conftest.py. Additional fix `c76b882`: subprocess.PIPE replaced with tempfile (deadlock prevention). **E2E verification run needed before proceeding with implementation work.**
+- **F-041** (**RESOLVED, VERIFIED** — `3a1e6bb` + `c76b882`): Mock server crash fix. Health-check + stderr capture in conftest.py. Additional fix `c76b882`: subprocess.PIPE replaced with tempfile (deadlock prevention). Verified 2026-03-21: full E2E suite completed, no crash. 124 passed, 41 failed (pre-existing regressions → F-048).
+- **F-048** (IN PROGRESS → ~1-8 remaining, Medium): Originally 41 E2E test failures. **25 fixed** (system_view, status_bar, visual_regression, event_log — pending commit). **13 fixed** (capture_spectrum + measurement_wizard — pending commit). Remaining: measurement wizard state isolation (F-049, 8 tests hang sequentially).
 - **F-042** (**RESOLVED** — `3a1e6bb`, worker-2): 5 E2E assertion fixes. Stale selectors updated, timing adjusted.
 - **Rule 13 retrospective** (2026-03-20): 12 code commits (`ff40766`..`3a6fabb`) committed without pre-approval. Architect: **12/12 APPROVED.** AE: **4/4 APPROVED.** AD: no blockers. TW: documentation in progress. All high/medium items resolved. **Resolved items:**
   - ~~TODO (low): u32 saturation comment on `LevelTracker::sample_count`~~ DONE (sg-worker, awaiting commit)
@@ -114,6 +118,39 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **F-016** (open, medium): 2 audible glitches after PipeWire restart with capture adapter active. Does not reproduce without restart.
 - **US-004** (**DONE** — owner-accepted 2026-03-21): Assumption register (A1-A28). CLAUDE.md reference corrected.
 - **US-000a** (**DONE** — owner-accepted 2026-03-21): Platform security hardening. F-002/F-011 resolved, reboot-verified.
+
+### Session Progress (2026-03-22)
+
+**Committed this session:**
+- `30a25e1` — F-046: quantum confirmation dialog (HIGH safety fix)
+- `ef7a063` — ENH-001 + F-043 + F-044 + F-045: sample rate in status bar, GM SCHED_OTHER color, Links label, duplicate Mode removed
+- `5dad57e` — US-064/US-065 E2E tests + F-047 keyboard focus indicators
+- `784c408` — F-026: spectrum clock drift fix (render loop synchronization)
+- `552866d` — docs: stale tracking corrections for F-040/US-064/US-065
+
+**Pending commit (code complete):**
+- F-048: 25 E2E test fixes (system_view, status_bar, visual_regression, event_log)
+- F-048: 13 E2E test fixes (capture_spectrum, measurement_wizard)
+- T-066-2: D-040 label updates (APP→CONV, DSP→OUT)
+- T-066-3: PHYS IN group inactive state
+- T-044-4: GraphManager safety watchdog (native PW API, <21ms mute)
+
+**Defects resolved this session:** F-026, F-038 (already committed), F-043, F-044, F-045, F-046, F-047, ENH-001 (8 items)
+**New defect filed:** F-049 (measurement wizard mock session state isolation)
+
+**E2E test health:** 41 failures → ~1-8 remaining (F-049 state isolation). F-041 VERIFIED — no server crash.
+
+**Story progress:**
+- US-064: DoD 3/8 → 4/8 (E2E test written, 600px responsive fixed)
+- US-065: DoD 5/10 → 6/10 (E2E test written, F-046 confirm dialog)
+- US-066: Phase 1 complete (T-066-1/2/3). Phase 2 needs Pi.
+- US-044: T-044-4 watchdog done. T-044-1/2 in progress.
+
+**Next steps:**
+- Commit pending code (F-048 fixes, T-066-2/3, T-044-4)
+- T-044-1 (ALSA lockout) + T-044-2 (WP hardening) — in progress
+- Pi CHANGE session: US-066 Phase 2 (pcm-bridge deploy, TK-112), US-064/US-065 Pi integration tests
+- US-044 remaining tasks (T-044-3/5/6/7/8)
 
 ### Session Wrap-Up (2026-03-21, continued session)
 
@@ -396,7 +433,7 @@ See `docs/project/defects.md` for full details.
 | F-021 | High | Resolved | Resolved by US-062: Mixxx systemd service uses pw-jack (`0df1e56`, `ff40766`) |
 | F-022 | High | Resolved | Resolved by US-062: versioned systemd service supersedes old autostart (`0df1e56`, `ff40766`) |
 | F-025 | Critical | Resolved | Speaker protection — TK-107 + TK-108 done (`a237bc3`) |
-| F-026 | High | Open | TK-114 (spectrum validation), TK-115 (JS FFT pipeline in progress) |
+| F-026 | High | Resolved | Spectrum clock drift fix: render loop synchronization (`784c408`). |
 | F-030 | High | Open | D-020 (web UI), US-029 (DJ UAT). Workaround: stop web UI service. |
 | F-031 | Low | Open | None (UI-only, audio unaffected). Investigation deferred per owner. |
 | S-012 | High | Open | Safety incident: unauthorized +30dB gain while owner listening. TK-242. |
@@ -406,18 +443,20 @@ See `docs/project/defects.md` for full details.
 | F-035 | High | Resolved | US-052: seccomp SIGSYS. Repo fix: SEC-PW-CLIENT profile applied to all 3 service files (`33b5577`). |
 | F-036 | Medium | Open | VNC RFB password auth insufficient for guest device access. Becomes High when US-018 deployed. Security specialist finding. |
 | F-037 | High | Open | Web UI on port 8080 has no authentication. Signal generator controllable by unauthenticated network clients. Tracked for venue deployment, not blocking current work. |
-| F-038 | Medium | In progress | Dashboard duplicate status bar: code fix implemented (8 files), PM approved Rule 13. Awaiting UX + architect approvals for CM commit. |
+| F-038 | Medium | Resolved | Dashboard duplicate status bar: consolidated into persistent bar (`72def21` + `afc8528`). |
 | F-039 | Medium | Open | DSP load gauge shows 0% — FilterChainCollector hardcodes processing_load. Needs pw-top BUSY parsing (US-060 AC #3). |
 | F-040 | High | Resolved | Panic MUTE/UNMUTE: backend `audio_mute.py` + `pw_helpers.py` committed (`4c80c23`). US-065 (`965f501`) and US-064 (`23a57c1`) committed on top. |
-| F-041 | High | Resolved (pending verification) | Mock server crash: `3a1e6bb` health-check + `c76b882` PIPE deadlock fix. **E2E verification run needed.** |
+| F-041 | High | Resolved (VERIFIED) | Mock server crash: `3a1e6bb` health-check + `c76b882` PIPE deadlock fix. Verified: 124 pass, no crash. 41 pre-existing failures tracked as F-048. |
+| F-048 | Medium | Open | 41 E2E test failures: stale selectors + CSS visibility (5 categories). Pre-existing regressions from F-038/US-051/US-064/US-065 UI changes. |
 | F-042 | Medium | Resolved | 5 E2E assertion failures: test fixes committed (`3a1e6bb`, worker-2). Stale selectors + timing adjustments. |
-| F-043 | Low | Open | GM SCHED_OTHER shown red in System tab — GM is control plane, SCHED_OTHER is correct. `system.js:387` color logic. |
-| F-044 | Low | Open | Status bar "Links 100" unclear — shows link health % (actual/desired), not link count. Needs label/format fix. |
-| F-045 | Low | Open | "Mode" vs "GM Mode" in System tab — both show mode, duplicate or unclear. One should be removed or labels clarified. |
-| ENH-001 | Low | Open | Owner requests sample rate in persistent status bar. Data already in `/ws/system`. Small addition. |
+| F-043 | Low | Resolved | GM SCHED_OTHER color fix (`ef7a063`). |
+| F-044 | Low | Resolved | "Links 100" → actual/desired format (`ef7a063`). |
+| F-045 | Low | Resolved | Duplicate "GM Mode" removed from System tab (`ef7a063`). |
+| ENH-001 | Low | Resolved | Sample rate added to persistent status bar (`ef7a063`). |
 | TK-249 | Medium | Open | PW `linear` Mult verified functional (owner confirmed during C-005). Downgraded from CRITICAL to calibration investigation — absolute SPL doesn't match theory, but gain mechanism works. Not a safety blocker. |
-| F-046 | High | Open | Config tab quantum buttons fire immediately with no confirmation dialog. Safety-relevant during live performance — accidental quantum change causes audible glitches. UX specialist P1 finding. Affects US-065. |
-| F-047 | Low | Open | No visible keyboard focus indicators in web UI. Accessibility/usability. UX specialist P3 finding. |
+| F-046 | High | Resolved | Quantum confirmation dialog added (`30a25e1`). |
+| F-047 | Low | Resolved | `:focus-visible` CSS styles added (`5dad57e`). |
+| F-049 | Medium | Open | Measurement wizard mock session state isolation: 8 E2E tests hang when run sequentially. |
 
 ### Resolved
 
@@ -436,6 +475,15 @@ See `docs/project/defects.md` for full details.
 | F-029 | Medium | Resolved | Level bar RMS vs Peak alignment (`d742fdf`) |
 | F-032 | High | Resolved | SEC-GM-01: `parse_listen_addr()` loopback enforcement + 8 unit tests (`main.rs:87-106`) |
 | F-040 | High | Resolved | Panic MUTE/UNMUTE backend: `audio_mute.py` + `pw_helpers.py` (`4c80c23`). Unblocked US-065 and US-064 commits. |
+| F-041 | High | Resolved (VERIFIED) | Mock server crash: `3a1e6bb` + `c76b882`. Full E2E suite completes, no crash. 41 pre-existing failures tracked as F-048. |
+| F-026 | High | Resolved | Spectrum clock drift: render loop synchronization (`784c408`). |
+| F-038 | Medium | Resolved | Dashboard duplicate status bar consolidated (`72def21` + `afc8528`). |
+| F-043 | Low | Resolved | GM SCHED_OTHER color logic (`ef7a063`). |
+| F-044 | Low | Resolved | Links label format fix (`ef7a063`). |
+| F-045 | Low | Resolved | Duplicate GM Mode removed (`ef7a063`). |
+| F-046 | High | Resolved | Quantum confirmation dialog (`30a25e1`). |
+| F-047 | Low | Resolved | Keyboard focus indicators (`5dad57e`). |
+| ENH-001 | Low | Resolved | Sample rate in status bar (`ef7a063`). |
 
 ## External Dependencies
 
