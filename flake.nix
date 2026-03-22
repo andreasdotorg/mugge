@@ -142,13 +142,22 @@
           '';
         };
 
-        # Rust PipeWire tools (Linux-only, need libpipewire).
-        # Defined here so both packages and checks can reference them.
-        pcm-bridge = pkgs.rustPlatform.buildRustPackage {
-          pname = "pcm-bridge";
-          version = "0.1.0";
-          src = ./src/pcm-bridge;
-          cargoLock.lockFile = ./src/pcm-bridge/Cargo.lock;
+        # Workspace source for pcm-bridge + signal-gen + audio-common.
+        # Cleaned to include only the workspace root and member crates.
+        rustWorkspaceSrc = pkgs.lib.cleanSourceWith {
+          src = ./src;
+          filter = path: type:
+            let baseName = builtins.baseNameOf path; in
+            # Include workspace root files
+            baseName == "Cargo.toml" || baseName == "Cargo.lock"
+            # Include workspace member directories
+            || pkgs.lib.hasPrefix (toString ./src/audio-common) (toString path)
+            || pkgs.lib.hasPrefix (toString ./src/pcm-bridge) (toString path)
+            || pkgs.lib.hasPrefix (toString ./src/signal-gen) (toString path);
+        };
+
+        # Shared PipeWire build args for Rust crates.
+        rustPwBuildArgs = {
           nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
           buildInputs = [ pkgs.pipewire ];
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
@@ -158,19 +167,23 @@
           ];
         };
 
-        signal-gen = pkgs.rustPlatform.buildRustPackage {
+        # Rust PipeWire tools (Linux-only, need libpipewire).
+        # Built from the Cargo workspace (audio-common + pcm-bridge + signal-gen).
+        pcm-bridge = pkgs.rustPlatform.buildRustPackage (rustPwBuildArgs // {
+          pname = "pcm-bridge";
+          version = "0.1.0";
+          src = rustWorkspaceSrc;
+          cargoLock.lockFile = ./src/Cargo.lock;
+          buildAndTestSubdir = "pcm-bridge";
+        });
+
+        signal-gen = pkgs.rustPlatform.buildRustPackage (rustPwBuildArgs // {
           pname = "pi4audio-signal-gen";
           version = "0.1.0";
-          src = ./src/signal-gen;
-          cargoLock.lockFile = ./src/signal-gen/Cargo.lock;
-          nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
-          buildInputs = [ pkgs.pipewire ];
-          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-          BINDGEN_EXTRA_CLANG_ARGS = builtins.toString [
-            "-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include"
-            "-isystem ${pkgs.glibc.dev}/include"
-          ];
-        };
+          src = rustWorkspaceSrc;
+          cargoLock.lockFile = ./src/Cargo.lock;
+          buildAndTestSubdir = "signal-gen";
+        });
 
         graph-manager = pkgs.rustPlatform.buildRustPackage {
           pname = "pi4audio-graph-manager";
@@ -394,10 +407,21 @@
               echo ""
               echo "=== graph-manager tests ==="
               cd ${toString ./.}/src/graph-manager
-              HOME="''${HOME:-/tmp}" PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:$PATH" cargo test --no-default-features --release 2>&1
+              HOME="''${HOME:-/tmp}" CARGO_TARGET_DIR="''${HOME:-/tmp}/.cargo-target/pi4audio-gm" PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.stdenv.cc}/bin:$PATH" cargo test --no-default-features --release 2>&1
               echo ""
               echo "All test suites passed."
               echo "(pcm-bridge and signal-gen: run nix run .#test-pcm-bridge / .#test-signal-gen on Linux)"
+            ''}";
+          };
+
+          test-audio-common = {
+            type = "app";
+            program = "${pkgs.writeShellScript "test-audio-common" ''
+              export HOME="''${HOME:-/tmp}"
+              export CARGO_TARGET_DIR="''${HOME}/.cargo-target/pi4audio-ws"
+              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.stdenv.cc}/bin:$PATH"
+              cd ${toString ./.}/src
+              exec cargo test --locked -p audio-common "$@"
             ''}";
           };
 
@@ -405,7 +429,8 @@
             type = "app";
             program = "${pkgs.writeShellScript "test-graph-manager" ''
               export HOME="''${HOME:-/tmp}"
-              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:$PATH"
+              export CARGO_TARGET_DIR="''${HOME}/.cargo-target/pi4audio-gm"
+              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.stdenv.cc}/bin:$PATH"
               cd ${toString ./.}/src/graph-manager
               exec cargo test --no-default-features "$@"
             ''}";
@@ -434,7 +459,7 @@
               echo ""
               echo "=== graph-manager tests ==="
               cd ${toString ./.}/src/graph-manager
-              HOME="''${HOME:-/tmp}" PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:$PATH" cargo test --no-default-features --release 2>&1
+              HOME="''${HOME:-/tmp}" CARGO_TARGET_DIR="''${HOME:-/tmp}/.cargo-target/pi4audio-gm" PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.stdenv.cc}/bin:$PATH" cargo test --no-default-features --release 2>&1
               echo ""
               echo "========== test-e2e (browser tests) =========="
               export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
@@ -460,12 +485,13 @@
             type = "app";
             program = "${pkgs.writeShellScript "test-pcm-bridge" ''
               export HOME="''${HOME:-/tmp}"
-              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.pkg-config}/bin:$PATH"
+              export CARGO_TARGET_DIR="''${HOME}/.cargo-target/pi4audio-ws"
+              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.pkg-config}/bin:${pkgs.stdenv.cc}/bin:$PATH"
               export PKG_CONFIG_PATH="${pkgs.pipewire.dev}/lib/pkgconfig''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
               export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
               export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include -isystem ${pkgs.glibc.dev}/include"
-              cd ${toString ./.}/src/pcm-bridge
-              exec cargo test "$@"
+              cd ${toString ./.}/src
+              exec cargo test --locked -p pcm-bridge "$@"
             ''}";
           };
 
@@ -473,12 +499,13 @@
             type = "app";
             program = "${pkgs.writeShellScript "test-signal-gen" ''
               export HOME="''${HOME:-/tmp}"
-              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.pkg-config}/bin:$PATH"
+              export CARGO_TARGET_DIR="''${HOME}/.cargo-target/pi4audio-ws"
+              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.pkg-config}/bin:${pkgs.stdenv.cc}/bin:$PATH"
               export PKG_CONFIG_PATH="${pkgs.pipewire.dev}/lib/pkgconfig''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
               export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
               export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include -isystem ${pkgs.glibc.dev}/include"
-              cd ${toString ./.}/src/signal-gen
-              exec cargo test "$@"
+              cd ${toString ./.}/src
+              exec cargo test --locked -p pi4audio-signal-gen "$@"
             ''}";
           };
         };
@@ -495,10 +522,7 @@
           # Build our custom Rust packages for the Pi target.
           # These are passed to NixOS modules via specialArgs so service
           # units can reference Nix store paths instead of ~/bin.
-          mkRustPkg = { pname, src, cargoLock }: pkgs.rustPlatform.buildRustPackage {
-            inherit pname src;
-            version = "0.1.0";
-            cargoLock.lockFile = cargoLock;
+          rustPwArgs = {
             nativeBuildInputs = [ pkgs.pkg-config pkgs.llvmPackages.libclang ];
             buildInputs = [ pkgs.pipewire ];
             LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
@@ -507,26 +531,42 @@
               "-isystem ${pkgs.glibc.dev}/include"
             ];
           };
+
+          # Workspace source for pcm-bridge + signal-gen + audio-common.
+          workspaceSrc = pkgs.lib.cleanSourceWith {
+            src = ./src;
+            filter = path: type:
+              let baseName = builtins.baseNameOf path; in
+              baseName == "Cargo.toml" || baseName == "Cargo.lock"
+              || pkgs.lib.hasPrefix (toString ./src/audio-common) (toString path)
+              || pkgs.lib.hasPrefix (toString ./src/pcm-bridge) (toString path)
+              || pkgs.lib.hasPrefix (toString ./src/signal-gen) (toString path);
+          };
         in
         nixpkgs.lib.nixosSystem {
           inherit system;
           specialArgs = {
             pi4audio-packages = {
-              graph-manager = mkRustPkg {
+              graph-manager = pkgs.rustPlatform.buildRustPackage (rustPwArgs // {
                 pname = "pi4audio-graph-manager";
+                version = "0.1.0";
                 src = ./src/graph-manager;
-                cargoLock = ./src/graph-manager/Cargo.lock;
-              };
-              pcm-bridge = mkRustPkg {
+                cargoLock.lockFile = ./src/graph-manager/Cargo.lock;
+              });
+              pcm-bridge = pkgs.rustPlatform.buildRustPackage (rustPwArgs // {
                 pname = "pcm-bridge";
-                src = ./src/pcm-bridge;
-                cargoLock = ./src/pcm-bridge/Cargo.lock;
-              };
-              signal-gen = mkRustPkg {
+                version = "0.1.0";
+                src = workspaceSrc;
+                cargoLock.lockFile = ./src/Cargo.lock;
+                buildAndTestSubdir = "pcm-bridge";
+              });
+              signal-gen = pkgs.rustPlatform.buildRustPackage (rustPwArgs // {
                 pname = "pi4audio-signal-gen";
-                src = ./src/signal-gen;
-                cargoLock = ./src/signal-gen/Cargo.lock;
-              };
+                version = "0.1.0";
+                src = workspaceSrc;
+                cargoLock.lockFile = ./src/Cargo.lock;
+                buildAndTestSubdir = "signal-gen";
+              });
             };
           };
           modules = [

@@ -1,0 +1,9 @@
+[package]
+name = "audio-common"
+version = "0.1.0"
+edition = "2021"
+description = "Shared lock-free audio primitives for Pi audio workstation RT services"
+license = "MIT"
+
+# ZERO PipeWire dependencies — this crate is pure Rust.
+[dependencies]

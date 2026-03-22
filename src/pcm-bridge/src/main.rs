@@ -24,14 +24,19 @@
 //!   `{"channels":8,"peak":[-3.1,-4.2,...],"rms":[-12.5,-14.0,...]}\n`
 //! Values are in dBFS, rounded to 1 decimal place. -120.0 means silence.
 
-mod levels;
-mod ring_buffer;
+pub(crate) mod levels {
+    pub use audio_common::level_tracker::*;
+}
+pub(crate) mod ring_buffer {
+    pub use audio_common::ring_buffer::*;
+}
 mod server;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use audio_common::audio_format::build_audio_format;
 use clap::{Parser, ValueEnum};
 use log::{info, warn};
 
@@ -194,81 +199,7 @@ fn main() {
     info!("pcm-bridge shutdown complete");
 }
 
-/// Build an SPA audio format pod for stream negotiation as raw bytes.
-///
-/// Port count in PipeWire is driven by the format params passed to
-/// `stream.connect()`, not by the `audio.channels` node property.
-/// Without format params, PipeWire defaults to 1 channel regardless
-/// of the property value.
-///
-/// The pod is constructed directly in the SPA wire format because the
-/// `spa_pod_builder_*` C functions are inline and not exposed by bindgen.
-#[allow(non_upper_case_globals)]
-fn build_audio_format(channels: u32, rate: u32) -> Vec<u8> {
-    // SPA pod wire format (all little-endian, 8-byte aligned):
-    //
-    // Pod header:     size:u32, type:u32
-    // Object body:    body_type:u32, body_id:u32
-    // Property:       key:u32, flags:u32, value_pod(size:u32, type:u32, data...)
-    //
-    // Constants from spa/utils/type.h and spa/param/format.h
-    // (verified against Pi PipeWire 1.4.10 headers in Nix store):
-    const SPA_TYPE_Id: u32 = 3;       // enum spa_type: None=1, Bool=2, Id=3
-    const SPA_TYPE_Int: u32 = 4;      // Int=4, Long=5, Float=6, Double=7
-    const SPA_TYPE_Object: u32 = 15;  // Struct=14, Object=15
-    const SPA_TYPE_OBJECT_Format: u32 = 0x40003; // START=0x40000, PropInfo, Props, Format
-    const SPA_PARAM_EnumFormat: u32 = 3;
-    const SPA_FORMAT_mediaType: u32 = 1;
-    const SPA_FORMAT_mediaSubtype: u32 = 2;
-    const SPA_FORMAT_AUDIO_format: u32 = 0x10001;    // START_Audio + 1
-    const SPA_FORMAT_AUDIO_rate: u32 = 0x10003;      // +3 (flags at +2)
-    const SPA_FORMAT_AUDIO_channels: u32 = 0x10004;  // +4
-    const SPA_MEDIA_TYPE_audio: u32 = 1; // unknown=0, audio=1
-    const SPA_MEDIA_SUBTYPE_raw: u32 = 1;
-    const SPA_AUDIO_FORMAT_F32LE: u32 = 0x11A; // F32_LE in interleaved block
-
-    let mut buf = Vec::with_capacity(136);
-
-    // Helper: write a property with an Id value
-    fn write_prop_id(buf: &mut Vec<u8>, key: u32, val: u32) {
-        buf.extend_from_slice(&key.to_le_bytes());    // property key
-        buf.extend_from_slice(&0u32.to_le_bytes());    // property flags
-        buf.extend_from_slice(&4u32.to_le_bytes());    // pod size
-        buf.extend_from_slice(&SPA_TYPE_Id.to_le_bytes()); // pod type = SPA_TYPE_Id
-        buf.extend_from_slice(&val.to_le_bytes());     // value
-        buf.extend_from_slice(&[0u8; 4]);              // pad to 8-byte align
-    }
-
-    // Helper: write a property with an Int value
-    fn write_prop_int(buf: &mut Vec<u8>, key: u32, val: i32) {
-        buf.extend_from_slice(&key.to_le_bytes());
-        buf.extend_from_slice(&0u32.to_le_bytes());
-        buf.extend_from_slice(&4u32.to_le_bytes());    // pod size
-        buf.extend_from_slice(&SPA_TYPE_Int.to_le_bytes()); // pod type = SPA_TYPE_Int
-        buf.extend_from_slice(&val.to_le_bytes());
-        buf.extend_from_slice(&[0u8; 4]);              // pad to 8-byte align
-    }
-
-    // Object pod header (size filled in at end)
-    let header_pos = buf.len();
-    buf.extend_from_slice(&0u32.to_le_bytes());                        // size placeholder
-    buf.extend_from_slice(&SPA_TYPE_Object.to_le_bytes());             // type = Object (15)
-    buf.extend_from_slice(&SPA_TYPE_OBJECT_Format.to_le_bytes());      // body type
-    buf.extend_from_slice(&SPA_PARAM_EnumFormat.to_le_bytes());        // body id
-
-    // Properties
-    write_prop_id(&mut buf, SPA_FORMAT_mediaType, SPA_MEDIA_TYPE_audio);
-    write_prop_id(&mut buf, SPA_FORMAT_mediaSubtype, SPA_MEDIA_SUBTYPE_raw);
-    write_prop_id(&mut buf, SPA_FORMAT_AUDIO_format, SPA_AUDIO_FORMAT_F32LE);
-    write_prop_int(&mut buf, SPA_FORMAT_AUDIO_rate, rate as i32);
-    write_prop_int(&mut buf, SPA_FORMAT_AUDIO_channels, channels as i32);
-
-    // Fill in object body size
-    let body_size = (buf.len() - header_pos - 8) as u32;
-    buf[header_pos..header_pos + 4].copy_from_slice(&body_size.to_le_bytes());
-
-    buf
-}
+// build_audio_format is imported from audio_common::audio_format
 
 /// Build PipeWire stream properties based on the operating mode.
 ///
@@ -342,7 +273,7 @@ fn run_pipewire(
     // count. This drives PipeWire port creation — without it, PipeWire
     // defaults to 1 channel regardless of the audio.channels property.
     // The WirePlumber routing properties handle stream linking.
-    let format_pod_bytes = build_audio_format(channels, args.rate);
+    let format_pod_bytes = build_audio_format(channels, args.rate, &[]);
     let format_pod = unsafe {
         &*(format_pod_bytes.as_ptr() as *const libspa::pod::Pod)
     };
@@ -492,7 +423,7 @@ mod tests {
 
     #[test]
     fn build_audio_format_size_and_alignment() {
-        let pod = build_audio_format(8, 48000);
+        let pod = build_audio_format(8, 48000, &[]);
         assert_eq!(pod.len() % 8, 0, "SPA pod must be 8-byte aligned");
         // 5 properties * 24 bytes each = 120, plus 16 bytes header = 136.
         assert_eq!(pod.len(), 136);
@@ -500,7 +431,7 @@ mod tests {
 
     #[test]
     fn build_audio_format_header_type() {
-        let pod = build_audio_format(2, 44100);
+        let pod = build_audio_format(2, 44100, &[]);
         // Bytes 4..8 are the pod type (SPA_TYPE_Object = 15).
         let pod_type = u32::from_le_bytes(pod[4..8].try_into().unwrap());
         assert_eq!(pod_type, 15, "pod header type must be SPA_TYPE_Object");
@@ -508,7 +439,7 @@ mod tests {
 
     #[test]
     fn build_audio_format_body_size() {
-        let pod = build_audio_format(3, 48000);
+        let pod = build_audio_format(3, 48000, &[]);
         // Bytes 0..4 are the body size (total - 8 byte pod header).
         let body_size = u32::from_le_bytes(pod[0..4].try_into().unwrap());
         assert_eq!(body_size as usize, pod.len() - 8);
@@ -516,7 +447,7 @@ mod tests {
 
     #[test]
     fn build_audio_format_channels_embedded() {
-        let pod = build_audio_format(8, 48000);
+        let pod = build_audio_format(8, 48000, &[]);
         // channels property value at: 16 + 4*24 + 16 = 128.
         let ch_val = u32::from_le_bytes(pod[128..132].try_into().unwrap());
         assert_eq!(ch_val, 8);
@@ -524,7 +455,7 @@ mod tests {
 
     #[test]
     fn build_audio_format_rate_embedded() {
-        let pod = build_audio_format(2, 96000);
+        let pod = build_audio_format(2, 96000, &[]);
         // rate property value at: 16 + 3*24 + 16 = 104.
         let rate_val = i32::from_le_bytes(pod[104..108].try_into().unwrap());
         assert_eq!(rate_val, 96000);

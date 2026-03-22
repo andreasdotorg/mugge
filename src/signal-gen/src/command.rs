@@ -12,8 +12,7 @@
 //! read/write positions. No external crate dependency, no mutex, O(1)
 //! push/pop, no allocation after construction.
 
-use std::cell::UnsafeCell;
-use std::sync::atomic::{AtomicUsize, Ordering};
+pub use audio_common::SpscQueue;
 
 // ---------------------------------------------------------------------------
 // Signal types
@@ -168,99 +167,7 @@ pub fn bitmask_to_channels(mask: u8) -> Vec<u8> {
     channels
 }
 
-// ---------------------------------------------------------------------------
-// Lock-free SPSC ring buffer
-// ---------------------------------------------------------------------------
-
-/// Lock-free single-producer single-consumer ring buffer.
-///
-/// - Fixed capacity (power of two for efficient modular indexing).
-/// - No allocation in `push()` or `pop()`.
-/// - No mutex, no blocking.
-/// - Safe for RT: one thread pushes, the other pops.
-///
-/// Uses `AtomicUsize` for read/write positions with `Acquire`/`Release`
-/// ordering to ensure visibility of written data across threads.
-pub struct SpscQueue<T: Copy, const N: usize> {
-    buffer: [UnsafeCell<T>; N],
-    head: AtomicUsize, // next write position (producer)
-    tail: AtomicUsize, // next read position (consumer)
-}
-
-// Safety: SpscQueue is designed for single-producer single-consumer use.
-// The producer only writes `head` and buffer slots; the consumer only
-// writes `tail` and reads buffer slots. The AtomicUsize ordering ensures
-// proper happens-before relationships.
-unsafe impl<T: Copy + Send, const N: usize> Send for SpscQueue<T, N> {}
-unsafe impl<T: Copy + Send, const N: usize> Sync for SpscQueue<T, N> {}
-
-impl<T: Copy + Default, const N: usize> SpscQueue<T, N> {
-    /// Create a new empty SPSC queue.
-    ///
-    /// `N` should be a power of two for optimal performance (modular
-    /// arithmetic uses bitwise AND instead of division).
-    pub fn new() -> Self {
-        Self {
-            buffer: std::array::from_fn(|_| UnsafeCell::new(T::default())),
-            head: AtomicUsize::new(0),
-            tail: AtomicUsize::new(0),
-        }
-    }
-}
-
-impl<T: Copy, const N: usize> SpscQueue<T, N> {
-    /// Try to push an item. Returns `Err(item)` if the queue is full.
-    ///
-    /// Only the producer thread should call this.
-    pub fn push(&self, item: T) -> Result<(), T> {
-        let head = self.head.load(Ordering::Relaxed);
-        let tail = self.tail.load(Ordering::Acquire);
-        let next_head = (head + 1) % N;
-
-        if next_head == tail {
-            return Err(item); // full
-        }
-
-        // Safety: only the producer writes to buffer[head], and we have
-        // verified that head != tail (so the slot is not being read).
-        unsafe {
-            *self.buffer[head].get() = item;
-        }
-
-        self.head.store(next_head, Ordering::Release);
-        Ok(())
-    }
-
-    /// Try to pop an item. Returns `None` if the queue is empty.
-    ///
-    /// Only the consumer thread should call this.
-    pub fn pop(&self) -> Option<T> {
-        let tail = self.tail.load(Ordering::Relaxed);
-        let head = self.head.load(Ordering::Acquire);
-
-        if tail == head {
-            return None; // empty
-        }
-
-        // Safety: only the consumer reads from buffer[tail], and we have
-        // verified that tail != head (so the slot has been written).
-        let item = unsafe { *self.buffer[tail].get() };
-
-        self.tail.store((tail + 1) % N, Ordering::Release);
-        Some(item)
-    }
-
-    /// Check if the queue is empty (snapshot -- may be stale).
-    pub fn is_empty(&self) -> bool {
-        self.head.load(Ordering::Acquire) == self.tail.load(Ordering::Acquire)
-    }
-
-    /// Usable capacity (N - 1, since one slot is reserved to distinguish
-    /// full from empty).
-    pub const fn capacity(&self) -> usize {
-        N - 1
-    }
-}
+// SpscQueue is re-exported from audio_common above.
 
 /// Command queue capacity. 64 slots per design doc Section 5.2.
 /// Using 64 (power of two) for efficient modular arithmetic.

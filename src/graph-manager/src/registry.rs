@@ -607,9 +607,19 @@ pub fn register_graph_listener(
     // registry delivers events for links that we just created/destroyed.
     // Without this, create_object() -> global event -> reconcile() -> create_object()
     // forms a feedback loop. Single-threaded, so Cell<bool> is sufficient.
+    //
+    // F-079: dirty flag tracks whether a graph mutation occurred while
+    // reconciliation was running. If so, we re-run reconciliation after
+    // the current one completes to pick up ports that arrived during the
+    // window (e.g., Mixxx out_1 arriving while out_0's links are being
+    // created). Without this, those ports are added to GraphState but
+    // never trigger reconciliation, leaving links permanently missing.
     let reconciling = Rc::new(std::cell::Cell::new(false));
+    let dirty = Rc::new(std::cell::Cell::new(false));
     let reconciling_add = reconciling.clone();
+    let dirty_add = dirty.clone();
     let reconciling_remove = reconciling;
+    let dirty_remove = dirty;
 
     // Core is Clone (Rc-based) — safe to clone into closures on the
     // same PW main loop thread. No WeakCore needed.
@@ -734,8 +744,15 @@ pub fn register_graph_listener(
             // Trigger reconciliation and health update after every graph mutation.
             // Skip if already reconciling (re-entrancy guard: our own link
             // creation triggers global events that re-enter this callback).
+            //
+            // F-079: If a mutation occurs while reconciling, set the dirty
+            // flag so we re-run after the current reconciliation completes.
+            // This handles the case where ports arrive during link creation
+            // (e.g., Mixxx out_1 arrives while out_0's links are being
+            // created). Without this, those ports never trigger reconciliation.
             if mutated && !reconciling_add.get() {
                 reconciling_add.set(true);
+                dirty_add.set(false);
                 let current_mode = *mode_add.borrow();
                 run_reconcile(
                     &g,
@@ -748,7 +765,29 @@ pub fn register_graph_listener(
                     &comp_reg_add,
                     &watchdog_add,
                 );
+                // F-079: If new mutations arrived during reconciliation,
+                // re-run to pick up newly arrived ports/nodes. Loop until
+                // clean to handle cascading arrivals.
+                while dirty_add.get() {
+                    dirty_add.set(false);
+                    let current_mode = *mode_add.borrow();
+                    run_reconcile(
+                        &g,
+                        &table_add,
+                        current_mode,
+                        &core_add,
+                        &reg_handle_add,
+                        &event_tx_add,
+                        &link_proxies_add,
+                        &comp_reg_add,
+                        &watchdog_add,
+                    );
+                }
                 reconciling_add.set(false);
+            } else if mutated && reconciling_add.get() {
+                // F-079: Mark dirty so the outer reconciliation loop
+                // re-runs after the current one completes.
+                dirty_add.set(true);
             }
         })
         .global_remove(move |id| {
@@ -771,8 +810,10 @@ pub fn register_graph_listener(
 
             // Trigger reconciliation and health update after every graph mutation.
             // Skip if already reconciling (re-entrancy guard).
+            // F-079: dirty flag for cascading mutations (same pattern as global).
             if removed && !reconciling_remove.get() {
                 reconciling_remove.set(true);
+                dirty_remove.set(false);
                 let current_mode = *mode_remove.borrow();
                 run_reconcile(
                     &g,
@@ -785,7 +826,24 @@ pub fn register_graph_listener(
                     &comp_reg_remove,
                     &watchdog_remove,
                 );
+                while dirty_remove.get() {
+                    dirty_remove.set(false);
+                    let current_mode = *mode_remove.borrow();
+                    run_reconcile(
+                        &g,
+                        &table_remove,
+                        current_mode,
+                        &core_remove,
+                        &reg_handle_remove,
+                        &event_tx_remove,
+                        &link_proxies_remove,
+                        &comp_reg_remove,
+                        &watchdog_remove,
+                    );
+                }
                 reconciling_remove.set(false);
+            } else if removed && reconciling_remove.get() {
+                dirty_remove.set(true);
             }
         })
         .register();

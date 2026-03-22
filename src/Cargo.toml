@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["audio-common", "pcm-bridge", "signal-gen"]
+exclude = ["graph-manager"]
+
+[profile.release]
+opt-level = 2
+strip = true
+lto = "thin"

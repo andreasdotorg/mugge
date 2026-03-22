@@ -6,6 +6,7 @@ description = "RT signal generator for Pi audio workstation measurement and test
 license = "MIT"
 
 [dependencies]
+audio-common = { path = "../audio-common" }
 pipewire = "0.8"
 pipewire-sys = "0.8"
 libspa = "0.8"
@@ -18,8 +19,3 @@ serde_json = "1"
 rand_xoshiro = "0.7"
 rand_core = "0.9"
 base64 = "0.22"
-
-[profile.release]
-opt-level = 2
-strip = true
-lto = "thin"

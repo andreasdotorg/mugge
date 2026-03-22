@@ -14,7 +14,9 @@
 //! 2. **RPC thread** — TCP listener, JSON parsing, command queue push, state polling
 //! 3. **PW data thread** (PW-managed, SCHED_FIFO) — process callback invoked each quantum
 
-mod capture;
+pub(crate) mod capture {
+    pub use audio_common::capture_ring_buffer::*;
+}
 mod command;
 mod generator;
 mod ramp;
@@ -29,6 +31,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use audio_common::audio_format::build_audio_format;
 use base64::Engine as _;
 use clap::Parser;
 use log::{error, info, warn};
@@ -558,123 +561,7 @@ fn dbfs_to_linear(dbfs: f32) -> f32 {
 // PipeWire playback stream
 // ---------------------------------------------------------------------------
 
-/// Build an SPA audio format pod for stream negotiation as raw bytes.
-///
-/// Port count in PipeWire is driven by the format params passed to
-/// `stream.connect()`, not by the `audio.channels` node property.
-/// Without format params, PipeWire never creates ports and WirePlumber
-/// cannot auto-link the stream (BUG-SG12-5 / TK-236).
-///
-/// `positions` specifies channel position IDs (e.g. AUX0-AUX7 for playback,
-/// MONO for capture). When provided, PipeWire creates per-channel ports that
-/// match the target sink/source topology, enabling WirePlumber auto-linking.
-/// Without positions, PipeWire creates a single interleaved port that cannot
-/// be linked to multi-port targets (TK-236 topology mismatch).
-///
-/// The pod is constructed directly in the SPA wire format because the
-/// `spa_pod_builder_*` C functions are inline and not exposed by bindgen.
-#[allow(non_upper_case_globals)]
-fn build_audio_format(channels: u32, rate: u32, positions: &[u32]) -> Vec<u8> {
-    // SPA pod wire format (all little-endian, 8-byte aligned):
-    //
-    // Pod header:     size:u32, type:u32
-    // Object body:    body_type:u32, body_id:u32
-    // Property:       key:u32, flags:u32, value_pod(size:u32, type:u32, data...)
-    // Array pod:      size:u32, type:u32(=Array), child_size:u32, child_type:u32, elements...
-    //
-    // Constants from spa/utils/type.h and spa/param/format.h
-    // (verified against Pi PipeWire 1.4.10 headers in Nix store):
-    const SPA_TYPE_Id: u32 = 3;       // enum spa_type: None=1, Bool=2, Id=3
-    const SPA_TYPE_Int: u32 = 4;      // Int=4, Long=5, Float=6, Double=7
-    const SPA_TYPE_Array: u32 = 13;   // String=8..Bitmap=12, Array=13
-    const SPA_TYPE_Object: u32 = 15;  // Struct=14, Object=15
-    const SPA_TYPE_OBJECT_Format: u32 = 0x40003; // START=0x40000, PropInfo, Props, Format
-    const SPA_PARAM_EnumFormat: u32 = 3;
-    const SPA_FORMAT_mediaType: u32 = 1;
-    const SPA_FORMAT_mediaSubtype: u32 = 2;
-    const SPA_FORMAT_AUDIO_format: u32 = 0x10001;    // START_Audio + 1
-    const SPA_FORMAT_AUDIO_rate: u32 = 0x10003;      // +3 (flags at +2)
-    const SPA_FORMAT_AUDIO_channels: u32 = 0x10004;  // +4
-    const SPA_FORMAT_AUDIO_position: u32 = 0x10005;  // +5
-    const SPA_MEDIA_TYPE_audio: u32 = 1; // unknown=0, audio=1
-    const SPA_MEDIA_SUBTYPE_raw: u32 = 1;
-    const SPA_AUDIO_FORMAT_F32LE: u32 = 0x11A; // F32_LE in interleaved block
-
-    // 5 scalar properties * 24 bytes + position array property + 16 bytes header.
-    // Position array: 8 (key+flags) + 8 (array pod header) + 8 (child descriptor)
-    //   + 4*N positions, padded to 8-byte alignment.
-    let mut buf = Vec::with_capacity(200);
-
-    // Helper: write a property with an Id value
-    fn write_prop_id(buf: &mut Vec<u8>, key: u32, val: u32) {
-        buf.extend_from_slice(&key.to_le_bytes());    // property key
-        buf.extend_from_slice(&0u32.to_le_bytes());    // property flags
-        buf.extend_from_slice(&4u32.to_le_bytes());    // pod size
-        buf.extend_from_slice(&SPA_TYPE_Id.to_le_bytes()); // pod type
-        buf.extend_from_slice(&val.to_le_bytes());     // value
-        buf.extend_from_slice(&[0u8; 4]);              // pad to 8-byte align
-    }
-
-    // Helper: write a property with an Int value
-    fn write_prop_int(buf: &mut Vec<u8>, key: u32, val: i32) {
-        buf.extend_from_slice(&key.to_le_bytes());
-        buf.extend_from_slice(&0u32.to_le_bytes());
-        buf.extend_from_slice(&4u32.to_le_bytes());    // pod size
-        buf.extend_from_slice(&SPA_TYPE_Int.to_le_bytes()); // pod type
-        buf.extend_from_slice(&val.to_le_bytes());
-        buf.extend_from_slice(&[0u8; 4]);              // pad to 8-byte align
-    }
-
-    // Object pod header (size filled in at end)
-    let header_pos = buf.len();
-    buf.extend_from_slice(&0u32.to_le_bytes());                        // size placeholder
-    buf.extend_from_slice(&SPA_TYPE_Object.to_le_bytes());             // type = Object (15)
-    buf.extend_from_slice(&SPA_TYPE_OBJECT_Format.to_le_bytes());      // body type
-    buf.extend_from_slice(&SPA_PARAM_EnumFormat.to_le_bytes());        // body id
-
-    // Properties
-    write_prop_id(&mut buf, SPA_FORMAT_mediaType, SPA_MEDIA_TYPE_audio);
-    write_prop_id(&mut buf, SPA_FORMAT_mediaSubtype, SPA_MEDIA_SUBTYPE_raw);
-    write_prop_id(&mut buf, SPA_FORMAT_AUDIO_format, SPA_AUDIO_FORMAT_F32LE);
-    write_prop_int(&mut buf, SPA_FORMAT_AUDIO_rate, rate as i32);
-    write_prop_int(&mut buf, SPA_FORMAT_AUDIO_channels, channels as i32);
-
-    // Position array property (TK-236): tells PipeWire which channel each
-    // port represents, enabling per-channel port creation and WirePlumber
-    // auto-linking to matching target ports.
-    if !positions.is_empty() {
-        let n = positions.len() as u32;
-        // Array element size is 4 bytes (Id), child descriptor is 8 bytes.
-        let array_data_size = 8 + n * 4; // child_desc(8) + elements(4*N)
-
-        buf.extend_from_slice(&SPA_FORMAT_AUDIO_position.to_le_bytes()); // property key
-        buf.extend_from_slice(&0u32.to_le_bytes());                       // property flags
-        // Array pod: size includes child descriptor + all elements.
-        buf.extend_from_slice(&array_data_size.to_le_bytes());            // pod size
-        buf.extend_from_slice(&SPA_TYPE_Array.to_le_bytes());             // pod type = Array
-        // Child descriptor: size and type of each element.
-        buf.extend_from_slice(&4u32.to_le_bytes());                       // child size = 4
-        buf.extend_from_slice(&SPA_TYPE_Id.to_le_bytes());                // child type = Id
-        // Elements: one Id per channel position.
-        for &pos in positions {
-            buf.extend_from_slice(&pos.to_le_bytes());
-        }
-        // Pad to 8-byte alignment if needed.
-        let remainder = (n * 4) % 8;
-        if remainder != 0 {
-            let pad = 8 - remainder;
-            for _ in 0..pad {
-                buf.push(0u8);
-            }
-        }
-    }
-
-    // Fill in object body size
-    let body_size = (buf.len() - header_pos - 8) as u32;
-    buf[header_pos..header_pos + 4].copy_from_slice(&body_size.to_le_bytes());
-
-    buf
-}
+// build_audio_format is imported from audio_common::audio_format
 
 /// Channel position constants from spa/param/audio/raw.h.
 /// Used for `audio.position` in stream properties and SPA format pods.
