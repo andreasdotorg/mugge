@@ -110,6 +110,146 @@ BEFORE writing code that touches any consultation topic:
 Do NOT write code first and ask for review after. The advisory model is
 consultation before implementation, not review after.
 
+## Testing Requirements (L-042)
+
+**You MUST run tests before reporting any task as done.** This is non-negotiable.
+
+**Tests are mandatory in the Definition of Done.** Every story requires:
+relevant tests exist, pass, and have been reviewed by QE. A story without
+tests is not done. See `docs/project/testing-process.md` for the full process.
+
+### Before reporting a task complete:
+
+1. **Run the relevant `nix run .#test-*` suite(s)** based on what you changed:
+
+   | Change category | Required suites |
+   |----------------|----------------|
+   | Web UI backend (`src/web-ui/app/`) | `nix run .#test-unit` |
+   | Web UI frontend (`src/web-ui/static/`) | `nix run .#test-unit` + `nix run .#test-e2e` |
+   | Web UI backend + frontend | `nix run .#test-unit` + `nix run .#test-e2e` |
+   | Room correction (`src/room-correction/`) | `nix run .#test-room-correction` |
+   | GraphManager Rust (`src/graph-manager/`) | `cargo test --no-default-features` in `nix develop` |
+   | MIDI daemon (`src/midi/`) | `nix run .#test-all` |
+   | PW/WP configs, systemd, udev | No local test — note "requires Pi validation" |
+   | Multiple categories | All relevant suites |
+
+   **Key rule:** Changes to BOTH frontend and backend require BOTH
+   `test-unit` AND `test-e2e`. A common mistake is running only unit tests
+   when a JS change breaks an E2E assertion.
+
+2. **All tests must pass (exit code 0).** If any test fails, your task is
+   NOT done. The task stays `in_progress` until resolved.
+
+3. **Capture full output.** Include the exact command and complete
+   stdout/stderr in your report.
+
+   **E2E evidence is critical:** E2E tests are NOT in `nix flake check`
+   (Gate 2) because they need Playwright/Chromium. You are the trust
+   boundary for E2E. When frontend changes are involved, your E2E test
+   output in the task report is the only evidence that E2E passes.
+
+4. **Write tests for new functionality.** New features require new tests.
+   Bug fixes require a regression test that would have caught the bug.
+   "No tests needed" is only valid for pure documentation changes.
+
+5. **Report test results to the QE** with the exact command and output.
+
+### No mock theater:
+
+**Tests must test real behavior, not verify that mocks return what they were
+told to return.** Specifically:
+
+- Mocks may ONLY replace external system boundaries (hardware, network, OS
+  services) — never internal application logic
+- A test that only asserts a mock was called, without checking actual output,
+  is not a valid test
+- If changing the implementation would not fail the test, the test is
+  meaningless and must be rewritten
+- Integration tests must exercise real code paths, not mock-wrapped stubs
+- The QE reviews tests for mock theater during Rule 13 approval — mock
+  theater will be rejected
+
+See `docs/project/testing-process.md` Section 3 for the full mock theater
+rules and examples.
+
+### When tests fail:
+
+1. **Do NOT dismiss, skip, delete, or weaken any test** without following
+   the triage process in `docs/project/testing-process.md`.
+
+2. **Report every failure honestly** to the QE with:
+   - The exact test command you ran
+   - The full failure output (traceback, assertion error — not a summary)
+   - Your proposed classification (code bug / test bug / environment gap / flaky)
+   - Your proposed fix
+
+3. **Wait for QE + Architect classification** before proceeding. You propose,
+   they decide.
+
+4. **Any of the following without a tracked defect AND QE approval is a
+   protocol violation:**
+   - Adding `@pytest.mark.skip` or `@pytest.mark.xfail`
+   - Deleting or commenting out a test
+   - Changing an assertion to match incorrect behavior
+   - Reporting done with known failing tests
+   - Writing mock theater (tests that verify mocks, not behavior)
+
+5. **Pre-existing failures are still your responsibility to report.** If a
+   test was already failing before your changes, report it. Do not assume it
+   is someone else's problem.
+
+### Rust code (GraphManager):
+
+If you modify Rust code, run `cargo test --no-default-features` inside
+`nix develop` and report the output to the QE before requesting commit.
+Gate 2 (`nix flake check`) runs both `test-graph-manager` (pure logic) and
+`test-graph-manager-full` (with PipeWire linkage) automatically.
+
+## Code Quality Standards (Owner Directive)
+
+**Code quality is mandatory, not aspirational.** These are requirements, not
+suggestions. The Architect reviews code quality at Rule 13. Code that does
+not meet these standards will be sent back for rework.
+
+### Requirements:
+
+1. **Well-structured code.** Avoid overly long functions and overly long
+   files. Break complex logic into focused, named functions.
+
+2. **No boilerplate.** Use abstraction. Apply DRY. If you see repeated
+   patterns, extract them into shared utilities or base classes.
+
+3. **Aggressive refactoring.** Refactor proactively to maintain quality.
+   Do not let tech debt accumulate. Protect refactorings with test
+   scaffolding — write tests first, then refactor.
+
+4. **Edge case handling.** Always consider all edge cases. Handle them
+   explicitly — do not ignore, defer, or hand-wave them.
+
+5. **Structured, modular logging.** Use log levels correctly (ERROR, WARN,
+   INFO, DEBUG). Include context in every log message. No debug prints in
+   production code. No sensitive data in logs.
+
+6. **File layout best practices.** Follow established project conventions
+   for source organization and deployment file locations.
+
+7. **Timing and race conditions.** Consider concurrency. Identify races.
+   Handle them with appropriate synchronization or documented assumptions.
+
+8. **No antipatterns.** Avoid architectural, safety, and security
+   antipatterns. If you recognize a pattern as problematic, do not use it.
+   When in doubt, consult the Architect or Security Specialist.
+
+### Enforcement:
+
+The **Architect** reviews code quality during Rule 13 approval. If the
+Architect provides feedback, you must address it before the task can be
+marked complete. Code quality feedback cannot be deferred to follow-up
+stories.
+
+See `docs/project/testing-process.md` Section 4 for the full code quality
+standards and the Architect's review criteria.
+
 ## Communication & Responsiveness (L-040)
 
 **Theory of mind:** Other agents (orchestrator, CM, advisors) do NOT see

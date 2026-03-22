@@ -556,11 +556,28 @@ stakeholders before committing — not just the requesting worker.
 
 | Change domain | Required approval from |
 |---------------|-----------------------|
+| All code changes | Quality Engineer (test adequacy) |
+| All code changes | Architect (code quality) |
 | Security-sensitive changes | Security Specialist |
-| Structural / module changes | Architect |
 | Operational changes | Domain Specialist (if present) |
 | Documentation / tracking changes | Project Manager |
 | Multi-domain changes | All relevant approvals above |
+
+**QE test adequacy approval (L-042, owner directive):** The QE reviews
+both the test results (did they pass?) and the tests themselves (are they
+meaningful?). The QE rejects commits where: tests were not run, new code
+has no corresponding tests, tests are mock theater (verify mocks rather
+than behavior), or test failures were dismissed without tracked defects.
+
+**Architect code quality approval (owner directive):** The Architect uses
+the 11-item review checklist in `docs/project/testing-process.md` Section
+4.8. Auto-reject criteria: Mult > 1.0 or D-009 violation (safety),
+subprocess on safety path, non-loopback binding or unsanitized subprocess
+input (security), pure-logic modules with I/O imports (architecture). The
+Architect rejects commits where code quality feedback has not been addressed.
+
+See `docs/project/testing-process.md` for the full testing and code quality
+governance process.
 
 The change-manager MUST independently verify the approval matrix before
 committing. The orchestrator is not exempt from Rule 13. The change-manager
