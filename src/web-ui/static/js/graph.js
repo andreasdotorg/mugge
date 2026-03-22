@@ -1,13 +1,16 @@
 /**
- * D-020 Web UI — Graph view module (US-064).
+ * D-020 Web UI — Graph view module (US-064 Phase 3).
  *
- * Renders PipeWire node topology as static SVG diagrams.
- * Four templates (DJ, Live, Monitoring, Measurement) match the
- * GraphManager routing table modes. Real-time data from /ws/system
- * selects the active template and updates node/link state indicators.
+ * Data-driven rendering from /api/v1/graph/topology.
+ * Fetches topology (nodes, links, internal filter-chain structure) and
+ * renders a left-to-right signal-flow SVG diagram:
+ *   Sources (col 0) -> DSP (col 1) -> Outputs (col 2)
  *
- * Three-column left-to-right signal flow:
- *   Sources (col 1) -> DSP (col 2) -> Outputs (col 3)
+ * The convolver node is expanded to show its internal topology
+ * (convolver + gain nodes from the SPA config parser).
+ *
+ * GM-managed nodes/links are highlighted with brighter borders/colors.
+ * Auto-refreshes at ~2Hz via polling when the graph tab is visible.
  *
  * No external dependencies. Pure SVG + CSS transitions.
  */
@@ -16,37 +19,38 @@
 
 (function () {
 
-    // -- Layout constants (match UX spec) --
+    // -- Layout constants --
 
     var SVG_W = 960;
     var SVG_H = 480;
-    var COL_X = [80, 320, 540, 720];  // source, convolver, gain, output
     var NODE_W = 160;
-    var NODE_W_GAIN = 120;
-    var NODE_W_COMPOUND = 180;
+    var NODE_W_NARROW = 120;
     var HEADER_H = 24;
     var PORT_ROW_H = 22;
     var PORT_PAD = 8;
     var PORT_R = 6;
     var NODE_R = 6;
     var NODE_GAP = 24;
+    var COL_GAP = 180;   // horizontal gap between columns
 
     var NS = "http://www.w3.org/2000/svg";
 
-    // -- Node type colors (from UX spec / dashboard GROUP_COLORS) --
+    // -- Node type colors --
 
     var NODE_COLORS = {
-        app:  "#00838f",
-        dsp:  "#2e7d32",
-        gain: "#1b5e20",
-        hw:   "#c17900",
-        main: "#8a94a4"
+        source: "#00838f",
+        dsp:    "#2e7d32",
+        gain:   "#1b5e20",
+        output: "#c17900",
+        other:  "#8a94a4"
     };
 
     // -- State --
 
-    var currentMode = null;
     var svgEl = null;
+    var pollTimer = null;
+    var lastTopologyJSON = null;
+    var POLL_INTERVAL_MS = 2000;
 
     // -- SVG helpers --
 
@@ -76,65 +80,45 @@
     function buildDefs() {
         var defs = svgCreate("defs");
 
-        // Standard arrowhead (grey)
-        var m1 = svgCreate("marker", {
-            id: "gv-arrow", markerWidth: "8", markerHeight: "6",
-            refX: "8", refY: "3", orient: "auto", markerUnits: "userSpaceOnUse"
-        });
-        var p1 = svgCreate("path", { d: "M0,0 L8,3 L0,6 Z", "class": "gv-arrowhead" });
-        m1.appendChild(p1);
-        defs.appendChild(m1);
+        var markers = [
+            { id: "gv-arrow",      cls: "gv-arrowhead" },
+            { id: "gv-arrow-blue", cls: "gv-arrowhead-blue" },
+            { id: "gv-arrow-red",  cls: "gv-arrowhead-red" },
+            { id: "gv-arrow-gm",   cls: "gv-arrowhead-gm" }
+        ];
 
-        // Blue arrowhead (bypass)
-        var m2 = svgCreate("marker", {
-            id: "gv-arrow-blue", markerWidth: "8", markerHeight: "6",
-            refX: "8", refY: "3", orient: "auto", markerUnits: "userSpaceOnUse"
-        });
-        var p2 = svgCreate("path", { d: "M0,0 L8,3 L0,6 Z", "class": "gv-arrowhead-blue" });
-        m2.appendChild(p2);
-        defs.appendChild(m2);
-
-        // Red arrowhead (failed)
-        var m3 = svgCreate("marker", {
-            id: "gv-arrow-red", markerWidth: "8", markerHeight: "6",
-            refX: "8", refY: "3", orient: "auto", markerUnits: "userSpaceOnUse"
-        });
-        var p3 = svgCreate("path", { d: "M0,0 L8,3 L0,6 Z", "class": "gv-arrowhead-red" });
-        m3.appendChild(p3);
-        defs.appendChild(m3);
+        for (var i = 0; i < markers.length; i++) {
+            var m = svgCreate("marker", {
+                id: markers[i].id, markerWidth: "8", markerHeight: "6",
+                refX: "8", refY: "3", orient: "auto", markerUnits: "userSpaceOnUse"
+            });
+            m.appendChild(svgCreate("path", {
+                d: "M0,0 L8,3 L0,6 Z", "class": markers[i].cls
+            }));
+            defs.appendChild(m);
+        }
 
         return defs;
     }
 
     // -- Node builder --
 
-    /**
-     * Build an SVG node group.
-     * @param {object} opts
-     * @param {string} opts.id       - Element ID (e.g., "gv-node-mixxx")
-     * @param {string} opts.label    - Display name
-     * @param {string} opts.color    - Header bar color key (app/dsp/hw/main)
-     * @param {number} opts.x        - Center x
-     * @param {number} opts.y        - Top y
-     * @param {string[]} opts.inputs - Input port labels (left edge)
-     * @param {string[]} opts.outputs- Output port labels (right edge)
-     * @param {boolean} opts.compound- Use wider compound width
-     * @param {string} opts.state    - "active", "absent", "error", "ghost"
-     * @param {string} opts.ghostText- Text for ghost node
-     * @returns {{g: SVGElement, inputPorts: {label:string, cx:number, cy:number}[], outputPorts: {label:string, cx:number, cy:number}[], width:number, height:number}}
-     */
     function buildNode(opts) {
-        var w = opts.compound ? NODE_W_COMPOUND : (opts.narrow ? NODE_W_GAIN : NODE_W);
-        var maxPorts = Math.max(opts.inputs ? opts.inputs.length : 0, opts.outputs ? opts.outputs.length : 0);
+        var w = opts.narrow ? NODE_W_NARROW : NODE_W;
+        var maxPorts = Math.max(
+            opts.inputs ? opts.inputs.length : 0,
+            opts.outputs ? opts.outputs.length : 0
+        );
         var portAreaH = maxPorts > 0 ? PORT_PAD + maxPorts * PORT_ROW_H + PORT_PAD : 40;
         var h = HEADER_H + portAreaH;
         var x = opts.x - w / 2;
         var y = opts.y;
 
         var stateClass = "gv-node--" + (opts.state || "active");
+        var managedClass = opts.gm_managed ? " gv-node--managed" : "";
         var g = svgCreate("g", {
-            id: opts.id,
-            "class": "gv-node " + stateClass,
+            id: opts.id || "",
+            "class": "gv-node " + stateClass + managedClass,
             transform: "translate(" + x + "," + y + ")"
         });
 
@@ -144,26 +128,26 @@
             x: 0, y: 0, width: w, height: h, rx: NODE_R, ry: NODE_R
         }));
 
-        if (opts.state !== "ghost") {
-            // Header bar (clipped to top corners only via a mask rect)
-            var color = NODE_COLORS[opts.color] || NODE_COLORS.main;
-            g.appendChild(svgCreate("rect", {
-                "class": "gv-node-header",
-                x: 0, y: 0, width: w, height: HEADER_H,
-                rx: NODE_R, ry: NODE_R,
-                fill: color
-            }));
-            // Mask bottom corners of header to be square
-            g.appendChild(svgCreate("rect", {
-                "class": "gv-node-header-mask",
-                x: 0, y: HEADER_H - NODE_R, width: w, height: NODE_R
-            }));
+        // Header bar
+        var color = NODE_COLORS[opts.colorKey] || NODE_COLORS.other;
+        g.appendChild(svgCreate("rect", {
+            "class": "gv-node-header",
+            x: 0, y: 0, width: w, height: HEADER_H,
+            rx: NODE_R, ry: NODE_R,
+            fill: color
+        }));
+        // Mask bottom corners of header
+        g.appendChild(svgCreate("rect", {
+            "class": "gv-node-header-mask",
+            x: 0, y: HEADER_H - NODE_R, width: w, height: NODE_R
+        }));
 
-            // Title
-            g.appendChild(svgText(w / 2, HEADER_H / 2, opts.label, "gv-node-label"));
-        } else {
-            // Ghost node — centered text
-            g.appendChild(svgText(w / 2, h / 2, opts.ghostText || "No source linked", "gv-node-label"));
+        // Title
+        g.appendChild(svgText(w / 2, HEADER_H / 2, opts.label, "gv-node-label"));
+
+        // Sublabel (description)
+        if (opts.sublabel) {
+            g.appendChild(svgText(w / 2, HEADER_H + 14, opts.sublabel, "gv-node-sublabel"));
         }
 
         // Ports
@@ -172,22 +156,19 @@
         var portStartY = HEADER_H + PORT_PAD;
 
         if (opts.inputs && opts.inputs.length > 0) {
-            // If fewer inputs than outputs, center inputs vertically
             var inOffset = 0;
             if (opts.outputs && opts.inputs.length < opts.outputs.length) {
                 inOffset = (opts.outputs.length - opts.inputs.length) * PORT_ROW_H / 2;
             }
             for (var i = 0; i < opts.inputs.length; i++) {
                 var py = portStartY + inOffset + i * PORT_ROW_H + PORT_ROW_H / 2;
-                var cx = 0;
-                var cy = py;
                 g.appendChild(svgCreate("circle", {
                     "class": "gv-port gv-port--input gv-port--idle",
-                    cx: cx, cy: cy, r: PORT_R,
+                    cx: 0, cy: py, r: PORT_R,
                     "data-port": opts.inputs[i]
                 }));
-                g.appendChild(svgText(14, cy, opts.inputs[i], "gv-port-label gv-port-label--input"));
-                inputPorts.push({ label: opts.inputs[i], cx: x + cx, cy: y + cy });
+                g.appendChild(svgText(14, py, opts.inputs[i], "gv-port-label gv-port-label--input"));
+                inputPorts.push({ label: opts.inputs[i], cx: x, cy: y + py });
             }
         }
 
@@ -198,15 +179,13 @@
             }
             for (var j = 0; j < opts.outputs.length; j++) {
                 var py2 = portStartY + outOffset + j * PORT_ROW_H + PORT_ROW_H / 2;
-                var cx2 = w;
-                var cy2 = py2;
                 g.appendChild(svgCreate("circle", {
                     "class": "gv-port gv-port--output gv-port--idle",
-                    cx: cx2, cy: cy2, r: PORT_R,
+                    cx: w, cy: py2, r: PORT_R,
                     "data-port": opts.outputs[j]
                 }));
-                g.appendChild(svgText(w - 14, cy2, opts.outputs[j], "gv-port-label gv-port-label--output"));
-                outputPorts.push({ label: opts.outputs[j], cx: x + cx2, cy: y + cy2 });
+                g.appendChild(svgText(w - 14, py2, opts.outputs[j], "gv-port-label gv-port-label--output"));
+                outputPorts.push({ label: opts.outputs[j], cx: x + w, cy: y + py2 });
             }
         }
 
@@ -228,606 +207,209 @@
         return svgCreate("path", attrs);
     }
 
-    function buildBypassArc(x1, y1, x2, y2, yOffset) {
-        var midX = (x1 + x2) / 2;
-        var midY = (y1 + y2) / 2 + yOffset;
-        var d = "M " + x1 + " " + y1 +
-                " Q " + midX + " " + midY + " " + x2 + " " + y2;
-        return svgCreate("path", {
-            d: d,
-            "class": "gv-bypass-arc",
-            "marker-end": "url(#gv-arrow-blue)"
-        });
+    // -- Node classification --
+
+    function classifyNode(node) {
+        var mc = (node.media_class || "").toLowerCase();
+        if (mc.indexOf("stream/output") !== -1) return "source";
+        if (mc.indexOf("stream/input") !== -1) return "source";
+        if (mc === "audio/sink" && node.name === "pi4audio-convolver") return "dsp";
+        if (mc === "audio/sink") return "output";
+        if (mc === "audio/source") return "output";
+        // Fallback: skip GraphManager-like nodes that don't produce audio
+        if (node.name && node.name.indexOf("graphmanager") !== -1) return "skip";
+        return "other";
     }
 
-    function buildYJunction(x, y) {
-        return svgCreate("circle", {
-            "class": "gv-yjunction",
-            cx: x, cy: y, r: 5
-        });
+    function colorKeyForClass(cls) {
+        if (cls === "source") return "source";
+        if (cls === "dsp") return "dsp";
+        if (cls === "output") return "output";
+        return "other";
     }
 
-    // -- Helper: vertically center a stack of nodes --
+    // -- Internal topology expansion --
 
-    function stackNodes(nodes) {
-        var totalH = 0;
-        for (var i = 0; i < nodes.length; i++) {
-            totalH += nodes[i].height;
-            if (i > 0) totalH += NODE_GAP;
-        }
-        var startY = (SVG_H - totalH) / 2;
-        var y = startY;
-        for (var j = 0; j < nodes.length; j++) {
-            nodes[j].y = y;
-            y += nodes[j].height + NODE_GAP;
-        }
-    }
-
-    // -- Gain node labels and IDs --
-
-    var GAIN_NODES = [
-        { id: "gv-node-gain-left-hp",  label: "Gain L HP",  shortLabel: "L HP" },
-        { id: "gv-node-gain-right-hp", label: "Gain R HP",  shortLabel: "R HP" },
-        { id: "gv-node-gain-sub1-lp",  label: "Gain Sub1",  shortLabel: "Sub1" },
-        { id: "gv-node-gain-sub2-lp",  label: "Gain Sub2",  shortLabel: "Sub2" }
-    ];
-
-    // -- Helper: build the four gain nodes stacked vertically --
-
-    function buildGainColumn(x, centerY) {
-        var gainH = HEADER_H + PORT_PAD + 1 * PORT_ROW_H + PORT_PAD;
-        var totalH = 4 * gainH + 3 * NODE_GAP;
-        var startY = centerY - totalH / 2;
+    function buildInternalColumn(internal, parentX, parentY, parentW) {
+        // internal = {nodes, links, inputs, outputs}
+        // Build two sub-columns within the DSP column:
+        //   convolver nodes (left) and gain nodes (right)
+        var convolvers = [];
         var gains = [];
-        for (var i = 0; i < 4; i++) {
-            var gy = startY + i * (gainH + NODE_GAP);
-            var g = buildNode({
-                id: GAIN_NODES[i].id, label: GAIN_NODES[i].label, color: "gain",
-                x: x, y: gy,
-                inputs: ["in"], outputs: ["out"],
-                narrow: true, state: "active"
+        var nodesByName = {};
+
+        for (var i = 0; i < internal.nodes.length; i++) {
+            var n = internal.nodes[i];
+            nodesByName[n.name] = n;
+            if (n.label === "convolver") {
+                convolvers.push(n);
+            } else if (n.label === "linear") {
+                gains.push(n);
+            }
+        }
+
+        // Layout: convolvers on left sub-column, gains on right sub-column
+        var subColGap = 160;
+        var convX = parentX - subColGap / 2;
+        var gainX = parentX + subColGap / 2;
+
+        var builtConvs = [];
+        var builtGains = [];
+
+        // Stack convolvers vertically
+        var convTotalH = convolvers.length * (HEADER_H + PORT_PAD + PORT_ROW_H + PORT_PAD) +
+                         (convolvers.length - 1) * NODE_GAP;
+        var convStartY = parentY - convTotalH / 2;
+
+        for (var c = 0; c < convolvers.length; c++) {
+            var cy = convStartY + c * (HEADER_H + PORT_PAD + PORT_ROW_H + PORT_PAD + NODE_GAP);
+            var cn = buildNode({
+                id: "gv-int-" + convolvers[c].name,
+                label: convolvers[c].name.replace("conv_", "").replace("_", " "),
+                colorKey: "dsp",
+                x: convX, y: cy,
+                inputs: ["In"], outputs: ["Out"],
+                state: "active",
+                gm_managed: true
             });
-            gains.push(g);
+            builtConvs.push({ node: cn, name: convolvers[c].name });
         }
-        return gains;
+
+        // Stack gains vertically (same y positions as convolvers)
+        var gainTotalH = gains.length * (HEADER_H + PORT_PAD + PORT_ROW_H + PORT_PAD) +
+                         (gains.length - 1) * NODE_GAP;
+        var gainStartY = parentY - gainTotalH / 2;
+
+        for (var g = 0; g < gains.length; g++) {
+            var gy = gainStartY + g * (HEADER_H + PORT_PAD + PORT_ROW_H + PORT_PAD + NODE_GAP);
+            var mult = "";
+            if (gains[g].control && gains[g].control.Mult !== undefined) {
+                var multVal = gains[g].control.Mult;
+                if (multVal > 0) {
+                    var db = 20 * Math.log10(multVal);
+                    mult = db.toFixed(1) + " dB";
+                } else {
+                    mult = "-inf dB";
+                }
+            }
+            var gn = buildNode({
+                id: "gv-int-" + gains[g].name,
+                label: gains[g].name.replace("gain_", "").replace("_", " "),
+                sublabel: mult,
+                colorKey: "gain",
+                x: gainX, y: gy,
+                inputs: ["In"], outputs: ["Out"],
+                narrow: true,
+                state: "active",
+                gm_managed: true
+            });
+            builtGains.push({ node: gn, name: gains[g].name });
+        }
+
+        // Build internal links (convolver Out -> gain In)
+        var intLinks = [];
+        for (var li = 0; li < internal.links.length; li++) {
+            var lnk = internal.links[li];
+            var srcBuilt = findBuiltNode(builtConvs, builtGains, lnk.output_node);
+            var dstBuilt = findBuiltNode(builtConvs, builtGains, lnk.input_node);
+            if (srcBuilt && dstBuilt) {
+                var outPort = findPort(srcBuilt.node.outputPorts, lnk.output_port);
+                var inPort = findPort(dstBuilt.node.inputPorts, lnk.input_port);
+                if (outPort && inPort) {
+                    intLinks.push(buildLink(
+                        outPort.cx, outPort.cy,
+                        inPort.cx, inPort.cy,
+                        "gv-link--connected gv-link--managed", "gv-arrow-gm"
+                    ));
+                }
+            }
+        }
+
+        // Build entry/exit port maps for link routing
+        var entryPorts = {};  // port index -> input port of first convolver node
+        for (var ei = 0; ei < internal.inputs.length; ei++) {
+            var inp = internal.inputs[ei];
+            var entryBuilt = findBuiltNode(builtConvs, builtGains, inp.node);
+            if (entryBuilt) {
+                var ep = findPort(entryBuilt.node.inputPorts, inp.port);
+                if (ep) entryPorts[ei] = ep;
+            }
+        }
+
+        var exitPorts = {};  // port index -> output port of last gain node
+        for (var xi = 0; xi < internal.outputs.length; xi++) {
+            var outp = internal.outputs[xi];
+            var exitBuilt = findBuiltNode(builtConvs, builtGains, outp.node);
+            if (exitBuilt) {
+                var xp = findPort(exitBuilt.node.outputPorts, outp.port);
+                if (xp) exitPorts[xi] = xp;
+            }
+        }
+
+        return {
+            convNodes: builtConvs,
+            gainNodes: builtGains,
+            internalLinks: intLinks,
+            entryPorts: entryPorts,
+            exitPorts: exitPorts,
+            convX: convX,
+            gainX: gainX
+        };
     }
 
-    // -- Template: Monitoring --
-
-    function buildMonitoringTemplate() {
-        var group = svgCreate("g", { "class": "gv-template-group" });
-
-        // Calculate node heights first for centering
-        var ghostH = 72; // fixed ghost height
-        var convMaxPorts = 4;
-        var convH = HEADER_H + PORT_PAD + convMaxPorts * PORT_ROW_H + PORT_PAD;
-        var usbPorts = 8;
-        var usbH = HEADER_H + PORT_PAD + usbPorts * PORT_ROW_H + PORT_PAD;
-
-        var centerY = SVG_H / 2;
-
-        // Ghost node (col 0)
-        var ghost = buildNode({
-            id: "gv-node-ghost", label: "No source linked", color: "main",
-            x: COL_X[0], y: centerY - ghostH / 2,
-            inputs: [], outputs: [],
-            state: "ghost", ghostText: "No source linked"
-        });
-
-        // Convolver (col 1)
-        var conv = buildNode({
-            id: "gv-node-convolver", label: "Convolver", color: "dsp",
-            x: COL_X[1], y: centerY - convH / 2,
-            inputs: ["AUX0", "AUX1", "AUX2", "AUX3"],
-            outputs: ["out0", "out1", "out2", "out3"],
-            state: "active"
-        });
-
-        // Gain nodes (col 2)
-        var gains = buildGainColumn(COL_X[2], centerY);
-
-        // USBStreamer (col 3)
-        var usb = buildNode({
-            id: "gv-node-usbstreamer", label: "USBStreamer", color: "hw",
-            x: COL_X[3], y: centerY - usbH / 2,
-            inputs: ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"],
-            outputs: [],
-            state: "active"
-        });
-
-        // Links (behind nodes)
-        var linksGroup = svgCreate("g");
-
-        // Convolver out0-3 -> Gain in
-        for (var i = 0; i < 4; i++) {
-            linksGroup.appendChild(buildLink(
-                conv.outputPorts[i].cx, conv.outputPorts[i].cy,
-                gains[i].inputPorts[0].cx, gains[i].inputPorts[0].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
+    function findBuiltNode(convs, gains, name) {
+        for (var i = 0; i < convs.length; i++) {
+            if (convs[i].name === name) return convs[i];
         }
-
-        // Gain out -> USBStreamer ch1-4
-        for (var j = 0; j < 4; j++) {
-            linksGroup.appendChild(buildLink(
-                gains[j].outputPorts[0].cx, gains[j].outputPorts[0].cy,
-                usb.inputPorts[j].cx, usb.inputPorts[j].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
+        for (var j = 0; j < gains.length; j++) {
+            if (gains[j].name === name) return gains[j];
         }
-
-        // Append: links first, then nodes (SVG painter's model)
-        group.appendChild(linksGroup);
-        group.appendChild(ghost.g);
-        group.appendChild(conv.g);
-        for (var k = 0; k < 4; k++) group.appendChild(gains[k].g);
-        group.appendChild(usb.g);
-
-        return group;
+        return null;
     }
 
-    // -- Template: DJ --
-
-    function buildDjTemplate() {
-        var group = svgCreate("g", { "class": "gv-template-group" });
-
-        // Node heights
-        var mixxxOuts = ["L", "R", "HP L", "HP R"];
-        var convIns = ["AUX0", "AUX1", "AUX2", "AUX3"];
-        var convOuts = ["out0", "out1", "out2", "out3"];
-        var usbIns = ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"];
-
-        var mixxxH = HEADER_H + PORT_PAD + mixxxOuts.length * PORT_ROW_H + PORT_PAD;
-        var convH = HEADER_H + PORT_PAD + Math.max(convIns.length, convOuts.length) * PORT_ROW_H + PORT_PAD;
-        var usbH = HEADER_H + PORT_PAD + usbIns.length * PORT_ROW_H + PORT_PAD;
-
-        var centerY = SVG_H / 2;
-        var mixxxY = centerY - mixxxH / 2;
-        var convY = centerY - convH / 2;
-        var usbY = centerY - usbH / 2;
-
-        // Mixxx (col 0)
-        var mixxx = buildNode({
-            id: "gv-node-mixxx", label: "Mixxx", color: "app",
-            x: COL_X[0], y: mixxxY,
-            inputs: [], outputs: mixxxOuts,
-            state: "active"
-        });
-
-        // Convolver (col 1)
-        var conv = buildNode({
-            id: "gv-node-convolver", label: "Convolver", color: "dsp",
-            x: COL_X[1], y: convY,
-            inputs: convIns, outputs: convOuts,
-            state: "active"
-        });
-
-        // Gain nodes (col 2)
-        var gains = buildGainColumn(COL_X[2], centerY);
-
-        // USBStreamer (col 3)
-        var usb = buildNode({
-            id: "gv-node-usbstreamer", label: "USBStreamer", color: "hw",
-            x: COL_X[3], y: usbY,
-            inputs: usbIns, outputs: [],
-            state: "active"
-        });
-
-        // Normal links (behind nodes)
-        var linksGroup = svgCreate("g");
-
-        // Mixxx L -> Convolver AUX0 (left main)
-        linksGroup.appendChild(buildLink(
-            mixxx.outputPorts[0].cx, mixxx.outputPorts[0].cy,
-            conv.inputPorts[0].cx, conv.inputPorts[0].cy,
-            "gv-link--connected", "gv-arrow"
-        ));
-
-        // Mixxx R -> Convolver AUX1 (right main)
-        linksGroup.appendChild(buildLink(
-            mixxx.outputPorts[1].cx, mixxx.outputPorts[1].cy,
-            conv.inputPorts[1].cx, conv.inputPorts[1].cy,
-            "gv-link--connected", "gv-arrow"
-        ));
-
-        // Y-junction: Mixxx L+R -> Convolver AUX2 (sub1)
-        var jx1 = (COL_X[0] + NODE_W / 2 + COL_X[1] - NODE_W / 2) / 2;
-        var jy1 = conv.inputPorts[2].cy;
-        linksGroup.appendChild(buildLink(
-            mixxx.outputPorts[0].cx, mixxx.outputPorts[0].cy,
-            jx1, jy1, "gv-link--connected", null
-        ));
-        linksGroup.appendChild(buildLink(
-            mixxx.outputPorts[1].cx, mixxx.outputPorts[1].cy,
-            jx1, jy1, "gv-link--connected", null
-        ));
-        linksGroup.appendChild(buildYJunction(jx1, jy1));
-        linksGroup.appendChild(buildLink(
-            jx1, jy1,
-            conv.inputPorts[2].cx, conv.inputPorts[2].cy,
-            "gv-link--connected", "gv-arrow"
-        ));
-
-        // Y-junction: Mixxx L+R -> Convolver AUX3 (sub2)
-        var jy2 = conv.inputPorts[3].cy;
-        linksGroup.appendChild(buildLink(
-            mixxx.outputPorts[0].cx, mixxx.outputPorts[0].cy,
-            jx1, jy2, "gv-link--connected", null
-        ));
-        linksGroup.appendChild(buildLink(
-            mixxx.outputPorts[1].cx, mixxx.outputPorts[1].cy,
-            jx1, jy2, "gv-link--connected", null
-        ));
-        linksGroup.appendChild(buildYJunction(jx1, jy2));
-        linksGroup.appendChild(buildLink(
-            jx1, jy2,
-            conv.inputPorts[3].cx, conv.inputPorts[3].cy,
-            "gv-link--connected", "gv-arrow"
-        ));
-
-        // Convolver -> Gain nodes
-        for (var i = 0; i < 4; i++) {
-            linksGroup.appendChild(buildLink(
-                conv.outputPorts[i].cx, conv.outputPorts[i].cy,
-                gains[i].inputPorts[0].cx, gains[i].inputPorts[0].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
+    function findPort(ports, label) {
+        for (var i = 0; i < ports.length; i++) {
+            if (ports[i].label === label) return ports[i];
         }
-
-        // Gain nodes -> USBStreamer ch1-4
-        for (var g = 0; g < 4; g++) {
-            linksGroup.appendChild(buildLink(
-                gains[g].outputPorts[0].cx, gains[g].outputPorts[0].cy,
-                usb.inputPorts[g].cx, usb.inputPorts[g].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
+        // Fallback: match by substring
+        for (var j = 0; j < ports.length; j++) {
+            if (label.indexOf(ports[j].label) !== -1 || ports[j].label.indexOf(label) !== -1) {
+                return ports[j];
+            }
         }
-
-        // Bypass arcs (rendered AFTER nodes so they appear on top — F-054)
-        var bypassGroup = svgCreate("g", { "class": "gv-bypass-group" });
-
-        // Bypass: Mixxx HP L -> USBStreamer ch5 (arc above)
-        bypassGroup.appendChild(buildBypassArc(
-            mixxx.outputPorts[2].cx, mixxx.outputPorts[2].cy,
-            usb.inputPorts[4].cx, usb.inputPorts[4].cy,
-            -60
-        ));
-
-        // Bypass: Mixxx HP R -> USBStreamer ch6 (arc above)
-        bypassGroup.appendChild(buildBypassArc(
-            mixxx.outputPorts[3].cx, mixxx.outputPorts[3].cy,
-            usb.inputPorts[5].cx, usb.inputPorts[5].cy,
-            -60
-        ));
-
-        // Append order: links, nodes, bypass arcs (painter's model)
-        group.appendChild(linksGroup);
-        group.appendChild(mixxx.g);
-        group.appendChild(conv.g);
-        for (var k = 0; k < 4; k++) group.appendChild(gains[k].g);
-        group.appendChild(usb.g);
-        group.appendChild(bypassGroup);
-
-        return group;
+        return ports.length > 0 ? ports[0] : null;
     }
 
-    // -- Template: Live --
+    // -- Port name extraction from node --
 
-    function buildLiveTemplate() {
-        var group = svgCreate("g", { "class": "gv-template-group" });
-
-        // ADA8200 in col 0 (capture input device)
-        var adaOuts = ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"];
-
-        // Reaper (compound: 8 in + 6 out)
-        var reaperIns = ["in1", "in2", "in3", "in4", "in5", "in6", "in7", "in8"];
-        var reaperOuts = ["out1", "out2", "HP L", "HP R", "IEM L", "IEM R"];
-
-        var convIns = ["AUX0", "AUX1", "AUX2", "AUX3"];
-        var convOuts = ["out0", "out1", "out2", "out3"];
-        var usbIns = ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"];
-
-        // Live has 5 columns: ADA8200, Reaper, Convolver, Gain, USBStreamer
-        var adaX = 50;
-        var reaperX = 220;
-        var convX = 420;
-        var gainX = 580;
-        var usbX = 740;
-
-        var centerY = SVG_H / 2;
-
-        // Heights
-        var adaH = HEADER_H + PORT_PAD + adaOuts.length * PORT_ROW_H + PORT_PAD;
-        var reaperH = HEADER_H + PORT_PAD + Math.max(reaperIns.length, reaperOuts.length) * PORT_ROW_H + PORT_PAD;
-        var convH = HEADER_H + PORT_PAD + convIns.length * PORT_ROW_H + PORT_PAD;
-        var usbH = HEADER_H + PORT_PAD + usbIns.length * PORT_ROW_H + PORT_PAD;
-
-        var adaY = centerY - adaH / 2;
-        var reaperY = centerY - reaperH / 2;
-        var convY = centerY - convH / 2;
-        var usbY = centerY - usbH / 2;
-
-        // ADA8200 (far left)
-        var ada = buildNode({
-            id: "gv-node-ada8200", label: "ADA8200", color: "hw",
-            x: adaX, y: adaY,
-            inputs: [], outputs: adaOuts,
-            state: "active"
-        });
-
-        // Reaper (compound)
-        var reaper = buildNode({
-            id: "gv-node-reaper", label: "Reaper", color: "app",
-            x: reaperX, y: reaperY,
-            inputs: reaperIns, outputs: reaperOuts,
-            compound: true, state: "active"
-        });
-
-        // Convolver
-        var conv = buildNode({
-            id: "gv-node-convolver", label: "Convolver", color: "dsp",
-            x: convX, y: convY,
-            inputs: convIns, outputs: convOuts,
-            state: "active"
-        });
-
-        // Gain nodes
-        var gains = buildGainColumn(gainX, centerY);
-
-        // USBStreamer
-        var usb = buildNode({
-            id: "gv-node-usbstreamer", label: "USBStreamer", color: "hw",
-            x: usbX, y: usbY,
-            inputs: usbIns, outputs: [],
-            state: "active"
-        });
-
-        // Normal links (behind nodes)
-        var linksGroup = svgCreate("g");
-
-        // ADA8200 ch1-8 -> Reaper in1-8
-        for (var i = 0; i < 8; i++) {
-            linksGroup.appendChild(buildLink(
-                ada.outputPorts[i].cx, ada.outputPorts[i].cy,
-                reaper.inputPorts[i].cx, reaper.inputPorts[i].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
+    function guessInputPorts(node) {
+        // For the convolver node with internal topology, use the internal inputs
+        if (node.internal && node.internal.inputs) {
+            return node.internal.inputs.map(function (p) {
+                return p.port || p.node;
+            });
         }
-
-        // Reaper out1 -> Convolver AUX0 (left main)
-        linksGroup.appendChild(buildLink(
-            reaper.outputPorts[0].cx, reaper.outputPorts[0].cy,
-            conv.inputPorts[0].cx, conv.inputPorts[0].cy,
-            "gv-link--connected", "gv-arrow"
-        ));
-
-        // Reaper out2 -> Convolver AUX1 (right main)
-        linksGroup.appendChild(buildLink(
-            reaper.outputPorts[1].cx, reaper.outputPorts[1].cy,
-            conv.inputPorts[1].cx, conv.inputPorts[1].cy,
-            "gv-link--connected", "gv-arrow"
-        ));
-
-        // Y-junction: Reaper out1+out2 -> Convolver AUX2 (sub1)
-        var jx = (reaperX + NODE_W_COMPOUND / 2 + convX - NODE_W / 2) / 2;
-        var jy1 = conv.inputPorts[2].cy;
-        linksGroup.appendChild(buildLink(
-            reaper.outputPorts[0].cx, reaper.outputPorts[0].cy,
-            jx, jy1, "gv-link--connected", null
-        ));
-        linksGroup.appendChild(buildLink(
-            reaper.outputPorts[1].cx, reaper.outputPorts[1].cy,
-            jx, jy1, "gv-link--connected", null
-        ));
-        linksGroup.appendChild(buildYJunction(jx, jy1));
-        linksGroup.appendChild(buildLink(
-            jx, jy1,
-            conv.inputPorts[2].cx, conv.inputPorts[2].cy,
-            "gv-link--connected", "gv-arrow"
-        ));
-
-        // Y-junction: Reaper out1+out2 -> Convolver AUX3 (sub2)
-        var jy2 = conv.inputPorts[3].cy;
-        linksGroup.appendChild(buildLink(
-            reaper.outputPorts[0].cx, reaper.outputPorts[0].cy,
-            jx, jy2, "gv-link--connected", null
-        ));
-        linksGroup.appendChild(buildLink(
-            reaper.outputPorts[1].cx, reaper.outputPorts[1].cy,
-            jx, jy2, "gv-link--connected", null
-        ));
-        linksGroup.appendChild(buildYJunction(jx, jy2));
-        linksGroup.appendChild(buildLink(
-            jx, jy2,
-            conv.inputPorts[3].cx, conv.inputPorts[3].cy,
-            "gv-link--connected", "gv-arrow"
-        ));
-
-        // Convolver -> Gain nodes
-        for (var c = 0; c < 4; c++) {
-            linksGroup.appendChild(buildLink(
-                conv.outputPorts[c].cx, conv.outputPorts[c].cy,
-                gains[c].inputPorts[0].cx, gains[c].inputPorts[0].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
-        }
-
-        // Gain nodes -> USBStreamer ch1-4
-        for (var g = 0; g < 4; g++) {
-            linksGroup.appendChild(buildLink(
-                gains[g].outputPorts[0].cx, gains[g].outputPorts[0].cy,
-                usb.inputPorts[g].cx, usb.inputPorts[g].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
-        }
-
-        // Bypass arcs (rendered AFTER nodes — F-054)
-        var bypassGroup = svgCreate("g", { "class": "gv-bypass-group" });
-
-        // Bypass: Reaper HP L -> USBStreamer ch5 (arc above)
-        bypassGroup.appendChild(buildBypassArc(
-            reaper.outputPorts[2].cx, reaper.outputPorts[2].cy,
-            usb.inputPorts[4].cx, usb.inputPorts[4].cy,
-            -60
-        ));
-
-        // Bypass: Reaper HP R -> USBStreamer ch6 (arc above)
-        bypassGroup.appendChild(buildBypassArc(
-            reaper.outputPorts[3].cx, reaper.outputPorts[3].cy,
-            usb.inputPorts[5].cx, usb.inputPorts[5].cy,
-            -60
-        ));
-
-        // Bypass: Reaper IEM L -> USBStreamer ch7 (arc below)
-        bypassGroup.appendChild(buildBypassArc(
-            reaper.outputPorts[4].cx, reaper.outputPorts[4].cy,
-            usb.inputPorts[6].cx, usb.inputPorts[6].cy,
-            60
-        ));
-
-        // Bypass: Reaper IEM R -> USBStreamer ch8 (arc below)
-        bypassGroup.appendChild(buildBypassArc(
-            reaper.outputPorts[5].cx, reaper.outputPorts[5].cy,
-            usb.inputPorts[7].cx, usb.inputPorts[7].cy,
-            60
-        ));
-
-        // Append order: links, nodes, bypass arcs (painter's model)
-        group.appendChild(linksGroup);
-        group.appendChild(ada.g);
-        group.appendChild(reaper.g);
-        group.appendChild(conv.g);
-        for (var k = 0; k < 4; k++) group.appendChild(gains[k].g);
-        group.appendChild(usb.g);
-        group.appendChild(bypassGroup);
-
-        return group;
+        // Generic: number ports based on media_class
+        var mc = (node.media_class || "").toLowerCase();
+        if (mc.indexOf("sink") !== -1) return ["in_0", "in_1"];
+        return [];
     }
 
-    // -- Template: Measurement --
-
-    function buildMeasurementTemplate() {
-        var group = svgCreate("g", { "class": "gv-template-group" });
-
-        // 5 columns: UMIK-1, Signal-gen, Convolver, Gain, USBStreamer
-        var umikX = 50;
-        var siggenX = 200;
-        var convX = 400;
-        var gainX = 570;
-        var usbX = 740;
-
-        var siggenIns = ["mic"];
-        var siggenOuts = ["ch0", "ch1", "ch2", "ch3"];
-        var convIns = ["AUX0", "AUX1", "AUX2", "AUX3"];
-        var convOuts = ["out0", "out1", "out2", "out3"];
-        var usbIns = ["ch1", "ch2", "ch3", "ch4"];
-
-        // Heights
-        var umikH = HEADER_H + PORT_PAD + 1 * PORT_ROW_H + PORT_PAD;
-        var siggenH = HEADER_H + PORT_PAD + Math.max(siggenIns.length, siggenOuts.length) * PORT_ROW_H + PORT_PAD;
-        var convH = HEADER_H + PORT_PAD + convIns.length * PORT_ROW_H + PORT_PAD;
-        var usbH = HEADER_H + PORT_PAD + usbIns.length * PORT_ROW_H + PORT_PAD;
-
-        var centerY = SVG_H / 2;
-
-        var umikY = centerY - umikH / 2;
-        var siggenY = centerY - siggenH / 2;
-        var convY = centerY - convH / 2;
-        var usbY = centerY - usbH / 2;
-
-        // UMIK-1 (absent by default until device detected)
-        var umik = buildNode({
-            id: "gv-node-umik1", label: "UMIK-1", color: "hw",
-            x: umikX, y: umikY,
-            inputs: [], outputs: ["capture"],
-            state: "absent"
-        });
-
-        // Signal-gen (compound)
-        var siggen = buildNode({
-            id: "gv-node-siggen", label: "Signal Gen", color: "app",
-            x: siggenX, y: siggenY,
-            inputs: siggenIns, outputs: siggenOuts,
-            compound: true, state: "active"
-        });
-
-        // Convolver
-        var conv = buildNode({
-            id: "gv-node-convolver", label: "Convolver", color: "dsp",
-            x: convX, y: convY,
-            inputs: convIns, outputs: convOuts,
-            state: "active"
-        });
-
-        // Gain nodes
-        var gains = buildGainColumn(gainX, centerY);
-
-        // USBStreamer
-        var usb = buildNode({
-            id: "gv-node-usbstreamer", label: "USBStreamer", color: "hw",
-            x: usbX, y: usbY,
-            inputs: usbIns, outputs: [],
-            state: "active"
-        });
-
-        // Links
-        var linksGroup = svgCreate("g");
-
-        // UMIK-1 capture -> Signal-gen mic (missing until UMIK-1 connected)
-        linksGroup.appendChild(buildLink(
-            umik.outputPorts[0].cx, umik.outputPorts[0].cy,
-            siggen.inputPorts[0].cx, siggen.inputPorts[0].cy,
-            "gv-link--missing", "gv-arrow"
-        ));
-
-        // Signal-gen ch0-3 -> Convolver AUX0-3
-        for (var i = 0; i < 4; i++) {
-            linksGroup.appendChild(buildLink(
-                siggen.outputPorts[i].cx, siggen.outputPorts[i].cy,
-                conv.inputPorts[i].cx, conv.inputPorts[i].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
+    function guessOutputPorts(node) {
+        if (node.internal && node.internal.outputs) {
+            return node.internal.outputs.map(function (p) {
+                return p.port || p.node;
+            });
         }
-
-        // Convolver -> Gain nodes
-        for (var j = 0; j < 4; j++) {
-            linksGroup.appendChild(buildLink(
-                conv.outputPorts[j].cx, conv.outputPorts[j].cy,
-                gains[j].inputPorts[0].cx, gains[j].inputPorts[0].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
-        }
-
-        // Gain nodes -> USBStreamer ch1-4
-        for (var g = 0; g < 4; g++) {
-            linksGroup.appendChild(buildLink(
-                gains[g].outputPorts[0].cx, gains[g].outputPorts[0].cy,
-                usb.inputPorts[g].cx, usb.inputPorts[g].cy,
-                "gv-link--connected", "gv-arrow"
-            ));
-        }
-
-        // Append order: links, nodes (painter's model)
-        group.appendChild(linksGroup);
-        group.appendChild(umik.g);
-        group.appendChild(siggen.g);
-        group.appendChild(conv.g);
-        for (var k = 0; k < 4; k++) group.appendChild(gains[k].g);
-        group.appendChild(usb.g);
-
-        return group;
+        var mc = (node.media_class || "").toLowerCase();
+        if (mc.indexOf("stream/output") !== -1) return ["out_0", "out_1"];
+        if (mc.indexOf("source") !== -1) return ["out_0", "out_1"];
+        return [];
     }
 
-    // -- Template selection --
+    // -- Topology rendering --
 
-    var templates = {
-        monitoring: buildMonitoringTemplate,
-        dj: buildDjTemplate,
-        live: buildLiveTemplate,
-        measurement: buildMeasurementTemplate
-    };
-
-    function renderTemplate(mode) {
+    function renderTopology(data) {
         if (!svgEl) return;
 
         // Clear existing content (keep defs)
@@ -838,28 +420,385 @@
             }
         }
 
+        var group = svgCreate("g", { "class": "gv-template-group" });
+
         // Mode label
-        var modeLabel = svgText(12, 18, (mode || "").toUpperCase(), "gv-mode-label");
+        var modeLabel = svgText(12, 18, (data.mode || "").toUpperCase(), "gv-mode-label");
         modeLabel.id = "gv-mode-label";
         svgEl.appendChild(modeLabel);
 
-        // Build template
-        var builderFn = templates[mode];
-        if (builderFn) {
-            var templateGroup = builderFn();
-            svgEl.appendChild(templateGroup);
+        // Classify nodes into columns
+        var sources = [];
+        var dspNodes = [];
+        var outputs = [];
+        var nodeMap = {};  // id -> node data
+
+        for (var n = 0; n < data.nodes.length; n++) {
+            var node = data.nodes[n];
+            nodeMap[node.id] = node;
+            var cls = classifyNode(node);
+            if (cls === "source") sources.push(node);
+            else if (cls === "dsp") dspNodes.push(node);
+            else if (cls === "output") outputs.push(node);
+            // skip "skip" and "other" nodes
         }
 
-        currentMode = mode;
+        // If no DSP nodes found but we have a convolver in nodes, it should be DSP
+        // (this handles edge cases where media_class might differ)
+
+        // Calculate column X positions
+        var hasInternal = false;
+        for (var di = 0; di < dspNodes.length; di++) {
+            if (dspNodes[di].internal) { hasInternal = true; break; }
+        }
+
+        var colX;
+        if (hasInternal) {
+            // 4 sub-columns: source, conv, gain, output
+            colX = [80, 280, 440, 640];
+        } else {
+            // 3 columns: source, dsp, output
+            colX = [80, 320, 560];
+        }
+
+        var centerY = SVG_H / 2;
+
+        // Build source nodes
+        var builtSources = [];
+        var srcTotalH = 0;
+        for (var s = 0; s < sources.length; s++) {
+            var src = sources[s];
+            var srcOuts = collectPortNames(data.links, src.id, "output");
+            if (srcOuts.length === 0) srcOuts = ["out_0", "out_1"];
+            var srcH = HEADER_H + PORT_PAD + Math.max(1, srcOuts.length) * PORT_ROW_H + PORT_PAD;
+            srcTotalH += srcH + (s > 0 ? NODE_GAP : 0);
+        }
+        var srcY = centerY - srcTotalH / 2;
+        for (var s2 = 0; s2 < sources.length; s2++) {
+            var src2 = sources[s2];
+            var srcOuts2 = collectPortNames(data.links, src2.id, "output");
+            if (srcOuts2.length === 0) srcOuts2 = ["out_0", "out_1"];
+            var built = buildNode({
+                id: "gv-node-" + src2.id,
+                label: src2.description || src2.name,
+                colorKey: "source",
+                x: colX[0], y: srcY,
+                inputs: [],
+                outputs: srcOuts2,
+                state: src2.state === "running" ? "active" : "absent",
+                gm_managed: src2.gm_managed
+            });
+            builtSources.push({ data: src2, built: built });
+            srcY += built.height + NODE_GAP;
+        }
+
+        // Build output nodes
+        var builtOutputs = [];
+        var outTotalH = 0;
+        for (var o = 0; o < outputs.length; o++) {
+            var out = outputs[o];
+            var outIns = collectPortNames(data.links, out.id, "input");
+            if (outIns.length === 0) outIns = ["in_0", "in_1"];
+            var outH = HEADER_H + PORT_PAD + Math.max(1, outIns.length) * PORT_ROW_H + PORT_PAD;
+            outTotalH += outH + (o > 0 ? NODE_GAP : 0);
+        }
+        var outY = centerY - outTotalH / 2;
+        var outColIdx = hasInternal ? 3 : 2;
+        for (var o2 = 0; o2 < outputs.length; o2++) {
+            var out2 = outputs[o2];
+            var outIns2 = collectPortNames(data.links, out2.id, "input");
+            if (outIns2.length === 0) outIns2 = ["in_0", "in_1"];
+            var builtOut = buildNode({
+                id: "gv-node-" + out2.id,
+                label: out2.description || out2.name,
+                colorKey: "output",
+                x: colX[outColIdx], y: outY,
+                inputs: outIns2,
+                outputs: [],
+                state: out2.state === "running" ? "active" : "absent",
+                gm_managed: out2.gm_managed
+            });
+            builtOutputs.push({ data: out2, built: builtOut });
+            outY += builtOut.height + NODE_GAP;
+        }
+
+        // Build DSP nodes (with internal expansion)
+        var builtDsp = [];
+        var internalExpansion = null;
+
+        for (var d = 0; d < dspNodes.length; d++) {
+            var dsp = dspNodes[d];
+            if (dsp.internal && hasInternal) {
+                // Expand internal topology into convolver + gain sub-columns
+                var intCenterY = centerY;
+                internalExpansion = buildInternalColumn(
+                    dsp.internal, (colX[1] + colX[2]) / 2, intCenterY, NODE_W
+                );
+                builtDsp.push({ data: dsp, internal: internalExpansion });
+            } else {
+                // Simple DSP node
+                var dspIns = collectPortNames(data.links, dsp.id, "input");
+                var dspOuts = collectPortNames(data.links, dsp.id, "output");
+                if (dspIns.length === 0) dspIns = guessInputPorts(dsp);
+                if (dspOuts.length === 0) dspOuts = guessOutputPorts(dsp);
+                var dspIdx = hasInternal ? 1 : 1;
+                var builtDspNode = buildNode({
+                    id: "gv-node-" + dsp.id,
+                    label: dsp.description || dsp.name,
+                    colorKey: "dsp",
+                    x: colX[dspIdx], y: centerY - 60,
+                    inputs: dspIns,
+                    outputs: dspOuts,
+                    state: dsp.state === "running" ? "active" : "absent",
+                    gm_managed: dsp.gm_managed
+                });
+                builtDsp.push({ data: dsp, built: builtDspNode });
+            }
+        }
+
+        // Build links layer
+        var linksGroup = svgCreate("g");
+
+        for (var li = 0; li < data.links.length; li++) {
+            var link = data.links[li];
+            var linkCls = "gv-link--connected";
+            var markerId = "gv-arrow";
+
+            if (link.state === "error" || link.state === "failed") {
+                linkCls = "gv-link--failed";
+                markerId = "gv-arrow-red";
+            }
+
+            if (link.gm_managed) {
+                linkCls += " gv-link--managed";
+                if (markerId === "gv-arrow") markerId = "gv-arrow-gm";
+            }
+
+            // Resolve source port
+            var srcPort = resolveOutputPort(
+                link.output_node, link.output_port,
+                builtSources, builtDsp, builtOutputs, internalExpansion
+            );
+            // Resolve destination port
+            var dstPort = resolveInputPort(
+                link.input_node, link.input_port,
+                builtSources, builtDsp, builtOutputs, internalExpansion
+            );
+
+            if (srcPort && dstPort) {
+                linksGroup.appendChild(buildLink(
+                    srcPort.cx, srcPort.cy,
+                    dstPort.cx, dstPort.cy,
+                    linkCls, markerId
+                ));
+            }
+        }
+
+        // Append in SVG painter's order: links, then nodes
+        group.appendChild(linksGroup);
+
+        // Append source nodes
+        for (var as = 0; as < builtSources.length; as++) {
+            group.appendChild(builtSources[as].built.g);
+        }
+
+        // Append DSP nodes (or internal expansion)
+        for (var ad = 0; ad < builtDsp.length; ad++) {
+            if (builtDsp[ad].internal) {
+                var ie = builtDsp[ad].internal;
+                // Internal links
+                for (var il = 0; il < ie.internalLinks.length; il++) {
+                    group.appendChild(ie.internalLinks[il]);
+                }
+                // Convolver nodes
+                for (var ic = 0; ic < ie.convNodes.length; ic++) {
+                    group.appendChild(ie.convNodes[ic].node.g);
+                }
+                // Gain nodes
+                for (var ig = 0; ig < ie.gainNodes.length; ig++) {
+                    group.appendChild(ie.gainNodes[ig].node.g);
+                }
+            } else if (builtDsp[ad].built) {
+                group.appendChild(builtDsp[ad].built.g);
+            }
+        }
+
+        // Append output nodes
+        for (var ao = 0; ao < builtOutputs.length; ao++) {
+            group.appendChild(builtOutputs[ao].built.g);
+        }
+
+        svgEl.appendChild(group);
+
+        // Device status badge on mode label
+        var devicesOk = true;
+        if (data.devices) {
+            for (var dk in data.devices) {
+                if (data.devices[dk] !== "present") devicesOk = false;
+            }
+        }
+        if (!devicesOk) {
+            modeLabel.setAttribute("fill", "#e5453a");
+        }
+
         fitViewBox();
     }
+
+    // -- Port collection from link data --
+
+    function collectPortNames(links, nodeId, direction) {
+        var names = [];
+        var seen = {};
+        for (var i = 0; i < links.length; i++) {
+            var lnk = links[i];
+            var name;
+            if (direction === "output" && lnk.output_node === nodeId) {
+                name = lnk.output_port;
+            } else if (direction === "input" && lnk.input_node === nodeId) {
+                name = lnk.input_port;
+            } else {
+                continue;
+            }
+            if (name && !seen[name]) {
+                seen[name] = true;
+                names.push(name);
+            }
+        }
+        return names;
+    }
+
+    // -- Port resolution for link routing --
+
+    function resolveOutputPort(nodeId, portName, sources, dspList, outputs, internal) {
+        // Check if this is a DSP node with internal expansion
+        for (var d = 0; d < dspList.length; d++) {
+            if (dspList[d].data.id === nodeId && dspList[d].internal) {
+                // Route through internal exit ports
+                var ie = dspList[d].internal;
+                // Find matching exit port by index or name
+                for (var xi in ie.exitPorts) {
+                    var ep = ie.exitPorts[xi];
+                    if (portMatchesIndex(portName, parseInt(xi))) {
+                        return ep;
+                    }
+                }
+                // Fallback: try gain node output ports directly
+                for (var gi = 0; gi < ie.gainNodes.length; gi++) {
+                    var gn = ie.gainNodes[gi];
+                    if (portName.indexOf(gn.name.replace("gain_", "")) !== -1 ||
+                        portMatchesIndex(portName, gi)) {
+                        return gn.node.outputPorts[0];
+                    }
+                }
+                return ie.exitPorts[0] || null;
+            }
+            if (dspList[d].data.id === nodeId && dspList[d].built) {
+                return findPortByName(dspList[d].built.outputPorts, portName);
+            }
+        }
+
+        // Check sources
+        for (var s = 0; s < sources.length; s++) {
+            if (sources[s].data.id === nodeId) {
+                return findPortByName(sources[s].built.outputPorts, portName);
+            }
+        }
+
+        // Check outputs (unusual but possible)
+        for (var o = 0; o < outputs.length; o++) {
+            if (outputs[o].data.id === nodeId) {
+                return findPortByName(outputs[o].built.outputPorts, portName);
+            }
+        }
+
+        return null;
+    }
+
+    function resolveInputPort(nodeId, portName, sources, dspList, outputs, internal) {
+        // Check DSP nodes with internal expansion
+        for (var d = 0; d < dspList.length; d++) {
+            if (dspList[d].data.id === nodeId && dspList[d].internal) {
+                var ie = dspList[d].internal;
+                // Route through internal entry ports
+                for (var ei in ie.entryPorts) {
+                    var ep = ie.entryPorts[ei];
+                    if (portMatchesIndex(portName, parseInt(ei))) {
+                        return ep;
+                    }
+                }
+                // Fallback: try convolver node input ports directly
+                for (var ci = 0; ci < ie.convNodes.length; ci++) {
+                    var cn = ie.convNodes[ci];
+                    if (portName.indexOf(cn.name.replace("conv_", "")) !== -1 ||
+                        portMatchesIndex(portName, ci)) {
+                        return cn.node.inputPorts[0];
+                    }
+                }
+                return ie.entryPorts[0] || null;
+            }
+            if (dspList[d].data.id === nodeId && dspList[d].built) {
+                return findPortByName(dspList[d].built.inputPorts, portName);
+            }
+        }
+
+        // Check outputs
+        for (var o = 0; o < outputs.length; o++) {
+            if (outputs[o].data.id === nodeId) {
+                return findPortByName(outputs[o].built.inputPorts, portName);
+            }
+        }
+
+        // Check sources (unusual but possible)
+        for (var s = 0; s < sources.length; s++) {
+            if (sources[s].data.id === nodeId) {
+                return findPortByName(sources[s].built.inputPorts, portName);
+            }
+        }
+
+        return null;
+    }
+
+    function findPortByName(ports, name) {
+        if (!ports || ports.length === 0) return null;
+        for (var i = 0; i < ports.length; i++) {
+            if (ports[i].label === name) return ports[i];
+        }
+        // Try substring match
+        for (var j = 0; j < ports.length; j++) {
+            if (name.indexOf(ports[j].label) !== -1 || ports[j].label.indexOf(name) !== -1) {
+                return ports[j];
+            }
+        }
+        // Try index extraction from port name (e.g., "input_0" -> index 0)
+        var idx = extractPortIndex(name);
+        if (idx !== null && idx < ports.length) {
+            return ports[idx];
+        }
+        return null;
+    }
+
+    function portMatchesIndex(portName, idx) {
+        var portIdx = extractPortIndex(portName);
+        return portIdx === idx;
+    }
+
+    function extractPortIndex(name) {
+        var m = name.match(/(\d+)$/);
+        if (m) return parseInt(m[1], 10);
+        // AUX0..AUX3 style
+        m = name.match(/AUX(\d+)/i);
+        if (m) return parseInt(m[1], 10);
+        return null;
+    }
+
+    // -- ViewBox fitting --
 
     function fitViewBox() {
         if (!svgEl) return;
         try {
             var bbox = svgEl.getBBox();
             if (bbox.width > 0 && bbox.height > 0) {
-                var pad = 12;
+                var pad = 16;
                 var vbX = Math.max(0, bbox.x - pad);
                 var vbY = Math.max(0, bbox.y - pad);
                 var vbW = bbox.width + pad * 2;
@@ -867,169 +806,41 @@
                 svgEl.setAttribute("viewBox", vbX + " " + vbY + " " + vbW + " " + vbH);
             }
         } catch (e) {
-            // getBBox fails if SVG not visible (display: none)
+            // getBBox fails if SVG not visible
         }
     }
 
-    // -- GM node name constants (from routing.rs, architect spec) --
+    // -- Topology polling --
 
-    var GM_NODES = {
-        mixxx:          { match: "prefix", pattern: "Mixxx" },
-        reaper:         { match: "prefix", pattern: "REAPER" },
-        convolver:      { match: "exact",  pattern: "pi4audio-convolver" },
-        convolverOut:   { match: "exact",  pattern: "pi4audio-convolver-out" },
-        gainLeftHp:     { match: "exact",  pattern: "gain_left_hp" },
-        gainRightHp:    { match: "exact",  pattern: "gain_right_hp" },
-        gainSub1Lp:     { match: "exact",  pattern: "gain_sub1_lp" },
-        gainSub2Lp:     { match: "exact",  pattern: "gain_sub2_lp" },
-        usbPlayback:    { match: "prefix", pattern: "alsa_output.usb-MiniDSP_USBStreamer" },
-        siggen:         { match: "exact",  pattern: "pi4audio-signal-gen" },
-        siggenCapture:  { match: "exact",  pattern: "pi4audio-signal-gen-capture" },
-        ada8200:        { match: "exact",  pattern: "ada8200-in" },
-        umik1:          { match: "prefix", pattern: "alsa_input.usb-miniDSP_UMIK-1" }
-    };
-
-    // Map SVG node IDs to GM node name matchers
-    var NODE_ID_TO_GM = {
-        "gv-node-mixxx":          [GM_NODES.mixxx],
-        "gv-node-reaper":         [GM_NODES.reaper],
-        "gv-node-convolver":      [GM_NODES.convolver, GM_NODES.convolverOut],
-        "gv-node-gain-left-hp":   [GM_NODES.gainLeftHp],
-        "gv-node-gain-right-hp":  [GM_NODES.gainRightHp],
-        "gv-node-gain-sub1-lp":   [GM_NODES.gainSub1Lp],
-        "gv-node-gain-sub2-lp":   [GM_NODES.gainSub2Lp],
-        "gv-node-usbstreamer":    [GM_NODES.usbPlayback],
-        "gv-node-siggen":         [GM_NODES.siggen, GM_NODES.siggenCapture],
-        "gv-node-ada8200":        [GM_NODES.ada8200],
-        "gv-node-umik1":          [GM_NODES.umik1]
-    };
-
-    // Map device keys (from GM get_state devices) to SVG node IDs
-    var DEVICE_TO_NODE = {
-        usbstreamer:      "gv-node-usbstreamer",
-        umik1:            "gv-node-umik1",
-        convolver:        "gv-node-convolver",
-        "convolver-out":  "gv-node-convolver",
-        "gain_left_hp":   "gv-node-gain-left-hp",
-        "gain_right_hp":  "gv-node-gain-right-hp",
-        "gain_sub1_lp":   "gv-node-gain-sub1-lp",
-        "gain_sub2_lp":   "gv-node-gain-sub2-lp"
-    };
-
-    function gmNodeMatch(gmName, matcher) {
-        if (matcher.match === "exact") return gmName === matcher.pattern;
-        return gmName.indexOf(matcher.pattern) === 0;
-    }
-
-    // -- Data handler (from /ws/system) --
-
-    function onSystemData(data) {
-        // Prefer new graph section; fall back to legacy camilladsp fields
-        var graph = data.graph || null;
-        var mode;
-        if (graph) {
-            mode = graph.mode || "monitoring";
-        } else {
-            mode = data.mode || (data.camilladsp && data.camilladsp.gm_mode) || "monitoring";
-        }
-
-        if (mode !== currentMode) {
-            renderTemplate(mode);
-        }
-
-        if (graph) {
-            updateDeviceStates(graph.devices || {});
-            updateLinkStates(graph.link_details || []);
-        } else {
-            updateLegacyStates(data.camilladsp || {});
-        }
-    }
-
-    function updateDeviceStates(devices) {
-        for (var devKey in DEVICE_TO_NODE) {
-            var nodeId = DEVICE_TO_NODE[devKey];
-            var el = document.getElementById(nodeId);
-            if (!el) continue;
-            var status = devices[devKey] || "unknown";
-            el.classList.remove("gv-node--active", "gv-node--absent", "gv-node--error");
-            if (status === "present" || status === "connected") {
-                el.classList.add("gv-node--active");
-            } else {
-                el.classList.add("gv-node--absent");
-            }
-        }
-    }
-
-    function updateLinkStates(links) {
-        if (!svgEl) return;
-
-        // Reset all ports to idle
-        var ports = svgEl.querySelectorAll(".gv-port");
-        for (var p = 0; p < ports.length; p++) {
-            ports[p].classList.remove("gv-port--connected");
-            ports[p].classList.add("gv-port--idle");
-        }
-
-        // Mark active ports and track health
-        var hasMissing = false;
-        for (var i = 0; i < links.length; i++) {
-            var lnk = links[i];
-            if (lnk.status === "missing" || lnk.status === "failed") {
-                hasMissing = true;
-            }
-            if (lnk.status === "active") {
-                markPortConnected(lnk.output_node, lnk.output_port, "output");
-                markPortConnected(lnk.input_node, lnk.input_port, "input");
-            }
-        }
-
-        // Mode label turns red if any links missing/failed
-        var modeLabel = document.getElementById("gv-mode-label");
-        if (modeLabel) {
-            modeLabel.setAttribute("fill", hasMissing ? "#e5453a" : "");
-        }
-    }
-
-    function markPortConnected(nodeName, portName, direction) {
-        for (var nodeId in NODE_ID_TO_GM) {
-            var matchers = NODE_ID_TO_GM[nodeId];
-            var matched = false;
-            for (var m = 0; m < matchers.length; m++) {
-                if (gmNodeMatch(nodeName, matchers[m])) { matched = true; break; }
-            }
-            if (!matched) continue;
-
-            var nodeEl = document.getElementById(nodeId);
-            if (!nodeEl) continue;
-
-            var portClass = direction === "input" ? "gv-port--input" : "gv-port--output";
-            var portEls = nodeEl.querySelectorAll("." + portClass);
-            for (var p = 0; p < portEls.length; p++) {
-                var dp = portEls[p].getAttribute("data-port");
-                if (dp && (portName.indexOf(dp) !== -1 || dp.indexOf(portName) !== -1)) {
-                    portEls[p].classList.remove("gv-port--idle");
-                    portEls[p].classList.add("gv-port--connected");
+    function fetchTopology() {
+        var url = "/api/v1/graph/topology";
+        fetch(url)
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                return resp.json();
+            })
+            .then(function (data) {
+                var json = JSON.stringify(data);
+                if (json !== lastTopologyJSON) {
+                    lastTopologyJSON = json;
+                    renderTopology(data);
                 }
-            }
-        }
+            })
+            .catch(function (err) {
+                // Silently retry on next poll
+            });
     }
 
-    function updateLegacyStates(cdsp) {
-        var convEl = document.getElementById("gv-node-convolver");
-        if (convEl) {
-            var convStatus = cdsp.gm_convolver || "unknown";
-            convEl.classList.remove("gv-node--active", "gv-node--absent", "gv-node--error");
-            if (convStatus === "present" || convStatus === "connected") {
-                convEl.classList.add("gv-node--active");
-            } else {
-                convEl.classList.add("gv-node--absent");
-            }
-        }
+    function startPolling() {
+        if (pollTimer) return;
+        fetchTopology();
+        pollTimer = setInterval(fetchTopology, POLL_INTERVAL_MS);
+    }
 
-        var missing = cdsp.gm_links_missing || 0;
-        var modeLabel = document.getElementById("gv-mode-label");
-        if (modeLabel) {
-            modeLabel.setAttribute("fill", missing > 0 ? "#e5453a" : "");
+    function stopPolling() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
         }
     }
 
@@ -1038,40 +849,23 @@
     function init() {
         svgEl = document.getElementById("gv-svg");
         if (!svgEl) return;
-
-        // Add marker definitions
         svgEl.appendChild(buildDefs());
-
-        // Render default template (monitoring)
-        renderTemplate("monitoring");
     }
 
     function onShow() {
-        // Re-render current template in case data changed while hidden
-        if (currentMode) {
-            renderTemplate(currentMode);
-        }
-        // Fit viewBox now that SVG is visible (getBBox needs display != none)
-        fitViewBox();
+        startPolling();
     }
 
     function onHide() {
-        // Nothing to stop (no animation loop)
+        stopPolling();
     }
 
-    // -- Register --
-    // View for lifecycle; global consumer for /ws/system data.
-    // system.js owns the /ws/system WebSocket connection.
-    // Global consumer receives dispatched data without opening a second socket.
+    // -- Register view --
 
     PiAudio.registerView("graph", {
         init: init,
         onShow: onShow,
         onHide: onHide
-    });
-
-    PiAudio.registerGlobalConsumer("graph", {
-        onSystem: onSystemData
     });
 
 })();

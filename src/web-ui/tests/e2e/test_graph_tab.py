@@ -1,12 +1,12 @@
-"""End-to-end Playwright tests for the Graph tab (US-064).
+"""End-to-end Playwright tests for the Graph tab (US-064 Phase 3).
 
 Verifies:
     - Graph tab visibility and navigation
-    - SVG element renders with content
+    - SVG element renders with content from /api/v1/graph/topology
     - Mode label present in SVG
-    - Mock mode provides graph data via /ws/system
+    - Data-driven nodes and links render from topology API
     - Responsive: SVG scales at 600px without overflow
-    - Node elements present in default (monitoring) template
+    - GM-managed nodes highlighted
 """
 
 import re
@@ -33,10 +33,10 @@ def _switch_tab(page, view_name: str):
     )
 
 
-def _wait_for_ws_data(page, timeout_ms=5000):
-    """Wait until WebSocket delivers data (DSP state is no longer '--')."""
+def _wait_for_graph_render(page, timeout_ms=5000):
+    """Wait until the graph topology has been fetched and rendered."""
     page.wait_for_function(
-        "document.getElementById('sb-dsp-state').textContent !== '--'",
+        "document.querySelectorAll('#gv-svg .gv-node').length > 0",
         timeout=timeout_ms,
     )
 
@@ -92,8 +92,8 @@ class TestSvgRendering:
     def test_svg_has_viewbox(self, page):
         """SVG element has a viewBox attribute after rendering."""
         _switch_tab(page, "graph")
-        # Wait for graph.js init and fitViewBox()
-        page.wait_for_timeout(500)
+        _wait_for_graph_render(page)
+        page.wait_for_timeout(300)
         vb = page.locator("#gv-svg").get_attribute("viewBox")
         assert vb is not None, "SVG should have a viewBox attribute"
         parts = vb.strip().split()
@@ -109,64 +109,62 @@ class TestSvgRendering:
     def test_mode_label_present(self, page):
         """Mode label text element exists in the SVG."""
         _switch_tab(page, "graph")
-        _wait_for_ws_data(page)
-        page.wait_for_timeout(500)
+        _wait_for_graph_render(page)
         label = page.locator("#gv-mode-label")
         expect(label).to_be_attached()
 
     def test_template_group_present(self, page):
         """Template group element renders inside SVG."""
         _switch_tab(page, "graph")
-        page.wait_for_timeout(500)
+        _wait_for_graph_render(page)
         groups = page.locator("#gv-svg .gv-template-group")
         assert groups.count() >= 1, "SVG should contain at least one template group"
 
 
 # ---------------------------------------------------------------------------
-# 3. Mock Mode Graph Data
+# 3. Data-Driven Topology Rendering
 # ---------------------------------------------------------------------------
 
 
-class TestMockGraphData:
-    """Mock backend provides graph data that drives template rendering."""
+class TestTopologyRendering:
+    """Topology API data drives node and link rendering."""
 
-    def test_default_mode_renders_template(self, page):
-        """Default scenario renders a template (monitoring or dj)."""
+    def test_nodes_rendered(self, page):
+        """At least one node renders from topology API data."""
         _switch_tab(page, "graph")
-        _wait_for_ws_data(page)
-        # Give time for onSystemData to trigger renderTemplate
-        page.wait_for_timeout(1000)
+        _wait_for_graph_render(page)
 
-        # Should have at least one node group
         nodes = page.locator("#gv-svg .gv-node")
-        assert nodes.count() >= 1, "Template should render at least one node"
-
-    def test_convolver_node_present(self, page):
-        """Convolver node (gv-node-convolver) renders in default template."""
-        _switch_tab(page, "graph")
-        _wait_for_ws_data(page)
-        page.wait_for_timeout(1000)
-
-        conv = page.locator("#gv-node-convolver")
-        expect(conv).to_be_attached()
-
-    def test_usbstreamer_node_present(self, page):
-        """USBStreamer node (gv-node-usbstreamer) renders in default template."""
-        _switch_tab(page, "graph")
-        _wait_for_ws_data(page)
-        page.wait_for_timeout(1000)
-
-        usb = page.locator("#gv-node-usbstreamer")
-        expect(usb).to_be_attached()
+        assert nodes.count() >= 1, "Should render at least one node from topology"
 
     def test_links_rendered(self, page):
-        """SVG contains link path elements (gv-link class)."""
+        """SVG contains link path elements from topology data."""
         _switch_tab(page, "graph")
-        _wait_for_ws_data(page)
-        page.wait_for_timeout(1000)
+        _wait_for_graph_render(page)
 
         links = page.locator("#gv-svg .gv-link")
-        assert links.count() >= 1, "Template should render at least one link"
+        assert links.count() >= 1, "Should render at least one link from topology"
+
+    def test_gm_managed_nodes_highlighted(self, page):
+        """GM-managed nodes have the gv-node--managed CSS class."""
+        _switch_tab(page, "graph")
+        _wait_for_graph_render(page)
+
+        managed = page.locator("#gv-svg .gv-node--managed")
+        assert managed.count() >= 1, "Should have at least one GM-managed node"
+
+    def test_internal_topology_expanded(self, page):
+        """Convolver internal topology shows convolver + gain sub-nodes."""
+        _switch_tab(page, "graph")
+        _wait_for_graph_render(page)
+
+        # Internal nodes have IDs starting with gv-int-
+        internal_nodes = page.evaluate("""() => {
+            const nodes = document.querySelectorAll('#gv-svg [id^="gv-int-"]');
+            return nodes.length;
+        }""")
+        assert internal_nodes >= 4, \
+            f"Should have at least 4 internal nodes (convolvers + gains), got {internal_nodes}"
 
 
 # ---------------------------------------------------------------------------
@@ -186,9 +184,8 @@ class TestResponsiveGraph:
               lambda msg: console_errors.append(msg.text)
               if msg.type == "error" else None)
         pg.goto(page.url)
-        _wait_for_ws_data(pg)
         _switch_tab(pg, "graph")
-        pg.wait_for_timeout(1000)
+        _wait_for_graph_render(pg)
 
         svg = pg.locator("#gv-svg")
         expect(svg).to_be_visible()
@@ -199,7 +196,7 @@ class TestResponsiveGraph:
         assert not real_errors, f"JS errors at 1920px: {real_errors}"
 
     def test_graph_at_600(self, page, browser):
-        """At 600px, graph SVG fits without horizontal overflow."""
+        """At 600px, graph SVG keeps min-width for readable text (F-080)."""
         ctx = browser.new_context(viewport={"width": 600, "height": 800})
         pg = ctx.new_page()
         console_errors = []
@@ -207,19 +204,27 @@ class TestResponsiveGraph:
               lambda msg: console_errors.append(msg.text)
               if msg.type == "error" else None)
         pg.goto(page.url)
-        _wait_for_ws_data(pg)
         _switch_tab(pg, "graph")
-        pg.wait_for_timeout(1000)
+        _wait_for_graph_render(pg)
 
         svg = pg.locator("#gv-svg")
         expect(svg).to_be_visible()
 
-        # Check no horizontal overflow on the graph container
-        overflow = pg.evaluate("""() => {
-            const container = document.querySelector('.gv-container');
-            return container.scrollWidth > container.clientWidth;
+        # F-080: SVG has min-width to keep text readable; container scrolls
+        svg_width = pg.evaluate("""() => {
+            const svg = document.querySelector('#gv-svg');
+            return svg.getBoundingClientRect().width;
         }""")
-        assert not overflow, "Graph container overflows horizontally at 600px"
+        assert svg_width >= 700, \
+            f"SVG should have min-width >= 700px for readability, got {svg_width}"
+
+        # Container allows horizontal scroll (overflow-x: auto)
+        overflow_style = pg.evaluate("""() => {
+            const container = document.querySelector('.gv-container');
+            return window.getComputedStyle(container).overflowX;
+        }""")
+        assert overflow_style == "auto", \
+            f"Container should have overflow-x: auto, got {overflow_style}"
 
         # SVG should still have content (nodes rendered)
         nodes = pg.locator("#gv-svg .gv-node")
@@ -236,7 +241,7 @@ class TestResponsiveGraph:
         pg = ctx.new_page()
         pg.goto(page.url)
         _switch_tab(pg, "graph")
-        pg.wait_for_timeout(500)
+        _wait_for_graph_render(pg)
 
         # Check that port labels have display: none via media query
         hidden = pg.evaluate("""() => {
@@ -257,8 +262,7 @@ class TestGraphScreenshots:
     """Capture screenshots for visual inspection."""
 
     def test_monitoring_template_screenshot(self, page):
-        """Screenshot of the graph in monitoring mode."""
+        """Screenshot of the graph in default mode."""
         _switch_tab(page, "graph")
-        _wait_for_ws_data(page)
-        page.wait_for_timeout(1000)
+        _wait_for_graph_render(page)
         _screenshot(page, "graph-monitoring-1920x1080.png")

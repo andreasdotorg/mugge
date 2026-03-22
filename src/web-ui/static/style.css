@@ -2232,14 +2232,15 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     padding: 8px;
 }
 
 .gv-svg {
     width: 100%;
     height: auto;
-    max-width: 100%;
+    min-width: 700px;
     max-height: 100%;
 }
 
@@ -2329,6 +2330,17 @@ html, body {
     font-style: italic;
     font-size: 12px;
     fill-opacity: 0.4;
+}
+
+/* GM-managed highlighting */
+
+.gv-node--managed .gv-node-rect {
+    stroke: var(--green);
+    stroke-width: 2;
+}
+
+.gv-link--managed {
+    stroke: var(--green);
 }
 
 /* -- Ports -- */
@@ -2439,6 +2451,10 @@ html, body {
 
 .gv-arrowhead-red {
     fill: var(--red);
+}
+
+.gv-arrowhead-gm {
+    fill: var(--green);
 }
 
 /* -- Fade transitions for mode switching -- */

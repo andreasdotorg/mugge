@@ -38,7 +38,7 @@ _DEFAULT_SPA_CONFIG = pathlib.Path(
 
 # Fallback: repo-local config for development/testing.
 _REPO_SPA_CONFIG = (
-    pathlib.Path(__file__).resolve().parents[2]
+    pathlib.Path(__file__).resolve().parents[3]
     / "configs/pipewire/30-filter-chain-convolver.conf"
 )
 
