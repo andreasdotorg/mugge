@@ -48,13 +48,13 @@ async def pw_dump() -> list | None:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15.0)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)
         if proc.returncode != 0:
             log.error("pw-dump failed: %s", stderr.decode().strip())
             return None
         return json.loads(stdout)
     except asyncio.TimeoutError:
-        log.error("pw-dump timed out (15s)")
+        log.error("pw-dump timed out (30s)")
         return None
     except (FileNotFoundError, json.JSONDecodeError) as exc:
         log.error("pw-dump error: %s", exc)
