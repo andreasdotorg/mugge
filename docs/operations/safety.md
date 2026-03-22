@@ -392,6 +392,114 @@ safety (Section 1). The audio path remains connected; only the gain is zeroed.
 
 ---
 
+## 9. ALSA Device Lockout and Filter-Chain Watchdog (US-044)
+
+**Threat model:** A process bypasses the PipeWire filter-chain convolver and
+sends audio directly to the USBStreamer ALSA device. The audio reaches the
+4x450W amplifier chain without crossover filtering, gain attenuation, or
+driver protection -- risking speaker damage and hearing injury.
+
+This threat is addressed by a four-layer defense-in-depth architecture.
+
+### Layer 1: PipeWire Exclusive ALSA Hold
+
+PipeWire's static adapters (`20-usbstreamer.conf`, `21-usbstreamer-playback.conf`)
+hold the USBStreamer ALSA device open continuously. Any other process attempting
+`open()` on the ALSA device node receives `EBUSY`. This is the primary defense
+and blocks all bypass attempts while PipeWire is running.
+
+**Residual risk:** When PipeWire is stopped or restarting, the ALSA device is
+momentarily available. Layer 2 covers this gap.
+
+### Layer 2: udev Device Permissions
+
+The udev rule `99-usbstreamer-lockout.rules` restricts USBStreamer ALSA device
+nodes to `OWNER=ela MODE=0600`:
+
+- **Locked:** `pcmC{X}D0p` (playback) and `controlC{X}` (mixer control)
+- **Not locked:** `pcmC{X}D0c` (capture -- needed for measurement, no safety risk)
+
+This ensures that even when PipeWire is down, only the `ela` user (who runs
+PipeWire) can open the playback device. Other users and system services receive
+`EACCES`.
+
+**Residual risk:** A process running as `ela` can still open the device when
+PipeWire is down. This is an accepted risk -- the `ela` user is the operator.
+
+### Layer 3: WirePlumber Node Deny Policy
+
+The Lua policy script `deny-usbstreamer-alsa.lua` (loaded by
+`53-deny-usbstreamer-alsa.conf`) monitors all PipeWire node creation events.
+Any node targeting the USBStreamer ALSA device that is not a whitelisted static
+adapter (`ada8200-in`, `alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0`)
+is immediately destroyed via `node:request_destroy()`.
+
+This catches edge cases where a PipeWire client (e.g., `pw-cli`, a misbehaving
+application) creates an unauthorized node targeting the USBStreamer within the
+PipeWire graph.
+
+### Layer 4: Filter-Chain Watchdog (T-044-4)
+
+The GraphManager's watchdog (`src/graph-manager/src/watchdog.rs`) continuously
+monitors 6 critical nodes in the PipeWire graph:
+
+| Node | Role |
+|------|------|
+| `pi4audio-convolver` | Filter-chain capture side |
+| `pi4audio-convolver-out` | Filter-chain playback side |
+| `gain_left_hp` | Left main gain node |
+| `gain_right_hp` | Right main gain node |
+| `gain_sub1_lp` | Sub 1 gain node |
+| `gain_sub2_lp` | Sub 2 gain node |
+
+If ANY monitored node disappears from the PipeWire graph, the watchdog
+triggers a **latched safety mute**:
+
+**Primary mute mechanism:** Set `Mult=0.0` on all 4 gain nodes via native
+PipeWire API (`pw_node_set_param` via `pipewire-rs` FFI). Target response
+time: <1ms per node, <5ms total.
+
+**Fallback mechanism:** If the gain nodes themselves have disappeared (can't
+set Mult on a nonexistent node), the watchdog destroys ALL links to the
+USBStreamer input ports using `pw_registry::destroy_global()`.
+
+**Latch behavior:** Once triggered, the mute is LATCHED -- it stays active
+even after the missing nodes return. Unlatching requires an explicit RPC
+command (`watchdog_unlatch`). This prevents transient audio during graph
+recovery. Pre-mute gain values are stored and restored on unlatch.
+
+**Response time budget:** <21ms (1 PipeWire graph cycle at quantum 1024).
+Registry events are push-based (not polled), so the watchdog fires within
+the same PW main loop iteration that processes the node removal event.
+
+**RT scheduling:** The GraphManager runs at SCHED_FIFO priority 80 (set via
+systemd `CPUSchedulingPolicy=fifo` / `CPUSchedulingPriority=80`). This is
+below PipeWire (FIFO/88) but above all non-audio processes, guaranteeing the
+watchdog's mute path meets its <21ms deadline even under CPU contention.
+
+### Defense Layer Summary
+
+| Layer | Mechanism | Blocks | When PW down? | Config |
+|-------|-----------|--------|---------------|--------|
+| 1 | PipeWire exclusive ALSA hold | All non-PW processes | No | `20/21-usbstreamer.conf` |
+| 2 | udev OWNER/MODE | Other users, system services | Yes | `99-usbstreamer-lockout.rules` |
+| 3 | WirePlumber node deny | Rogue PW client nodes | N/A (WP requires PW) | `53-deny-usbstreamer-alsa.conf` |
+| 4 | GraphManager watchdog | Convolver/gain node loss | N/A (GM requires PW) | `src/graph-manager/src/watchdog.rs` |
+
+### Cross-References
+
+- US-044: ALSA device lockout user story
+- T-044-1: udev rules + PipeWire exclusive hold
+- T-044-2: WirePlumber deny policy
+- T-044-3: GraphManager link audit
+- T-044-4: Filter-chain watchdog
+- `configs/udev/99-usbstreamer-lockout.rules`
+- `configs/wireplumber/53-deny-usbstreamer-alsa.conf`
+- `configs/wireplumber/scripts/deny-usbstreamer-alsa.lua`
+- `src/graph-manager/src/watchdog.rs`
+
+---
+
 ## Summary of Safety Decisions
 
 | Decision | Summary | Section |
@@ -402,6 +510,7 @@ safety (Section 1). The audio path remains connected; only the gain is zeroed.
 | D-031 | IIR Butterworth HPF in all production configs | 2 |
 | S-012 | No gain increase without owner confirmation | 7, 8 |
 | F-040 | Panic MUTE sets gain to 0.0 without dropping PW stream | 8 |
+| US-044 | Four-layer ALSA lockout + watchdog defense | 9 |
 
 ## Safety Incident Register
 
