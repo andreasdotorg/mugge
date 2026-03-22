@@ -430,6 +430,24 @@ html, body {
     color: #c17900;
 }
 
+/* Inactive group state (no data source connected) */
+
+.meter-group--inactive {
+    opacity: 0.3;
+}
+
+.meter-group-inactive-label {
+    font-size: 7px;
+    font-weight: 600;
+    color: var(--text-micro);
+    text-align: center;
+    letter-spacing: 0.05em;
+    height: 10px;
+    line-height: 10px;
+    flex-shrink: 0;
+    font-style: italic;
+}
+
 .meters-row-main {
     gap: 4px;
 }

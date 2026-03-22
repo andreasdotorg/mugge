@@ -73,6 +73,7 @@
     var physinColumns = [];
     var animating = false;
     var startTime = performance.now();
+    var physinHasData = false;
 
     // Track previous monitoring DSP data for event detection
     var prevMonXruns = null;
@@ -375,6 +376,13 @@
             for (var pch = 0; pch < 8; pch++) {
                 updateChannel(physinState[pch], data.usbstreamer_rms[pch], data.usbstreamer_peak[pch], now);
             }
+            if (!physinHasData) {
+                physinHasData = true;
+                var pg = document.getElementById("group-physin");
+                if (pg) pg.classList.remove("meter-group--inactive");
+                var sl = document.getElementById("physin-inactive-label");
+                if (sl) sl.style.display = "none";
+            }
         }
 
         // Push events for xrun/clip increments (monitoring data has higher update rate)
@@ -419,6 +427,22 @@
             dspoutCanvases, dspoutColumns, "playback", "dspout");
         buildMeterGroup("meters-physin", PHYSIN_LABELS, PHYSIN_CHANNELS,
             physinCanvases, physinColumns, "physin", "physin");
+
+        // Add "(no source)" sublabel to PHYS IN group and mark inactive
+        var physinGroup = document.getElementById("group-physin");
+        if (physinGroup) {
+            var sublabel = document.createElement("div");
+            sublabel.className = "meter-group-inactive-label";
+            sublabel.id = "physin-inactive-label";
+            sublabel.textContent = "(no source)";
+            var groupLabel = physinGroup.querySelector(".meter-group-label");
+            if (groupLabel && groupLabel.nextSibling) {
+                physinGroup.insertBefore(sublabel, groupLabel.nextSibling);
+            } else {
+                physinGroup.appendChild(sublabel);
+            }
+            physinGroup.classList.add("meter-group--inactive");
+        }
 
         window.addEventListener("resize", function () {
             resizeAll();
