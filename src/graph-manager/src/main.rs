@@ -27,6 +27,7 @@
 //! - `registry` — PW registry listener (push-based graph awareness)
 //! - `reconcile` — Reconciliation engine (diff desired vs actual → actions)
 //! - `lifecycle` — Component health observer (derive health from graph state)
+//! - `watchdog` — Safety mute watchdog (T-044-4, latches mute on node loss)
 //! - `rpc` — TCP JSON-RPC server (port 4002), cross-thread commands
 
 // Pure-logic modules — compile on all platforms.
@@ -35,6 +36,7 @@ mod lifecycle;
 mod reconcile;
 mod routing;
 mod rpc;
+mod watchdog;
 
 // PipeWire registry listener — Linux only (needs libpipewire).
 #[cfg(feature = "pipewire-backend")]
@@ -134,6 +136,7 @@ fn run_pipewire(
     use graph::GraphState;
     use lifecycle::ComponentRegistry;
     use routing::RoutingTable;
+    use watchdog::Watchdog;
 
     pipewire::init();
 
@@ -165,15 +168,20 @@ fn run_pipewire(
         component_registry.borrow().len(),
     );
 
+    // Safety watchdog — monitors critical audio nodes and latches a
+    // safety mute if any disappear (T-044-4).
+    let watchdog_state = Rc::new(RefCell::new(Watchdog::new()));
+    info!("Safety watchdog initialized (monitoring {} nodes)", watchdog::MONITORED_NODES.len());
+
     // Created link proxies — must be kept alive for links to persist.
     // Keyed by (output_port_id, input_port_id).
     let link_proxies: Rc<RefCell<std::collections::HashMap<(u32, u32), pipewire::link::Link>>> =
         Rc::new(RefCell::new(std::collections::HashMap::new()));
 
     // Register registry listener (push-based graph awareness).
-    // After every graph state change, reconciliation runs automatically
-    // and component health is re-evaluated.
-    // Pass core, event_tx, link_proxies, and component_registry.
+    // After every graph state change, reconciliation runs automatically,
+    // component health is re-evaluated, and the safety watchdog is checked.
+    // Pass core, event_tx, link_proxies, component_registry, and watchdog.
     let (_registry, _registry_listener, reg_handle) =
         registry::register_graph_listener(
             &core,
@@ -183,8 +191,9 @@ fn run_pipewire(
             event_tx.clone(),
             link_proxies.clone(),
             component_registry.clone(),
+            watchdog_state.clone(),
         );
-    info!("PipeWire registry listener registered (reconciliation + lifecycle wired)");
+    info!("PipeWire registry listener registered (reconciliation + lifecycle + watchdog wired)");
 
     // Shutdown timer: poll the AtomicBool every 100ms and quit the PW loop.
     let mainloop_ptr = mainloop.as_raw_ptr();
@@ -231,6 +240,7 @@ fn run_pipewire(
         let link_proxies = link_proxies.clone();
         let component_registry = component_registry.clone();
         let reg_handle = reg_handle.clone();
+        let watchdog_state = watchdog_state.clone();
         move |_expirations| {
             // Drain all pending commands.
             while let Ok(cmd) = cmd_rx.try_recv() {
@@ -250,6 +260,7 @@ fn run_pipewire(
                     core_ref,
                     &reg_handle,
                     &component_registry,
+                    &watchdog_state,
                 );
             }
         }
@@ -298,6 +309,7 @@ fn dispatch_rpc_command(
     core_ref: &pipewire::core::CoreRef,
     reg_handle: &registry::RegistryHandle,
     component_registry: &std::rc::Rc<std::cell::RefCell<lifecycle::ComponentRegistry>>,
+    watchdog_state: &std::rc::Rc<std::cell::RefCell<watchdog::Watchdog>>,
 ) {
     use rpc::{DeviceStatus, GraphEvent, LinkSnapshot, RpcResult};
 
@@ -377,6 +389,51 @@ fn dispatch_rpc_command(
                 links: Vec::new(), // Detailed link info comes with GM-3 integration.
             };
             let _ = reply.send(snap);
+        }
+
+        rpc::RpcCommand::WatchdogStatus { reply } => {
+            let wd = watchdog_state.borrow();
+            let _ = reply.send(wd.status());
+        }
+
+        rpc::RpcCommand::WatchdogUnlatch { reply } => {
+            let mut wd = watchdog_state.borrow_mut();
+            match wd.unlatch() {
+                Some(gains) => {
+                    // Drop the borrow before accessing the graph (may need
+                    // to look up node IDs for gain restoration).
+                    drop(wd);
+
+                    info!("Watchdog unlatch: restoring {} gain values", gains.len());
+
+                    // Restore pre-mute gain values via native PW API.
+                    let g = graph.borrow();
+                    let mut restored = 0usize;
+                    for (name, mult) in &gains {
+                        if let Some(node) = g.node_by_name(name) {
+                            if reg_handle.set_node_mult(node.id, *mult as f32) {
+                                info!("Watchdog unlatch: restored {} (node {}) to Mult={}", name, node.id, mult);
+                                restored += 1;
+                            } else {
+                                log::warn!("Watchdog unlatch: failed to restore {} (node {})", name, node.id);
+                            }
+                        } else {
+                            log::warn!("Watchdog unlatch: node '{}' not in graph, skipping restore", name);
+                        }
+                    }
+                    drop(g);
+
+                    let _ = event_tx.send(GraphEvent::WatchdogUnlatched {
+                        restored_gains: restored,
+                    });
+                    let _ = reply.send(RpcResult::Ok);
+                }
+                None => {
+                    let _ = reply.send(RpcResult::Error(
+                        "watchdog is not latched".to_string(),
+                    ));
+                }
+            }
         }
     }
 }

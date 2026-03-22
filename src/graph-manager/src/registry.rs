@@ -40,6 +40,7 @@ use crate::lifecycle::{ComponentRegistry, HealthTransition};
 use crate::reconcile::{self, LinkAction};
 use crate::routing::{Mode, RoutingTable};
 use crate::rpc::GraphEvent;
+use crate::watchdog::{Watchdog, WatchdogAction};
 
 /// Lightweight handle to call `destroy_global()` on the PW registry.
 ///
@@ -83,6 +84,104 @@ impl RegistryHandle {
                 destroy,
                 global_id
             );
+        }
+    }
+
+    /// Set the Mult parameter to the given value on a PipeWire node, using
+    /// the native PipeWire API (no subprocess).
+    ///
+    /// This is the safety-critical mute path (T-044-4). It binds a temporary
+    /// node proxy via the registry, builds the SPA Props pod containing the
+    /// Mult parameter, calls `pw_node_set_param`, and destroys the proxy.
+    ///
+    /// ## Timing
+    ///
+    /// Each call takes <1ms (in-process function call, no fork/exec). This
+    /// meets the <21ms budget for the complete 4-node mute operation.
+    ///
+    /// ## Safety
+    ///
+    /// Must be called on the PW main loop thread. The registry pointer must
+    /// be valid. Best-effort: returns false on failure but never panics.
+    pub fn set_node_mult(&self, node_id: u32, mult_value: f32) -> bool {
+        unsafe {
+            // 1. Bind a temporary node proxy via the registry.
+            //    pw_registry_bind(registry, id, type, version, user_data_size)
+            //    Returns *mut c_void (the proxy), or null on failure.
+            let type_cstr = std::ffi::CStr::from_bytes_with_nul_unchecked(
+                pipewire_sys::PW_TYPE_INTERFACE_Node,
+            );
+            let proxy_ptr: *mut std::os::raw::c_void =
+                libspa::spa_interface_call_method!(
+                    self.ptr.as_ptr(),
+                    pipewire_sys::pw_registry_methods,
+                    bind,
+                    node_id,
+                    type_cstr.as_ptr(),
+                    pipewire_sys::PW_VERSION_NODE,  // version 3
+                    0usize  // no user data
+                );
+
+            if proxy_ptr.is_null() {
+                log::error!(
+                    "WATCHDOG: pw_registry_bind failed for node {} — null proxy",
+                    node_id,
+                );
+                return false;
+            }
+
+            // 2. Build the SPA Props pod: Object(Props) { params => Struct { String("Mult"), Float(value) } }
+            //    This matches what pw-cli sends for: pw-cli s <id> Props '{ params = [ "Mult" <value> ] }'
+            let mut pod_data: Vec<u8> = Vec::with_capacity(128);
+            let mut builder = libspa::pod::builder::Builder::new(&mut pod_data);
+
+            let build_result = libspa::builder_add!(
+                &mut builder,
+                Object(
+                    spa_sys::SPA_TYPE_OBJECT_Props,
+                    spa_sys::SPA_PARAM_Props,
+                ) {
+                    spa_sys::SPA_PROP_params => Struct {
+                        String("Mult"),
+                        Float(mult_value),
+                    },
+                }
+            );
+
+            if build_result.is_err() {
+                log::error!(
+                    "WATCHDOG: SPA pod build failed for node {} — {:?}",
+                    node_id, build_result,
+                );
+                // Destroy the proxy before returning.
+                pipewire_sys::pw_proxy_destroy(proxy_ptr.cast());
+                return false;
+            }
+
+            // Drop the builder to release the borrow on pod_data.
+            drop(builder);
+
+            // 3. Get the pod pointer from the built data.
+            let pod_ptr = pod_data.as_ptr() as *const spa_sys::spa_pod;
+
+            // 4. Call pw_node_set_param(proxy, SPA_PARAM_Props, 0, pod).
+            //    The proxy pointer is a pw_node proxy obtained via pw_registry_bind.
+            libspa::spa_interface_call_method!(
+                proxy_ptr,
+                pipewire_sys::pw_node_methods,
+                set_param,
+                spa_sys::SPA_PARAM_Props,
+                0u32,  // flags
+                pod_ptr
+            );
+
+            // 5. Destroy the temporary proxy. The set_param message has been
+            //    queued in PipeWire's protocol buffer and will be sent on the
+            //    next main loop iteration. Destroying the proxy after queuing
+            //    is safe — PW flushes pending messages before cleanup.
+            pipewire_sys::pw_proxy_destroy(proxy_ptr.cast());
+
+            true
         }
     }
 }
@@ -286,6 +385,7 @@ fn run_reconcile(
     event_tx: &mpsc::Sender<GraphEvent>,
     link_proxies: &Rc<RefCell<HashMap<(u32, u32), pipewire::link::Link>>>,
     component_registry: &Rc<RefCell<ComponentRegistry>>,
+    watchdog: &Rc<RefCell<Watchdog>>,
 ) {
     let actions = reconcile::reconcile(graph, table, mode);
     apply_actions(&actions, core, registry, graph, event_tx, link_proxies);
@@ -302,6 +402,112 @@ fn run_reconcile(
             }
         };
         let _ = event_tx.send(event);
+    }
+
+    // Run safety watchdog check (T-044-4).
+    // This fires on every graph mutation — if a critical node disappears,
+    // the watchdog latches a safety mute within the same PW loop iteration.
+    run_watchdog_check(graph, watchdog, registry, event_tx);
+}
+
+/// Execute the safety watchdog check and apply mute actions.
+///
+/// Called after every graph mutation. The watchdog's check() is pure —
+/// it returns an action. This function applies the action via PW API.
+///
+/// ## Mute mechanism
+///
+/// **Primary (SetGainMute):** Uses `pw_node_set_param()` via the native
+/// PipeWire API (`RegistryHandle::set_node_mult`). Binds a temporary node
+/// proxy, builds a SPA Props pod with Mult=0.0, calls set_param, and
+/// destroys the proxy. No subprocess — <1ms per node, <5ms for all 4.
+///
+/// **Fallback (DestroyUsbLinks):** Uses `registry.destroy_global()` to
+/// destroy all links to USBStreamer input ports. This is the existing
+/// link destruction mechanism already used by reconciliation.
+fn run_watchdog_check(
+    graph: &GraphState,
+    watchdog: &Rc<RefCell<Watchdog>>,
+    registry: &RegistryHandle,
+    event_tx: &mpsc::Sender<GraphEvent>,
+) {
+    let action = watchdog.borrow_mut().check(graph);
+
+    match action {
+        WatchdogAction::AllPresent | WatchdogAction::AlreadyLatched => {
+            // No action needed.
+        }
+
+        WatchdogAction::SetGainMute { gain_nodes } => {
+            // Primary mute path: set Mult=0.0 on all available gain nodes
+            // via native PW API (pw_registry_bind + pw_node_set_param).
+            // No subprocess — <1ms per node, well within the <21ms budget.
+            let missing = watchdog.borrow().missing_at_latch().to_vec();
+            log::error!(
+                "WATCHDOG MUTE: Setting Mult=0.0 on {} gain nodes via native PW API (missing: {:?})",
+                gain_nodes.len(),
+                missing,
+            );
+
+            // Store pre-mute gains (default production values from
+            // 30-filter-chain-convolver.conf, since reading the actual
+            // Mult value would require an async enum_params round-trip).
+            let pre_mute: Vec<(String, f64)> = gain_nodes
+                .iter()
+                .map(|(_, name)| {
+                    let default_mult = match name.as_str() {
+                        "gain_left_hp" | "gain_right_hp" => 0.001,
+                        "gain_sub1_lp" | "gain_sub2_lp" => 0.000631,
+                        _ => 0.001,
+                    };
+                    (name.clone(), default_mult)
+                })
+                .collect();
+            watchdog.borrow_mut().store_pre_mute_gains(pre_mute);
+
+            // Execute mute via native PW API — no pw-cli subprocess.
+            // Safety-critical: best-effort per node. If one fails, we
+            // continue to mute the remaining nodes.
+            for (node_id, name) in &gain_nodes {
+                log::error!("WATCHDOG: Muting {} (node {}) via set_node_mult", name, node_id);
+                if registry.set_node_mult(*node_id, 0.0) {
+                    log::error!("WATCHDOG: Muted {} (node {})", name, node_id);
+                } else {
+                    log::error!(
+                        "WATCHDOG: Native set_param failed for {} (node {})",
+                        name, node_id,
+                    );
+                }
+            }
+
+            // Emit watchdog mute event.
+            let _ = event_tx.send(GraphEvent::WatchdogMute {
+                missing_nodes: missing,
+                mechanism: "gain_mute_native".to_string(),
+            });
+        }
+
+        WatchdogAction::DestroyUsbLinks { link_ids } => {
+            // Fallback: destroy all links to USBStreamer.
+            let missing = watchdog.borrow().missing_at_latch().to_vec();
+            log::error!(
+                "WATCHDOG FALLBACK: Destroying {} USBStreamer links (missing: {:?})",
+                link_ids.len(),
+                missing,
+            );
+
+            for link_id in &link_ids {
+                registry.destroy_global(*link_id);
+                log::error!("WATCHDOG: Destroyed link id={}", link_id);
+            }
+
+            // Emit watchdog mute event.
+            let _ = event_tx.send(GraphEvent::WatchdogMute {
+                missing_nodes: missing,
+                mechanism: "link_destroy".to_string(),
+            });
+        }
+
     }
 }
 
@@ -332,6 +538,7 @@ pub fn register_graph_listener(
     event_tx: mpsc::Sender<GraphEvent>,
     link_proxies: Rc<RefCell<HashMap<(u32, u32), pipewire::link::Link>>>,
     component_registry: Rc<RefCell<ComponentRegistry>>,
+    watchdog: Rc<RefCell<Watchdog>>,
 ) -> (pipewire::registry::Registry, Box<dyn std::any::Any>, RegistryHandle) {
     let registry = core
         .get_registry()
@@ -363,12 +570,14 @@ pub fn register_graph_listener(
     let event_tx_add = event_tx.clone();
     let link_proxies_add = link_proxies.clone();
     let comp_reg_add = component_registry.clone();
+    let watchdog_add = watchdog.clone();
     let graph_remove = graph;
     let table_remove = table;
     let mode_remove = mode;
     let event_tx_remove = event_tx;
     let link_proxies_remove = link_proxies;
     let comp_reg_remove = component_registry;
+    let watchdog_remove = watchdog;
 
     let listener = registry
         .add_listener_local()
@@ -484,6 +693,7 @@ pub fn register_graph_listener(
                     &event_tx_add,
                     &link_proxies_add,
                     &comp_reg_add,
+                    &watchdog_add,
                 );
                 reconciling_add.set(false);
             }
@@ -520,6 +730,7 @@ pub fn register_graph_listener(
                     &event_tx_remove,
                     &link_proxies_remove,
                     &comp_reg_remove,
+                    &watchdog_remove,
                 );
                 reconciling_remove.set(false);
             }

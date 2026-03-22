@@ -253,6 +253,16 @@ pub enum RpcCommand {
     GetLinks {
         reply: mpsc::Sender<LinkSnapshot>,
     },
+
+    /// Request the current watchdog status.
+    WatchdogStatus {
+        reply: mpsc::Sender<crate::watchdog::WatchdogStatus>,
+    },
+
+    /// Request to unlatch the safety watchdog.
+    WatchdogUnlatch {
+        reply: mpsc::Sender<RpcResult>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +309,13 @@ pub enum GraphEvent {
     DeviceConnected { name: String },
     #[serde(rename = "device_disconnected")]
     DeviceDisconnected { name: String },
+    #[serde(rename = "watchdog_mute")]
+    WatchdogMute {
+        missing_nodes: Vec<String>,
+        mechanism: String,
+    },
+    #[serde(rename = "watchdog_unlatched")]
+    WatchdogUnlatched { restored_gains: usize },
 }
 
 
@@ -331,6 +348,8 @@ pub fn handle_request(
         "get_state" => handle_get_state(cmd_tx, stored_mode),
         "get_devices" => handle_get_devices(cmd_tx),
         "get_links" => handle_get_links(cmd_tx, stored_mode),
+        "watchdog_status" => handle_watchdog_status(cmd_tx),
+        "watchdog_unlatch" => handle_watchdog_unlatch(cmd_tx),
         other => HandleResult::Error(
             other.to_string(),
             format!("unknown command: \"{}\"", other),
@@ -563,6 +582,73 @@ fn handle_get_links(
     }
 }
 
+fn handle_watchdog_status(cmd_tx: &mpsc::Sender<RpcCommand>) -> HandleResult {
+    let (reply_tx, reply_rx) = mpsc::channel();
+    if cmd_tx
+        .send(RpcCommand::WatchdogStatus { reply: reply_tx })
+        .is_err()
+    {
+        // PW thread not available — return stub.
+        let status = crate::watchdog::WatchdogStatus {
+            latched: false,
+            missing_nodes: Vec::new(),
+            pre_mute_gains: Vec::new(),
+        };
+        return HandleResult::ResponseJson(
+            serde_json::to_string(&serde_json::json!({
+                "type": "response",
+                "cmd": "watchdog_status",
+                "ok": true,
+                "watchdog": status,
+            }))
+            .unwrap_or_default(),
+        );
+    }
+
+    match reply_rx.recv() {
+        Ok(status) => HandleResult::ResponseJson(
+            serde_json::to_string(&serde_json::json!({
+                "type": "response",
+                "cmd": "watchdog_status",
+                "ok": true,
+                "watchdog": status,
+            }))
+            .unwrap_or_default(),
+        ),
+        Err(_) => HandleResult::ResponseJson(
+            serde_json::to_string(&serde_json::json!({
+                "type": "response",
+                "cmd": "watchdog_status",
+                "ok": true,
+                "watchdog": { "latched": false, "missing_nodes": [], "pre_mute_gains": [] },
+            }))
+            .unwrap_or_default(),
+        ),
+    }
+}
+
+fn handle_watchdog_unlatch(cmd_tx: &mpsc::Sender<RpcCommand>) -> HandleResult {
+    let (reply_tx, reply_rx) = mpsc::channel();
+    if cmd_tx
+        .send(RpcCommand::WatchdogUnlatch { reply: reply_tx })
+        .is_err()
+    {
+        return HandleResult::Error(
+            "watchdog_unlatch".to_string(),
+            "internal: PW thread not responding".to_string(),
+        );
+    }
+
+    match reply_rx.recv() {
+        Ok(RpcResult::Ok) => HandleResult::Ack("watchdog_unlatch".to_string()),
+        Ok(RpcResult::Error(e)) => HandleResult::Error("watchdog_unlatch".to_string(), e),
+        Err(_) => HandleResult::Error(
+            "watchdog_unlatch".to_string(),
+            "internal: PW thread dropped reply channel".to_string(),
+        ),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Response formatting
 // ---------------------------------------------------------------------------
@@ -666,6 +752,16 @@ pub fn handle_pw_command(cmd: RpcCommand, current_mode: &Mutex<String>) {
                 .map(|m| m.clone())
                 .unwrap_or_else(|_| "monitoring".to_string());
             let _ = reply.send(LinkSnapshot::empty(&mode));
+        }
+        RpcCommand::WatchdogStatus { reply } => {
+            let _ = reply.send(crate::watchdog::WatchdogStatus {
+                latched: false,
+                missing_nodes: Vec::new(),
+                pre_mute_gains: Vec::new(),
+            });
+        }
+        RpcCommand::WatchdogUnlatch { reply } => {
+            let _ = reply.send(RpcResult::Error("watchdog is not latched".to_string()));
         }
     }
 }
