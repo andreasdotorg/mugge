@@ -106,7 +106,8 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **ENH-003** (OPEN, Medium): Sticky latching health indicator with manual clear. Analogous to industrial alarm panel.
 - **F-059** (OPEN, HIGH): Graph view uses hardcoded SVG — owner directive to show real `pw-dump` topology. US-064 returned to DESIGN phase, DoD reset to 0/8.
 - **F-060** (OPEN, Medium): L-042 process docs (`17a0cb2`) need corrections: (1) `nix develop` used where `nix run .#test-*` required for QA gates, (2) project-specific details (GraphManager, gain nodes, etc.) embedded in generic role prompts — must be extracted to project config.
-- **F-061** (IN PROGRESS, HIGH): `pw-dump` subprocess hangs under WebSocket load — `asyncio.create_subprocess_exec` deadlocks when event loop is saturated by WS handlers. Fix: `asyncio.to_thread(subprocess.run, ...)`. **Blocks F-056 and F-057 real-mode Pi verification.** Worker-functional fixing now. Also: webui systemd `Type=notify` restart loop bug fixed in `ba8aaf5` (S-005).
+- **F-061** (CODE FIXED `9808a56`, needs Pi deploy): `pw-dump` subprocess hang fixed — `asyncio.to_thread(subprocess.run, ...)` replaces `asyncio.create_subprocess_exec`. Also: webui systemd `Type=notify` restart loop fixed (`ba8aaf5`). **Pi deploy unblocks F-056 and F-057 real-mode verification.**
+- **F-062** (OPEN, Medium): 25 tests fail due to deprecated `asyncio.get_event_loop()` under Python 3.13. Affects `test_measurement_integration.py` (20) and `test_phase1_validation.py` (5). QE + Architect confirmed: test bug, not production. Fix: replace with `asyncio.run()`. Worker-functional fixing after task #58.
 - **F-040** (**RESOLVED** — committed `4c80c23` 2026-03-21): Panic MUTE/UNMUTE backend (`audio_mute.py` + `pw_helpers.py`). US-065 and US-064 commits followed (`965f501`, `23a57c1`). No longer blocking.
 - **F-041** (**RESOLVED, VERIFIED** — `3a1e6bb` + `c76b882`): Mock server crash fix. Health-check + stderr capture in conftest.py. Additional fix `c76b882`: subprocess.PIPE replaced with tempfile (deadlock prevention). Verified 2026-03-21: full E2E suite completed, no crash. 124 passed, 41 failed (pre-existing regressions → F-048).
 - **F-048** (IN PROGRESS → ~1-8 remaining, Medium): Originally 41 E2E test failures. **25 fixed** (system_view, status_bar, visual_regression, event_log — pending commit). **13 fixed** (capture_spectrum + measurement_wizard — pending commit). Remaining: measurement wizard state isolation (F-049, 8 tests hang sequentially).
@@ -152,17 +153,19 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - `0c1f650` — docs: status + defects update
 - `e286a41` — E2E screenshot baselines
 
-**Defects resolved this session:** F-026, F-038, F-043, F-044, F-045, F-046, F-047, F-049, F-050, ENH-001 (10 items)
-**New defects filed:** F-049 (resolved same session), F-050 (resolved same session)
+**Defects resolved this session (morning):** F-026, F-038, F-043, F-044, F-045, F-046, F-047, F-049, F-050, ENH-001 (10 items)
+**Defects resolved this session (afternoon):** F-051, F-052, F-053, F-054 (superseded), F-055 (superseded), F-056 (partial), F-058, F-061 (13 total for the day)
+**New defects filed:** F-049, F-050, F-051-F-061, ENH-002, ENH-003
 
-**E2E test health:** 41 failures → resolved. F-041 VERIFIED — no server crash. F-049 session isolation fixed.
+**E2E test health:** Original 41 failures → resolved. F-041 VERIFIED. 25 pre-existing failures discovered in `nix run .#test-all` — triage pending per L-042.
 
 **Story progress:**
-- US-064: DoD 3/8 → 4/8 (E2E test written, 600px responsive fixed)
+- US-064: DoD 4/8 → **0/8 REWORK** (F-059 — owner directive: real pw-dump topology)
 - US-065: DoD 5/10 → 6/10 (E2E test written, F-046 confirm dialog)
 - US-066: Phase 1 complete (T-066-1/2/3). Phase 2 needs Pi.
 - US-044: T-044-1/2/3/4/5/8 done. T-044-6/7 need Pi.
 - US-067, US-068, US-069: stories drafted
+- US-070: CI setup story pending draft (owner approved)
 
 **Lesson learned (L-041): CM agent crash — likely memory pressure.**
 The Change Manager agent became unresponsive during the overnight autonomous
@@ -204,11 +207,65 @@ file F-058 immediately and assign a worker to fix the screenshot output path.
    references `config.md` generically. `testing-process.md` has full detail
    (environment matrix, code quality standards) as process documentation.
 
+**Afternoon commits (17 more, `26957fd`..`546cb54`):**
+- `26957fd` — pcm-bridge EXTRA_ARGS → LEVELS_LISTEN env var fix
+- `774c2ee` — F-051/052/053: contrast improvements (spectrum, meters, PHYS IN)
+- `93567db` — F-054/055: graph bypass arc z-order + gain nodes (superseded by F-059)
+- `ab109d9` — ENH-002/003 stories (tooltips + latching alarm)
+- `61a2b9d` — docs: status/defects update
+- `b1c96da` — F-056: quantum force-quantum display + mock sync
+- `e75b73a` — F-057: gain node Mult extraction (incorrect assumption — see F-057 revision)
+- `cb57483` — F-058: E2E screenshots to /tmp
+- `d5e12f4` — docs: deployment status update
+- `65449c6` — F-057 rev2: gain node discovery rewrite for convolver params
+- `17a0cb2` — L-042: testing process + code quality docs
+- `0219d76` — F-057: pw_helpers subprocess timeout from Pi deploy
+- `5e7fbec` — docs: S-005 deploy + L-042 process update
+- `ba8aaf5` — F-061: webui service Type=simple + pw-dump timeout 30s
+- `f25280f` — `nix run .#test-graph-manager` target added
+- `9808a56` — F-061: pw-dump thread pool fix (event loop starvation)
+- `c953bb9` + `546cb54` — F-060: nix run as sole QA gate, remove nix flake check Gate 2
+
+**Owner approvals (2026-03-22 afternoon):**
+
+1. **3-gate test structure APPROVED.** Gate 1: worker `nix run .#test-*`
+   (targeted, every task). Gate 2: full `nix run .#test-all` + E2E (pre-merge,
+   story-closing commits). Gate 3: owner Pi acceptance testing (REVIEW phase
+   sub-step). WIP limit of 3 stories awaiting acceptance. Documented in
+   `testing-process.md`.
+
+2. **CI with GitHub Actions self-hosted runner APPROVED.** Enables branch-based
+   parallel work (resolves L-039). Workers on feature branches, merges gated on
+   green CI. Story US-070 pending draft. Key decisions: runner on dev machine
+   (not Pi — E2E needs Chromium, can't risk audio interference). Modified Rule 9:
+   workers may commit to feature branches, CM manages branch lifecycle + merge
+   gates, main stays protected.
+
+3. **Graph view rework APPROVED.** US-064 returned to DESIGN (F-059). Must show
+   real `pw-dump` topology, not hardcoded SVG. Story revision pending.
+
+**New defects filed this afternoon:** F-059 (graph rework, HIGH), F-060 (L-042
+corrections, Medium), F-061 (pw-dump hang, HIGH — fixed `9808a56`).
+
+**Defects resolved this afternoon:** F-051, F-052, F-053 (`774c2ee`), F-054,
+F-055 (`93567db`, superseded by F-059), F-056 partial (quantum OK, xrun OPEN),
+F-058 (`cb57483`), F-061 (`9808a56`).
+
+**25 pre-existing test failures need triage.** The latest `nix run .#test-all`
+shows 25 failures across visual regression (screenshot diffs) and other suites.
+Per L-042 these must be triaged by QE + Architect — not dismissed. Each failure
+needs classification (code bug / test bug / environment gap) and a tracked defect.
+
+**Session totals:** 35 commits, 13 defects resolved, 3 owner approvals.
+
 **Next steps:**
-- Pi CHANGE session: US-066 Phase 2 (pcm-bridge deploy, TK-112), US-064/US-065 Pi integration tests
+- **F-061 Pi deploy:** pw-dump thread pool fix (`9808a56`) needs DEPLOY session — unblocks F-056/F-057 real-mode verification
+- **US-070:** CI setup story draft (GitHub Actions + self-hosted runner)
+- **US-064:** Graph view rework story revision (architect design first)
+- **25 test failures:** QE-led triage per L-042
 - US-044: T-044-6 (reboot survival), T-044-7 (no-interference test) — need Pi
-- Task #28: Redesign T-044-1 with dedicated service account (may supersede `df70fc5`)
-- Working tree has uncommitted changes in 16 files — need CM commit
+- US-066 Phase 2: pcm-bridge deploy + TK-112 validation — needs Pi
+- Working tree has dirty files (`testing-process.md` revert needed — worker accidentally restored `nix flake check` as Gate 2)
 
 ### Session Wrap-Up (2026-03-21, continued session)
 
@@ -528,7 +585,8 @@ See `docs/project/defects.md` for full details.
 | F-058 | Medium | Open | E2E screenshot tests write to read-only Nix store path — 6+ false failures in pure sandbox. |
 | F-059 | High | Open | Graph view uses hardcoded SVG templates instead of real PW topology. US-064 returned to DESIGN. |
 | F-060 | Medium | Open | L-042 process docs: `nix develop` used where `nix run` required; project-specific details in role prompts. |
-| F-061 | High | In progress | `pw-dump` subprocess hangs under WebSocket load — event loop saturation. Blocks F-056/F-057 Pi verification. |
+| F-061 | High | Code fixed (`9808a56`) | pw-dump hang fixed (thread pool). Needs Pi deploy to unblock F-056/F-057. |
+| F-062 | Medium | Open | 25 tests fail: deprecated `asyncio.get_event_loop()` in Python 3.13. Test bug, not production. Worker fixing after #58. |
 
 ### Resolved
 

@@ -3384,45 +3384,145 @@ All three are non-invasive: they query PipeWire's registry or kernel interfaces 
 
 ---
 
-## US-064: PipeWire Graph Visualization Tab
+## US-064: Real PipeWire Graph Visualization Tab (REWORK — F-059)
 
 **As** the live sound engineer,
-**I want** a "Graph" tab in the web UI showing the PipeWire node topology as a visual diagram with live state indicators,
-**so that** I can see the actual audio routing at a glance, verify correct link topology, and diagnose routing problems without running pw-dump on the command line.
+**I want** a "Graph" tab in the web UI showing the **actual PipeWire graph topology** from `pw-dump` data with real node names, real links, real states, and live level meters on audio-carrying nodes,
+**so that** I can see exactly what PipeWire sees — real routing, real parameters, real signal levels — and edit gain and quantum values in-place without switching tabs.
 
-**Status:** in-progress (worker-4, DoD 3/8. `graph.js` + CSS + HTML tab implemented. Blocked on 600px responsive bug fix for UX review.)
-**Depends on:** US-059 (GraphManager RPC operational), US-060 (monitoring replacement -- shares data layer)
+**Status:** DESIGN phase (rework per F-059. Previous implementation `23a57c1`
+used hardcoded SVG templates — rejected by owner 2026-03-22. DoD reset to 0/9.
+Architect 6-phase design proposal received. All F-054/F-055 fixes to the old
+hardcoded layout are superseded.)
+**Depends on:** US-059 (GraphManager RPC operational), US-060 (monitoring
+replacement — shares data layer), US-066 (pcm-bridge level data)
 **Blocks:** none
-**Decisions:** D-040 (pure PW pipeline), D-039/D-043 (GraphManager is sole link manager)
+**Decisions:** D-040 (pure PW pipeline), D-039/D-043 (GraphManager is sole
+link manager)
 **Supersedes:** US-038 (Signal Flow Diagram View, pre-D-040)
+**Fixes:** F-059 (hardcoded SVG templates instead of real topology)
 
-**The problem:** The GraphManager manages all PipeWire link topology (D-039/D-043), but the only visibility into routing state is the status bar's link count summary (gm_links_desired/actual/missing from FilterChainCollector). When links are missing or unexpected, the operator has no way to see WHICH links are affected without SSH access and `pw-dump`/`pw-link -l`. During venue troubleshooting (USB hot-unplug, mode transitions, JACK bypass cleanup), a visual topology view would immediately show the problem.
+**The problem:** The original graph tab (commit `23a57c1`) used hardcoded SVG
+templates representing an idealized audio pipeline. It did not display the
+actual PipeWire graph. The owner requires the graph view to show **real nodes,
+real links, and real topology** as reported by `pw-dump` — not a stylized
+representation. Additionally, the filter-chain convolver appears as a single
+opaque node in `pw-dump`, hiding its internal structure (4 convolvers, 4 gain
+nodes, routing). The graph view must parse the SPA filter-chain configuration
+to expose this internal structure.
 
-**The solution (architect recommendation):** New "Graph" tab rendering PipeWire node topology as inline SVG. Data sourced from GraphManager RPC with a small extension (~20 lines Rust) to include port names and directions in the existing `get_links` / `get_state` responses. Fixed left-to-right layout: Sources (Mixxx/Reaper) -> DSP (filter-chain convolver) -> Outputs (USBStreamer channels). Event-driven updates via GraphManager push events (not polled). No external JS dependencies. Xrun/error counts are NOT sourced from GraphManager (wrong architectural layer -- GM is a topology engine, not a monitoring system); xruns remain in US-063's MetadataCollector via pw-cli.
+**The solution (architect 6-phase design):** Complete rewrite of `graph.js`.
+Backend provides a `/api/v1/graph/topology` endpoint that merges GM RPC state
+with `pw-dump` JSON and filter-chain SPA config parsing. Frontend renders
+dynamic SVG from this data with a force-directed or hierarchical layout.
+Editable parameters (gain Mult, quantum) are modified in-place on the graph.
+Live level meters overlay audio-carrying nodes using pcm-bridge WebSocket data.
 
-**Acceptance criteria:**
-- [ ] New "Graph" tab registered via `PiAudio.registerView("graph", ...)` in the web UI
-- [ ] SVG rendering of PipeWire node topology with left-to-right layout: source nodes -> DSP nodes -> output nodes
-- [ ] Nodes display: name, type (source/filter/sink), port count
-- [ ] Node color reflects state: active (green), absent/suspended (yellow), error (red)
-- [ ] Links between nodes displayed with directional arrows showing audio flow
-- [ ] Link color reflects status: connected (green), pending/expected but missing (dashed yellow), failed/unexpected (red)
-- [ ] Port names and direction (in/out) visible on hover or as labels on nodes
-- [ ] Event-driven updates from GraphManager push events -- topology changes reflected within 500ms
-- [ ] Mode transitions (DJ <-> Live) update the diagram to show the correct routing topology for the active mode
-- [ ] No external JavaScript dependencies (no D3.js, no vis.js) -- pure DOM/SVG
+### Acceptance criteria
+
+**1. Real topology from pw-dump:**
+- [ ] Backend endpoint `/api/v1/graph/topology` returns merged data from
+  GraphManager RPC (`get_state`, `get_links`) and `pw-dump` JSON
+- [ ] Every PipeWire node visible in `pw-dump` that participates in the audio
+  graph is rendered (sources, sinks, filter-chain, adapters)
+- [ ] Each node displays: real PipeWire node name, node ID, media.class,
+  state (running/idle/suspended/error)
+- [ ] Each link displays: source port -> sink port, link state, port format
+- [ ] Nodes and links that exist in `pw-dump` but are NOT managed by the
+  GraphManager are visually distinguished (e.g., dimmed or dashed border)
+
+**2. Filter-chain internal structure:**
+- [ ] The PipeWire filter-chain node is expanded to show its internal
+  structure: individual convolver instances, gain (linear/Mult) nodes,
+  internal routing between them
+- [ ] Internal structure parsed from the SPA filter-chain configuration
+  file (the `filter.graph` section of the PipeWire conf) or from
+  `pw-dump` node properties
+- [ ] Each internal sub-node shows its type (convolver, builtin:linear)
+  and key parameters (filter filename for convolvers, current Mult value
+  for gain nodes)
+
+**3. Editable parameters in-place:**
+- [ ] Gain Mult values on `builtin:linear` nodes are editable: click/tap
+  the value to enter edit mode, type new value, press Enter to apply
+- [ ] Gain changes call the existing `/api/v1/config/gain` endpoint (from
+  US-065) and update the displayed value on success
+- [ ] Current dB equivalent shown alongside the Mult value (e.g.,
+  `Mult: 0.001 (-60.0 dB)`)
+- [ ] Quantum is editable via a selector on the graph header or on the
+  PipeWire core node, calling `/api/v1/config/quantum` (from US-065)
+- [ ] D-009 safety: gain edit rejects Mult values > 1.0 (client-side
+  validation + server-side enforcement from US-065)
+
+**4. Live level meters on audio-carrying nodes:**
+- [ ] Audio-carrying nodes (sources, filter-chain outputs, sink inputs)
+  display miniature level meters showing real-time signal level
+- [ ] Level data sourced from pcm-bridge WebSocket (port 9100), same data
+  feed as the dashboard meters (US-066)
+- [ ] Meters update at pcm-bridge's native rate (~10 Hz) without polling
+- [ ] Meter color coding matches dashboard conventions (green/yellow/red)
+
+**5. Dynamic layout:**
+- [ ] Graph layout is computed dynamically from the topology data — no
+  hardcoded positions or fixed slot assignments
+- [ ] Layout algorithm: hierarchical left-to-right (sources -> processing
+  -> sinks) or force-directed, with consistent node ordering
+- [ ] Layout handles the production topology (10-20 nodes, 20-40 links
+  including filter-chain internals) without overlap or clutter
+- [ ] Node positions are stable across updates (adding/removing one link
+  does not rearrange the entire graph)
+
+**6. Event-driven updates:**
+- [ ] Topology changes from GraphManager push events reflected within 500ms
+- [ ] Mode transitions (DJ <-> Live) update the diagram to show the correct
+  routing for the active mode
+- [ ] Node state changes (running -> suspended, error) update node color
+  in real time
+
+**7. Visual design:**
+- [ ] No external JavaScript dependencies (no D3.js, no vis.js) — pure
+  DOM/SVG
 - [ ] Dark theme consistent with existing web UI views
-- [ ] Responsive: readable on 1920x1080 kiosk and usable on 600px phone width
+- [ ] Responsive: readable on 1920x1080 kiosk, usable on 600px phone width
+- [ ] Node color reflects state: active (green outline), suspended (yellow),
+  error (red), absent/expected (dashed)
+- [ ] Link color reflects status: connected (green), missing (dashed yellow),
+  unexpected (red)
 
-**DoD:**
-- [ ] GraphManager RPC extended with port info in `get_links`/`get_state` responses (~20 lines Rust)
-- [x] `graph.js` view module implemented and registered
-- [x] SVG layout algorithm handles the production topology (6-10 nodes, 12-20 links)
-- [ ] Unit tests for SVG layout logic (node positioning, link routing)
-- [ ] E2E Playwright test: Graph tab renders with mock GM data, node/link counts correct
-- [x] Mock mode: renders a representative topology when GM is unreachable (development/testing)
-- [ ] Architect review: topology accurately represents the GM-managed graph
-- [ ] UX specialist review: diagram is scannable, not cluttered, consistent with existing views (blocked: 600px responsive bug)
+### Definition of Done
+
+- [ ] Backend `/api/v1/graph/topology` endpoint implemented, returning merged
+  GM + pw-dump + filter-chain internal data as JSON
+- [ ] `graph.js` fully rewritten — no code from the hardcoded implementation
+  (`23a57c1`) retained
+- [ ] Dynamic SVG layout renders the production topology correctly
+- [ ] Filter-chain internal structure visible (convolvers, gain nodes, routing)
+- [ ] At least gain Mult is editable in-place on the graph
+- [ ] Level meters render on audio-carrying nodes with pcm-bridge data
+- [ ] E2E Playwright test: graph tab renders with mock topology data, correct
+  node/link counts, filter-chain expanded
+- [ ] E2E Playwright test: gain edit on graph updates value and calls API
+- [ ] Architect review: topology accurately represents `pw-dump` output and
+  filter-chain internals — BEFORE implementation (design gate)
+- [ ] UX specialist review: diagram is scannable, not cluttered, consistent
+  with existing views
+- [ ] Verified on Pi: graph matches actual `pw-dump` output for DJ mode
+
+### Risks
+
+1. **pw-dump JSON size:** Full `pw-dump` output can be large (hundreds of
+   nodes including non-audio PipeWire internals). Backend must filter to
+   audio-relevant nodes only. Thread pool needed for `pw-dump` subprocess
+   (F-059 fix already deployed)
+2. **Filter-chain config parsing:** The SPA filter-chain configuration is
+   PipeWire-internal format. Parsing may be fragile across PW versions.
+   Fallback: show filter-chain as single node if parsing fails
+3. **Layout stability:** Force-directed layouts can be unstable (nodes jump
+   around on each update). May need a deterministic hierarchical layout
+   instead. Architect to decide in design phase
+4. **Level meter performance:** Rendering ~10 miniature meters at 10 Hz on
+   the graph SVG may cause performance issues on the Pi's browser. May need
+   to throttle to 5 Hz or use canvas instead of SVG for meters
 
 ---
 
@@ -4343,6 +4443,129 @@ not glanceable.
 
 ---
 
+## US-070: GitHub Actions CI with Self-Hosted Runner
+
+**As** the project team,
+**I want** a GitHub Actions CI pipeline running all test suites on every push
+and PR, with branch protection requiring green CI before merging to main,
+**so that** test failures are caught automatically before merge, workers can
+develop on feature branches with confidence, and the "worker said tests passed"
+trust gap (AD finding F14) is eliminated.
+
+**Status:** draft (PO-drafted 2026-03-22. Architect workflow design received.
+QE gate proposal v3 received. Prerequisites: `nix run .#test-pcm-bridge` and
+`nix run .#test-signal-gen` flake targets — task #58 in progress.)
+**Depends on:** All `nix run .#test-*` targets must exist in `flake.nix`
+(test-unit, test-e2e, test-room-correction, test-graph-manager, test-pcm-bridge,
+test-signal-gen, test-drivers)
+**Blocks:** none (but enables PR-based workflow for all future stories)
+**Decisions:** none
+
+**The problem:** Currently, Gate 1 (worker local testing) is trust-based:
+workers self-report that `nix run .#test-*` passed. There is no automated
+enforcement. Workers test against their working tree (potentially dirty),
+not against committed code. Multiple workers on `main` cannot work in
+parallel without stepping on each other's commits. The testing-process.md
+(Section 8.4) identifies CI as the solution.
+
+**The solution (architect design):** GitHub Actions workflow with a
+self-hosted `aarch64-linux` runner (the dev machine, NOT the Pi). Two
+parallel jobs. Branch protection on `main` requiring green CI. Enables
+feature branches and PR-based workflow.
+
+### Acceptance criteria
+
+**1. Self-hosted runner setup:**
+- [ ] GitHub Actions self-hosted runner installed on the dev machine
+  (aarch64-linux NixOS) and registered with the repository
+- [ ] Runner executes under a dedicated unprivileged user (not root,
+  not the developer's user account)
+- [ ] Runner has access to the Nix store and can execute `nix run`
+  commands
+- [ ] Runner configured as a systemd service with auto-restart
+- [ ] Runner labeled `self-hosted, linux, aarch64` for workflow targeting
+
+**2. Workflow definition (`.github/workflows/ci.yml`):**
+- [ ] Triggered on: push to any branch, pull_request to main
+- [ ] Two parallel jobs:
+  - **`test-all`**: runs `nix run .#test-all` (unit tests + room-correction
+    + graph-manager + pcm-bridge + signal-gen + drivers)
+  - **`test-e2e`**: runs `nix run .#test-e2e` (Playwright E2E tests —
+    separated because they take 7-20 minutes and benefit from parallel
+    execution)
+- [ ] Both jobs use `runs-on: [self-hosted, linux, aarch64]`
+- [ ] Both jobs run against committed code (git checkout), NOT working tree
+- [ ] Workflow file committed to repository
+
+**3. Branch protection rules:**
+- [ ] Branch protection enabled on `main` branch
+- [ ] Required status checks: both `test-all` and `test-e2e` must pass
+- [ ] Merging blocked if either check fails
+- [ ] Force-push to `main` disabled (prevents bypassing CI)
+- [ ] Branch deletion after merge: enabled (keeps branch list clean)
+
+**4. PR-based workflow enablement:**
+- [ ] Workers create feature branches for their work (naming convention:
+  `<story-id>/<short-description>`, e.g., `us-064/graph-rework`)
+- [ ] Workers open PRs against `main` when ready for merge
+- [ ] CI runs automatically on PR creation and on each push to the PR branch
+- [ ] PR merge is blocked until CI passes (enforced by branch protection)
+- [ ] Squash merge as default merge strategy (clean main history)
+
+**5. Nix caching:**
+- [ ] Nix store persists across CI runs on the self-hosted runner (no cold
+  cache penalty — the runner IS the dev machine)
+- [ ] `/nix/store` is shared between the runner and interactive development
+  (same machine, same store)
+- [ ] Workflow does NOT use GitHub-hosted cache actions (unnecessary for
+  self-hosted with persistent Nix store)
+
+**6. Flaky test handling (per QE policy):**
+- [ ] Flaky test = defect filed + test quarantined (`@pytest.mark.skip` with
+  defect ID) until fixed
+- [ ] No "re-run until green" policy — a flaky test is a bug, not an
+  inconvenience
+- [ ] CI failure on a flaky test blocks the PR until the test is fixed or
+  properly quarantined
+
+**7. Security considerations (single-owner repo):**
+- [ ] Self-hosted runner acceptable because this is a single-owner private
+  repository — no risk of untrusted PR code executing on the runner
+- [ ] Runner does NOT have SSH access to the Pi (CI is dev-machine only;
+  Pi deployment remains a manual Gate 2 operation via CM)
+- [ ] Secrets (if any) stored in GitHub repository secrets, not in the
+  workflow file
+
+### Definition of Done
+
+- [ ] Self-hosted runner registered and running as systemd service
+- [ ] `.github/workflows/ci.yml` committed and functional
+- [ ] Both jobs (`test-all`, `test-e2e`) pass on current `main` branch
+- [ ] Branch protection configured on `main` with required status checks
+- [ ] Test PR created, verified that merge is blocked on CI failure and
+  allowed on CI success
+- [ ] Documentation: runner setup and maintenance instructions added to
+  `docs/guide/howto/development.md`
+- [ ] QE sign-off: CI test coverage matches Gate 1 requirements from
+  testing-process.md
+
+### Risks
+
+1. **Runner capacity:** Only one self-hosted runner. If two PRs push
+   simultaneously, jobs queue. Mitigation: concurrency group in workflow
+   to cancel superseded runs on the same branch
+2. **Playwright on aarch64:** Chromium for Playwright on aarch64-linux
+   must be available in the Nix environment. Already verified in
+   `nix run .#test-e2e` (existing flake target)
+3. **Runner machine availability:** If the dev machine is off or
+   rebooting, CI is unavailable. Acceptable for a single-developer
+   project — not a production CI service
+4. **Long E2E test times:** E2E tests take 7-20 minutes. PRs will wait.
+   Mitigation: parallel job execution, concurrency groups to cancel stale
+   runs
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -4456,7 +4679,7 @@ US-059 ──> US-060 (PW Monitoring Replacement, Phase B)
 US-059 ──> US-061 (Measurement Pipeline Adaptation, Phase C)
 US-060 and US-061 are independent of each other (can be parallelized after US-059)
 US-059 ──> US-063 (PW Metadata Collector, pw-top replacement) ──> US-060 AC #2/#3/#7 satisfied
-US-059 + US-060 ──> US-064 (PW Graph Visualization Tab, supersedes US-038)
+US-059 + US-060 + US-066 ──> US-064 (Real PW Graph Visualization Tab — REWORK per F-059, supersedes US-038)
 US-059 + US-051 ──> US-065 (Configuration Tab — Gain, Quantum, Filter Info)
 US-059 ──> US-062 (Boot-to-DJ Mode, minimum viable auto-launch)
 US-060 + US-063 ──> US-066 (Spectrum and Meter Polish — F-026, TK-112, TK-227, pcm-bridge)
@@ -4467,4 +4690,7 @@ US-039 + US-043 ──> US-069 (Speaker Setup & Design Tool — T/S modeling, pl
 US-069 ──> US-011b + US-010 + US-067 (design tool outputs feed profile schema, correction targets, and simulator models)
 US-060 ──> ENH-002 (Comprehensive Tooltips — touch-friendly tooltips for all dashboard elements)
 US-060 + US-055 ──> ENH-003 (Latching Health Alarm — persistent "problems occurred" indicator with acknowledgment)
+US-070 (GitHub Actions CI — self-hosted aarch64 runner, branch protection on main, PR-based workflow)
+  Prerequisites: all nix run .#test-* targets in flake.nix
+  Enables: PR-based parallel development for all future stories
 ```

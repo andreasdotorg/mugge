@@ -2426,3 +2426,43 @@ pre-existing `Type=notify` bug causing restart loops. Fixed in `ba8aaf5`.
 
 **Related:** F-056 (quantum display — blocked on Pi by this), F-057 (gain
 controls — blocked on Pi by this), S-005 (deployment session).
+
+---
+
+## F-062: 25 tests fail in full suite due to deprecated asyncio.get_event_loop()
+
+**Severity:** Medium
+**Status:** Open
+**Found in:** F-059 fix test run (full suite: `pytest tests/ --ignore=tests/e2e/`)
+**Affects:** test_measurement_integration.py (20 tests), test_phase1_validation.py (5 tests)
+**Found by:** Worker (F-059 run), triaged by QE
+**Classification:** Test bug (QE + Architect confirmed 2026-03-22)
+
+**Description:** 25 tests use `asyncio.get_event_loop().run_until_complete(coro)`
+which is deprecated since Python 3.10 and raises `RuntimeError: There is no
+current event loop in thread 'MainThread'` under Python 3.13 when no ambient
+event loop exists.
+
+The tests pass in isolation (FastAPI's TestClient lifespan creates an ambient
+loop as a side effect) but fail when run as part of the full suite because
+earlier tests consume/close that event loop. This means these 25 tests are
+effectively dead in `nix run .#test-unit` which runs the full suite.
+
+**Affected test classes (all in Section 14+ of test_measurement_integration.py
+and TestTK132MockPCMStream in test_phase1_validation.py):**
+- TestGMEnterMeasurementMode (5 tests)
+- TestGMVerifyMeasurementMode (4 tests)
+- TestGMRestoreOnCleanup (4 tests)
+- TestGMRestoreOnAbort (2 tests)
+- TestGMConnectGM (3 tests)
+- TestGMSetupPhaseIntegration (2 tests)
+- TestTK132MockPCMStream (5 tests)
+
+**Fix:** Replace `asyncio.get_event_loop().run_until_complete(coro)` with
+`asyncio.run(coro)` at all 25 call sites. `asyncio.run()` creates a new
+event loop per call — no ambient loop dependency. Verify no test runs inside
+an already-running loop (if so, use `await` + `@pytest.mark.asyncio` instead).
+
+**Files:**
+- `src/web-ui/tests/test_measurement_integration.py` (20 call sites)
+- `src/web-ui/tests/test_phase1_validation.py` (5 call sites)
