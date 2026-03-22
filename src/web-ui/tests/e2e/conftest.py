@@ -235,8 +235,10 @@ def frozen_page(browser, mock_server, request):
         lambda msg: console_errors.append(msg.text) if msg.type == "error" else None,
     )
     pg.goto(f"{mock_server}?scenario=A&freeze_time=true")
-    # Wait for WebSocket data to arrive and populate the UI
-    pg.locator("#sb-dsp-state").wait_for(state="visible")
+    # Wait for WebSocket data to arrive and populate the UI.
+    # Note: sb-dsp-state is a text-only span with zero dimensions in headless
+    # Chromium without fonts (Nix sandbox), so we use "attached" not "visible".
+    pg.locator("#sb-dsp-state").wait_for(state="attached")
     pg.wait_for_function(
         "document.getElementById('sb-dsp-state').textContent !== '--'",
         timeout=5000,

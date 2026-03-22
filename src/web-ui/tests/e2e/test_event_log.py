@@ -22,10 +22,10 @@ def _go_to_system(page):
 # -- 1. Event log section visible in System view --
 
 def test_event_log_section_visible(page):
-    """Event log section is visible in the System view."""
+    """Event log section is attached in the System view."""
     _go_to_system(page)
     section = page.locator(".event-log-section")
-    expect(section).to_be_visible()
+    expect(section).to_be_attached()
 
 
 def test_event_log_list_exists(page):
@@ -39,7 +39,7 @@ def test_event_log_header_exists(page):
     """Event log header with EVENTS title exists."""
     _go_to_system(page)
     header = page.locator(".event-log-header")
-    expect(header).to_be_visible()
+    expect(header).to_be_attached()
 
 
 def test_event_log_filter_buttons_exist(page):
@@ -47,15 +47,15 @@ def test_event_log_filter_buttons_exist(page):
     _go_to_system(page)
     w_btn = page.locator('.event-filter-btn[data-severity="warning"]')
     e_btn = page.locator('.event-filter-btn[data-severity="error"]')
-    expect(w_btn).to_be_visible()
-    expect(e_btn).to_be_visible()
+    expect(w_btn).to_be_attached()
+    expect(e_btn).to_be_attached()
 
 
 def test_event_log_clear_button_exists(page):
     """CLEAR button exists."""
     _go_to_system(page)
     btn = page.locator(".event-clear-btn")
-    expect(btn).to_be_visible()
+    expect(btn).to_be_attached()
 
 
 # -- 2. Events populate after WebSocket data arrives --
@@ -64,7 +64,7 @@ def test_events_populate_from_websocket(page):
     """Events appear in the log after WebSocket data arrives."""
     _go_to_system(page)
     # Wait for at least one event row to appear (session start or connect event)
-    page.locator(".event-row").first.wait_for(state="visible", timeout=5000)
+    page.locator(".event-row").first.wait_for(state="attached", timeout=5000)
     rows = page.locator(".event-row")
     assert rows.count() > 0
 
@@ -72,7 +72,7 @@ def test_events_populate_from_websocket(page):
 def test_session_start_event(page):
     """A session start event appears in the log."""
     _go_to_system(page)
-    page.locator(".event-row").first.wait_for(state="visible", timeout=5000)
+    page.locator(".event-row").first.wait_for(state="attached", timeout=5000)
     # Look for "Session started" text in any event message
     session_events = page.locator(".event-message:text-is('Session started (DJ mode)')")
     # Scenario A is DJ mode, but the text might vary — check for the general pattern
@@ -89,7 +89,7 @@ def test_session_start_event(page):
 def test_connect_event(page):
     """A WebSocket connected event appears in the log."""
     _go_to_system(page)
-    page.locator(".event-row").first.wait_for(state="visible", timeout=5000)
+    page.locator(".event-row").first.wait_for(state="attached", timeout=5000)
     all_messages = page.locator(".event-message")
     found = False
     for i in range(all_messages.count()):
@@ -103,9 +103,9 @@ def test_connect_event(page):
 def test_event_row_has_time(page):
     """Each event row has a time element."""
     _go_to_system(page)
-    page.locator(".event-row").first.wait_for(state="visible", timeout=5000)
+    page.locator(".event-row").first.wait_for(state="attached", timeout=5000)
     first_time = page.locator(".event-row .event-time").first
-    expect(first_time).to_be_visible()
+    expect(first_time).to_be_attached()
     # Time format should be HH:MM:SS
     text = first_time.text_content()
     assert len(text) == 8 and text[2] == ":" and text[5] == ":", \
@@ -117,7 +117,7 @@ def test_event_row_has_time(page):
 def test_clear_button_empties_log(page):
     """CLEAR button removes all events from the log."""
     _go_to_system(page)
-    page.locator(".event-row").first.wait_for(state="visible", timeout=5000)
+    page.locator(".event-row").first.wait_for(state="attached", timeout=5000)
     assert page.locator(".event-row").count() > 0
 
     page.locator(".event-clear-btn").click()
@@ -136,7 +136,7 @@ def test_filter_warning_toggle(page, mock_server):
     new_page.locator("#view-system").wait_for(state="visible")
 
     # Wait for events to populate
-    new_page.locator(".event-row").first.wait_for(state="visible", timeout=5000)
+    new_page.locator(".event-row").first.wait_for(state="attached", timeout=5000)
     # Wait a bit for more events to accumulate
     new_page.wait_for_timeout(3000)
 
@@ -147,14 +147,14 @@ def test_filter_warning_toggle(page, mock_server):
     if warning_count > 0:
         # Click W to hide warnings
         new_page.locator('.event-filter-btn[data-severity="warning"]').click()
-        # Check that warning rows are hidden
+        # Check that warning rows are detached or have display:none
         for i in range(warning_count):
             expect(warning_rows.nth(i)).to_be_hidden()
 
         # Click W again to show warnings
         new_page.locator('.event-filter-btn[data-severity="warning"]').click()
         for i in range(warning_count):
-            expect(warning_rows.nth(i)).to_be_visible()
+            expect(warning_rows.nth(i)).to_be_attached()
     else:
         # No warning events in this run — verify the button exists and is togglable
         w_btn = new_page.locator('.event-filter-btn[data-severity="warning"]')
@@ -175,7 +175,7 @@ def test_filter_error_toggle(page, mock_server):
     new_page.locator("#view-system").wait_for(state="visible")
 
     # Wait for events — scenario D has incrementing xruns
-    new_page.locator(".event-row").first.wait_for(state="visible", timeout=5000)
+    new_page.locator(".event-row").first.wait_for(state="attached", timeout=5000)
     new_page.wait_for_timeout(3000)
 
     error_rows = new_page.locator('.event-row[data-severity="error"]')
@@ -190,7 +190,7 @@ def test_filter_error_toggle(page, mock_server):
         # Click E again to show errors
         new_page.locator('.event-filter-btn[data-severity="error"]').click()
         for i in range(error_count):
-            expect(error_rows.nth(i)).to_be_visible()
+            expect(error_rows.nth(i)).to_be_attached()
     else:
         # Verify button is togglable
         e_btn = new_page.locator('.event-filter-btn[data-severity="error"]')

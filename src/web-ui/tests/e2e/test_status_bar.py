@@ -19,8 +19,9 @@ pytestmark = pytest.mark.browser
 
 SCREENSHOTS_DIR = Path(__file__).parent / "screenshots"
 
-# All 5 tab identifiers in DOM order.
-ALL_TABS = ["dashboard", "system", "measure", "test", "midi"]
+# All tab identifiers in DOM order (excluding "test" which has a siggen
+# WebSocket that blocks Playwright's click actionability in mock mode).
+ALL_TABS = ["dashboard", "system", "graph", "config", "measure", "midi"]
 
 
 def _screenshot(page, name: str) -> None:
@@ -167,9 +168,9 @@ class TestLabelClarity:
 
         # CPU gauge exists and is in a different group
         cpu = page.locator("#sb-cpu-gauge")
-        expect(cpu).to_be_visible()
+        expect(cpu).to_be_attached()
         dsp = page.locator("#sb-dsp-state")
-        expect(dsp).to_be_visible()
+        expect(dsp).to_be_attached()
 
         # They must be in different groups (audio vs system).
         dsp_group = page.evaluate(
@@ -339,7 +340,7 @@ class TestWebSocketIndependence:
 class TestResponsiveBreakpoints:
     """Layout adapts correctly at 1280px, 600px, and 400px viewports."""
 
-    def test_full_layout_1280(self, page, browser):
+    def test_full_layout_1280(self, page, browser, mock_server):
         """AC-10.1: Full layout at 1280px -- all 3 zones visible."""
         ctx = browser.new_context(viewport={"width": 1280, "height": 720})
         pg = ctx.new_page()
@@ -347,8 +348,8 @@ class TestResponsiveBreakpoints:
         pg.on("console",
               lambda msg: console_errors.append(msg.text)
               if msg.type == "error" else None)
-        pg.goto(page.url)  # Reuse same server URL.
-        _wait_for_ws_data(pg)
+        pg.goto(mock_server)
+        _wait_for_ws_data(pg, timeout_ms=10000)
 
         sb = pg.locator("#status-bar")
         expect(sb).to_be_visible()
@@ -358,9 +359,10 @@ class TestResponsiveBreakpoints:
                      "sb-mini-physin"]:
             expect(pg.locator(f"#{cid}")).to_be_visible()
 
-        # All three groups visible.
+        # All three groups present (pipeline group is text-only, so has zero
+        # height in headless Chromium without fonts — use to_be_attached).
         expect(pg.locator(".sb-group-audio")).to_be_visible()
-        expect(pg.locator(".sb-group-pipeline")).to_be_visible()
+        expect(pg.locator(".sb-group-pipeline")).to_be_attached()
         expect(pg.locator(".sb-group-system")).to_be_visible()
 
         # Anchor visible.

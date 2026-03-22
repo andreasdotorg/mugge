@@ -165,10 +165,16 @@ def _assert_screenshot(
 # -- Tests --
 
 def test_dashboard_screenshot(frozen_page, request):
-    """Visual regression: Dashboard view with frozen scenario-A data."""
+    """Visual regression: Dashboard view with frozen scenario-A data.
+
+    Uses a higher diff threshold (5%) than the default (1%) because the
+    dashboard contains animated canvas meters whose exact pixel state
+    depends on requestAnimationFrame timing, not on the frozen mock data.
+    """
     frozen_page.wait_for_timeout(500)
     update = request.config.getoption("--update-snapshots", default=False)
-    _assert_screenshot(frozen_page, "dashboard-view.png", update=update)
+    _assert_screenshot(frozen_page, "dashboard-view.png", update=update,
+                       max_diff_pixel_ratio=0.05)
 
 
 def test_system_screenshot(frozen_page, request):
