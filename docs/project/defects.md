@@ -1896,3 +1896,51 @@ timeout protection so hung tests fail fast rather than blocking the suite.
 
 **Related:** F-048 (parent defect for E2E failures), US-050 (TEST phase
 needs green suite).
+
+---
+
+## F-050: Dashboard brightness too low — spectrum grid, meter labels, meter outlines barely visible (OPEN)
+
+**Severity:** Medium (usability — operator cannot read dashboard elements at normal viewing distance)
+**Status:** Open (worker-brightness assigned to task #37)
+**Found in:** Owner UX review (2026-03-22)
+**Affects:** Dashboard tab (`dashboard.js`, `style.css`), D-020 (web UI)
+**Found by:** Owner
+
+**Description:** The owner reports that the dashboard elements are far too
+dark to be usable. Specifically:
+
+1. **Spectrum display major grid lines:** Barely visible at normal viewing
+   distance. These are the primary frequency/dB reference lines that the
+   operator uses to read the spectrum analyzer.
+2. **Spectrum display minor grid lines:** Essentially invisible — owner has
+   to get very close to the monitor to even detect they exist.
+3. **Meter labels:** Text labels for the level meters are too dark to read
+   comfortably.
+4. **Meter outlines:** The borders/outlines of the meter bars are too faint
+   to distinguish the meter boundaries.
+
+The owner's directive: "This all needs to go up in brightness significantly."
+
+**Root cause:** The dark theme CSS color values for grid lines, labels, and
+outlines are set too close to the background color, providing insufficient
+contrast. This is a venue-readability issue — the dashboard must be readable
+at arm's length in varied lighting conditions (dark venue, bright outdoor,
+stage lighting).
+
+**Fix required:** Increase brightness/contrast of:
+- Spectrum major grid lines (stroke color or opacity)
+- Spectrum minor grid lines (stroke color or opacity)
+- Meter label text color
+- Meter outline/border color
+
+All changes should maintain the dark theme aesthetic while providing
+sufficient contrast for venue use. Test at arm's length on a real display.
+
+**Files:**
+- `src/web-ui/static/js/dashboard.js` (spectrum grid line colors, meter rendering)
+- `src/web-ui/static/style.css` (meter label and outline CSS colors)
+- Possibly `src/web-ui/static/js/spectrum.js` (if grid lines are drawn there)
+
+**Related:** D-020 (web UI dashboard), US-066 (spectrum and meter polish),
+TK-112 (spectrum color approach).

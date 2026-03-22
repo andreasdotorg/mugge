@@ -95,7 +95,8 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **US-064** (Phase: **IMPLEMENT, DoD 4/8** — committed `23a57c1` + `5dad57e`): PW Graph Visualization Tab. `graph.js` + CSS + HTML + E2E test committed. 600px responsive fixed. Remaining: GM RPC port info extension (#1, Rust ~20 lines), unit tests (#4), architect review (#7), UX review (#8).
 - **US-066** (Phase: **IMPLEMENT** — T-066-1/2/3 complete): Spectrum and Meter Polish. Phase 1 complete: F-026 spectrum clock drift fix (`784c408`), T-066-2 D-040 label updates (APP→CONV, DSP→OUT, pending commit), T-066-3 PHYS IN group inactive state (pending commit). Phase 2: pcm-bridge deployment + TK-112 validation needs Pi CHANGE session.
 - **US-044** (Phase: **IMPLEMENT** — T-044-4 complete, T-044-1/2 in progress): CamillaDSP Bypass Protection (rewritten for D-040). T-044-4 watchdog implemented (native PW API, <21ms mute, pending commit). T-044-1 (ALSA lockout) and T-044-2 (WP hardening) in progress. T-044-3/5 blocked on earlier tasks. T-044-6/7/8 pending.
-- **F-049** (OPEN, Medium): Measurement wizard mock session state isolation — 8 E2E tests hang when run sequentially. Likely shared state between test cases in `test_measurement_wizard.py`.
+- **F-049** (RESOLVED, pending commit): Measurement wizard mock session state isolation fixed (task #24).
+- **F-050** (OPEN, Medium): Dashboard brightness too low — spectrum grid lines, meter labels, meter outlines barely visible. Owner UX feedback 2026-03-22. worker-brightness assigned (task #37).
 - **F-040** (**RESOLVED** — committed `4c80c23` 2026-03-21): Panic MUTE/UNMUTE backend (`audio_mute.py` + `pw_helpers.py`). US-065 and US-064 commits followed (`965f501`, `23a57c1`). No longer blocking.
 - **F-041** (**RESOLVED, VERIFIED** — `3a1e6bb` + `c76b882`): Mock server crash fix. Health-check + stderr capture in conftest.py. Additional fix `c76b882`: subprocess.PIPE replaced with tempfile (deadlock prevention). Verified 2026-03-21: full E2E suite completed, no crash. 124 passed, 41 failed (pre-existing regressions → F-048).
 - **F-048** (IN PROGRESS → ~1-8 remaining, Medium): Originally 41 E2E test failures. **25 fixed** (system_view, status_bar, visual_regression, event_log — pending commit). **13 fixed** (capture_spectrum + measurement_wizard — pending commit). Remaining: measurement wizard state isolation (F-049, 8 tests hang sequentially).
@@ -447,7 +448,7 @@ See `docs/project/defects.md` for full details.
 | F-039 | Medium | Open | DSP load gauge shows 0% — FilterChainCollector hardcodes processing_load. Needs pw-top BUSY parsing (US-060 AC #3). |
 | F-040 | High | Resolved | Panic MUTE/UNMUTE: backend `audio_mute.py` + `pw_helpers.py` committed (`4c80c23`). US-065 (`965f501`) and US-064 (`23a57c1`) committed on top. |
 | F-041 | High | Resolved (VERIFIED) | Mock server crash: `3a1e6bb` health-check + `c76b882` PIPE deadlock fix. Verified: 124 pass, no crash. 41 pre-existing failures tracked as F-048. |
-| F-048 | Medium | Open | 41 E2E test failures: stale selectors + CSS visibility (5 categories). Pre-existing regressions from F-038/US-051/US-064/US-065 UI changes. |
+| F-048 | Medium | In progress | 41 E2E test failures: 38 fixed (pending commit), remaining ~1-8 are F-049. |
 | F-042 | Medium | Resolved | 5 E2E assertion failures: test fixes committed (`3a1e6bb`, worker-2). Stale selectors + timing adjustments. |
 | F-043 | Low | Resolved | GM SCHED_OTHER color fix (`ef7a063`). |
 | F-044 | Low | Resolved | "Links 100" → actual/desired format (`ef7a063`). |
@@ -456,7 +457,8 @@ See `docs/project/defects.md` for full details.
 | TK-249 | Medium | Open | PW `linear` Mult verified functional (owner confirmed during C-005). Downgraded from CRITICAL to calibration investigation — absolute SPL doesn't match theory, but gain mechanism works. Not a safety blocker. |
 | F-046 | High | Resolved | Quantum confirmation dialog added (`30a25e1`). |
 | F-047 | Low | Resolved | `:focus-visible` CSS styles added (`5dad57e`). |
-| F-049 | Medium | Open | Measurement wizard mock session state isolation: 8 E2E tests hang when run sequentially. |
+| F-049 | Medium | Resolved | Measurement wizard mock session state isolation fixed (task #24, pending commit). |
+| F-050 | Medium | Open | Dashboard brightness too low: spectrum grid lines, meter labels, meter outlines barely visible. Owner UX feedback. worker-brightness assigned. |
 
 ### Resolved
 
