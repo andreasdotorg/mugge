@@ -4566,6 +4566,311 @@ feature branches and PR-based workflow.
 
 ---
 
+## US-071: Documentation Overhaul — Post-D-040 Audit and Update
+
+**As** the system builder (and future self six months from now),
+**I want** all project documentation audited and updated to reflect the current
+D-040 PipeWire filter-chain architecture, current gain architecture, current
+test gates, CI infrastructure, and web UI state,
+**so that** documentation is a trustworthy operational reference — not a
+historical artifact that misleads anyone who reads it.
+
+**Status:** draft (PO-drafted 2026-03-22 per owner directive. TW starting
+audit now — task #70.)
+**Depends on:** D-040 (architecture pivot that made docs stale), US-070
+(CI adds new workflow docs), US-065 (gain architecture changed)
+**Blocks:** none (but stale docs actively harm all other work)
+**Decisions:** D-040 (CamillaDSP abandoned), D-009 (gain staging — Mult
+params, not CamillaDSP YAML), D-039/D-043 (GraphManager)
+
+**The problem:** D-040 (2026-03-16) was a fundamental architecture pivot:
+CamillaDSP abandoned, ALSA Loopback removed, gain architecture changed from
+CamillaDSP YAML to PipeWire `linear` builtin Mult params, monitoring moved
+from pycamilladsp to pcm-bridge/pw-cli. SETUP-MANUAL.md (2200 lines) is
+largely stale — it documents CamillaDSP installation, configuration, and
+troubleshooting that no longer apply. Architecture docs reference the old
+dual-graph pipeline. Test gates changed (nix run as sole QA gate). CI was
+added (US-070). The web UI has 7 tabs now, not 2. Safety docs need gain
+architecture updates (D-009 enforcement is now via Mult params, not YAML).
+
+Additionally, role prompts were separated from project config (owner directive
+2026-03-22), creating a new documentation layer. Lab notes from the D-040
+transition period are the primary source of truth for many current procedures.
+
+**The solution:** Systematic audit of every document in the repository, with
+TW leading the audit and subject matter experts reviewing domain-specific
+sections.
+
+### Acceptance criteria
+
+**1. SETUP-MANUAL.md overhaul:**
+- [ ] CamillaDSP sections marked as historical or removed (installation,
+  configuration, troubleshooting, websocket API, YAML reference)
+- [ ] PipeWire filter-chain convolver setup documented (config file location,
+  coefficient WAV files, `pw-cli` gain commands, quantum management)
+- [ ] GraphManager documented (installation, RPC API, mode transitions,
+  link topology management)
+- [ ] pcm-bridge documented (installation, level metering, TCP protocol)
+- [ ] Signal-gen documented (installation, RPC API, sweep generation)
+- [ ] ALSA Loopback references removed (no longer in the signal path)
+- [ ] Web UI documented (all 7 tabs, service setup, HTTPS, port 8080)
+- [ ] Test plan section updated (BM-2 results supersede T1a-e, nix run
+  as QA gate, CI workflow)
+
+**2. Architecture docs update:**
+- [ ] `docs/architecture/rt-audio-stack.md`: pipeline diagram updated to
+  pure PipeWire (remove CamillaDSP, ALSA Loopback). Performance numbers
+  updated (1.70% CPU at q1024, 3.47% at q256)
+- [ ] `docs/architecture/unified-graph-analysis.md`: Add D-040 outcome
+  section — BM-2 validated Option B, CamillaDSP abandoned. Historical
+  analysis preserved but clearly labeled as pre-D-040
+- [ ] `docs/architecture/web-ui.md`: Update for current 7-tab SPA
+  architecture, pcm-bridge data source, GraphManager integration
+- [ ] `docs/architecture/web-ui-monitoring-plan.md`: Update monitoring
+  sources (pcm-bridge replaces pycamilladsp, pw-cli replaces websocket)
+- [ ] `docs/architecture/measurement-daemon.md`: Flag CamillaDSP
+  dependencies as needing replacement (US-061)
+
+**3. Safety documentation update:**
+- [ ] `docs/operations/safety.md`: Gain staging section updated — D-009
+  enforcement is now via `pw-cli` Mult params on convolver node (not
+  CamillaDSP YAML). Maximum Mult <= 1.0 verified by US-044 watchdog
+- [ ] Driver protection filters (D-031): document that HPFs are now in
+  PipeWire filter-chain config, not CamillaDSP
+- [ ] USBStreamer transient risk: verify documentation still accurate
+  post-D-040 (PipeWire restart behavior differs from CamillaDSP restart)
+
+**4. Development workflow docs:**
+- [ ] `docs/guide/howto/development.md`: Update for CI workflow (US-070),
+  branch-based development, PR process, `nix run .#test-*` as sole QA gate
+- [ ] Nix flake targets documented (all test-* apps, dev shell, checks)
+- [ ] Pi deployment procedure updated (no CamillaDSP service restart,
+  filter-chain config reload procedure)
+
+**5. Project management docs:**
+- [ ] `docs/project/status.md`: Comprehensive current state update
+- [ ] `docs/project/decisions.md`: Verify all decisions post-D-040 are
+  recorded (D-040 through D-043+)
+- [ ] `docs/project/testing-process.md`: Verify alignment with actual
+  practice (nix run gates, CI, L-042 process)
+
+**6. Lab notes consolidation:**
+- [ ] Key procedures scattered across lab notes (GM-12, BM-2, filter-chain
+  config reference) extracted into permanent how-to docs or SETUP-MANUAL
+  sections
+- [ ] Lab notes remain as historical records but are not the primary
+  reference for any current procedure
+
+**7. Staleness markers:**
+- [ ] Every document that references CamillaDSP, ALSA Loopback,
+  pycamilladsp, or the pre-D-040 architecture is either updated or
+  clearly marked with a staleness warning at the top (e.g.,
+  "**WARNING:** This document predates D-040 and has not been updated.")
+- [ ] No document silently contains stale information without a marker
+
+### Definition of Done
+
+- [ ] TW audit checklist completed — every `.md` file in the repo reviewed
+  and categorized as: current, updated, or marked stale
+- [ ] SETUP-MANUAL.md reflects the current D-040 architecture end-to-end
+- [ ] Architecture docs updated with current pipeline diagram
+- [ ] Safety docs updated with current gain architecture
+- [ ] Development how-to updated with CI and nix run workflow
+- [ ] No CamillaDSP reference in any document is presented as current
+  operational procedure (all either removed, marked historical, or in
+  the unified-graph-analysis.md historical context)
+- [ ] Audio engineer review: technical accuracy of updated audio/DSP
+  sections
+- [ ] Security specialist review: safety docs accuracy
+- [ ] Owner review: SETUP-MANUAL.md is usable as an operational reference
+
+### Risks
+
+1. **Scope creep:** 80+ markdown files in the repo. Strict prioritization
+   needed — SETUP-MANUAL.md and safety docs first, architecture docs
+   second, lab notes last (mark stale, don't rewrite)
+2. **Moving target:** Active development continues. Docs may go stale
+   again during the overhaul. Mitigation: update docs as part of each
+   story's DoD going forward (not just this one-time overhaul)
+3. **CamillaDSP historical value:** Some CamillaDSP content (benchmarks,
+   architecture analysis) has historical and educational value. Don't
+   delete it — mark it as historical context clearly separated from
+   current procedures
+
+---
+
+## US-072: NixOS Standalone Build — SD Image and nixos-anywhere Deployment
+
+**As** the system builder,
+**I want** a single NixOS flake that can produce both a flashable SD card
+image AND perform a remote `nixos-anywhere` OS switchover on a running Pi,
+incorporating the complete current RT audio stack (PREEMPT_RT kernel,
+PipeWire 1.4.9 at FIFO/88, filter-chain convolver, GraphManager, pcm-bridge,
+signal-gen, web UI, all systemd services),
+**so that** the entire system is reproducibly buildable from source, a new Pi
+can be provisioned in minutes, and the current manual Debian Trixie setup
+can be replaced with a declarative NixOS configuration.
+
+**Status:** draft (PO-drafted 2026-03-22 per owner directive. Architect
+designing now — task #69.)
+**Depends on:** US-019 (state capture — NixOS config IS the captured state),
+US-059 (GraphManager must be buildable), all Rust binaries in flake
+(pcm-bridge, signal-gen, graph-manager)
+**Blocks:** US-020 (redundancy — NixOS makes SD card cloning trivial)
+**Decisions:** D-013 (PREEMPT_RT mandatory), D-022 (hardware V3D GL), D-040
+(pure PW pipeline)
+**Supersedes:** US-019 partially (NixOS flake IS the reproducible setup —
+tool-agnostic state capture becomes the NixOS configuration itself)
+
+**The problem:** The Pi currently runs Debian Trixie with ~50 manual
+configuration steps documented across SETUP-MANUAL.md and lab notes.
+Reproducing the system on a new SD card requires following these steps
+manually — error-prone and time-consuming. The project already has a partial
+NixOS configuration in `nix/nixos/` (5 files: `configuration.nix`,
+`hardware.nix`, `network.nix`, `sd-image.nix`, `users.nix`) and a
+`nixosConfigurations.mugge` in `flake.nix`, but these are Phase 1 drafts
+that predate D-040: they reference CamillaDSP, ALSA Loopback, and don't
+include PipeWire filter-chain, GraphManager, or the web UI stack.
+
+**The solution:** Extend the NixOS configuration to capture the complete
+current Pi state declaratively. Two deployment paths from the same config:
+(1) `nix build .#images.sd-card` produces a flashable image for new hardware,
+(2) `nixos-anywhere` performs remote OS switchover on a running Pi over SSH.
+
+### Acceptance criteria
+
+**1. Kernel and boot:**
+- [ ] PREEMPT_RT kernel for Pi 4B (matching current `6.12.62+rpt-rpi-v8-rt`
+  or newer RT kernel). Source: `linuxPackages_rpi4` with RT patch, or
+  custom kernel derivation
+- [ ] `config.txt` settings: `kernel=kernel8_rt.img` equivalent,
+  `dtoverlay=vc4-kms-v3d`, `gpu_mem=256`, `arm_boost=1`, `enable_uart=1`
+- [ ] Hardware V3D GL active (D-022) — no pixman, no llvmpipe, no V3D blacklist
+- [ ] BCM2835 watchdog enabled
+
+**2. Audio stack (PipeWire + filter-chain):**
+- [ ] PipeWire 1.4.9+ from trixie-backports equivalent (or nixpkgs version
+  with filter-chain convolver support including FFTW3 NEON)
+- [ ] PipeWire systemd user service with SCHED_FIFO 88 override (F-020
+  workaround)
+- [ ] Filter-chain convolver configuration deployed to
+  `/etc/pi4audio/pipewire/filter-chain-convolver.conf` (or NixOS-managed
+  equivalent path)
+- [ ] Coefficient WAV files deployed to `/etc/pi4audio/coeffs/`
+- [ ] Production quantum config (`10-audio-settings.conf`): default quantum
+  256, force-quantum via `pw-metadata` at runtime
+- [ ] WirePlumber with linking disabled (D-043) — device management only
+- [ ] No ALSA Loopback (`snd-aloop` NOT loaded), no CamillaDSP
+
+**3. Custom services (Rust binaries):**
+- [ ] GraphManager binary built from `src/graph-manager/` via Nix, installed
+  as systemd user service on port 4002
+- [ ] pcm-bridge binary built from `src/pcm-bridge/` via Nix, installed as
+  systemd user service on port 9100 (level metering mode)
+- [ ] signal-gen binary built from `src/signal-gen/` via Nix, installed as
+  systemd user service on port 4001
+- [ ] Web UI (FastAPI) deployed as systemd user service on port 8080 with
+  HTTPS (self-signed cert)
+- [ ] All services start automatically on boot in correct order
+  (PipeWire -> filter-chain -> GraphManager -> pcm-bridge -> web UI)
+
+**4. Desktop and display:**
+- [ ] labwc (Wayland compositor) as systemd user service
+- [ ] Hardware V3D GL compositor (no pixman override)
+- [ ] lightdm disabled, labwc auto-starts
+- [ ] wayvnc for remote access (password-protected)
+
+**5. Network and security:**
+- [ ] nftables firewall with current rules (US-000a): SSH 22, VNC 5900,
+  Web UI 8080, mDNS 5353, ICMP, loopback, established/related. Default
+  DROP inbound
+- [ ] SSH key-based auth only (password auth disabled)
+- [ ] Hostname: `mugge`
+- [ ] mDNS via avahi (`mugge.local`)
+
+**6. Applications:**
+- [ ] Mixxx installed (version available in nixpkgs — may differ from
+  Trixie's 2.5.0)
+- [ ] Reaper installed (binary package or nixpkgs derivation)
+- [ ] USB device udev rules for: UMIK-1, USBStreamer, Hercules DJControl
+  Mix Ultra, APCmini mk2, Nektar SE25
+
+**7. SD card image generation:**
+- [ ] `nix build .#images.sd-card` produces a compressed, flashable `.img.zst`
+- [ ] Image boots on Pi 4B, all services start, web UI accessible
+- [ ] Image size reasonable (< 4 GB compressed for 16 GB+ SD cards)
+
+**8. nixos-anywhere remote deployment:**
+- [ ] `nixos-anywhere --flake .#mugge root@<ip>` performs remote OS
+  switchover on a running Pi (Debian or NixOS) over SSH
+- [ ] Switchover preserves user data in `/home/ela/` (or documents the
+  data migration procedure)
+- [ ] Rollback possible: NixOS generation switching allows reverting to
+  previous configuration
+
+**9. Development workflow integration:**
+- [ ] `nix build .#images.sd-card` works from the dev machine
+  (cross-compilation aarch64 on x86_64, or native on aarch64 dev machine)
+- [ ] Configuration changes tested via `nixos-rebuild build --flake .#mugge`
+  before deployment
+- [ ] CI (US-070) can validate NixOS build (not deployment) as an additional
+  check
+
+### Definition of Done
+
+- [ ] `nix build .#images.sd-card` produces a bootable image that passes
+  a smoke test: boots, PipeWire runs at FIFO/88, filter-chain convolver
+  loads, web UI accessible on port 8080, GraphManager responsive on
+  port 4002
+- [ ] `nixos-anywhere` deployment tested on a spare SD card (not the
+  production card) — full stack operational after switchover
+- [ ] All 5 NixOS module files in `nix/nixos/` updated for D-040 architecture
+  (no CamillaDSP references, no ALSA Loopback, correct kernel)
+- [ ] `flake.nix` exposes `images.sd-card` output alongside existing
+  `nixosConfigurations.mugge`
+- [ ] Architect review: NixOS module structure, service dependencies, and
+  build system
+- [ ] Audio engineer review: PipeWire + filter-chain configuration matches
+  current production setup
+- [ ] Security specialist review: firewall rules, SSH config, service
+  isolation match US-000a requirements
+- [ ] Owner smoke test: flash SD image, boot Pi, verify audio output works
+
+### Risks
+
+1. **PREEMPT_RT kernel availability:** The Raspberry Pi PREEMPT_RT kernel
+   may not be available in nixpkgs. May require a custom kernel derivation
+   pulling from the `raspberrypi/linux` RT branch. This is the highest-risk
+   item — without RT kernel, the entire NixOS build is non-viable for
+   production (D-013)
+2. **PipeWire version parity:** nixpkgs PipeWire may lag behind the
+   trixie-backports 1.4.9 version. Filter-chain convolver behavior must
+   be identical. May need a nixpkgs overlay to pin the correct version
+3. **Mixxx version:** nixpkgs may have a different Mixxx version than
+   Trixie's 2.5.0. Hardware GL performance on NixOS needs validation
+4. **Cross-compilation:** Building an aarch64 SD image on an x86_64 host
+   requires cross-compilation or remote builder. The aarch64 dev machine
+   avoids this but not all contributors may have one
+5. **nixos-anywhere maturity:** `nixos-anywhere` is relatively new tooling.
+   The Raspberry Pi deployment path may have edge cases (firmware partition
+   handling, U-Boot vs direct kernel boot)
+6. **Data migration:** Switching from Debian to NixOS on the production SD
+   card is destructive. Must have a tested rollback plan (keep Debian SD
+   card as backup)
+
+### Phasing (architect to refine)
+
+- **Phase 1:** NixOS config builds and produces bootable image with basic
+  services (PipeWire, network, SSH). Validate kernel and V3D
+- **Phase 2:** Add custom Rust services (GraphManager, pcm-bridge, signal-gen,
+  web UI). Validate audio pipeline end-to-end
+- **Phase 3:** Add applications (Mixxx, Reaper), desktop (labwc, wayvnc),
+  udev rules. Full production parity
+- **Phase 4:** nixos-anywhere deployment tested. Documentation. Owner
+  acceptance
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -4693,4 +4998,7 @@ US-060 + US-055 ──> ENH-003 (Latching Health Alarm — persistent "problems 
 US-070 (GitHub Actions CI — self-hosted aarch64 runner, branch protection on main, PR-based workflow)
   Prerequisites: all nix run .#test-* targets in flake.nix
   Enables: PR-based parallel development for all future stories
+D-040 + US-070 + US-065 ──> US-071 (Documentation Overhaul — audit and update all docs for D-040 architecture)
+US-019 + US-059 ──> US-072 (NixOS Standalone Build — SD image + nixos-anywhere, full RT audio stack)
+US-072 ──> US-020 (redundancy — NixOS makes SD card cloning trivial)
 ```

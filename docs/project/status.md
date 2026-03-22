@@ -4,15 +4,18 @@ The project started with a basic question -- can a Raspberry Pi 4B replace a
 Windows PC as a live sound processor? -- and has spent its first phase proving
 that the answer is yes, with margin to spare.
 
-The Pi now runs a complete audio stack: PipeWire for routing, CamillaDSP for
-real-time signal processing, Mixxx for DJ sets, and Reaper for live vocal
-performance. The system is hardened for venue WiFi networks, trimmed for
-headless operation, and benchmarked under load. CPU consumption for 16,384-tap
-FIR convolution on four channels comes in at 5% in DJ mode and about 34% in
-live mode with the full 8-channel production configuration -- far below the
-limits that would have forced compromises on filter quality. The bone-to-electronic latency for the vocalist targets approximately
-21 milliseconds at D-011 parameters -- within the threshold where a singer can
-perform comfortably.
+The Pi now runs a complete audio stack: PipeWire for routing and real-time
+FIR convolution (via its built-in filter-chain convolver, D-040), Mixxx for
+DJ sets, and Reaper for live vocal performance. CamillaDSP was the original
+DSP engine but was abandoned (D-040) after benchmarking showed PipeWire's
+convolver is 3-5.6x more CPU-efficient (FFTW3/NEON vs rustfft). The system
+is hardened for venue WiFi networks, trimmed for headless operation, and
+benchmarked under load. CPU consumption for 16,384-tap FIR convolution on
+four channels comes in at 1.70% in DJ mode (quantum 1024) and 3.47% in live
+mode (quantum 256) -- far below the limits that would have forced compromises
+on filter quality. The PA path latency for the vocalist is approximately
+5.3ms at quantum 256 (live mode) -- well within the threshold where a singer
+can perform comfortably without slapback perception.
 
 The automated room correction pipeline (TK-071) is written: 13 DSP modules
 covering sweep generation, deconvolution, correction filter computation,
@@ -35,13 +38,13 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
 | User stories | active | 68 stories (US-000 through US-065 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039-043): driver database. US-044: bypass protection. US-045-049: measurement safety + Path A + visualization (owner planning brief 2026-03-13). US-050: measurement mock backend / E2E test harness (owner directive 2026-03-14, scope expanded 2026-03-15). **Tier 9 (US-051-053): observable tooling (owner strategic pivot 2026-03-15).** US-051: persistent status bar. US-052: RT signal generator (Rust). US-053: manual test tool page. **Tier 10 (US-054-055): ADA8200 mic input for measurements (AE calibration transfer assessment 2026-03-15).** US-054: ADA8200 mic channel selection. US-055: calibration transfer from UMIK-1 to ADA8200 mic. **Tier 11 (US-056-061): architecture evolution (owner directive 2026-03-16, D-040 pivot).** US-056: CANCELLED (D-040). US-057: CANCELLED (D-040). US-058: DONE (BM-2 PASS: 1.70% CPU, triggered D-040 abandon CamillaDSP). US-059: GraphManager Core + Production Filter-Chain, Phase A (D-039+D-040, selected). US-060: PipeWire Monitoring Replacement, Phase B (draft, depends US-059). US-061: Measurement Pipeline Adaptation, Phase C (draft, depends US-059). US-011b and US-012 amended with power budget validation and automated gain calibration. US-047/048/049 implementation gated on UX design validation (TK-160 -> TK-161 -> TK-162). **US-063: PW Metadata Collector (pw-top replacement, satisfies US-060 AC #2/#3/#7, selected 2026-03-21).** **US-064: PW Graph Visualization Tab (supersedes US-038, draft 2026-03-21).** **US-065: Configuration Tab — Gain, Quantum, Filter Info (selected 2026-03-21, worker-1 assigned).** |
-| CamillaDSP configs | draft | In SETUP-MANUAL.md, not yet tested on hardware. D-011: all 8 channels must route through CamillaDSP (IEM as passthrough on ch 6-7). |
+| PW filter-chain config | deployed | `30-filter-chain-convolver.conf` on Pi. 4ch FIR convolver + gain nodes. CamillaDSP configs are historical (service stopped, D-040). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | done (TK-071) | `src/room-correction/` — 13 modules (sweep, deconvolution, correction, crossover, combine, export, verify), mock room simulator, CLI runner, spatial averaging. Bose FIR generator (`generate_bose_filters.py`). All verification tests pass (D-009 compliant). |
 | Documentation suite | not started | Stories US-014 through US-016 defined |
-| Web UI platform | Stage 1+2 deployed | D-020 production dashboard deployed with 4 real backend collectors (CamillaDSP, PCM, System, PipeWire). HTTPS via self-signed cert (D-032). Spectrum analyzer via browser FFT. 24-channel meter layout. Lab notes: `D-020-poc-validation.md`, `webui-real-data-deployment.md`. |
+| Web UI platform | Stage 1+2 deployed | D-020 production dashboard deployed with 4 backend collectors (FilterChain/GM RPC, Levels/pcm-bridge, System, PipeWire). HTTPS via self-signed cert (D-032). Spectrum analyzer, Config tab (US-065), Graph viz (US-064 rework). Lab notes: `D-020-poc-validation.md`, `webui-real-data-deployment.md`. |
 | Speaker profiles (Bose) | measured | PS28 III sub: port tuning measured (58/88 Hz dual-port), type changed to ported. Temporary bass shelf: LowShelf 70 Hz +6 dB Q=0.7 on sub ch [2,3] (D-034, temporary until Path A). Jewel Double Cube satellite: near-field measured (peak 339.8 Hz, usable 200Hz-6kHz), crossover moved 155->200 Hz. Lab notes written. |
-| Core software (CamillaDSP, Mixxx, Reaper) | installed | CamillaDSP 3.0.1, Mixxx 2.5.0, Reaper 7.64, wayvnc, Python venv. 7.5G/117G disk. RustDesk removed per D-018. |
+| Core software (PipeWire, Mixxx, Reaper) | installed | PipeWire 1.4.9 (filter-chain convolver), Mixxx 2.5.0, Reaper 7.64, wayvnc. CamillaDSP 3.0.1 installed but service stopped (D-040). GraphManager, signal-gen, pcm-bridge (Rust services). RustDesk removed per D-018. |
 | Platform security | partial | US-000a: firewall active, SSH hardened, services disabled. CamillaDSP systemd service with `-a 127.0.0.1` (F-002 resolved). nfs-blkmap masked (F-011). wayvnc password auth (F-013 partially resolved — TLS needed before US-018 guest devices). RustDesk purged, firewall cleaned (F-014 resolved). |
 | Desktop trimming (US-000b) | done | lightdm disabled, labwc user service, RTKit installed, PipeWire FIFO rtprio 83-88. RAM: 397→302Mi. USBStreamer path fixed (hw:USBStreamer,0). |
 | CamillaDSP benchmarks (US-001) | done | 16k taps @ 2048: 5.23% CPU, 16k @ 512: 10.42% CPU. Zero xruns. A1/A2 validated. |
@@ -69,8 +72,11 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-059 | done | **14/14** | **done** (owner-accepted 2026-03-21). GraphManager Core + Production Filter-Chain (Phase A). Clean reboot demo PASS (S-004, 17/17 checks). Pi boots into working DJ mode on pure PW filter-chain pipeline (D-040/D-043). Follow-ups: F-033, I-1 CI wiring, spectral verification (AC 3141), D-042 lifting. |
 | US-060 | VERIFY | 3/7 | **VERIFY PASS** (S-002 2026-03-21). FilterChainCollector running, GM RPC working, 0 xruns. `56ef3f0` LevelsCollector adds PW-native level data for meters. DoD #1 (collectors replaced) advancing. Known gaps: AC #3 (processing load, F-039), AC #7 (xrun counter from PW metadata, needs US-063). |
 | US-061 | VERIFY | 1/8 | **VERIFY PASS** (S-002 2026-03-21). Client files deployed, imports OK on Pi. Known gaps resolved: deploy.py path fixed (`3dcccc2`), measure_nearfield.py pycamilladsp removed (`d368c76`). |
-| US-064 | **DESIGN** | **0/8** | **REWORK REQUIRED (F-059).** Owner directive: hardcoded SVG templates must be replaced with real PipeWire topology from `pw-dump`. Previous commits (`23a57c1`, `5dad57e`) superseded. DoD reset — all items must be redone against new design. Architect review (#7) must precede implementation. |
+| US-064 | **IMPLEMENT** | **1/8** | **REWORK in progress (F-059).** Phase 1 complete: SPA config parser for filter-chain internal topology (task #67, 38 tests, awaiting CM commit). Remaining phases: pw-dump graph builder, dynamic SVG layout, live updates, E2E tests, architect review, UX review. |
+| US-070 | IMPLEMENT | 0/TBD | **CI setup.** GitHub Actions workflow YAML + self-hosted runner setup script + `test-everything` flake target delivered (task #66, awaiting CM commit). DoD TBD — needs story acceptance criteria. |
 | US-065 | IMPLEMENT | 6/10 | **committed** (`965f501` + `5dad57e`). Config Tab + E2E test (#6, `5dad57e`). F-046 quantum confirm dialog committed (`30a25e1`). Remaining: UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10). |
+| US-071 | PENDING | 0/TBD | **Story pending from PO.** Documentation overhaul — TW leading (task #70). Comprehensive docs review and update. DoD TBD. |
+| US-072 | PENDING | 0/TBD | **Story pending from PO.** NixOS standalone build — Architect design complete (task #69): 8-phase plan, module structure, RT kernel, PipeWire configPackages. Existing NixOS work found in `nix/nixos/` (5 files). P1-P3 dev-testable, P4-P7 need Pi. DoD TBD. |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -92,13 +98,14 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **US-051** (Phase: **TEST, DoD 4/4** — advanced 2026-03-21): Persistent System Status Bar. QE test plan delivered: T-051-1 (Playwright E2E, 20+ tests in `test_status_bar.py`), T-051-2 (CI regression), T-051-3 (D-040 inspection — QE reviewing), T-051-4 (Pi hardware — deferred to VERIFY per QE recommendation). TP-003 protocol exists. Committed `8975b5b`. T-051-1/2 need worker execution.
 - **US-053** (Phase: **IMPLEMENT, DoD 4/6** — code complete 2026-03-21): Manual Test Tool Page. Code committed (`94103c3`): 7 UX spec fixes, signal-gen env var. Remaining DoD: #3 integration test (Pi), #4 hot-plug test (Pi), #5 AD sign-off (safety controls), #6 AE sign-off (signal quality). All remaining items need Pi access.
 - **US-065** (Phase: **IMPLEMENT, DoD 6/10** — committed `965f501` + `5dad57e` + `30a25e1`): Configuration Tab. Code + E2E test + F-046 quantum confirm dialog all committed. Remaining DoD: UX screenshot gate (#7), Pi integration test (#8), architect sign-off (#9), safety review (#10).
-- **US-064** (Phase: **DESIGN, DoD 0/8** — **REWORK, F-059**): PW Graph Visualization Tab. Owner directive: current hardcoded SVG template approach (`23a57c1`) must be completely replaced with real PipeWire topology from `pw-dump`. Story returned to DESIGN phase. Architect review (#7) must happen BEFORE re-implementation. All previous DoD items (SVG layout, mock mode, E2E test, responsive) must be redone against new design. F-054/F-055 fixes superseded.
+- **US-064** (Phase: **IMPLEMENT, DoD 1/8** — rework in progress, F-059): PW Graph Visualization Tab. **Phase 1 complete:** SPA config parser module delivered (task #67, worker-spa, 38 tests, awaiting CM commit). Parses PipeWire filter-chain config to expose internal node topology. Remaining phases: pw-dump graph builder, dynamic SVG layout, live updates, E2E tests, architect review, UX review.
+- **US-070** (Phase: **IMPLEMENT** — awaiting CM commit): CI Setup. GitHub Actions workflow YAML + self-hosted runner setup script + `test-everything` flake target delivered (task #66, worker-ci). Enables branch-based parallel work (resolves L-039). DoD TBD.
 - **US-066** (Phase: **IMPLEMENT** — T-066-1/2/3 complete): Spectrum and Meter Polish. Phase 1 complete: F-026 spectrum clock drift fix (`784c408`), T-066-2 D-040 label updates (APP→CONV, DSP→OUT, pending commit), T-066-3 PHYS IN group inactive state (pending commit). Phase 2: pcm-bridge deployment + TK-112 validation needs Pi CHANGE session.
 - **US-044** (Phase: **IMPLEMENT** — T-044-4 complete, T-044-1/2 in progress): CamillaDSP Bypass Protection (rewritten for D-040). T-044-4 watchdog implemented (native PW API, <21ms mute, pending commit). T-044-1 (ALSA lockout) and T-044-2 (WP hardening) in progress. T-044-3/5 blocked on earlier tasks. T-044-6/7/8 pending.
 - **F-049** (RESOLVED, pending commit): Measurement wizard mock session state isolation fixed (task #24).
 - **F-050** (**RESOLVED** — `1b527d8` 2026-03-22): Dashboard brightness increased for spectrum grid lines, meter labels, meter outlines. Owner UX feedback addressed same session. **Follow-ups from deployment review:** F-051 (spectrum bg too bright), F-052 (meters still bad), F-053 (PHYS IN too subtle).
-- **F-056** (PARTIAL FIX, HIGH): Quantum display fix confirmed on Pi. **Xrun counters still OPEN** — `pw-dump` and `pw-cli info` don't expose xrun counts. Need to investigate `pw-top`, `/proc`, PipeWire profiler as alternative sources. **Pi real-mode verification blocked by F-061.**
-- **F-057** (IN PROGRESS, HIGH): Previous fix `e75b73a` based on incorrect assumption that gain nodes are separate PW nodes. Pi OBSERVE session S-004 revealed they're **params on the convolver node** (`pi4audio-convolver`, id 43). Full `pw_helpers.py` rewrite needed. Validates L-042. **Pi real-mode verification blocked by F-061.**
+- **F-056** (PARTIAL FIX, HIGH): Quantum display fix confirmed on Pi. **Xrun counters still OPEN** — `pw-dump` and `pw-cli info` don't expose xrun counts. Need to investigate `pw-top`, `/proc`, PipeWire profiler as alternative sources. **F-061 resolved — Pi verification now unblocked.**
+- **F-057** (IN PROGRESS, HIGH): Previous fix `e75b73a` based on incorrect assumption that gain nodes are separate PW nodes. Pi OBSERVE session S-004 revealed they're **params on the convolver node** (`pi4audio-convolver`, id 43). Full `pw_helpers.py` rewrite committed (`65449c6`). Validates L-042. **F-061 resolved — Pi verification now unblocked.**
 - **F-051/F-052/F-053** (**RESOLVED** — `774c2ee`): Contrast follow-ups from F-050. Spectrum bg restored to black, meter contrast improved, PHYS IN opacity increased.
 - **F-054/F-055** (**RESOLVED** — `93567db`): Graph view HP bypass arc z-order fixed, four gain nodes added.
 - **F-058** (OPEN, Medium): E2E screenshot tests write to read-only Nix store path — 6+ false failures in pure sandbox. Task #49 pending.
@@ -106,7 +113,8 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **ENH-003** (OPEN, Medium): Sticky latching health indicator with manual clear. Analogous to industrial alarm panel.
 - **F-059** (OPEN, HIGH): Graph view uses hardcoded SVG — owner directive to show real `pw-dump` topology. US-064 returned to DESIGN phase, DoD reset to 0/8.
 - **F-060** (OPEN, Medium): L-042 process docs (`17a0cb2`) need corrections: (1) `nix develop` used where `nix run .#test-*` required for QA gates, (2) project-specific details (GraphManager, gain nodes, etc.) embedded in generic role prompts — must be extracted to project config.
-- **F-061** (CODE FIXED `9808a56`, needs Pi deploy): `pw-dump` subprocess hang fixed — `asyncio.to_thread(subprocess.run, ...)` replaces `asyncio.create_subprocess_exec`. Also: webui systemd `Type=notify` restart loop fixed (`ba8aaf5`). **Pi deploy unblocks F-056 and F-057 real-mode verification.**
+- **F-061** (**RESOLVED** — deployed + verified on Pi 2026-03-22): All 6 `asyncio.create_subprocess_exec` calls converted to `asyncio.to_thread`. No more subprocess hangs. Awaiting CM commit. **F-056 and F-057 now unblocked for Pi verification.** New issue found during deploy: F-063 (uvicorn single-worker capacity).
+- **F-063** (OPEN, Medium): uvicorn single-worker saturated by active WebSocket connections — blocks new TLS handshakes. Separate from F-061. Needs `--workers 2` or similar.
 - **F-062** (**RESOLVED** `95aeb0a`): 25 asyncio test failures fixed — `asyncio.get_event_loop()` replaced with `asyncio.run()` across 25 call sites.
 - **F-040** (**RESOLVED** — committed `4c80c23` 2026-03-21): Panic MUTE/UNMUTE backend (`audio_mute.py` + `pw_helpers.py`). US-065 and US-064 commits followed (`965f501`, `23a57c1`). No longer blocking.
 - **F-041** (**RESOLVED, VERIFIED** — `3a1e6bb` + `c76b882`): Mock server crash fix. Health-check + stderr capture in conftest.py. Additional fix `c76b882`: subprocess.PIPE replaced with tempfile (deadlock prevention). Verified 2026-03-21: full E2E suite completed, no crash. 124 passed, 41 failed (pre-existing regressions → F-048).
@@ -256,16 +264,24 @@ shows 25 failures across visual regression (screenshot diffs) and other suites.
 Per L-042 these must be triaged by QE + Architect — not dismissed. Each failure
 needs classification (code bug / test bug / environment gap) and a tracked defect.
 
-**Session totals:** 35 commits, 13 defects resolved, 3 owner approvals.
+**Session totals:** 35+ commits, 15 defects resolved (incl F-061 Pi deploy, F-062), 3 owner approvals, 1 new defect (F-063).
+
+**Late session progress (3 parallel streams):**
+- **US-070 code complete** (task #66, worker-ci): workflow YAML + runner setup script + `test-everything` flake target. Awaiting CM commit.
+- **US-064 Phase 1 complete** (task #67, worker-spa): SPA config parser module + 38 tests. Parses filter-chain config for internal node topology. Awaiting CM commit.
+- **F-062 RESOLVED** (`95aeb0a`): 25 asyncio test failures fixed.
+- **Visual regression snapshots** (task #68, worker-ci): 3 stale reference PNGs from before F-050-F-055 contrast fixes. Updating — test bug, not code regression.
+- **Task #59** (F-061 Pi deploy): **COMPLETE.** All 6 `asyncio.create_subprocess_exec` calls converted to `asyncio.to_thread`. Deployed and verified on Pi — no more subprocess hangs. F-056/F-057 now unblocked. New issue found: F-063 (uvicorn single-worker capacity).
+- **US-072 architect design complete** (task #69): 8-phase NixOS standalone build plan. Existing `nix/nixos/` work (5 files) found. P1-P3 dev-testable, P4-P7 need Pi. Story pending from PO.
 
 **Next steps:**
-- **F-061 Pi deploy:** pw-dump thread pool fix (`9808a56`) needs DEPLOY session — unblocks F-056/F-057 real-mode verification
-- **US-070:** CI setup story draft (GitHub Actions + self-hosted runner)
-- **US-064:** Graph view rework story revision (architect design first)
-- **25 test failures:** QE-led triage per L-042
+- **F-056/F-057 Pi verification:** Now unblocked (F-061 resolved). Quantum xrun counters + gain control real-mode testing.
+- **CM commits:** US-070 + US-064 Phase 1 deliverables + dirty tree cleanup (revert `testing-process.md`)
+- **US-064 Phase 2+:** pw-dump graph builder, dynamic SVG layout — blocked on Phase 1 commit
+- **US-071 (docs overhaul):** Story pending from PO. TW leading (task #70), work in progress as ad-hoc task. Needs proper user story for sprint tracking.
+- **US-072 (NixOS standalone build):** Story pending from PO. Architect designing (task #69), work in progress as ad-hoc task. Needs proper user story for sprint tracking.
 - US-044: T-044-6 (reboot survival), T-044-7 (no-interference test) — need Pi
 - US-066 Phase 2: pcm-bridge deploy + TK-112 validation — needs Pi
-- Working tree has dirty files (`testing-process.md` revert needed — worker accidentally restored `nix flake check` as Gate 2)
 
 ### Session Wrap-Up (2026-03-21, continued session)
 
