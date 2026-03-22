@@ -253,9 +253,9 @@ pub enum AppPortNaming {
     /// These are the monitor ports on the convolver's capture (Audio/Sink) side.
     /// Channel 1 -> "monitor_AUX0", channel 2 -> "monitor_AUX1", etc.
     ConvolverMonitorOutput,
-    /// pcm-bridge input: `input_0`, `input_1`, ...
-    /// PipeWire creates zero-based input ports for streams without position info.
-    /// Channel 1 -> "input_0", channel 2 -> "input_1", etc.
+    /// pcm-bridge input: `input_1`, `input_2`, ...
+    /// PipeWire creates one-based input ports for streams without position info.
+    /// Channel 1 -> "input_1", channel 2 -> "input_2", etc.
     PcmBridgeInput,
 }
 
@@ -285,7 +285,7 @@ impl AppPortNaming {
                 "capture_MONO".to_string()
             }
             AppPortNaming::ConvolverMonitorOutput => format!("monitor_AUX{}", zero_based),
-            AppPortNaming::PcmBridgeInput => format!("input_{}", zero_based),
+            AppPortNaming::PcmBridgeInput => format!("input_{}", channel),
         }
     }
 }
@@ -561,7 +561,7 @@ impl RoutingTable {
     ///
     /// The convolver's Audio/Sink node exposes monitor_AUX0..3 output ports
     /// that mirror its playback_AUX0..3 inputs. pcm-bridge creates generic
-    /// input_0..3 ports (no SPA position array).
+    /// input_1..4 ports (no SPA position array — PW uses 1-based naming).
     fn pcm_bridge_monitor_links() -> Vec<DesiredLink> {
         let cv_mon = AppPortNaming::ConvolverMonitorOutput;
         let pcm = AppPortNaming::PcmBridgeInput;
@@ -819,7 +819,8 @@ mod tests {
 
     #[test]
     fn pcm_bridge_monitor_links_use_correct_ports() {
-        // Verify monitor_AUX0..3 → input_0..3 mapping.
+        // Verify monitor_AUX0..3 → input_1..4 mapping.
+        // PW creates 1-based input ports for streams without SPA position array.
         let table = RoutingTable::production();
         let links = table.links_for(Mode::Monitoring);
         let pcm_links: Vec<_> = links
@@ -830,7 +831,7 @@ mod tests {
             .collect();
         for (i, link) in pcm_links.iter().enumerate() {
             assert_eq!(link.output_port, format!("monitor_AUX{}", i));
-            assert_eq!(link.input_port, format!("input_{}", i));
+            assert_eq!(link.input_port, format!("input_{}", i + 1));
             // Output node is the convolver capture sink (monitor ports).
             assert!(matches!(&link.output_node, NodeMatch::Exact(n) if n == "pi4audio-convolver"));
         }
@@ -1173,9 +1174,9 @@ mod tests {
 
     #[test]
     fn port_naming_pcm_bridge_input() {
-        // pcm-bridge input: input_ prefix, zero-based.
-        assert_eq!(AppPortNaming::PcmBridgeInput.port_name(1), "input_0");
-        assert_eq!(AppPortNaming::PcmBridgeInput.port_name(4), "input_3");
+        // pcm-bridge input: input_ prefix, one-based (PW convention for no SPA positions).
+        assert_eq!(AppPortNaming::PcmBridgeInput.port_name(1), "input_1");
+        assert_eq!(AppPortNaming::PcmBridgeInput.port_name(4), "input_4");
     }
 
     #[test]
