@@ -563,25 +563,7 @@ fn dbfs_to_linear(dbfs: f32) -> f32 {
 
 // build_audio_format is imported from audio_common::audio_format
 
-/// Channel position constants from spa/param/audio/raw.h.
-/// Used for `audio.position` in stream properties and SPA format pods.
-#[allow(dead_code)]
-mod spa_channel {
-    pub const MONO: u32 = 0x02;  // UNKNOWN=0, NA=1, MONO=2
-    pub const AUX0: u32 = 0x1000;
-    pub const AUX1: u32 = 0x1001;
-    pub const AUX2: u32 = 0x1002;
-    pub const AUX3: u32 = 0x1003;
-    pub const AUX4: u32 = 0x1004;
-    pub const AUX5: u32 = 0x1005;
-    pub const AUX6: u32 = 0x1006;
-    pub const AUX7: u32 = 0x1007;
-
-    /// Playback channel positions: 8 aux channels matching loopback sink.
-    pub const PLAYBACK_8CH: [u32; 8] = [AUX0, AUX1, AUX2, AUX3, AUX4, AUX5, AUX6, AUX7];
-    /// Capture channel position: mono (UMIK-1 measurement mic).
-    pub const CAPTURE_MONO: [u32; 1] = [MONO];
-}
+use audio_common::audio_format::spa_channel;
 
 /// Run the PipeWire main loop with playback and capture streams.
 ///

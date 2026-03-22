@@ -96,6 +96,27 @@ pub fn build_audio_format(channels: u32, rate: u32, positions: &[u32]) -> Vec<u8
     buf
 }
 
+/// Channel position constants from `spa/param/audio/raw.h`.
+///
+/// Used for `audio.position` in stream properties and SPA format pods.
+/// Shared across all RT services that create PipeWire streams.
+pub mod spa_channel {
+    pub const MONO: u32 = 0x02;  // UNKNOWN=0, NA=1, MONO=2
+    pub const AUX0: u32 = 0x1000;
+    pub const AUX1: u32 = 0x1001;
+    pub const AUX2: u32 = 0x1002;
+    pub const AUX3: u32 = 0x1003;
+    pub const AUX4: u32 = 0x1004;
+    pub const AUX5: u32 = 0x1005;
+    pub const AUX6: u32 = 0x1006;
+    pub const AUX7: u32 = 0x1007;
+
+    /// Playback channel positions: 8 aux channels matching loopback sink.
+    pub const PLAYBACK_8CH: [u32; 8] = [AUX0, AUX1, AUX2, AUX3, AUX4, AUX5, AUX6, AUX7];
+    /// Capture channel position: mono (UMIK-1 measurement mic).
+    pub const CAPTURE_MONO: [u32; 1] = [MONO];
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,5 +170,23 @@ mod tests {
         let pod = build_audio_format(1, 48000, &[0x02]);
         assert_eq!(pod.len() % 8, 0);
         assert!(pod.len() > 136);
+    }
+
+    #[test]
+    fn spa_channel_mono_value() {
+        assert_eq!(spa_channel::MONO, 0x02);
+    }
+
+    #[test]
+    fn spa_channel_aux_contiguous() {
+        for i in 0u32..8 {
+            assert_eq!(spa_channel::PLAYBACK_8CH[i as usize], 0x1000 + i);
+        }
+    }
+
+    #[test]
+    fn spa_channel_capture_mono() {
+        assert_eq!(spa_channel::CAPTURE_MONO.len(), 1);
+        assert_eq!(spa_channel::CAPTURE_MONO[0], spa_channel::MONO);
     }
 }
