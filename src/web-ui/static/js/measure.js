@@ -231,6 +231,17 @@
         // Update state indicator
         setText("mw-state-text", state.toUpperCase().replace(/_/g, " "));
 
+        // Show/hide abort button (visible during active phases only)
+        var abortBtn = $("mw-abort-btn");
+        if (abortBtn) {
+            var activePhases = ["setup", "gain_cal", "measuring", "filter_gen", "deploy", "verify"];
+            if (activePhases.indexOf(state) >= 0) {
+                show(abortBtn);
+            } else {
+                hide(abortBtn);
+            }
+        }
+
         // Update progress bar segments
         updateProgressBar(state);
     }
@@ -664,6 +675,16 @@
         });
     }
 
+    function abortMeasurement() {
+        fetch("/api/v1/measurement/abort", { method: "POST" })
+            .then(function (resp) {
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+            })
+            .catch(function (err) {
+                setText("mw-error-message", "Abort failed: " + err.message);
+            });
+    }
+
     function returnToIdle() {
         switchScreen("idle");
         // Clear dynamic content
@@ -691,6 +712,11 @@
         var startBtn = $("mw-start-btn");
         if (startBtn) {
             startBtn.addEventListener("click", startMeasurement);
+        }
+
+        var abortBtn = $("mw-abort-btn");
+        if (abortBtn) {
+            abortBtn.addEventListener("click", abortMeasurement);
         }
 
         var returnBtns = document.querySelectorAll(".mw-return-btn");

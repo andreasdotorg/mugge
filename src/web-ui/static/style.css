@@ -1162,6 +1162,28 @@ html, body {
     color: var(--green);
 }
 
+/* Abort button (hidden in IDLE / terminal states) */
+
+.mw-abort-btn {
+    flex-shrink: 0;
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: rgba(229, 69, 58, 0.15);
+    color: var(--red);
+    border: 1px solid rgba(229, 69, 58, 0.3);
+    border-radius: 3px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.mw-abort-btn:hover {
+    background: rgba(229, 69, 58, 0.3);
+}
+
 /* Wizard body (screen container) */
 
 .mw-body {
