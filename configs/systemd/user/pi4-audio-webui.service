@@ -20,8 +20,9 @@ Environment=LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/pipewire-0.3/jack
 # WatchdogSec=30
 Restart=on-failure
 RestartSec=2
-# Web UI must not compete with RT audio
-Nice=10
+# Nice=10 removed (F-064): single-worker uvicorn needs full CPU access
+# to avoid event loop starvation under WebSocket load
+Nice=0
 
 [Install]
 WantedBy=default.target
