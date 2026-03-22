@@ -37,8 +37,7 @@
     var prevColors = {
         cpu: null,
         temp: null,
-        mem: null,
-        dspLoad: null
+        mem: null
     };
 
     // Map PiAudio CSS color class to event severity.
@@ -62,7 +61,7 @@
         var now = Date.now();
 
         // Debounce continuous conditions
-        var debounceCategories = ["cpu", "dsp_load", "temp", "system"];
+        var debounceCategories = ["cpu", "temp", "system"];
         if (debounceCategories.indexOf(category) !== -1) {
             var lastTime = lastEventTime[category] || 0;
             if (now - lastTime < DEBOUNCE_MS) return;
@@ -185,7 +184,6 @@
             prevColors.cpu = PiAudio.cpuColor(cpuNorm);
             prevColors.temp = PiAudio.tempColor(data.cpu.temperature);
             prevColors.mem = PiAudio.memColor(memPct);
-            prevColors.dspLoad = PiAudio.dspLoadColor(data.camilladsp.processing_load);
 
             prevSystemData = data;
             return;
@@ -231,14 +229,8 @@
             prevColors.mem = memColor;
         }
 
-        // DSP load — fire event only on color change (uses PiAudio.dspLoadColor thresholds)
-        var dspLoad = data.camilladsp.processing_load;
-        var dspColor = PiAudio.dspLoadColor(dspLoad);
-        if (dspColor !== prevColors.dspLoad) {
-            pushEvent("dsp_load", colorToSeverity(dspColor),
-                "DSP load: " + dspLoad.toFixed(1) + "%");
-            prevColors.dspLoad = dspColor;
-        }
+        // DSP load: removed (F-088) — processing_load is hardcoded 0.0
+        // (no data source post-D-040). Event detection would produce false events.
 
         // Xrun count increment (value-based, not color-based)
         if (data.camilladsp.xruns > prev.camilladsp.xruns) {
@@ -326,10 +318,18 @@
         // Event detection (compare with previous tick)
         detectSystemEvents(data);
 
+        // F-088: detect GM connectivity for PipeWire metadata honesty.
+        var pwConnected = data.pipewire.pw_connected !== false;
+
         // Header strip
         PiAudio.setText("sys-mode", data.mode.toUpperCase());
-        PiAudio.setText("sys-quantum", String(data.pipewire.quantum));
-        PiAudio.setText("sys-rate", (data.pipewire.sample_rate / 1000) + " kHz");
+        if (pwConnected) {
+            PiAudio.setText("sys-quantum", String(data.pipewire.quantum));
+            PiAudio.setText("sys-rate", (data.pipewire.sample_rate / 1000) + " kHz");
+        } else {
+            PiAudio.setText("sys-quantum", "\u2014", "no-data");
+            PiAudio.setText("sys-rate", "\u2014", "no-data");
+        }
 
         var temp = data.cpu.temperature;
         PiAudio.setText("sys-temp", temp.toFixed(1) + "\u00b0C",
@@ -376,8 +376,13 @@
         // FilterChainCollector hardcodes 0, PW has no clip counter).
         // Show em-dash to avoid fake-truth display (F-088).
         PiAudio.setText("sys-cdsp-clipped", "\u2014", "c-grey");
-        PiAudio.setText("sys-cdsp-xruns", String(cdsp.xruns),
-            cdsp.xruns > 0 ? "c-red" : "c-green");
+        // F-088: xruns come from PipeWireCollector — show em-dash when GM offline.
+        if (pwConnected) {
+            PiAudio.setText("sys-cdsp-xruns", String(cdsp.xruns),
+                cdsp.xruns > 0 ? "c-red" : "c-green");
+        } else {
+            PiAudio.setText("sys-cdsp-xruns", "\u2014", "no-data");
+        }
 
         // Scheduling
         var sched = data.pipewire.scheduling;
@@ -392,8 +397,13 @@
             gmPolicy + "/" + sched.graphmgr_priority,
             gmSchedOk ? "c-green" : "c-red");
         // F-9 FIX: Graph state color-coding — green for running, red for anything else
-        PiAudio.setText("sys-sched-graph", data.pipewire.graph_state,
-            data.pipewire.graph_state === "running" ? "c-green" : "c-red");
+        // F-088: show em-dash when GM offline (graph_state="unknown" is fallback).
+        if (pwConnected) {
+            PiAudio.setText("sys-sched-graph", data.pipewire.graph_state,
+                data.pipewire.graph_state === "running" ? "c-green" : "c-red");
+        } else {
+            PiAudio.setText("sys-sched-graph", "\u2014", "no-data");
+        }
 
         // Memory
         PiAudio.setText("sys-mem-used",

@@ -333,6 +333,7 @@ class TestFallbackSnapshots:
         assert snap["sample_rate"] == 48000
         assert snap["graph_state"] == "unknown"
         assert snap["xruns"] == 0
+        assert snap["pw_connected"] is False
         # Scheduling moved to SystemCollector (TK-245)
         assert "scheduling" not in snap
 
@@ -945,6 +946,7 @@ class TestPipeWireCollectorRPC:
             assert snap["sample_rate"] == 48000
             assert snap["xruns"] == 3
             assert snap["graph_state"] == "running"
+            assert snap["pw_connected"] is True
         _run_async(_test())
 
     def test_force_quantum_preferred(self):
@@ -989,6 +991,7 @@ class TestPipeWireCollectorRPC:
             assert snap["quantum"] == 256
             assert snap["graph_state"] == "unknown"
             assert snap["xruns"] == 0
+            assert snap["pw_connected"] is False
         _run_async(_test())
 
     def test_reconnect_after_disconnect(self):

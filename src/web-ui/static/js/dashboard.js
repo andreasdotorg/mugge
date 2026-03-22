@@ -429,9 +429,17 @@
             prevMonXruns = cdsp.xruns;
         }
 
-        // Spectrum analyzer
+        // Spectrum analyzer — only pass through bands that contain real data.
+        // F-088: FilterChainCollector hardcodes [-60]*31; don't feed fake data.
         if (data.spectrum && data.spectrum.bands) {
-            PiAudioSpectrum.updateData(data.spectrum.bands);
+            var bands = data.spectrum.bands;
+            var allSame = true;
+            for (var bi = 1; bi < bands.length; bi++) {
+                if (bands[bi] !== bands[0]) { allSame = false; break; }
+            }
+            if (!allSame) {
+                PiAudioSpectrum.updateData(bands);
+            }
         }
 
         // SPL (optional field)

@@ -201,19 +201,36 @@
             Math.round(cpuPct) + "%",
             PiAudio.cpuColorRaw(cpuPct));
 
+        // F-088: PipeWire metadata is fallback when GM unreachable.
+        // Show dimmed values to indicate these are defaults, not live data.
+        var pwConnected = data.pipewire.pw_connected !== false;
+
         // Quantum
-        PiAudio.setText("sb-quantum", String(data.pipewire.quantum));
+        if (pwConnected) {
+            PiAudio.setText("sb-quantum", String(data.pipewire.quantum));
+        } else {
+            PiAudio.setText("sb-quantum", "\u2014", "no-data");
+        }
 
         // Sample rate (ENH-001)
-        var rate = data.pipewire.sample_rate;
-        var rateText = rate >= 1000 ? (rate / 1000) + "k" : String(rate);
-        PiAudio.setText("sb-rate", rateText);
+        if (pwConnected) {
+            var rate = data.pipewire.sample_rate;
+            var rateText = rate >= 1000 ? (rate / 1000) + "k" : String(rate);
+            PiAudio.setText("sb-rate", rateText);
+        } else {
+            PiAudio.setText("sb-rate", "\u2014", "no-data");
+        }
 
         // Xrun count (from PipeWireCollector via /ws/system — pw-cli data)
+        // F-088: show em-dash when GM unreachable (xruns=0 is fallback, not real).
         // Three-tier coloring per UX spec: green=0, yellow=1-5, red>5
-        var xruns = data.camilladsp.xruns || 0;
-        PiAudio.setText("sb-xruns", String(xruns),
-            xruns > 5 ? "c-red" : xruns > 0 ? "c-yellow" : "c-green");
+        if (pwConnected) {
+            var xruns = data.camilladsp.xruns || 0;
+            PiAudio.setText("sb-xruns", String(xruns),
+                xruns > 5 ? "c-red" : xruns > 0 ? "c-yellow" : "c-green");
+        } else {
+            PiAudio.setText("sb-xruns", "\u2014", "no-data");
+        }
 
         // FIFO status (promoted from health bar)
         var sched = data.pipewire.scheduling;
