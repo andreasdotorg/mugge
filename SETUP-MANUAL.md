@@ -1583,56 +1583,34 @@ well within budget for both modes.
 
 ### 6.13 Test Plan — Performance Validation
 
-These tests should be run early in the implementation, before investing time in the
-room correction pipeline. Run them on the actual Pi 4 with the actual USB audio setup.
+These tests validate that the Pi 4 can handle the full audio workload reliably.
+Run them on the actual Pi 4 with the actual USB audio setup.
 
-**Test T1: CamillaDSP baseline CPU with synthetic FIR filters**
+> **D-040 update (2026-03-16):** Test T1 (CamillaDSP CPU) is **SUPERSEDED** by
+> BM-2 benchmarks. CamillaDSP is no longer the active DSP engine. PipeWire's
+> built-in filter-chain convolver handles all FIR processing at dramatically lower
+> CPU cost. T2-T5 remain relevant but are updated for the D-040 architecture.
 
-Generate dummy FIR filters (identity/dirac impulse padded to target length) and
-measure CamillaDSP's CPU consumption. This isolates convolution cost from everything
-else.
+#### ~~Test T1: CamillaDSP baseline CPU~~ — SUPERSEDED by BM-2
 
-```bash
-# Generate a 16384-tap dummy filter (dirac impulse at sample 0)
-python3 << 'PYEOF'
-import numpy as np
-import soundfile as sf
-ir = np.zeros(16384, dtype=np.float32)
-ir[0] = 1.0
-sf.write('/etc/camilladsp/coeffs/test_dirac_16k.wav', ir, 48000)
-PYEOF
+BM-2 benchmark results (PipeWire filter-chain convolver, 16k taps x 4ch,
+FFTW3/NEON, 2026-03-16):
 
-# Create a test config (4ch FIR convolution, 8ch output, chunksize 2048)
-# ... (copy dj-pa.yml, point all filters to test_dirac_16k.wav)
+| Quantum | Convolver CPU | Equivalent old test |
+|---------|--------------|---------------------|
+| 1024 (DJ) | 1.70% | ~~T1a~~ (was: < 30%) |
+| 256 (Live) | 3.47% | ~~T1c~~ (was: < 60%) |
 
-# Run CamillaDSP and monitor CPU for 30 seconds
-camilladsp -v /etc/camilladsp/configs/test-perf.yml &
-CDSP_PID=$!
-sleep 5  # let it stabilize
+**Result:** A1 (DJ CPU budget) and A2 (Live CPU budget) are **VALIDATED**. The
+PipeWire convolver uses 3-5.6x less CPU than CamillaDSP at comparable settings.
+First successful PW-native DJ session (GM-12): 40+ minutes, zero xruns, 58% idle,
+71C peak temperature.
 
-# Sample CPU usage (requires audio flowing through loopback)
-for i in $(seq 1 10); do
-    ps -p $CDSP_PID -o %cpu --no-headers
-    sleep 2
-done
+The original T1 decision tree (chunksize fallbacks) is obsolete — there is no
+separate chunksize parameter in the D-040 architecture. The PipeWire quantum is
+the single latency-controlling parameter.
 
-kill $CDSP_PID
-```
-
-Run this test matrix:
-
-| Test | Filter Length | Chunksize | Expected Result | PASS Criteria |
-|---|---|---|---|---|
-| T1a | 16,384 | 2048 | Low CPU | < 30% CPU |
-| T1b | 16,384 | 512 | Moderate CPU | < 45% CPU |
-| T1c | 16,384 | 256 | High CPU | < 60% CPU |
-| T1d | 8,192 | 512 | Low-moderate | < 30% CPU |
-| T1e | 32,768 | 2048 | Moderate | < 40% CPU |
-
-**Decision point:** If T1b fails (>45% CPU), fall back to 8,192 taps for live mode.
-If T1c passes and T1b passes, consider using chunksize 256 for even lower latency.
-
-**Test T2: End-to-end latency measurement**
+#### Test T2: End-to-end latency measurement
 
 Measure the actual round-trip latency of the full signal path.
 
@@ -1641,56 +1619,65 @@ Measure the actual round-trip latency of the full signal path.
 # Send an impulse from Reaper output ch1, record on Reaper input ch1
 # Measure the delay between sent and received impulse in Reaper
 
-# Expected latency breakdown (live mode, D-011):
+# Expected latency breakdown (D-040, live mode):
 # PipeWire quantum:          256 samples  =  5.3ms
-# CamillaDSP chunksize:      256 samples  =  5.3ms
+# (no CamillaDSP chunksize — convolver runs in-graph)
 # USB round-trip (2x):       ~2ms
 # ADAT encode/decode (2x):   ~0.5ms
-# TOTAL expected:            ~13ms (measured: ~21ms including processing)
+# TOTAL expected:            ~8ms
 ```
 
 | Test | Config | Expected Latency | PASS Criteria |
 |---|---|---|---|
-| T2a | DJ/PA (chunksize 2048) | ~48ms | < 55ms |
-| T2b | Live (chunksize 256, D-011) | ~21ms | < 25ms |
+| T2a | DJ/PA (quantum 1024) | ~24ms | < 30ms |
+| T2b | Live (quantum 256) | ~8ms | < 15ms |
 
-**Test T3: Xrun stability under load**
+> **D-040 improvement:** Pre-D-040, T2b expected ~21ms (CamillaDSP chunksize +
+> quantum). Post-D-040, the convolver runs within the PipeWire graph cycle,
+> eliminating the separate CamillaDSP buffering stage. Theoretical PA path latency
+> at quantum 256 is ~5.3ms — well below the 25ms slapback threshold.
 
-Run CamillaDSP + Reaper for 30 minutes with backing tracks playing, simulating a
-live performance scenario. Monitor for xruns.
+**Status:** Formal measurement pending. A3 (PA latency < 25ms) is **VALIDATED**
+theoretically (~5.3ms at quantum 256).
+
+#### Test T3: Xrun stability under load
+
+Run the full audio stack for 30 minutes with representative workload. Monitor
+for xruns via PipeWire and the web UI event log.
 
 ```bash
-# Run CamillaDSP with live config
-sudo systemctl start camilladsp
+# PipeWire filter-chain convolver is always active (started by pipewire.service)
 
-# Start Reaper with a test project (backing tracks + FX)
-# Play continuously for 30 minutes
+# Monitor xruns via pw-top:
+pw-top
 
-# Monitor xruns:
-journalctl -u camilladsp -f | grep -i xrun
+# Or via the web UI System tab event log at https://mugge:8080
 
-# Also monitor CamillaDSP's internal stats via websocket:
-python3 -c "
-from camilladsp import CamillaClient
-c = CamillaClient('127.0.0.1', 1234)
-c.connect()
-import time
-for _ in range(180):
-    print(f'Load: {c.status.processing_load():.1f}%  '
-          f'State: {c.general.state()}  ')
-    time.sleep(10)
-"
+# Monitor PipeWire journal:
+journalctl --user -u pipewire -f | grep -i xrun
+
+# Record CPU/temp over time:
+while true; do
+    echo "$(date +%H:%M:%S) CPU: $(top -bn1 | grep 'Cpu(s)' | awk '{print $2}')% $(vcgencmd measure_temp)"
+    sleep 10
+done > /tmp/stability_log.txt
 ```
 
 | Test | Config | Load | PASS Criteria |
 |---|---|---|---|
-| T3a | DJ/PA: CamillaDSP + Mixxx (2 decks) | 30 min | 0 xruns, peak CPU < 85% |
-| T3b | Live: CamillaDSP + Reaper (8 tracks) | 30 min | 0 xruns, peak CPU < 85% |
+| T3a | DJ/PA: PW convolver + Mixxx (2 decks, quantum 1024) | 30 min | 0 xruns, peak CPU < 85% |
+| T3b | Live: PW convolver + Reaper (8 tracks, quantum 256) | 30 min | 0 xruns, peak CPU < 85% |
+| T3c | DJ/PA on PREEMPT_RT with hardware V3D GL | 30 min | 0 xruns, temp < 75C |
+| T3d | Live on PREEMPT_RT with hardware V3D GL | 30 min | 0 xruns, temp < 75C |
 
-**Test T4: Thermal stability**
+> **Partial validation:** GM-12 session (DJ mode, quantum 1024) ran 40+ minutes
+> with zero xruns and 58% idle CPU. T3c/T3d (PREEMPT_RT + V3D GL) not yet formally
+> tested.
 
-Same as T3 but monitor temperature. In a flight case, thermal throttling is the
-silent killer.
+#### Test T4: Thermal stability
+
+Same as T3 but focused on temperature in the actual flight case. Thermal
+throttling is the silent killer for a gig-critical system.
 
 ```bash
 # During T3, also record temperature:
@@ -1700,19 +1687,23 @@ while true; do
 done > /tmp/thermal_log.txt
 ```
 
-PASS criteria: CPU temperature stays below 75°C (throttling starts at 80°C) and
+PASS criteria: CPU temperature stays below 75C (throttling starts at 80C) and
 clock frequency remains at maximum (1500000 or 1800000 depending on config).
 
-**Test T5: Filter length vs. frequency resolution — audible verification**
+> **Partial data:** GM-12 peaked at 71C (no flight case). Flight case testing
+> (T4) pending.
 
-After generating real room correction filters, verify that the correction is effective
-down to 20Hz by comparing the measurement before and after correction at the
-listening position. Sweep 15-100Hz and compare magnitude response with and without
-the FIR filter active.
+#### Test T5: Filter length vs. frequency resolution — audible verification
 
-This test validates that our 16,384-tap filters actually provide the correction we
-designed for at the lowest frequencies. If the correction at 20Hz is insufficient,
-we may need longer filters and should re-evaluate the CPU budget based on T1 results.
+After generating real room correction filters, verify that the correction is
+effective down to 20Hz by comparing the measurement before and after correction
+at the listening position. Sweep 15-100Hz and compare magnitude response with
+and without the FIR filter active.
+
+This test validates that our 16,384-tap filters actually provide the correction
+we designed for at the lowest frequencies. If the correction at 20Hz is
+insufficient, we may need longer filters — but the CPU budget is no longer a
+concern (BM-2: 1.70-3.47% for 16k taps).
 
 ---
 
@@ -2175,7 +2166,138 @@ systemctl --user status pi4audio-webui
 # https://mugge:8080
 ```
 
-This lets you adjust filters, gains, and delays in real time without SSH/VNC.
+The web UI is a single-page application with 7 tabs and a persistent status bar.
+All real-time data arrives over WebSocket connections; no polling or page reloads
+are required. The UI is responsive and works on mobile devices (phones/tablets)
+for on-stage monitoring.
+
+#### Status Bar (persistent, all tabs)
+
+The status bar runs across the bottom of every tab and provides at-a-glance
+system health:
+
+- **Mini meters:** 4-group level meters (Main L/R, App routing, DSP output,
+  Physical inputs) — same channel groups as the Dashboard but miniaturized.
+- **System indicators:** CPU load, temperature, memory usage (color-coded
+  green/yellow/red with threshold crossings).
+- **Audio state:** Current PipeWire quantum, xrun count, GraphManager mode
+  (DJ/Live/Monitoring/Measurement).
+- **Measurement progress:** When a measurement session is active, shows a
+  progress bar, current step label, and an ABORT button.
+
+Data sources: `/ws/monitoring` (levels), `/ws/system` (health), `/ws/measurement`
+(session progress).
+
+#### Tab 1: Dashboard
+
+The default view. Dense single-screen engineer dashboard showing all audio
+channels in signal-flow order:
+
+- **Level meters:** 24 channels in 4 groups:
+  - MAIN (2ch) — program bus capture
+  - APP→CONV (6ch) — application routing to convolver
+  - CONV→OUT (8ch) — all post-convolver playback outputs (SatL, SatR, S1, S2,
+    EL, ER, IL, IR)
+  - PHYS IN (8ch) — USBStreamer/ADA8200 analog inputs (Mic, Spare, etc.)
+- **Peak hold** (1.5s) and **clip indicators** (latched 3s, -0.5 dBFS threshold).
+- **SPL hero display** and **LUFS panel** (right side, 200px).
+- **FFT spectrum analyzer:** 2048-point Blackman-Harris windowed FFT on raw PCM
+  data (L+R mono sum), rendered as a filled "mountain range" area plot with
+  amplitude-based heat palette on a log-frequency axis (20Hz-20kHz). Driven by
+  binary WebSocket `/ws/pcm` for high-resolution real-time display. Falls back
+  to 1/3-octave bars if PCM stream is unavailable.
+
+Data source: `/ws/monitoring` (JSON levels at ~20Hz), `/ws/pcm` (binary PCM
+for spectrum).
+
+#### Tab 2: System
+
+Full system health view with detailed breakdowns:
+
+- **Mode indicator:** Current GraphManager mode (DJ, Live, Monitoring, Measurement).
+- **Audio config:** Sample rate, quantum, buffer size, filter-chain state.
+- **CPU:** Per-core usage bars + per-process CPU breakdown (PipeWire, Mixxx/Reaper,
+  GraphManager, etc.).
+- **Temperature:** Current reading with color thresholds (green < 65C, yellow
+  65-75C, red > 75C).
+- **Memory:** Usage bar and numeric display.
+- **Scheduling:** SCHED_FIFO priority verification for audio processes.
+- **Event log:** Records state transitions and threshold crossings (e.g., CPU
+  entering yellow, temperature spike, mode change). Client-side logic compares
+  consecutive WebSocket messages. Filterable by severity (warning/error).
+  Buffer holds up to 500 events.
+
+Data source: `/ws/system` (~1Hz updates).
+
+#### Tab 3: Graph
+
+PipeWire node topology visualization as SVG diagrams:
+
+- **Four routing modes:** DJ, Live, Monitoring, Measurement — each shows the
+  corresponding link topology from the GraphManager routing table.
+- **Three-column signal flow:** Sources (left) → DSP/Convolver (center) → Outputs
+  (right). Gain nodes shown between convolver and output.
+- **Node types** color-coded: applications (teal), DSP (green), gain (dark green),
+  hardware (amber), main bus (grey).
+- **Active mode** auto-selected based on real-time GraphManager state from
+  `/ws/system`.
+
+Data source: `/ws/system` (mode selection), static SVG templates matching
+GraphManager routing table.
+
+#### Tab 4: Config
+
+Runtime configuration controls:
+
+- **Per-channel gain sliders:** Four sliders for the filter-chain gain nodes
+  (gain_left_hp, gain_right_hp, gain_sub1_lp, gain_sub2_lp). Each shows current
+  Mult value and dB equivalent. Slider range 0.0-0.1 (soft cap -20 dB).
+  Server-side hard cap at Mult 1.0 (0 dB) per D-009.
+  - **Apply** button sends gain changes to PipeWire via `pw-cli`.
+  - **Reset** button reverts sliders to last-fetched server values.
+- **Quantum selector:** Buttons for common quantum values (64, 128, 256, 512,
+  1024). Shows current active quantum and calculated latency. Warning displayed
+  about audio path impact when changing quantum. Changes applied via
+  `pw-metadata`.
+- **Filter-chain info:** Read-only display of filter-chain node properties
+  (convolver config, coefficient files, sample rate, tap count).
+
+Data source: `GET /api/v1/config` (fetched on tab show).
+
+#### Tab 5: Measure
+
+Measurement wizard for automated room correction:
+
+- **State-driven wizard** with screens: IDLE, SETUP, GAIN_CAL, MEASURING,
+  FILTER_GEN, DEPLOY, VERIFY, COMPLETE, ABORTED, ERROR.
+- **Start button** triggers a measurement session (POST `/api/v1/measurement/start`).
+- **Real-time progress** via WebSocket `/ws/measurement` — shows current state,
+  progress percentage, channel being measured, sweep position.
+- **Abort button** available during active sessions.
+- **Browser reconnect:** If the browser disconnects and reconnects mid-session,
+  the wizard recovers its state from `GET /api/v1/measurement/status`.
+
+#### Tab 6: Test
+
+Manual signal generation and analysis tool:
+
+- **Signal generator** connected to `pi4audio-signal-gen` via WebSocket
+  `/ws/siggen`. Supports sine, white noise, pink noise, and sweep signals.
+- **Channel selector:** Choose output channels (SatL, SatR, Sub1, Sub2, EngL,
+  EngR, IEML, IEMR) for signal routing.
+- **Frequency control:** Adjustable frequency for sine/sweep signals.
+- **Level control:** Adjustable output level in dBFS. Hard cap at -0.5 dBFS
+  (D-009) enforced both client-side and server-side.
+- **Safety:** Pre-play confirmation dialog on first use per session to prevent
+  accidental signal output through speakers.
+- **SPL readout** and live spectrum display for the test signal.
+
+#### Tab 7: MIDI
+
+Placeholder for MIDI controller mapping and monitoring (Stage 2). Currently
+shows an empty view. Future implementation will display connected MIDI devices
+(Hercules DJControl, APCmini mk2, Nektar SE25), their mapping status, and
+allow runtime MIDI routing configuration.
 
 ---
 
