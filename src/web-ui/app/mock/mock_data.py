@@ -455,6 +455,7 @@ class MockDataGenerator:
                     "graphmgr_policy": s["graphmgr_policy"],
                     "graphmgr_priority": s["graphmgr_priority"],
                 },
+                "pw_connected": True,
             },
             "camilladsp": {
                 "state": s["cdsp_state"],

@@ -125,6 +125,7 @@ def _build_system_snapshot(app) -> dict:
             "sample_rate": pw_snap.get("sample_rate", 48000),
             "graph_state": pw_snap.get("graph_state", "unknown"),
             "scheduling": sys_snap.get("scheduling", _default_sched),
+            "pw_connected": pw_snap.get("pw_connected", False),
         },
         "camilladsp": dsp_section,
         "memory": sys_snap.get("memory", {

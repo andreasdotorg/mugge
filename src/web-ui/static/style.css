@@ -875,6 +875,7 @@ html, body {
 .c-cyan { color: var(--cyan) !important; }
 .c-amber { color: var(--amber) !important; }
 .c-grey { color: var(--text-dim) !important; }
+.no-data { color: var(--text-dim) !important; font-style: italic; }
 
 /* -- Keyboard focus indicators (F-047) ------------------------------------ */
 

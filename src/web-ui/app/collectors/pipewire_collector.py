@@ -67,10 +67,10 @@ class PipeWireCollector:
     def snapshot(self) -> dict:
         """Return the latest PipeWire snapshot.
 
-        Shape: {quantum, sample_rate, graph_state, xruns}.
+        Shape: {quantum, sample_rate, graph_state, xruns, pw_connected}.
         """
         if self._snapshot is not None:
-            return self._snapshot
+            return {**self._snapshot, "pw_connected": True}
         return self._fallback_snapshot()
 
     async def _poll_loop(self) -> None:
@@ -172,4 +172,5 @@ class PipeWireCollector:
             "sample_rate": 48000,
             "graph_state": "unknown",
             "xruns": 0,
+            "pw_connected": False,
         }
