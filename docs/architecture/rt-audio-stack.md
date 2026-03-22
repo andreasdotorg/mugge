@@ -401,7 +401,9 @@ with BM-2.
 PipeWire 1.4.9's filter-chain convolver silently ignores the `config.gain`
 parameter in convolver block configs (TK-237). The production gain mechanism
 uses four `linear` builtin gain nodes defined in the filter-chain config, each
-with a `Mult` parameter on the convolver node (id 43 on production Pi):
+with a `Mult` parameter on the convolver node. **Note:** Node IDs are dynamic
+and change across PipeWire restarts (e.g., 43 → 38). Look up the current ID by
+`node.name = "pi4audio-convolver"` (see examples below).
 
 | Gain Node | Parameter | Default | Purpose |
 |-----------|-----------|---------|---------|
@@ -410,18 +412,22 @@ with a `Mult` parameter on the convolver node (id 43 on production Pi):
 | `gain_sub1_lp` | `gain_sub1_lp:Mult` | 0.000631 (-64 dB) | Sub 1 attenuation |
 | `gain_sub2_lp` | `gain_sub2_lp:Mult` | 0.000631 (-64 dB) | Sub 2 attenuation |
 
-**Key property (C-009):** Mult params persist across PipeWire restarts. Unlike
-the earlier `pw-cli volume` workaround (which was runtime-only), Mult values
-set via `pw-cli s <node> Props '{ params = [ "<name>:Mult" <value> ] }'` are
-stored by PipeWire and restored on restart. No manual reapplication needed.
+**Key property (C-009 verified):** Mult default values are set from the
+`.conf` file (`30-filter-chain-convolver.conf`) at PipeWire startup. Runtime
+changes via `pw-cli s <node> Props '{ params = [ "<name>:Mult" <value> ] }'`
+are **session-only** and revert to `.conf` defaults on PipeWire restart. This
+is a safety property: accidental gain increases cannot survive a restart.
 
 **Setting gain:**
 ```bash
+# Find the convolver node ID (changes across PW restarts):
+NODE=$(pw-cli ls Node | grep -B1 'pi4audio-convolver' | head -1 | awk '{print $2}')
+
 # Set left main to -30 dB (Mult = 0.0316):
-pw-cli s 43 Props '{ params = [ "gain_left_hp:Mult" 0.0316 ] }'
+pw-cli s $NODE Props '{ params = [ "gain_left_hp:Mult" 0.0316 ] }'
 
 # Read current gain values:
-pw-dump 43 | jq '.[0].info.params.Props[1].params'
+pw-dump $NODE | jq '.[0].info.params.Props[1].params'
 # Returns flat key-value array: [ "gain_left_hp:Mult", 0.001, ... ]
 ```
 
@@ -760,7 +766,9 @@ ldd /usr/lib/aarch64-linux-gnu/spa-0.2/filter-graph/libspa-filter-graph.so | gre
 # Expected: libfftw3f.so.3
 
 # Check convolver gain (Mult params, C-009):
-pw-dump 43 | jq '.[0].info.params.Props[1].params'
+# Node ID is dynamic — look up by name:
+NODE=$(pw-cli ls Node | grep -B1 'pi4audio-convolver' | head -1 | awk '{print $2}')
+pw-dump $NODE | jq '.[0].info.params.Props[1].params'
 # Expected: flat array with gain_left_hp:Mult, gain_right_hp:Mult, etc.
 # Values should be <= 1.0 (D-009 hard cap). Production defaults: 0.001 mains, 0.000631 subs.
 

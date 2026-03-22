@@ -298,7 +298,7 @@ Pi: `ela@192.168.178.185` (hostname: mugge), key-based auth, passwordless sudo.
 - **OS:** Debian 13 Trixie. **Currently booted: PREEMPT_RT kernel (`6.12.62+rpt-rpi-v8-rt`)**. Upgraded from `6.12.47` via `apt upgrade`. `config.txt` has `kernel=kernel8_rt.img`.
 - **Desktop:** labwc (Wayland) with **hardware V3D GL compositor** (D-022). No pixman override. lightdm disabled, labwc runs as systemd user service.
 - **V3D:** Hardware V3D GL active on PREEMPT_RT. No blacklist needed (D-022). Upstream fix for ABBA deadlock (commit `09fb2c6f4093`) included in `6.12.62+rpt-rpi-v8-rt`. F-012/F-017 RESOLVED.
-- **Audio:** PipeWire 1.4.9 at SCHED_FIFO 88 (systemd override, F-020 workaround deployed). PW filter-chain convolver handles all FIR processing (FFTW3/NEON, 16k taps, 4ch). Four `linear` builtin gain nodes provide per-channel attenuation (Mult params, persist across PW restarts via C-009). CamillaDSP 3.0.1 installed but **service stopped** (D-040: abandoned in favor of PW convolver). GraphManager (port 4002) manages link topology and mode transitions. Signal-gen (port 4001) provides RT measurement audio. pcm-bridge (port 9100) provides lock-free level metering.
+- **Audio:** PipeWire 1.4.9 at SCHED_FIFO 88 (systemd override, F-020 workaround deployed). PW filter-chain convolver handles all FIR processing (FFTW3/NEON, 16k taps, 4ch). Four `linear` builtin gain nodes provide per-channel attenuation (Mult params from `.conf` defaults; runtime `pw-cli` changes are session-only per C-009). CamillaDSP 3.0.1 installed but **service stopped** (D-040: abandoned in favor of PW convolver). GraphManager (port 4002) manages link topology and mode transitions. Signal-gen (port 4001) provides RT measurement audio. pcm-bridge (port 9100) provides lock-free level metering.
 - **Quantum:** Production config at `~/.config/pipewire/pipewire.conf.d/10-audio-settings.conf` sets quantum 256. DJ mode needs quantum 1024 (set at runtime via `pw-metadata -n settings 0 clock.force-quantum 1024`).
 - **99-no-rt.conf:** DELETED (was Test 3 artifact forcing PipeWire to SCHED_OTHER).
 - **Mixxx:** Runs with hardware V3D GL on PREEMPT_RT (D-022). `pw-jack mixxx` — no `LIBGL_ALWAYS_SOFTWARE=1` needed. CPU ~85% with hardware GL (vs 142-166% with llvmpipe).
@@ -335,9 +335,10 @@ pre-flight checklists, and PREEMPT_RT as a safety requirement (D-013).
   to lose its audio stream. This applies to all team members — workers, CM, everyone.
   The owner decides when it is safe to proceed (e.g., after turning off amps).
   **Gain attenuation:** The filter-chain convolver config uses `linear` builtin
-  Mult params for gain (0.001 = -60 dB mains, 0.000631 = -64 dB subs). These
-  persist across PW restarts — no manual `pw-cli` workaround needed (verified
-  C-009). The old `config.gain` approach is silently ignored by PW 1.4.9 (TK-237).
+  Mult params for gain (0.001 = -60 dB mains, 0.000631 = -64 dB subs). Default
+  values load from `.conf` at startup; runtime `pw-cli` changes are session-only
+  and revert on PW restart (C-009 verified). The old `config.gain` approach is
+  silently ignored by PW 1.4.9 (TK-237).
 
 ## Key Documents
 

@@ -716,11 +716,14 @@ Per-channel gain is set via `linear` builtin nodes with `Mult` parameters:
 Adjust gain at runtime (find the convolver node ID first):
 
 ```bash
-# Find the convolver node ID (look for "FIR Convolver")
-pw-dump 43 | jq '.[0].info.params.Props[1].params'
+# Find the convolver node ID (dynamic — changes across PW restarts):
+NODE=$(pw-cli ls Node | grep -B1 'pi4audio-convolver' | head -1 | awk '{print $2}')
+
+# Read current gain values:
+pw-dump $NODE | jq '.[0].info.params.Props[1].params'
 
 # Set gain for left main to -50 dB (0.00316)
-pw-cli s 43 Props '{ params = [ "gain_left_hp:Mult" 0.00316 ] }'
+pw-cli s $NODE Props '{ params = [ "gain_left_hp:Mult" 0.00316 ] }'
 ```
 
 **Safety rule:** Never increase gain (increase Mult) without owner confirmation.
@@ -754,8 +757,9 @@ systemctl --user status pipewire
 # Verify convolver node exists
 pw-cli ls Node | grep -i convolver
 
-# Check current gain values
-pw-dump 43 | jq '.[0].info.params.Props[1].params'
+# Check current gain values (node ID is dynamic):
+NODE=$(pw-cli ls Node | grep -B1 'pi4audio-convolver' | head -1 | awk '{print $2}')
+pw-dump $NODE | jq '.[0].info.params.Props[1].params'
 
 # Monitor DSP load in real time
 pw-top
