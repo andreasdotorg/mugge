@@ -318,8 +318,8 @@ fn run_pipewire(
         .expect("Failed to arm gain integrity timer");
     info!("Gain integrity timer armed (30s polling)");
 
-    // Graph info timer: every 1s, run pw-metadata to cache quantum/rate,
-    // and scan the graph state for driver node xruns (Phase 2a).
+    // Graph info timer: every 1s, run pw-metadata + pw-dump to cache
+    // quantum/rate/xruns (Phase 2a, F-095: reduced from N+1 to 2 subprocesses).
     // This moves subprocess calls from the Python web-UI event loop
     // to the GM PW thread, freeing the uvicorn asyncio loop.
     let _graph_info_timer = mainloop.loop_().add_timer({
@@ -641,18 +641,80 @@ fn parse_xrun_count(pw_cli_output: &str) -> u64 {
     0
 }
 
+/// Parse per-node `clock.xrun-count` from `pw-dump` JSON output (F-095).
+///
+/// Replaces the N separate `pw-cli info <node_id>` calls with a single
+/// `pw-dump` parse. Returns the sum of `clock.xrun-count` across all nodes
+/// and the driver node name (USBStreamer).
+///
+/// In pw-dump JSON, xrun-count appears in `info.props` as an integer:
+/// ```json
+/// {
+///   "type": "PipeWire:Interface:Node",
+///   "info": {
+///     "props": {
+///       "node.name": "alsa_output.usb-MiniDSP_USBStreamer...",
+///       "clock.xrun-count": 7
+///     }
+///   }
+/// }
+/// ```
+#[cfg(any(feature = "pipewire-backend", test))]
+fn parse_pw_dump_xruns(json_str: &str) -> Result<(u64, String), String> {
+    let objects: serde_json::Value =
+        serde_json::from_str(json_str).map_err(|e| format!("JSON parse error: {}", e))?;
+
+    let array = objects
+        .as_array()
+        .ok_or_else(|| "pw-dump output is not a JSON array".to_string())?;
+
+    let mut total_xruns: u64 = 0;
+    let mut driver_node_name = String::new();
+
+    for obj in array {
+        let obj_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        if obj_type != "PipeWire:Interface:Node" {
+            continue;
+        }
+
+        let props = match obj.get("info").and_then(|i| i.get("props")) {
+            Some(p) => p,
+            None => continue,
+        };
+
+        // Extract xrun count from props.
+        if let Some(xrun_val) = props.get("clock.xrun-count") {
+            if let Some(count) = xrun_val.as_u64() {
+                total_xruns += count;
+            }
+        }
+
+        // Identify the driver node.
+        if let Some(name) = props.get("node.name").and_then(|n| n.as_str()) {
+            if name.starts_with("alsa_output.usb-MiniDSP_USBStreamer") {
+                driver_node_name = name.to_string();
+            }
+        }
+    }
+
+    Ok((total_xruns, driver_node_name))
+}
+
 /// Update the cached PipeWire graph info (quantum, sample rate, xruns).
 ///
 /// Runs `pw-metadata -n settings` to read quantum/force-quantum/sample-rate,
-/// then iterates over all tracked nodes and sums their `clock.xrun-count`
-/// values via `pw-cli info <node-id>` calls.
+/// then runs ONE `pw-dump --no-colors` to aggregate `clock.xrun-count` across
+/// all nodes and identify the driver node.
 ///
-/// Called every 1s on the PW main loop thread. Subprocess overhead is ~5-10ms
-/// each — acceptable for a 1s polling interval on the control plane.
+/// F-095: Previously spawned N `pw-cli info <node_id>` subprocesses (one per
+/// tracked node), causing 62% CPU on Pi via journald log flooding. Now uses
+/// exactly 2 subprocesses per cycle: pw-metadata + pw-dump.
+///
+/// Called every 1s on the PW main loop thread.
 #[cfg(feature = "pipewire-backend")]
 fn update_graph_info_cache(
     cache: &std::rc::Rc<std::cell::RefCell<rpc::GraphInfoSnapshot>>,
-    graph: &std::rc::Rc<std::cell::RefCell<graph::GraphState>>,
+    _graph: &std::rc::Rc<std::cell::RefCell<graph::GraphState>>,
 ) {
     use std::process::Command;
 
@@ -701,45 +763,39 @@ fn update_graph_info_cache(
         }
     }
 
-    // --- Step 2: Aggregate xruns across ALL tracked nodes (F-092) ---
+    // --- Step 2: Aggregate xruns via ONE pw-dump call (F-095) ---
     //
-    // PipeWire tracks xrun counters per-node. Previously only the
-    // USBStreamer driver node was queried, missing xruns on Mixxx,
-    // convolver, or other nodes. Now we sum clock.xrun-count across
-    // every tracked node.
+    // Replaces N `pw-cli info <node_id>` calls with a single pw-dump.
+    // Parses JSON to sum clock.xrun-count across all nodes and identify
+    // the USBStreamer driver node.
     let mut xruns: u64 = 0;
     let mut driver_node_name = String::new();
 
-    // Collect all node IDs and identify the driver node (borrow scope).
-    let (all_node_ids, driver_info): (Vec<u32>, Option<(String, u32)>) = {
-        let g = graph.borrow();
-        let ids: Vec<u32> = g.nodes().map(|n| n.id).collect();
-        let driver = g.nodes()
-            .find(|n| n.name.starts_with("alsa_output.usb-MiniDSP_USBStreamer"))
-            .map(|n| (n.name.clone(), n.id));
-        (ids, driver)
-    };
-
-    if let Some((name, _)) = driver_info {
-        driver_node_name = name;
-    }
-
-    // Query each node for xrun counts. Each pw-cli call takes ~5ms;
-    // with ~10-20 nodes this adds ~50-100ms per cycle — acceptable
-    // for a 1s control-plane poll.
-    for node_id in &all_node_ids {
-        match Command::new("pw-cli").arg("info").arg(node_id.to_string()).output() {
-            Ok(output) if output.status.success() => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                xruns += parse_xrun_count(&stdout);
+    match Command::new("pw-dump").arg("--no-colors").output() {
+        Ok(output) if output.status.success() => {
+            match std::str::from_utf8(&output.stdout) {
+                Ok(json_str) => {
+                    match parse_pw_dump_xruns(json_str) {
+                        Ok((total, driver)) => {
+                            xruns = total;
+                            driver_node_name = driver;
+                        }
+                        Err(e) => {
+                            log::debug!("pw-dump xrun parse error: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::debug!("pw-dump output not UTF-8: {}", e);
+                }
             }
-            Ok(_) => {
-                log::debug!("pw-cli info {} failed (node may have been removed)", node_id);
-            }
-            Err(e) => {
-                log::debug!("pw-cli info failed to execute: {}", e);
-                break; // pw-cli binary not available, skip remaining nodes
-            }
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            log::debug!("pw-dump exited with {}: {}", output.status, stderr.trim());
+        }
+        Err(e) => {
+            log::debug!("pw-dump failed to execute: {}", e);
         }
     }
 
@@ -1039,5 +1095,121 @@ mod tests {
             .map(|s| parse_xrun_count(s))
             .sum();
         assert_eq!(total, 15);
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_pw_dump_xruns (F-095)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn parse_pw_dump_xruns_empty_array() {
+        let (xruns, driver) = parse_pw_dump_xruns("[]").unwrap();
+        assert_eq!(xruns, 0);
+        assert_eq!(driver, "");
+    }
+
+    #[test]
+    fn parse_pw_dump_xruns_sums_across_nodes() {
+        let json = r#"[
+            {
+                "type": "PipeWire:Interface:Node",
+                "info": {
+                    "props": {
+                        "node.name": "Mixxx",
+                        "clock.xrun-count": 3
+                    }
+                }
+            },
+            {
+                "type": "PipeWire:Interface:Node",
+                "info": {
+                    "props": {
+                        "node.name": "pi4audio-convolver",
+                        "clock.xrun-count": 0
+                    }
+                }
+            },
+            {
+                "type": "PipeWire:Interface:Node",
+                "info": {
+                    "props": {
+                        "node.name": "alsa_output.usb-MiniDSP_USBStreamer_B-00",
+                        "clock.xrun-count": 12
+                    }
+                }
+            }
+        ]"#;
+        let (xruns, driver) = parse_pw_dump_xruns(json).unwrap();
+        assert_eq!(xruns, 15);
+        assert_eq!(driver, "alsa_output.usb-MiniDSP_USBStreamer_B-00");
+    }
+
+    #[test]
+    fn parse_pw_dump_xruns_ignores_non_node_objects() {
+        let json = r#"[
+            {
+                "type": "PipeWire:Interface:Link",
+                "info": {
+                    "props": { "clock.xrun-count": 999 }
+                }
+            },
+            {
+                "type": "PipeWire:Interface:Node",
+                "info": {
+                    "props": {
+                        "node.name": "test-node",
+                        "clock.xrun-count": 5
+                    }
+                }
+            }
+        ]"#;
+        let (xruns, _) = parse_pw_dump_xruns(json).unwrap();
+        assert_eq!(xruns, 5);
+    }
+
+    #[test]
+    fn parse_pw_dump_xruns_handles_missing_xrun_prop() {
+        let json = r#"[
+            {
+                "type": "PipeWire:Interface:Node",
+                "info": {
+                    "props": {
+                        "node.name": "no-xrun-node"
+                    }
+                }
+            },
+            {
+                "type": "PipeWire:Interface:Node",
+                "info": {
+                    "props": {
+                        "node.name": "has-xrun-node",
+                        "clock.xrun-count": 7
+                    }
+                }
+            }
+        ]"#;
+        let (xruns, _) = parse_pw_dump_xruns(json).unwrap();
+        assert_eq!(xruns, 7);
+    }
+
+    #[test]
+    fn parse_pw_dump_xruns_invalid_json() {
+        assert!(parse_pw_dump_xruns("not json").is_err());
+    }
+
+    #[test]
+    fn parse_pw_dump_xruns_not_array() {
+        assert!(parse_pw_dump_xruns("{}").is_err());
+    }
+
+    #[test]
+    fn parse_pw_dump_xruns_node_without_info() {
+        let json = r#"[
+            {
+                "type": "PipeWire:Interface:Node"
+            }
+        ]"#;
+        let (xruns, _) = parse_pw_dump_xruns(json).unwrap();
+        assert_eq!(xruns, 0);
     }
 }
