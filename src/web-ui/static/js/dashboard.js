@@ -73,11 +73,11 @@
     var physinColumns = [];
     var animating = false;
     var startTime = performance.now();
+    var dspoutHasData = false;
     var physinHasData = false;
 
     // Track previous monitoring DSP data for event detection
     var prevMonXruns = null;
-    var prevMonClipped = null;
 
     // Per-channel last-signal-time tracking for dim logic
     // Indexed by group key + local index
@@ -102,6 +102,22 @@
         if (db >= -3) return "#e5453a";
         if (db >= -12) return "#e2c039";
         return "#79e25b";
+    }
+
+    function markGroupInactive(groupId, labelId, labelText) {
+        var group = document.getElementById(groupId);
+        if (!group) return;
+        var sublabel = document.createElement("div");
+        sublabel.className = "meter-group-inactive-label";
+        sublabel.id = labelId;
+        sublabel.textContent = labelText;
+        var groupLabel = group.querySelector(".meter-group-label");
+        if (groupLabel && groupLabel.nextSibling) {
+            group.insertBefore(sublabel, groupLabel.nextSibling);
+        } else {
+            group.appendChild(sublabel);
+        }
+        group.classList.add("meter-group--inactive");
     }
 
     // -- Meter building --
@@ -371,6 +387,22 @@
             updateChannel(playbackState[ch], data.playback_rms[ch], data.playback_peak[ch], now);
         }
 
+        // CONV→OUT: detect real playback data (F-088). Currently hardcoded
+        // -120dB by FilterChainCollector — no playback pcm-bridge instance.
+        // Auto-activate when a future playback tap provides real levels.
+        if (!dspoutHasData) {
+            for (var dch = 0; dch < 8; dch++) {
+                if (data.playback_peak[dch] > -120) {
+                    dspoutHasData = true;
+                    var dg = document.getElementById("group-dspout");
+                    if (dg) dg.classList.remove("meter-group--inactive");
+                    var dl = document.getElementById("dspout-inactive-label");
+                    if (dl) dl.style.display = "none";
+                    break;
+                }
+            }
+        }
+
         // PHYS IN: optional usbstreamer arrays (not yet provided by backend)
         if (data.usbstreamer_rms && data.usbstreamer_peak) {
             for (var pch = 0; pch < 8; pch++) {
@@ -385,20 +417,16 @@
             }
         }
 
-        // Push events for xrun/clip increments (monitoring data has higher update rate)
+        // Push events for xrun increments (monitoring data has higher update rate).
+        // NOTE: clipped_samples removed (F-088) — no real data source post-D-040.
+        // Clip events from monitoring WS were always 0 (hardcoded in FilterChainCollector).
         var cdsp = data.camilladsp;
         if (window._piAudioPushEvent) {
             if (prevMonXruns !== null && cdsp.xruns > prevMonXruns) {
                 window._piAudioPushEvent("xrun", "error",
                     "Xruns: +" + (cdsp.xruns - prevMonXruns) + " (total: " + cdsp.xruns + ")");
             }
-            if (prevMonClipped !== null && cdsp.clipped_samples > prevMonClipped) {
-                window._piAudioPushEvent("clip", "error",
-                    "Clipped: +" + (cdsp.clipped_samples - prevMonClipped) +
-                    " (total: " + cdsp.clipped_samples + ")");
-            }
             prevMonXruns = cdsp.xruns;
-            prevMonClipped = cdsp.clipped_samples;
         }
 
         // Spectrum analyzer
@@ -428,21 +456,12 @@
         buildMeterGroup("meters-physin", PHYSIN_LABELS, PHYSIN_CHANNELS,
             physinCanvases, physinColumns, "physin", "physin");
 
-        // Add "(no source)" sublabel to PHYS IN group and mark inactive
-        var physinGroup = document.getElementById("group-physin");
-        if (physinGroup) {
-            var sublabel = document.createElement("div");
-            sublabel.className = "meter-group-inactive-label";
-            sublabel.id = "physin-inactive-label";
-            sublabel.textContent = "(no source)";
-            var groupLabel = physinGroup.querySelector(".meter-group-label");
-            if (groupLabel && groupLabel.nextSibling) {
-                physinGroup.insertBefore(sublabel, groupLabel.nextSibling);
-            } else {
-                physinGroup.appendChild(sublabel);
-            }
-            physinGroup.classList.add("meter-group--inactive");
-        }
+        // Mark groups without a data source as inactive (F-088: no fake-truth).
+        // CONV→OUT: no playback-side pcm-bridge instance; data is hardcoded -120dB.
+        // PHYS IN: no usbstreamer capture pcm-bridge instance.
+        // Both are architecturally intended but not yet wired up.
+        markGroupInactive("group-dspout", "dspout-inactive-label", "(no meter tap)");
+        markGroupInactive("group-physin", "physin-inactive-label", "(no source)");
 
         window.addEventListener("resize", function () {
             resizeAll();

@@ -170,14 +170,17 @@
             dspOk ? "c-green" : dspWarn ? "c-yellow" : "c-red");
 
         // Links: actual/desired (F-044: replaces percentage display)
+        // F-088: fallback shows em-dash — buffer_level is hardcoded 0 when GM disconnected.
         var linksText = (cdsp.gm_links_actual != null)
             ? cdsp.gm_links_actual + "/" + cdsp.gm_links_desired
-            : String(cdsp.buffer_level);
-        PiAudio.setText("sb-buf", linksText);
+            : "\u2014";
+        PiAudio.setText("sb-buf", linksText,
+            cdsp.gm_links_actual != null ? null : "c-grey");
 
-        // Clip count
-        PiAudio.setText("sb-clip", String(cdsp.clipped_samples),
-            cdsp.clipped_samples > 0 ? "c-red" : "c-green");
+        // Clip count — no real data source (D-040: CamillaDSP removed,
+        // FilterChainCollector hardcodes 0, PW has no clip counter).
+        // Show "--" to avoid fake-truth display (F-088).
+        PiAudio.setText("sb-clip", "\u2014", "c-grey");
     }
 
     function onSystem(data) {

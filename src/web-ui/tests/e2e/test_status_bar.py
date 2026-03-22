@@ -103,7 +103,8 @@ class TestHealthIndicators:
         indicators = {
             "sb-dsp-state": ("Run", "Stop"),
             "sb-quantum": None,  # numeric
-            "sb-clip": None,
+            # sb-clip: no real data source post-D-040 (F-088), shows em-dash
+            "sb-clip": ("\u2014",),
             "sb-xruns": None,
             "sb-temp-gauge-text": None,
             "sb-cpu-gauge-text": None,

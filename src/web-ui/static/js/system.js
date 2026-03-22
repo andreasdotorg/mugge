@@ -247,12 +247,8 @@
                 "Xruns: +" + delta + " (total: " + data.camilladsp.xruns + ")");
         }
 
-        // Clipped samples increment (value-based, not color-based)
-        if (data.camilladsp.clipped_samples > prev.camilladsp.clipped_samples) {
-            var clipDelta = data.camilladsp.clipped_samples - prev.camilladsp.clipped_samples;
-            pushEvent("clip", "error",
-                "Clipped: +" + clipDelta + " (total: " + data.camilladsp.clipped_samples + ")");
-        }
+        // Clipped samples: removed (F-088) — no real data source post-D-040.
+        // FilterChainCollector hardcodes clipped_samples=0; never increments.
 
         prevSystemData = data;
     }
@@ -358,18 +354,28 @@
         PiAudio.setText("sys-cdsp-state", cdsp.state,
             cdspOk ? "c-green" : cdspWarn ? "c-yellow" : "c-red");
         // Links: desired/actual/missing (replaces processing_load)
+        // F-088: fallback shows em-dash — processing_load is hardcoded 0 (no data source).
         var linksText = (cdsp.gm_links_actual != null)
             ? cdsp.gm_links_actual + "/" + cdsp.gm_links_desired
-            : cdsp.processing_load.toFixed(1) + "%";
-        PiAudio.setText("sys-cdsp-load", linksText);
+            : "\u2014";
+        PiAudio.setText("sys-cdsp-load", linksText,
+            cdsp.gm_links_actual != null ? null : "c-grey");
         // Buffer = link health percentage
-        PiAudio.setText("sys-cdsp-buffer",
-            cdsp.buffer_level + "%");
+        // F-088: show em-dash when GM disconnected (buffer_level=0 is hardcoded).
+        if (cdsp.gm_links_actual != null) {
+            PiAudio.setText("sys-cdsp-buffer", cdsp.buffer_level + "%");
+        } else {
+            PiAudio.setText("sys-cdsp-buffer", "\u2014", "c-grey");
+        }
         // Convolver status (replaces rate_adjust)
-        var convText = cdsp.gm_convolver || cdsp.rate_adjust.toFixed(6);
-        PiAudio.setText("sys-cdsp-rate-adj", convText);
-        PiAudio.setText("sys-cdsp-clipped", String(cdsp.clipped_samples),
-            cdsp.clipped_samples > 0 ? "c-red" : "c-green");
+        // F-088: fallback em-dash — rate_adjust is hardcoded 1.0 (no data source).
+        var convText = cdsp.gm_convolver || "\u2014";
+        PiAudio.setText("sys-cdsp-rate-adj", convText,
+            cdsp.gm_convolver ? null : "c-grey");
+        // Clipped — no real data source (D-040: CamillaDSP removed,
+        // FilterChainCollector hardcodes 0, PW has no clip counter).
+        // Show em-dash to avoid fake-truth display (F-088).
+        PiAudio.setText("sys-cdsp-clipped", "\u2014", "c-grey");
         PiAudio.setText("sys-cdsp-xruns", String(cdsp.xruns),
             cdsp.xruns > 0 ? "c-red" : "c-green");
 
