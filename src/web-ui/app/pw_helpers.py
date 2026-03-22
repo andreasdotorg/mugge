@@ -163,33 +163,36 @@ def find_gain_node(pw_data: list, node_name: str) -> tuple[int | None, float]:
     return convolver_id, gain_params[node_name]
 
 
+def _read_mult_sync(node_id: int) -> subprocess.CompletedProcess | None:
+    """Run ``pw-cli enum-params`` synchronously (called from thread pool)."""
+    try:
+        return subprocess.run(
+            ["pw-cli", "enum-params", str(node_id), "Props"],
+            capture_output=True, timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        log.warning("pw-cli enum-params timed out for node %d", node_id)
+        return None
+    except FileNotFoundError:
+        return None
+
+
 async def read_mult(node_id: int, node_name: str | None = None) -> float | None:
     """Read Mult value from the convolver node via pw-cli enum-params.
 
     Fallback for when pw-dump doesn't expose the gain params.
-    Runs ``pw-cli enum-params <node-id> Props`` and parses the output.
+    Uses ``asyncio.to_thread`` to avoid event loop starvation (F-059).
 
     If node_name is provided, looks for ``<node_name>:Mult`` specifically.
     Otherwise returns the first Mult value found.
 
     Returns the Mult value, or None if it could not be read.
     """
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "pw-cli", "enum-params", str(node_id), "Props",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-        if proc.returncode != 0:
-            return None
-        text = stdout.decode("utf-8", errors="replace")
-        return _parse_mult_from_enum(text, node_name)
-    except asyncio.TimeoutError:
-        log.warning("pw-cli enum-params timed out for node %d", node_id)
+    result = await asyncio.to_thread(_read_mult_sync, node_id)
+    if result is None or result.returncode != 0:
         return None
-    except FileNotFoundError:
-        return None
+    text = result.stdout.decode("utf-8", errors="replace")
+    return _parse_mult_from_enum(text, node_name)
 
 
 def _parse_mult_from_enum(text: str, node_name: str | None = None) -> float | None:
@@ -221,32 +224,38 @@ def _parse_mult_from_enum(text: str, node_name: str | None = None) -> float | No
     return None
 
 
+def _set_mult_sync(node_id: int, node_name: str, mult: float) -> subprocess.CompletedProcess | None:
+    """Run ``pw-cli s`` synchronously (called from thread pool)."""
+    param_key = f"{node_name}:Mult"
+    try:
+        return subprocess.run(
+            ["pw-cli", "s", str(node_id), "Props",
+             f'{{ params = [ "{param_key}" {mult} ] }}'],
+            capture_output=True, timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        log.warning("pw-cli timed out for %s", node_name)
+        return None
+    except FileNotFoundError:
+        log.error("pw-cli not found")
+        return None
+
+
 async def set_mult(node_id: int, node_name: str, mult: float) -> bool:
     """Set a gain node's Mult value via ``pw-cli``.
 
+    Uses ``asyncio.to_thread`` to avoid event loop starvation (F-059).
     Targets the convolver node with the full param key
     ``<node_name>:Mult``, matching the filter-chain builtin param format.
     """
-    param_key = f"{node_name}:Mult"
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "pw-cli", "s", str(node_id), "Props",
-            f'{{ params = [ "{param_key}" {mult} ] }}',
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-        if proc.returncode == 0:
-            log.debug("Set %s (convolver node %d): Mult=%s", node_name, node_id, mult)
-            return True
-        log.warning("pw-cli failed for %s: %s", node_name, stderr.decode().strip())
+    result = await asyncio.to_thread(_set_mult_sync, node_id, node_name, mult)
+    if result is None:
         return False
-    except asyncio.TimeoutError:
-        log.warning("pw-cli timed out for %s", node_name)
-        return False
-    except FileNotFoundError:
-        log.error("pw-cli not found")
-        return False
+    if result.returncode == 0:
+        log.debug("Set %s (convolver node %d): Mult=%s", node_name, node_id, mult)
+        return True
+    log.warning("pw-cli failed for %s: %s", node_name, result.stderr.decode().strip())
+    return False
 
 
 def find_quantum(pw_data: list) -> int | None:

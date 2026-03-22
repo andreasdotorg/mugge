@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import subprocess
 import sys
 
 log = logging.getLogger(__name__)
@@ -93,11 +94,26 @@ class PipeWireCollector:
             "xruns": xruns,
         }
 
+    @staticmethod
+    def _read_metadata_sync() -> subprocess.CompletedProcess | None:
+        """Run ``pw-metadata`` synchronously (called from thread pool)."""
+        try:
+            return subprocess.run(
+                ["pw-metadata", "-n", "settings"],
+                capture_output=True, timeout=2,
+            )
+        except subprocess.TimeoutExpired:
+            log.warning("pw-metadata timed out")
+            return None
+        except FileNotFoundError:
+            log.warning("pw-metadata not found")
+            return None
+
     async def _read_metadata(self) -> tuple[int, int]:
         """Read quantum and sample rate from pw-metadata.
 
-        Runs ``pw-metadata -n settings`` which prints key-value pairs
-        and exits immediately (no monitoring mode). Output format::
+        Uses ``asyncio.to_thread`` to avoid event loop starvation (F-059).
+        Output format::
 
             Found "settings" metadata 32
             update: id:0 key:'clock.quantum' value:'1024' type:''
@@ -105,30 +121,15 @@ class PipeWireCollector:
 
         Returns (quantum, sample_rate). Falls back to (0, 0) on error.
         """
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "pw-metadata", "-n", "settings",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=2.0,
-            )
-        except asyncio.TimeoutError:
-            log.warning("pw-metadata timed out")
-            return (0, 0)
-        except FileNotFoundError:
-            log.warning("pw-metadata not found")
-            return (0, 0)
-
-        if proc.returncode != 0:
+        result = await asyncio.to_thread(self._read_metadata_sync)
+        if result is None or result.returncode != 0:
             return (0, 0)
 
         quantum = 0
         force_quantum = 0
         sample_rate = 0
 
-        for line in stdout.decode("utf-8", errors="replace").splitlines():
+        for line in result.stdout.decode("utf-8", errors="replace").splitlines():
             m = _META_RE.search(line)
             if not m:
                 continue
@@ -147,27 +148,28 @@ class PipeWireCollector:
         effective_quantum = force_quantum if force_quantum > 0 else quantum
         return (effective_quantum, sample_rate)
 
+    @staticmethod
+    def _discover_driver_node_sync() -> subprocess.CompletedProcess | None:
+        """Run ``pw-cli ls Node`` synchronously (called from thread pool)."""
+        try:
+            return subprocess.run(
+                ["pw-cli", "ls", "Node"],
+                capture_output=True, timeout=3,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return None
+
     async def _discover_driver_node(self) -> int | None:
         """Find the USBStreamer driver node ID via pw-cli.
 
+        Uses ``asyncio.to_thread`` to avoid event loop starvation (F-059).
         Looks for a node with 'USBStreamer' in its description.
         Called once at first poll; result is cached.
 
         Returns the node ID, or None if not found.
         """
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "pw-cli", "ls", "Node",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=3.0,
-            )
-        except (asyncio.TimeoutError, FileNotFoundError):
-            return None
-
-        if proc.returncode != 0:
+        result = await asyncio.to_thread(self._discover_driver_node_sync)
+        if result is None or result.returncode != 0:
             return None
 
         # pw-cli ls Node output has blocks like:
@@ -175,7 +177,7 @@ class PipeWireCollector:
         #     ...
         #     node.description = "USBStreamer"
         current_id = None
-        for line in stdout.decode("utf-8", errors="replace").splitlines():
+        for line in result.stdout.decode("utf-8", errors="replace").splitlines():
             line = line.strip()
             id_match = re.match(r"id\s+(\d+),", line)
             if id_match:
@@ -213,47 +215,56 @@ class PipeWireCollector:
         # Fallback: scan all nodes for xrun properties
         return await self._query_all_xruns()
 
-    async def _query_node_xruns(self, node_id: int) -> int | None:
-        """Query xrun count from a specific node via pw-cli info."""
+    @staticmethod
+    def _query_node_xruns_sync(node_id: int) -> subprocess.CompletedProcess | None:
+        """Run ``pw-cli info <node-id>`` synchronously (called from thread pool)."""
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "pw-cli", "info", str(node_id),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            return subprocess.run(
+                ["pw-cli", "info", str(node_id)],
+                capture_output=True, timeout=2,
             )
-            stdout, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=2.0,
-            )
-        except (asyncio.TimeoutError, FileNotFoundError):
+        except (subprocess.TimeoutExpired, FileNotFoundError):
             return None
 
-        if proc.returncode != 0:
+    async def _query_node_xruns(self, node_id: int) -> int | None:
+        """Query xrun count from a specific node via pw-cli info.
+
+        Uses ``asyncio.to_thread`` to avoid event loop starvation (F-059).
+        """
+        result = await asyncio.to_thread(self._query_node_xruns_sync, node_id)
+        if result is None:
+            return None
+
+        if result.returncode != 0:
             # Node may have been removed — reset discovery
             self._driver_node_id = None
             self._driver_discovery_done = False
             return None
 
-        return self._parse_xruns(stdout.decode("utf-8", errors="replace"))
+        return self._parse_xruns(result.stdout.decode("utf-8", errors="replace"))
+
+    @staticmethod
+    def _query_all_xruns_sync() -> subprocess.CompletedProcess | None:
+        """Run ``pw-cli info all`` synchronously (called from thread pool)."""
+        try:
+            return subprocess.run(
+                ["pw-cli", "info", "all"],
+                capture_output=True, timeout=3,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return None
 
     async def _query_all_xruns(self) -> int:
-        """Fallback: scan all node info for xrun properties."""
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "pw-cli", "info", "all",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await asyncio.wait_for(
-                proc.communicate(), timeout=3.0,
-            )
-        except (asyncio.TimeoutError, FileNotFoundError):
-            return 0
+        """Fallback: scan all node info for xrun properties.
 
-        if proc.returncode != 0:
+        Uses ``asyncio.to_thread`` to avoid event loop starvation (F-059).
+        """
+        result = await asyncio.to_thread(self._query_all_xruns_sync)
+        if result is None or result.returncode != 0:
             return 0
 
         return self._parse_xruns(
-            stdout.decode("utf-8", errors="replace")) or 0
+            result.stdout.decode("utf-8", errors="replace")) or 0
 
     def _parse_xruns(self, output: str) -> int | None:
         """Parse xrun count from pw-cli info output.

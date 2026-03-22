@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import subprocess
 from typing import Dict, Optional
 
 from fastapi import APIRouter
@@ -193,32 +194,32 @@ async def set_quantum(body: QuantumRequest):
         _mock_quantum = body.quantum
         return JSONResponse({"ok": True, "quantum": _mock_quantum})
 
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "pw-metadata", "-n", "settings", "0",
-            "clock.force-quantum", str(body.quantum),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5.0)
-        if proc.returncode != 0:
-            return JSONResponse(
-                status_code=502,
-                content={"ok": False,
-                         "error": f"pw-metadata failed: {stderr.decode().strip()}"},
+    def _set_quantum_sync() -> subprocess.CompletedProcess | None:
+        try:
+            return subprocess.run(
+                ["pw-metadata", "-n", "settings", "0",
+                 "clock.force-quantum", str(body.quantum)],
+                capture_output=True, timeout=5,
             )
-        log.info("Quantum set to %d via pw-metadata", body.quantum)
-        return JSONResponse({"ok": True, "quantum": body.quantum})
-    except asyncio.TimeoutError:
+        except subprocess.TimeoutExpired:
+            return None
+        except FileNotFoundError:
+            return None
+
+    result = await asyncio.to_thread(_set_quantum_sync)
+    if result is None:
         return JSONResponse(
             status_code=504,
-            content={"ok": False, "error": "pw-metadata timed out"},
+            content={"ok": False, "error": "pw-metadata timed out or not found"},
         )
-    except FileNotFoundError:
+    if result.returncode != 0:
         return JSONResponse(
             status_code=502,
-            content={"ok": False, "error": "pw-metadata not found"},
+            content={"ok": False,
+                     "error": f"pw-metadata failed: {result.stderr.decode().strip()}"},
         )
+    log.info("Quantum set to %d via pw-metadata", body.quantum)
+    return JSONResponse({"ok": True, "quantum": body.quantum})
 
 
 # -- Mock helpers -----------------------------------------------------------
