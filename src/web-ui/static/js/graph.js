@@ -18,10 +18,11 @@
 
     // -- Layout constants (match UX spec) --
 
-    var SVG_W = 860;
+    var SVG_W = 960;
     var SVG_H = 480;
-    var COL_X = [80, 360, 640];    // column center x
+    var COL_X = [80, 320, 540, 720];  // source, convolver, gain, output
     var NODE_W = 160;
+    var NODE_W_GAIN = 120;
     var NODE_W_COMPOUND = 180;
     var HEADER_H = 24;
     var PORT_ROW_H = 22;
@@ -37,6 +38,7 @@
     var NODE_COLORS = {
         app:  "#00838f",
         dsp:  "#2e7d32",
+        gain: "#1b5e20",
         hw:   "#c17900",
         main: "#8a94a4"
     };
@@ -122,7 +124,7 @@
      * @returns {{g: SVGElement, inputPorts: {label:string, cx:number, cy:number}[], outputPorts: {label:string, cx:number, cy:number}[], width:number, height:number}}
      */
     function buildNode(opts) {
-        var w = opts.compound ? NODE_W_COMPOUND : NODE_W;
+        var w = opts.compound ? NODE_W_COMPOUND : (opts.narrow ? NODE_W_GAIN : NODE_W);
         var maxPorts = Math.max(opts.inputs ? opts.inputs.length : 0, opts.outputs ? opts.outputs.length : 0);
         var portAreaH = maxPorts > 0 ? PORT_PAD + maxPorts * PORT_ROW_H + PORT_PAD : 40;
         var h = HEADER_H + portAreaH;
@@ -261,66 +263,105 @@
         }
     }
 
+    // -- Gain node labels and IDs --
+
+    var GAIN_NODES = [
+        { id: "gv-node-gain-left-hp",  label: "Gain L HP",  shortLabel: "L HP" },
+        { id: "gv-node-gain-right-hp", label: "Gain R HP",  shortLabel: "R HP" },
+        { id: "gv-node-gain-sub1-lp",  label: "Gain Sub1",  shortLabel: "Sub1" },
+        { id: "gv-node-gain-sub2-lp",  label: "Gain Sub2",  shortLabel: "Sub2" }
+    ];
+
+    // -- Helper: build the four gain nodes stacked vertically --
+
+    function buildGainColumn(x, centerY) {
+        var gainH = HEADER_H + PORT_PAD + 1 * PORT_ROW_H + PORT_PAD;
+        var totalH = 4 * gainH + 3 * NODE_GAP;
+        var startY = centerY - totalH / 2;
+        var gains = [];
+        for (var i = 0; i < 4; i++) {
+            var gy = startY + i * (gainH + NODE_GAP);
+            var g = buildNode({
+                id: GAIN_NODES[i].id, label: GAIN_NODES[i].label, color: "gain",
+                x: x, y: gy,
+                inputs: ["in"], outputs: ["out"],
+                narrow: true, state: "active"
+            });
+            gains.push(g);
+        }
+        return gains;
+    }
+
     // -- Template: Monitoring --
 
     function buildMonitoringTemplate() {
         var group = svgCreate("g", { "class": "gv-template-group" });
 
         // Calculate node heights first for centering
-        var ghostH = HEADER_H + PORT_PAD + 0 + PORT_PAD + 16; // minimal ghost
-        ghostH = 72; // fixed ghost height
+        var ghostH = 72; // fixed ghost height
         var convMaxPorts = 4;
         var convH = HEADER_H + PORT_PAD + convMaxPorts * PORT_ROW_H + PORT_PAD;
         var usbPorts = 8;
         var usbH = HEADER_H + PORT_PAD + usbPorts * PORT_ROW_H + PORT_PAD;
 
-        // Vertical centering
-        var heights = [
-            { height: ghostH },
-            { height: convH },
-            { height: usbH }
-        ];
-        stackNodes(heights);
+        var centerY = SVG_H / 2;
 
-        // Ghost node (col 1)
+        // Ghost node (col 0)
         var ghost = buildNode({
             id: "gv-node-ghost", label: "No source linked", color: "main",
-            x: COL_X[0], y: heights[0].y,
+            x: COL_X[0], y: centerY - ghostH / 2,
             inputs: [], outputs: [],
             state: "ghost", ghostText: "No source linked"
         });
-        group.appendChild(ghost.g);
 
-        // Convolver (col 2)
+        // Convolver (col 1)
         var conv = buildNode({
             id: "gv-node-convolver", label: "Convolver", color: "dsp",
-            x: COL_X[1], y: heights[1].y,
+            x: COL_X[1], y: centerY - convH / 2,
             inputs: ["AUX0", "AUX1", "AUX2", "AUX3"],
             outputs: ["out0", "out1", "out2", "out3"],
             state: "active"
         });
-        group.appendChild(conv.g);
+
+        // Gain nodes (col 2)
+        var gains = buildGainColumn(COL_X[2], centerY);
 
         // USBStreamer (col 3)
         var usb = buildNode({
             id: "gv-node-usbstreamer", label: "USBStreamer", color: "hw",
-            x: COL_X[2], y: heights[2].y,
+            x: COL_X[3], y: centerY - usbH / 2,
             inputs: ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"],
             outputs: [],
             state: "active"
         });
-        group.appendChild(usb.g);
 
-        // Links: convolver out0-3 -> USBStreamer ch1-4
+        // Links (behind nodes)
+        var linksGroup = svgCreate("g");
+
+        // Convolver out0-3 -> Gain in
         for (var i = 0; i < 4; i++) {
-            var link = buildLink(
+            linksGroup.appendChild(buildLink(
                 conv.outputPorts[i].cx, conv.outputPorts[i].cy,
-                usb.inputPorts[i].cx, usb.inputPorts[i].cy,
+                gains[i].inputPorts[0].cx, gains[i].inputPorts[0].cy,
                 "gv-link--connected", "gv-arrow"
-            );
-            // Insert links before nodes for z-order
-            group.insertBefore(link, ghost.g);
+            ));
         }
+
+        // Gain out -> USBStreamer ch1-4
+        for (var j = 0; j < 4; j++) {
+            linksGroup.appendChild(buildLink(
+                gains[j].outputPorts[0].cx, gains[j].outputPorts[0].cy,
+                usb.inputPorts[j].cx, usb.inputPorts[j].cy,
+                "gv-link--connected", "gv-arrow"
+            ));
+        }
+
+        // Append: links first, then nodes (SVG painter's model)
+        group.appendChild(linksGroup);
+        group.appendChild(ghost.g);
+        group.appendChild(conv.g);
+        for (var k = 0; k < 4; k++) group.appendChild(gains[k].g);
+        group.appendChild(usb.g);
 
         return group;
     }
@@ -340,40 +381,39 @@
         var convH = HEADER_H + PORT_PAD + Math.max(convIns.length, convOuts.length) * PORT_ROW_H + PORT_PAD;
         var usbH = HEADER_H + PORT_PAD + usbIns.length * PORT_ROW_H + PORT_PAD;
 
-        // Center all three columns vertically based on tallest
-        var maxH = Math.max(mixxxH, convH, usbH);
-        var mixxxY = (SVG_H - mixxxH) / 2;
-        var convY = (SVG_H - convH) / 2;
-        var usbY = (SVG_H - usbH) / 2;
+        var centerY = SVG_H / 2;
+        var mixxxY = centerY - mixxxH / 2;
+        var convY = centerY - convH / 2;
+        var usbY = centerY - usbH / 2;
 
-        // Mixxx (col 1)
+        // Mixxx (col 0)
         var mixxx = buildNode({
             id: "gv-node-mixxx", label: "Mixxx", color: "app",
             x: COL_X[0], y: mixxxY,
             inputs: [], outputs: mixxxOuts,
             state: "active"
         });
-        group.appendChild(mixxx.g);
 
-        // Convolver (col 2)
+        // Convolver (col 1)
         var conv = buildNode({
             id: "gv-node-convolver", label: "Convolver", color: "dsp",
             x: COL_X[1], y: convY,
             inputs: convIns, outputs: convOuts,
             state: "active"
         });
-        group.appendChild(conv.g);
+
+        // Gain nodes (col 2)
+        var gains = buildGainColumn(COL_X[2], centerY);
 
         // USBStreamer (col 3)
         var usb = buildNode({
             id: "gv-node-usbstreamer", label: "USBStreamer", color: "hw",
-            x: COL_X[2], y: usbY,
+            x: COL_X[3], y: usbY,
             inputs: usbIns, outputs: [],
             state: "active"
         });
-        group.appendChild(usb.g);
 
-        // Links layer (inserted before nodes for z-order)
+        // Normal links (behind nodes)
         var linksGroup = svgCreate("g");
 
         // Mixxx L -> Convolver AUX0 (left main)
@@ -425,30 +465,48 @@
             "gv-link--connected", "gv-arrow"
         ));
 
-        // Convolver -> USBStreamer ch1-4
+        // Convolver -> Gain nodes
         for (var i = 0; i < 4; i++) {
             linksGroup.appendChild(buildLink(
                 conv.outputPorts[i].cx, conv.outputPorts[i].cy,
-                usb.inputPorts[i].cx, usb.inputPorts[i].cy,
+                gains[i].inputPorts[0].cx, gains[i].inputPorts[0].cy,
                 "gv-link--connected", "gv-arrow"
             ));
         }
 
+        // Gain nodes -> USBStreamer ch1-4
+        for (var g = 0; g < 4; g++) {
+            linksGroup.appendChild(buildLink(
+                gains[g].outputPorts[0].cx, gains[g].outputPorts[0].cy,
+                usb.inputPorts[g].cx, usb.inputPorts[g].cy,
+                "gv-link--connected", "gv-arrow"
+            ));
+        }
+
+        // Bypass arcs (rendered AFTER nodes so they appear on top — F-054)
+        var bypassGroup = svgCreate("g", { "class": "gv-bypass-group" });
+
         // Bypass: Mixxx HP L -> USBStreamer ch5 (arc above)
-        linksGroup.appendChild(buildBypassArc(
+        bypassGroup.appendChild(buildBypassArc(
             mixxx.outputPorts[2].cx, mixxx.outputPorts[2].cy,
             usb.inputPorts[4].cx, usb.inputPorts[4].cy,
-            -40
+            -60
         ));
 
         // Bypass: Mixxx HP R -> USBStreamer ch6 (arc above)
-        linksGroup.appendChild(buildBypassArc(
+        bypassGroup.appendChild(buildBypassArc(
             mixxx.outputPorts[3].cx, mixxx.outputPorts[3].cy,
             usb.inputPorts[5].cx, usb.inputPorts[5].cy,
-            -40
+            -60
         ));
 
-        group.insertBefore(linksGroup, mixxx.g);
+        // Append order: links, nodes, bypass arcs (painter's model)
+        group.appendChild(linksGroup);
+        group.appendChild(mixxx.g);
+        group.appendChild(conv.g);
+        for (var k = 0; k < 4; k++) group.appendChild(gains[k].g);
+        group.appendChild(usb.g);
+        group.appendChild(bypassGroup);
 
         return group;
     }
@@ -458,10 +516,10 @@
     function buildLiveTemplate() {
         var group = svgCreate("g", { "class": "gv-template-group" });
 
-        // ADA8200 in col 1 (capture input device)
+        // ADA8200 in col 0 (capture input device)
         var adaOuts = ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"];
 
-        // Reaper in col 1 (compound: 8 in + 6 out)
+        // Reaper (compound: 8 in + 6 out)
         var reaperIns = ["in1", "in2", "in3", "in4", "in5", "in6", "in7", "in8"];
         var reaperOuts = ["out1", "out2", "HP L", "HP R", "IEM L", "IEM R"];
 
@@ -469,25 +527,21 @@
         var convOuts = ["out0", "out1", "out2", "out3"];
         var usbIns = ["ch1", "ch2", "ch3", "ch4", "ch5", "ch6", "ch7", "ch8"];
 
+        // Live has 5 columns: ADA8200, Reaper, Convolver, Gain, USBStreamer
+        var adaX = 50;
+        var reaperX = 220;
+        var convX = 420;
+        var gainX = 580;
+        var usbX = 740;
+
+        var centerY = SVG_H / 2;
+
         // Heights
         var adaH = HEADER_H + PORT_PAD + adaOuts.length * PORT_ROW_H + PORT_PAD;
         var reaperH = HEADER_H + PORT_PAD + Math.max(reaperIns.length, reaperOuts.length) * PORT_ROW_H + PORT_PAD;
         var convH = HEADER_H + PORT_PAD + convIns.length * PORT_ROW_H + PORT_PAD;
         var usbH = HEADER_H + PORT_PAD + usbIns.length * PORT_ROW_H + PORT_PAD;
 
-        // Position: ADA8200 and Reaper share col 1 (ADA above, Reaper below)
-        // Actually, ADA8200 outputs feed Reaper inputs — they should be
-        // separate columns or ADA8200 to the far left. Let's put ADA8200
-        // at x=40, Reaper at x=180, Convolver at x=400, USBStreamer at x=660
-        // to fit the extra column.
-        var adaX = 50;
-        var reaperX = 240;
-        var convX = 440;
-        var usbX = 680;
-
-        var centerY = SVG_H / 2;
-
-        // Vertical centering per column
         var adaY = centerY - adaH / 2;
         var reaperY = centerY - reaperH / 2;
         var convY = centerY - convH / 2;
@@ -500,36 +554,35 @@
             inputs: [], outputs: adaOuts,
             state: "active"
         });
-        group.appendChild(ada.g);
 
-        // Reaper (compound, col 1.5)
+        // Reaper (compound)
         var reaper = buildNode({
             id: "gv-node-reaper", label: "Reaper", color: "app",
             x: reaperX, y: reaperY,
             inputs: reaperIns, outputs: reaperOuts,
             compound: true, state: "active"
         });
-        group.appendChild(reaper.g);
 
-        // Convolver (col 2)
+        // Convolver
         var conv = buildNode({
             id: "gv-node-convolver", label: "Convolver", color: "dsp",
             x: convX, y: convY,
             inputs: convIns, outputs: convOuts,
             state: "active"
         });
-        group.appendChild(conv.g);
 
-        // USBStreamer (col 3)
+        // Gain nodes
+        var gains = buildGainColumn(gainX, centerY);
+
+        // USBStreamer
         var usb = buildNode({
             id: "gv-node-usbstreamer", label: "USBStreamer", color: "hw",
             x: usbX, y: usbY,
             inputs: usbIns, outputs: [],
             state: "active"
         });
-        group.appendChild(usb.g);
 
-        // Links
+        // Normal links (behind nodes)
         var linksGroup = svgCreate("g");
 
         // ADA8200 ch1-8 -> Reaper in1-8
@@ -590,44 +643,63 @@
             "gv-link--connected", "gv-arrow"
         ));
 
-        // Convolver -> USBStreamer ch1-4
+        // Convolver -> Gain nodes
         for (var c = 0; c < 4; c++) {
             linksGroup.appendChild(buildLink(
                 conv.outputPorts[c].cx, conv.outputPorts[c].cy,
-                usb.inputPorts[c].cx, usb.inputPorts[c].cy,
+                gains[c].inputPorts[0].cx, gains[c].inputPorts[0].cy,
                 "gv-link--connected", "gv-arrow"
             ));
         }
 
+        // Gain nodes -> USBStreamer ch1-4
+        for (var g = 0; g < 4; g++) {
+            linksGroup.appendChild(buildLink(
+                gains[g].outputPorts[0].cx, gains[g].outputPorts[0].cy,
+                usb.inputPorts[g].cx, usb.inputPorts[g].cy,
+                "gv-link--connected", "gv-arrow"
+            ));
+        }
+
+        // Bypass arcs (rendered AFTER nodes — F-054)
+        var bypassGroup = svgCreate("g", { "class": "gv-bypass-group" });
+
         // Bypass: Reaper HP L -> USBStreamer ch5 (arc above)
-        linksGroup.appendChild(buildBypassArc(
+        bypassGroup.appendChild(buildBypassArc(
             reaper.outputPorts[2].cx, reaper.outputPorts[2].cy,
             usb.inputPorts[4].cx, usb.inputPorts[4].cy,
-            -40
+            -60
         ));
 
         // Bypass: Reaper HP R -> USBStreamer ch6 (arc above)
-        linksGroup.appendChild(buildBypassArc(
+        bypassGroup.appendChild(buildBypassArc(
             reaper.outputPorts[3].cx, reaper.outputPorts[3].cy,
             usb.inputPorts[5].cx, usb.inputPorts[5].cy,
-            -40
+            -60
         ));
 
         // Bypass: Reaper IEM L -> USBStreamer ch7 (arc below)
-        linksGroup.appendChild(buildBypassArc(
+        bypassGroup.appendChild(buildBypassArc(
             reaper.outputPorts[4].cx, reaper.outputPorts[4].cy,
             usb.inputPorts[6].cx, usb.inputPorts[6].cy,
-            40
+            60
         ));
 
         // Bypass: Reaper IEM R -> USBStreamer ch8 (arc below)
-        linksGroup.appendChild(buildBypassArc(
+        bypassGroup.appendChild(buildBypassArc(
             reaper.outputPorts[5].cx, reaper.outputPorts[5].cy,
             usb.inputPorts[7].cx, usb.inputPorts[7].cy,
-            40
+            60
         ));
 
-        group.insertBefore(linksGroup, ada.g);
+        // Append order: links, nodes, bypass arcs (painter's model)
+        group.appendChild(linksGroup);
+        group.appendChild(ada.g);
+        group.appendChild(reaper.g);
+        group.appendChild(conv.g);
+        for (var k = 0; k < 4; k++) group.appendChild(gains[k].g);
+        group.appendChild(usb.g);
+        group.appendChild(bypassGroup);
 
         return group;
     }
@@ -637,15 +709,12 @@
     function buildMeasurementTemplate() {
         var group = svgCreate("g", { "class": "gv-template-group" });
 
-        // UMIK-1 (col 0, far left)
-        // Signal-gen (col 1, compound: 1 in + 4 out)
-        // Convolver (col 2)
-        // USBStreamer (col 3)
-
+        // 5 columns: UMIK-1, Signal-gen, Convolver, Gain, USBStreamer
         var umikX = 50;
-        var siggenX = 220;
-        var convX = 440;
-        var usbX = 680;
+        var siggenX = 200;
+        var convX = 400;
+        var gainX = 570;
+        var usbX = 740;
 
         var siggenIns = ["mic"];
         var siggenOuts = ["ch0", "ch1", "ch2", "ch3"];
@@ -673,7 +742,6 @@
             inputs: [], outputs: ["capture"],
             state: "absent"
         });
-        group.appendChild(umik.g);
 
         // Signal-gen (compound)
         var siggen = buildNode({
@@ -682,7 +750,6 @@
             inputs: siggenIns, outputs: siggenOuts,
             compound: true, state: "active"
         });
-        group.appendChild(siggen.g);
 
         // Convolver
         var conv = buildNode({
@@ -691,7 +758,9 @@
             inputs: convIns, outputs: convOuts,
             state: "active"
         });
-        group.appendChild(conv.g);
+
+        // Gain nodes
+        var gains = buildGainColumn(gainX, centerY);
 
         // USBStreamer
         var usb = buildNode({
@@ -700,7 +769,6 @@
             inputs: usbIns, outputs: [],
             state: "active"
         });
-        group.appendChild(usb.g);
 
         // Links
         var linksGroup = svgCreate("g");
@@ -721,16 +789,31 @@
             ));
         }
 
-        // Convolver -> USBStreamer ch1-4
+        // Convolver -> Gain nodes
         for (var j = 0; j < 4; j++) {
             linksGroup.appendChild(buildLink(
                 conv.outputPorts[j].cx, conv.outputPorts[j].cy,
-                usb.inputPorts[j].cx, usb.inputPorts[j].cy,
+                gains[j].inputPorts[0].cx, gains[j].inputPorts[0].cy,
                 "gv-link--connected", "gv-arrow"
             ));
         }
 
-        group.insertBefore(linksGroup, umik.g);
+        // Gain nodes -> USBStreamer ch1-4
+        for (var g = 0; g < 4; g++) {
+            linksGroup.appendChild(buildLink(
+                gains[g].outputPorts[0].cx, gains[g].outputPorts[0].cy,
+                usb.inputPorts[g].cx, usb.inputPorts[g].cy,
+                "gv-link--connected", "gv-arrow"
+            ));
+        }
+
+        // Append order: links, nodes (painter's model)
+        group.appendChild(linksGroup);
+        group.appendChild(umik.g);
+        group.appendChild(siggen.g);
+        group.appendChild(conv.g);
+        for (var k = 0; k < 4; k++) group.appendChild(gains[k].g);
+        group.appendChild(usb.g);
 
         return group;
     }
@@ -795,6 +878,10 @@
         reaper:         { match: "prefix", pattern: "REAPER" },
         convolver:      { match: "exact",  pattern: "pi4audio-convolver" },
         convolverOut:   { match: "exact",  pattern: "pi4audio-convolver-out" },
+        gainLeftHp:     { match: "exact",  pattern: "gain_left_hp" },
+        gainRightHp:    { match: "exact",  pattern: "gain_right_hp" },
+        gainSub1Lp:     { match: "exact",  pattern: "gain_sub1_lp" },
+        gainSub2Lp:     { match: "exact",  pattern: "gain_sub2_lp" },
         usbPlayback:    { match: "prefix", pattern: "alsa_output.usb-MiniDSP_USBStreamer" },
         siggen:         { match: "exact",  pattern: "pi4audio-signal-gen" },
         siggenCapture:  { match: "exact",  pattern: "pi4audio-signal-gen-capture" },
@@ -804,21 +891,29 @@
 
     // Map SVG node IDs to GM node name matchers
     var NODE_ID_TO_GM = {
-        "gv-node-mixxx":        [GM_NODES.mixxx],
-        "gv-node-reaper":       [GM_NODES.reaper],
-        "gv-node-convolver":    [GM_NODES.convolver, GM_NODES.convolverOut],
-        "gv-node-usbstreamer":  [GM_NODES.usbPlayback],
-        "gv-node-siggen":       [GM_NODES.siggen, GM_NODES.siggenCapture],
-        "gv-node-ada8200":      [GM_NODES.ada8200],
-        "gv-node-umik1":        [GM_NODES.umik1]
+        "gv-node-mixxx":          [GM_NODES.mixxx],
+        "gv-node-reaper":         [GM_NODES.reaper],
+        "gv-node-convolver":      [GM_NODES.convolver, GM_NODES.convolverOut],
+        "gv-node-gain-left-hp":   [GM_NODES.gainLeftHp],
+        "gv-node-gain-right-hp":  [GM_NODES.gainRightHp],
+        "gv-node-gain-sub1-lp":   [GM_NODES.gainSub1Lp],
+        "gv-node-gain-sub2-lp":   [GM_NODES.gainSub2Lp],
+        "gv-node-usbstreamer":    [GM_NODES.usbPlayback],
+        "gv-node-siggen":         [GM_NODES.siggen, GM_NODES.siggenCapture],
+        "gv-node-ada8200":        [GM_NODES.ada8200],
+        "gv-node-umik1":          [GM_NODES.umik1]
     };
 
     // Map device keys (from GM get_state devices) to SVG node IDs
     var DEVICE_TO_NODE = {
-        usbstreamer:     "gv-node-usbstreamer",
-        umik1:           "gv-node-umik1",
-        convolver:       "gv-node-convolver",
-        "convolver-out": "gv-node-convolver"
+        usbstreamer:      "gv-node-usbstreamer",
+        umik1:            "gv-node-umik1",
+        convolver:        "gv-node-convolver",
+        "convolver-out":  "gv-node-convolver",
+        "gain_left_hp":   "gv-node-gain-left-hp",
+        "gain_right_hp":  "gv-node-gain-right-hp",
+        "gain_sub1_lp":   "gv-node-gain-sub1-lp",
+        "gain_sub2_lp":   "gv-node-gain-sub2-lp"
     };
 
     function gmNodeMatch(gmName, matcher) {
