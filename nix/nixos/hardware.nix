@@ -20,8 +20,8 @@
   # When used standalone (without nixos-hardware), add:
   #   boot.kernelPackages = pkgs.linuxPackages_rpi4;
 
-  # ALSA loopback device — required by CamillaDSP for virtual routing
-  boot.kernelModules = [ "snd-aloop" ];
+  # D-040: snd-aloop removed — CamillaDSP abandoned, PW filter-chain
+  # convolver handles all DSP natively (no ALSA loopback needed).
 
   # ── Firmware ───────────────────────────────────────────────────
   hardware.enableRedistributableFirmware = true;

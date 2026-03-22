@@ -2,7 +2,7 @@
   description = "Pi 4B audio workstation — development environment and NixOS deployment";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils/11707dc2f618dd54ca8739b309ec4fc024de578b";
     nixos-hardware.url = "github:NixOS/nixos-hardware";
     nixgl = {
