@@ -657,13 +657,14 @@ See `docs/project/defects.md` for full details.
 | F-061 | High | Resolved (deployed) | All subprocess calls replaced with `asyncio.to_thread` (`98a95bf`). Deployed to Pi S-007. F-056/F-057 unblocked. |
 | F-062 | Medium | Resolved | 25 asyncio test failures fixed (`95aeb0a`). `get_event_loop()` → `asyncio.run()`. |
 | F-067 | Medium | In progress | US-071 Gate 3 FAILED. SETUP-MANUAL prose quality + CamillaDSP scrub needed. Task #98. |
-| F-083 | High | Open | No spectrum on dashboard. Root cause (S-024): F-081 FD leak + pcm-bridge auto-connect broken (`object.register=false` prevents WirePlumber linking). Needs architect assessment for link creation approach. |
-| F-084 | High | Open | No level meters on dashboard. Same root cause as F-083 (F-081 + auto-connect). |
+| F-083 | High | Open | No spectrum on dashboard. Auto-connect root cause fixed (F-090/F-093 resolved, 16/16 links). Remaining blocker: F-081 FD leak code bug in `broadcast_loop`. |
+| F-084 | High | Open | No level meters on dashboard. Same remaining blocker as F-083 (F-081 FD leak). |
 | F-085 | High | Open | Graph tab rendering issues (6 sub-items): layout overlap, ADA8200 input direction wrong, gain nodes not wired, wrong gain values, IIR shown instead of FIR convolver, Mixxx not visible. Real pw-dump data differs from mock data assumptions. |
 | F-086 | Medium | Open | Config tab quantum button not pre-selected. Should show current quantum (1024 DJ mode) as active. F-073 code exists but not working on Pi. |
 | F-087 | Low | Open | Config tab latency display missing "Latency" label. Shows "21.3 ms at 48 kHz" but no identifying label. |
 | F-089 | Medium | Open | `journalctl --user` returns "No entries" on Pi. User service logs not persisted to disk. Only visible in `systemctl --user status` ring buffer. |
-| F-092 | High | Open | Xruns triggered in Mixxx at quantum 256 not visible in web UI. Counter stays at 0. No PW data pipeline for xrun events. Investigation complete (task #142) — implementation pending. |
+| F-094 | Medium | Open | rsync --delete wiped TLS certs from ~/web-ui/ during S-027 deploy. Need cert exclusion or relocation. |
+| F-095 | High | Open | journald 62% CPU on Pi. Root cause: GM spawns `pw-cli info` per node per poll cycle — ~562 log lines/sec floods journald. Fix: batch queries via `pw-dump` or native PW protocol. |
 
 ### Resolved
 
@@ -702,9 +703,11 @@ See `docs/project/defects.md` for full details.
 | F-076 | Low | Resolved | Math.min safety clamp on both `set_level` sendCmd locations in test.js (`d44921c`). |
 | F-081 | High | REOPENED | pcm-bridge FD leak — S-021 redeploy did NOT fix. Code bug: `broadcast_loop` never prunes clients when no audio data flows. Blocks F-083/F-084. |
 | F-082 | High | Resolved | Web-UI deployment dir mismatch. Files synced from repo to `~/web-ui/` and service restarted (S-022). |
-| F-088 | High | Resolved | Xrun display fake-truth — clipped_samples hardcoded 0 shown as real data. Fixed by worker-truth (task #139). Pending commit + deploy. |
-| F-090 | High | Resolved | pcm-bridge auto-connect broken. Fix: GM-managed links (Option A). Task #141 code complete — pending commit + Pi deploy. |
-| F-091 | Medium | Resolved | D-043 violation. Same fix as F-090 — `--managed` flag + GM reconciler monitor links. Task #141. |
+| F-088 | High | Resolved (deployed) | Xrun display fake-truth — clipped_samples hardcoded 0 shown as real data. Fixed by worker-truth (task #139). Deployed to Pi S-027. |
+| F-090 | High | Resolved (deployed, verified) | pcm-bridge auto-connect broken. Fix: GM-managed links (Option A). Task #141. Deployed and verified on Pi — 16/16 links. |
+| F-091 | Medium | Resolved (deployed, verified) | D-043 violation. Same fix as F-090 — `--managed` flag + GM reconciler monitor links. Task #141. Deployed and verified on Pi. |
+| F-092 | High | Resolved (deployed) | Xrun aggregation implemented. pcm-bridge + GM xrun tracking deployed to Pi S-027. |
+| F-093 | High | Resolved (deployed) | GM routing.rs 0-based port names fixed to match pcm-bridge 1-based ports. 16/16 links achieved. Journald retry storm resolved. |
 
 ## External Dependencies
 

@@ -2997,7 +2997,7 @@ number represents.
 ## F-088: Xrun display still broken — status bar count not updating (RESOLVED)
 
 **Severity:** High
-**Status:** Resolved (worker-truth task #139, pending commit + deploy)
+**Status:** Resolved (deployed to Pi S-027)
 **Found in:** Owner web UI review on Pi (2026-03-22, post S-022 deploy)
 **Affects:** Status bar, US-051 (Persistent Status Bar)
 **Found by:** Owner
@@ -3055,7 +3055,7 @@ catching the issue live via `systemctl --user status` before the ring buffer wra
 ## F-090: pcm-bridge auto-connect broken + monitor links session-only (RESOLVED)
 
 **Severity:** High
-**Status:** Resolved (task #141 — code complete, pending commit + Pi deploy)
+**Status:** Resolved (deployed and verified on Pi S-027 — 16/16 links)
 **Found in:** S-024 diagnostics (2026-03-22)
 **Affects:** pcm-bridge metering (F-083/F-084), US-066 (Spectrum and Meter Polish)
 **Found by:** worker-spa (S-024 diagnostics)
@@ -3114,7 +3114,7 @@ F-091 (D-043 architecture violation)
 ## F-091: pcm-bridge violates D-043 — uses PipeWire AUTOCONNECT instead of GM-managed links (RESOLVED)
 
 **Severity:** Medium
-**Status:** Resolved (task #141 — same fix as F-090, pending commit + Pi deploy)
+**Status:** Resolved (deployed and verified on Pi S-027)
 **Found in:** Architect WP vs GM link audit (2026-03-22)
 **Affects:** Architecture compliance, D-043 ("GM is sole link manager")
 **Found by:** Architect (link audit)
@@ -3144,10 +3144,10 @@ cause, different framing), F-083/F-084 (downstream symptoms)
 
 ---
 
-## F-092: Xruns triggered in Mixxx at quantum 256 not visible in web UI (OPEN)
+## F-092: Xruns triggered in Mixxx at quantum 256 not visible in web UI (RESOLVED)
 
 **Severity:** High
-**Status:** Open
+**Status:** Resolved (deployed to Pi S-027 — xrun aggregation working)
 **Found in:** Owner testing on Pi (2026-03-22)
 **Affects:** Status bar xrun display, US-051 (Persistent Status Bar), US-066
 **Found by:** Owner
@@ -3184,3 +3184,102 @@ xruns do not)
 - `src/web-ui/app/pipewire_collector.py` (PW metadata polling)
 - `src/pcm-bridge/src/main.rs` (potential xrun counter in stream callback)
 - `src/graph-manager/src/main.rs` (potential xrun event subscription)
+
+---
+
+## F-093: GM routing port naming mismatch — 0-based vs 1-based pcm-bridge ports (RESOLVED)
+
+**Severity:** High
+**Status:** Resolved (deployed to Pi S-027 — 16/16 links, journald retry storm gone)
+**Found in:** S-027 Pi deployment verification (2026-03-22)
+**Affects:** pcm-bridge monitor channel 1 (AUX0), F-083/F-084 (meters/spectrum partial)
+**Found by:** team-lead (deployment verification)
+
+**Description:** GM's `routing.rs` generates 0-based port names for pcm-bridge monitor
+links (`input_0`, `input_1`, `input_2`, `input_3`), but pcm-bridge creates 1-based
+PipeWire input ports (`input_1`, `input_2`, `input_3`, `input_4`). Result:
+
+- `monitor_AUX0` → `input_0` link **FAILS** (input_0 does not exist)
+- `monitor_AUX1` → `input_1` link succeeds (by coincidence)
+- `monitor_AUX2` → `input_2` link succeeds (by coincidence)
+- `monitor_AUX3` → `input_3` link succeeds (by coincidence)
+
+15/16 links active instead of 16/16. Channel 1 monitor data (left main) is missing
+from pcm-bridge.
+
+**Fix:** Either:
+- Change GM `routing.rs` to use 1-based naming (`input_1` through `input_4`), OR
+- Change pcm-bridge to use 0-based naming (`input_0` through `input_3`)
+
+Need to verify which convention PipeWire actually uses for the port names created by
+`pw_stream`. The fix should match PW's actual behavior, not assume either convention.
+
+**Side effect:** GM retrying the failed `input_0` link in a tight loop is likely
+causing a journald CPU spike on Pi. Fixing the port naming should resolve this.
+
+**Related:** F-090/F-091 (GM-managed links — this is a bug in the implementation),
+F-083/F-084 (meters/spectrum — channel 1 data missing due to this bug)
+
+**Files:**
+- `src/graph-manager/src/routing.rs` (monitor link port name generation)
+- `src/pcm-bridge/src/main.rs` (PW stream port creation)
+
+---
+
+## F-094: rsync --delete wiped TLS certs from ~/web-ui/ during deployment (OPEN)
+
+**Severity:** Medium
+**Status:** Open
+**Found in:** S-027 Pi deployment (2026-03-22)
+**Affects:** Web UI HTTPS, US-037 (Web UI)
+**Found by:** team-lead (deployment verification)
+
+**Description:** During S-027 deployment, `rsync --delete` from the repo's
+`src/web-ui/` to `~/web-ui/` on the Pi deleted the TLS certificate files that
+were present in the deployment directory but not in the source tree. The web UI
+serves over HTTPS (port 8080) and needs these certs.
+
+**Fix options:**
+1. Add `--exclude` for cert files in the rsync deploy command
+2. Relocate TLS certs outside `~/web-ui/` (e.g., `~/certs/` or `/etc/pi4audio/certs/`)
+   and update the web-UI service config to reference the new path
+3. Add cert files to `.gitignore` and document their expected location
+
+**Related:** F-082 (deployment dir mismatch that created the rsync pattern)
+
+---
+
+## F-095: journald consuming 62% CPU on Pi — GM pw-cli subprocess flood (OPEN)
+
+**Severity:** High
+**Status:** Open
+**Found in:** S-027 Pi deployment verification (2026-03-22)
+**Affects:** Pi system performance, audio headroom
+**Found by:** team-lead (deployment verification + root cause analysis)
+
+**Description:** `journald` process consuming approximately 62% CPU on the Pi.
+62% CPU on a Pi 4B is significant — it eats into audio processing headroom.
+
+**Root cause (confirmed):** GraphManager spawns `pw-cli info <node_id>`
+subprocesses in a tight loop for node polling — one subprocess per PipeWire
+node per poll cycle. Each subprocess causes PipeWire to log 5 lines (connect,
+security, access, permissions, disconnect). At approximately 562 log lines/sec
+(33,700/min), this floods journald and drives it to 62% CPU.
+
+**Fix options:**
+1. **Quick mitigation:** Reduce GM polling frequency or lower PW log level
+2. **Proper fix — batch queries:** Replace per-node `pw-cli info` calls with
+   a single `pw-dump` call that returns all node data at once
+3. **Proper fix — native protocol:** Use PipeWire native protocol from Rust
+   (GM already has a PW core connection) instead of spawning subprocesses
+
+Options 2 and 3 are the correct architectural fixes. Option 1 is a band-aid.
+
+**Note:** F-093's GM retry loop was an additional contributor (retry storm on
+failed input_0 link). F-093 is now resolved, but the base polling flood
+remains the primary cause.
+
+**Related:** F-093 (retry storm, resolved — was additive to this issue)
+
+**Files:**
+- `src/graph-manager/src/` (node polling logic — identify subprocess spawn loop)
