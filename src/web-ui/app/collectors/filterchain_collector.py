@@ -13,7 +13,7 @@ pw-top indirectly via PipeWireCollector (already running). This collector
 focuses on the GM-managed link health and mode state.
 
 Connection lifecycle: connect on startup, reconnect with exponential
-backoff (1s -> 2s -> 4s -> 8s, capped at 15s).
+backoff (1s -> 2s -> 4s -> 8s cap). Timeouts reduced to 2s (F-063b).
 
 Graceful degradation: when GraphManager is unreachable, snapshots
 include ``state: "Disconnected"`` so the frontend shows a disconnected
@@ -35,7 +35,7 @@ GM_PORT = 4002
 # Backoff parameters
 _BACKOFF_BASE = 1.0
 _BACKOFF_FACTOR = 2.0
-_BACKOFF_CAP = 15.0
+_BACKOFF_CAP = 8.0
 
 
 class FilterChainCollector:
@@ -183,7 +183,7 @@ class FilterChainCollector:
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(self._host, self._port),
-                timeout=5.0,
+                timeout=2.0,
             )
             self._connected = True
             self._backoff = _BACKOFF_BASE
@@ -236,7 +236,7 @@ class FilterChainCollector:
             await self._writer.drain()
 
             resp_line = await asyncio.wait_for(
-                self._reader.readline(), timeout=5.0)
+                self._reader.readline(), timeout=2.0)
             if not resp_line:
                 log.warning("GraphManager closed connection")
                 self._disconnect()

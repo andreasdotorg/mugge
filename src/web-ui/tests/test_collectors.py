@@ -927,7 +927,7 @@ class TestFilterChainRPCIntegration:
         _run_async(_test())
 
     def test_backoff_increases_on_repeated_failure(self):
-        """Backoff doubles on each failed connection attempt, capped at 15s."""
+        """Backoff doubles on each failed connection attempt, capped at 8s."""
         from app.collectors.filterchain_collector import (
             _BACKOFF_BASE, _BACKOFF_FACTOR, _BACKOFF_CAP,
         )
@@ -935,7 +935,7 @@ class TestFilterChainRPCIntegration:
         assert fc._backoff == _BACKOFF_BASE
 
         # Simulate backoff progression without sleeping.
-        for expected in [2.0, 4.0, 8.0, 15.0, 15.0]:
+        for expected in [2.0, 4.0, 8.0, 8.0, 8.0]:
             fc._backoff = min(fc._backoff * _BACKOFF_FACTOR, _BACKOFF_CAP)
             assert fc._backoff == expected, (
                 f"Expected backoff {expected}, got {fc._backoff}"

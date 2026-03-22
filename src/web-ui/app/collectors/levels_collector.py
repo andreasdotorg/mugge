@@ -9,7 +9,7 @@ The collector stores the latest snapshot for consumption by
 FilterChainCollector.monitoring_snapshot().
 
 Connection lifecycle: connect on startup, reconnect with exponential
-backoff (1s -> 2s -> 4s -> 8s, capped at 15s). Graceful degradation:
+backoff (1s -> 2s -> 4s -> 8s cap). Timeouts reduced to 2s (F-063b). Graceful degradation:
 when pcm-bridge is unreachable, snapshot returns -120.0 (silent).
 """
 
@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 _BACKOFF_BASE = 1.0
 _BACKOFF_FACTOR = 2.0
-_BACKOFF_CAP = 15.0
+_BACKOFF_CAP = 8.0
 
 
 class LevelsCollector:
@@ -85,7 +85,7 @@ class LevelsCollector:
         try:
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(self._host, self._port),
-                timeout=5.0,
+                timeout=2.0,
             )
             self._connected = True
             self._backoff = _BACKOFF_BASE
@@ -126,7 +126,7 @@ class LevelsCollector:
                         continue
 
                 line = await asyncio.wait_for(
-                    self._reader.readline(), timeout=5.0)
+                    self._reader.readline(), timeout=2.0)
                 if not line:
                     log.warning("pcm-bridge levels connection closed")
                     self._disconnect()
