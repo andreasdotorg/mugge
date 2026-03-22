@@ -7,7 +7,7 @@
  * persistent status bar module (statusbar.js).
  *
  * 24-channel layout (4 groups, signal-flow order):
- *   - MAIN (2ch capture), APP→DSP (6ch capture), DSP→OUT (8ch playback), PHYS IN (8ch placeholder)
+ *   - MAIN (2ch capture), APP→CONV (6ch capture), CONV→OUT (8ch playback), PHYS IN (8ch placeholder)
  *   - SPL hero + LUFS panel (200px right)
  */
 
@@ -21,11 +21,11 @@
     var MAIN_LABELS = ["ML", "MR"];
     var MAIN_CHANNELS = [0, 1];
 
-    // APP→DSP: capture ch 2-7 (application routing)
+    // APP→CONV: capture ch 2-7 (application routing)
     var APP_LABELS = ["A3", "A4", "A5", "A6", "A7", "A8"];
     var APP_CHANNELS = [2, 3, 4, 5, 6, 7];
 
-    // DSP→OUT: playback ch 0-7 (all post-DSP outputs)
+    // CONV→OUT: playback ch 0-7 (all post-convolver outputs)
     var DSPOUT_LABELS = ["SatL", "SatR", "S1", "S2", "EL", "ER", "IL", "IR"];
     var DSPOUT_CHANNELS = [0, 1, 2, 3, 4, 5, 6, 7];
 
@@ -316,7 +316,7 @@
             updateDbReadout("meters-main-db-" + idx, state.peak);
         }
 
-        // APP→DSP meters (capture ch 2-7)
+        // APP→CONV meters (capture ch 2-7)
         for (idx = 0; idx < APP_CHANNELS.length; idx++) {
             ch = APP_CHANNELS[idx];
             state = captureState[ch];
@@ -326,7 +326,7 @@
             updateDbReadout("meters-app-db-" + idx, state.peak);
         }
 
-        // DSP→OUT meters (playback ch 0-7)
+        // CONV→OUT meters (playback ch 0-7)
         for (idx = 0; idx < DSPOUT_CHANNELS.length; idx++) {
             ch = DSPOUT_CHANNELS[idx];
             state = playbackState[ch];

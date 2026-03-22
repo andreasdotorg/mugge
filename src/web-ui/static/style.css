@@ -2081,7 +2081,7 @@ html, body {
 /* -- Responsive: phone at venue ------------------------------------------- */
 
 @media (max-width: 600px) {
-    /* Status bar: hide APP>DSP and PHYS IN mini meters on phone */
+    /* Status bar: hide APP>CONV and PHYS IN mini meters on phone */
     #sb-mini-app,
     #sb-mini-physin,
     .sb-meters .sb-meter-sep:nth-child(2),
@@ -2165,7 +2165,7 @@ html, body {
 /* -- Responsive: ultra-compact -------------------------------------------- */
 
 @media (max-width: 400px) {
-    /* Ultra-compact: MAIN + first 4 DSP>OUT only */
+    /* Ultra-compact: MAIN + first 4 CONV>OUT only */
     .sb-meters {
         max-width: 80px;
         overflow: hidden;

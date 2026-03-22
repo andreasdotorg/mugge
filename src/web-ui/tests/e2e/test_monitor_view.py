@@ -108,17 +108,17 @@ def test_main_group_label(page):
 
 
 def test_app_group_label(page):
-    """APP->DSP group has the 'APP->DSP' label with cyan color class."""
+    """APP->CONV group has the 'APP->CONV' label with cyan color class."""
     label = page.locator(".meter-group-label-app")
     expect(label).to_have_count(1)
     # The arrow is a Unicode right arrow in the HTML
-    expect(label).to_contain_text("DSP")
+    expect(label).to_contain_text("CONV")
 
 
 def test_dspout_group_label(page):
-    """DSP->OUT group has the 'DSP->OUT' label."""
+    """CONV->OUT group has the 'CONV->OUT' label."""
     label = page.locator("#group-dspout .meter-group-label")
-    expect(label).to_contain_text("OUT")
+    expect(label).to_contain_text("CONV")
 
 
 def test_physin_group_label(page):

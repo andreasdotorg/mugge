@@ -213,13 +213,13 @@ class TestMiniMeterStructure:
         )
 
     def test_total_bar_count_is_24(self, page):
-        """AC-5.2: MAIN(2) + APP(6) + DSP>OUT(8) + PHYS IN(8) = 24 bars.
+        """AC-5.2: MAIN(2) + APP(6) + CONV>OUT(8) + PHYS IN(8) = 24 bars.
 
         Bar count is derived from canvas width and the rendering config in
         statusbar.js.  We verify canvas widths match the expected bar layout:
           MAIN:    2 bars * 7px + 1 gap * 2px = 16px
           APP:     6 bars * 5px + 5 gaps * 1px = 35px
-          DSP>OUT: 8 bars * 5px + 7 gaps * 1px = 47px
+          CONV>OUT: 8 bars * 5px + 7 gaps * 1px = 47px
           PHYS IN: 8 bars * 5px + 7 gaps * 1px = 47px
         """
         expected_widths = {"sb-mini-main": 16, "sb-mini-app": 35,
@@ -239,8 +239,8 @@ class TestMiniMeterStructure:
         """
         expected_titles = {
             "sb-mini-main": "MAIN",
-            "sb-mini-app": "APP>DSP",
-            "sb-mini-dspout": "DSP>OUT",
+            "sb-mini-app": "APP>CONV",
+            "sb-mini-dspout": "CONV>OUT",
             "sb-mini-physin": "PHYS IN",
         }
         for canvas_id, expected_group in expected_titles.items():
@@ -379,7 +379,7 @@ class TestResponsiveBreakpoints:
         assert not console_errors, f"JS errors at 1280px: {console_errors}"
 
     def test_responsive_600(self, page, browser):
-        """AC-10.2: At 600px, APP>DSP and PHYS IN meters hidden, ABORT grows."""
+        """AC-10.2: At 600px, APP>CONV and PHYS IN meters hidden, ABORT grows."""
         ctx = browser.new_context(viewport={"width": 600, "height": 900})
         pg = ctx.new_page()
         console_errors = []
@@ -389,7 +389,7 @@ class TestResponsiveBreakpoints:
         pg.goto(page.url)
         _wait_for_ws_data(pg)
 
-        # APP>DSP and PHYS IN should be hidden at 600px.
+        # APP>CONV and PHYS IN should be hidden at 600px.
         app_hidden = pg.evaluate("""() => {
             const el = document.getElementById('sb-mini-app');
             return window.getComputedStyle(el).display === 'none';
@@ -398,10 +398,10 @@ class TestResponsiveBreakpoints:
             const el = document.getElementById('sb-mini-physin');
             return window.getComputedStyle(el).display === 'none';
         }""")
-        assert app_hidden, "APP>DSP meters should be hidden at 600px"
+        assert app_hidden, "APP>CONV meters should be hidden at 600px"
         assert physin_hidden, "PHYS IN meters should be hidden at 600px"
 
-        # MAIN and DSP>OUT should still be visible.
+        # MAIN and CONV>OUT should still be visible.
         expect(pg.locator("#sb-mini-main")).to_be_visible()
         expect(pg.locator("#sb-mini-dspout")).to_be_visible()
 
@@ -410,7 +410,7 @@ class TestResponsiveBreakpoints:
         assert not console_errors, f"JS errors at 600px: {console_errors}"
 
     def test_responsive_400(self, page, browser):
-        """AC-10.3: At 400px, ultra-compact -- only MAIN + partial DSP>OUT."""
+        """AC-10.3: At 400px, ultra-compact -- only MAIN + partial CONV>OUT."""
         ctx = browser.new_context(viewport={"width": 400, "height": 900})
         pg = ctx.new_page()
         console_errors = []

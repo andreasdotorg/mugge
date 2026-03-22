@@ -36,10 +36,10 @@
                     width="16" height="24" title="MAIN (ML, MR)"></canvas>
             <div class="sb-meter-sep"></div>
             <canvas class="sb-meter-canvas" id="sb-mini-app"
-                    width="35" height="24" title="APP>DSP (A3-A8)"></canvas>
+                    width="35" height="24" title="APP>CONV (A3-A8)"></canvas>
             <div class="sb-meter-sep"></div>
             <canvas class="sb-meter-canvas" id="sb-mini-dspout"
-                    width="47" height="24" title="DSP>OUT (SatL-IR)"></canvas>
+                    width="47" height="24" title="CONV>OUT (SatL-IR)"></canvas>
             <div class="sb-meter-sep"></div>
             <canvas class="sb-meter-canvas" id="sb-mini-physin"
                     width="47" height="24" title="PHYS IN (Mic-P8)"></canvas>
@@ -136,15 +136,15 @@
                     <div class="meters-row meters-row-main" id="meters-main"></div>
                 </div>
 
-                <!-- APP→DSP group (capture ch 2-7, application routing) -->
+                <!-- APP→CONV group (capture ch 2-7, application routing) -->
                 <div class="meter-group-section" id="group-app">
-                    <div class="meter-group-label meter-group-label-app">APP→DSP</div>
+                    <div class="meter-group-label meter-group-label-app">APP→CONV</div>
                     <div class="meters-row" id="meters-app"></div>
                 </div>
 
-                <!-- DSP→OUT group (playback ch 0-7, post-DSP to speakers/headphones/IEM) -->
+                <!-- CONV→OUT group (playback ch 0-7, post-convolver to speakers/headphones/IEM) -->
                 <div class="meter-group-section" id="group-dspout">
-                    <div class="meter-group-label meter-group-label-dspout">DSP→OUT</div>
+                    <div class="meter-group-label meter-group-label-dspout">CONV→OUT</div>
                     <div class="meters-row" id="meters-dspout"></div>
                 </div>
 
