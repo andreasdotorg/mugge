@@ -43,6 +43,9 @@ async def ws_system(
             while True:
                 data = gen.system()
                 data["is_muted"] = mute_mgr.is_muted if mute_mgr else False
+                # F-056: Reflect quantum changes made via Config tab
+                from .config_routes import _mock_quantum as current_q
+                data["pipewire"]["quantum"] = current_q
                 await ws.send_text(json.dumps(data))
                 await asyncio.sleep(1.0)
         except WebSocketDisconnect:

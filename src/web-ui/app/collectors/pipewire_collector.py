@@ -125,6 +125,7 @@ class PipeWireCollector:
             return (0, 0)
 
         quantum = 0
+        force_quantum = 0
         sample_rate = 0
 
         for line in stdout.decode("utf-8", errors="replace").splitlines():
@@ -133,14 +134,18 @@ class PipeWireCollector:
                 continue
             key, value = m.group(1), m.group(2)
             try:
-                if key == "clock.quantum" and quantum == 0:
+                if key == "clock.force-quantum":
+                    force_quantum = int(value)
+                elif key == "clock.quantum" and quantum == 0:
                     quantum = int(value)
                 elif key == "clock.rate" and sample_rate == 0:
                     sample_rate = int(value)
             except ValueError:
                 continue
 
-        return (quantum, sample_rate)
+        # F-056: Prefer force-quantum (set via Config tab) over base quantum
+        effective_quantum = force_quantum if force_quantum > 0 else quantum
+        return (effective_quantum, sample_rate)
 
     async def _discover_driver_node(self) -> int | None:
         """Find the USBStreamer driver node ID via pw-cli.
