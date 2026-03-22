@@ -209,8 +209,23 @@ fn build_stream_props(args: &Args) -> pipewire::properties::Properties {
     let channels_str = args.channels.to_string();
 
     match args.mode {
+        Mode::Monitor if args.managed => {
+            // Managed monitor mode (D-043): GraphManager creates the links
+            // from the convolver's monitor ports to our input ports.
+            // No stream.capture.sink, no target.object, no AUTOCONNECT.
+            pipewire::properties::properties! {
+                "media.type" => "Audio",
+                "media.category" => "Capture",
+                "media.role" => "Monitor",
+                "media.class" => "Stream/Input/Audio",
+                "node.name" => "pi4audio-pcm-bridge",
+                "node.description" => "PCM Bridge for Web UI",
+                "node.always-process" => "true",
+                "audio.channels" => &*channels_str,
+            }
+        }
         Mode::Monitor => {
-            // Monitor mode: passive tap on a sink's monitor ports.
+            // Unmanaged monitor mode: passive tap on a sink's monitor ports.
             // stream.capture.sink tells PipeWire we want monitor ports.
             // target.object names the sink to capture from.
             pipewire::properties::properties! {
@@ -338,14 +353,19 @@ fn run_pipewire(
         .register()
         .expect("Failed to register stream listener");
 
-    // Connect for capture with AUTOCONNECT + MAP_BUFFERS + RT_PROCESS.
+    // Connect the stream. In managed mode (D-043), omit AUTOCONNECT so
+    // GraphManager creates all links. In unmanaged mode, AUTOCONNECT lets
+    // PipeWire self-link to the target sink's monitor ports.
+    let mut flags = pipewire::stream::StreamFlags::MAP_BUFFERS
+        | pipewire::stream::StreamFlags::RT_PROCESS;
+    if !args.managed {
+        flags |= pipewire::stream::StreamFlags::AUTOCONNECT;
+    }
     stream
         .connect(
             libspa::utils::Direction::Input,
             None,
-            pipewire::stream::StreamFlags::AUTOCONNECT
-                | pipewire::stream::StreamFlags::MAP_BUFFERS
-                | pipewire::stream::StreamFlags::RT_PROCESS,
+            flags,
             &mut params,
         )
         .expect("Failed to connect PipeWire stream");
@@ -587,6 +607,20 @@ mod tests {
         }
     }
 
+    fn make_managed_args(mode: Mode, target: &str, channels: u32) -> Args {
+        Args {
+            mode,
+            managed: true,
+            target: target.to_string(),
+            node_name: None,
+            listen: "tcp:127.0.0.1:9090".to_string(),
+            levels_listen: None,
+            channels,
+            rate: 48000,
+            quantum: 256,
+        }
+    }
+
     #[test]
     fn props_monitor_has_capture_sink() {
         ensure_pw_init();
@@ -698,5 +732,53 @@ mod tests {
         let capture_props = build_stream_props(&capture_args);
         assert_eq!(monitor_props.get("node.always-process"), Some("true"));
         assert_eq!(capture_props.get("node.always-process"), Some("true"));
+    }
+
+    // --- Managed mode property tests (D-043) ---
+
+    #[test]
+    fn props_managed_monitor_no_capture_sink() {
+        ensure_pw_init();
+        let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
+        let props = build_stream_props(&args);
+        assert_eq!(
+            props.get("stream.capture.sink"), None,
+            "managed monitor must NOT set stream.capture.sink",
+        );
+    }
+
+    #[test]
+    fn props_managed_monitor_no_target_object() {
+        ensure_pw_init();
+        let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
+        let props = build_stream_props(&args);
+        assert_eq!(
+            props.get("target.object"), None,
+            "managed monitor must NOT set target.object",
+        );
+    }
+
+    #[test]
+    fn props_managed_monitor_has_node_name() {
+        ensure_pw_init();
+        let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
+        let props = build_stream_props(&args);
+        assert_eq!(props.get("node.name"), Some("pi4audio-pcm-bridge"));
+    }
+
+    #[test]
+    fn props_managed_monitor_has_media_class() {
+        ensure_pw_init();
+        let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
+        let props = build_stream_props(&args);
+        assert_eq!(props.get("media.class"), Some("Stream/Input/Audio"));
+    }
+
+    #[test]
+    fn props_managed_monitor_has_channels() {
+        ensure_pw_init();
+        let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
+        let props = build_stream_props(&args);
+        assert_eq!(props.get("audio.channels"), Some("4"));
     }
 }
