@@ -99,8 +99,9 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **F-050** (**RESOLVED** — `1b527d8` 2026-03-22): Dashboard brightness increased for spectrum grid lines, meter labels, meter outlines. Owner UX feedback addressed same session. **Follow-ups from deployment review:** F-051 (spectrum bg too bright), F-052 (meters still bad), F-053 (PHYS IN too subtle).
 - **F-056** (OPEN, HIGH): Quantum change not reflected in status bar/system tab after Config tab change. Xrun counters also not updating during visible Mixxx underruns. Monitoring gap — operator cannot confirm system state.
 - **F-057** (OPEN, HIGH): Config tab gain controls show -INF and are not editable. Gain feature completely non-functional. Likely backend data issue or mock data gap.
-- **F-051/F-052/F-053** (OPEN, Medium/Low): Contrast follow-ups from F-050 deployment review. Spectrum bg too bright, meters still insufficient, PHYS IN 30% opacity invisible.
-- **F-054/F-055** (OPEN, Low/Medium): Graph view issues — HP lines behind Convolver node, four gain nodes missing from visualization.
+- **F-051/F-052/F-053** (**RESOLVED** — `774c2ee`): Contrast follow-ups from F-050. Spectrum bg restored to black, meter contrast improved, PHYS IN opacity increased.
+- **F-054/F-055** (**RESOLVED** — `93567db`): Graph view HP bypass arc z-order fixed, four gain nodes added.
+- **F-058** (OPEN, Medium): E2E screenshot tests write to read-only Nix store path — 6+ false failures in pure sandbox. Task #49 pending.
 - **ENH-002** (OPEN, Low): Owner wants tooltips on all dashboard elements. Comprehensive UX enhancement (~50+ definitions).
 - **ENH-003** (OPEN, Medium): Sticky latching health indicator with manual clear. Analogous to industrial alarm panel.
 - **F-040** (**RESOLVED** — committed `4c80c23` 2026-03-21): Panic MUTE/UNMUTE backend (`audio_mute.py` + `pw_helpers.py`). US-065 and US-064 commits followed (`965f501`, `23a57c1`). No longer blocking.
@@ -171,6 +172,24 @@ shutdowns). Mitigation: monitor for CM responsiveness during long sessions;
 the CM role accumulates context faster than advisory roles due to frequent
 tool calls (git add, git commit, git status). Consider periodic CM rotation
 for sessions exceeding ~20 commits.
+
+**Lesson learned (L-042): Broken tests must always be fixed, never dismissed.
+Multi-role review required.**
+When E2E screenshot tests failed with `PermissionError: [Errno 13] Permission
+denied: '/nix/store/.../screenshots/...'`, the orchestrator pattern-matched
+the error as a "Nix sandbox infrastructure quirk" and directed the team to
+skip the failing tests rather than fix the root cause. This violated two
+principles: (1) test failures always indicate a real problem — the test setup
+was genuinely broken (writing to a read-only Nix store path), and (2) dismissing
+failures without a tracked defect erodes test suite trust. Rules:
+1. Every test failure is a real problem until proven otherwise with evidence.
+2. Never dismiss, skip, or xfail a test failure without filing a tracked defect
+   and getting explicit multi-role agreement (QE + AD + Architect minimum).
+3. The decision to skip vs fix must be documented with rationale and ownership.
+4. The orchestrator must not downplay test failures to avoid blocking progress.
+Root cause: the orchestrator optimized for throughput over correctness — a
+recurring anti-pattern when under time pressure. The correct response was to
+file F-058 immediately and assign a worker to fix the screenshot output path.
 
 **Next steps:**
 - Pi CHANGE session: US-066 Phase 2 (pcm-bridge deploy, TK-112), US-064/US-065 Pi integration tests
@@ -484,15 +503,16 @@ See `docs/project/defects.md` for full details.
 | F-047 | Low | Resolved | `:focus-visible` CSS styles added (`5dad57e`). |
 | F-049 | Medium | Resolved | Measurement wizard mock session state isolation fixed (task #24, pending commit). |
 | F-050 | Medium | Resolved | Dashboard brightness fix: spectrum grid, meter labels, meter outlines (`1b527d8`). |
-| F-051 | Medium | Open | Spectrum background accidentally brightened by F-050 — should be black. |
-| F-052 | Medium | Open | Meter contrast still insufficient after F-050 — labels and outlines hard to read. |
-| F-053 | Low | Open | PHYS IN inactive state 30% opacity too subtle — not visible at normal distance. |
-| F-054 | Low | Open | Graph view HP connection lines render behind Convolver node. |
-| F-055 | Medium | Open | Graph view missing four gain nodes (gain_left_hp, gain_right_hp, gain_sub1_lp, gain_sub2_lp). |
+| F-051 | Medium | Resolved | Spectrum background restored to black (`774c2ee`). |
+| F-052 | Medium | Resolved | Meter contrast improved (`774c2ee`). |
+| F-053 | Low | Resolved | PHYS IN inactive opacity increased (`774c2ee`). |
+| F-054 | Low | Resolved | Graph HP bypass arc z-order fixed (`93567db`). |
+| F-055 | Medium | Resolved | Graph gain nodes added (`93567db`). |
 | F-056 | High | Open | Quantum change not reflected in status bar/system tab. Xrun counters not updating. |
 | F-057 | High | Open | Config tab gain controls show -INF and are not editable. Non-functional. |
 | ENH-002 | Low | Open | Tooltips for all dashboard elements (what, good/bad values, relevance). |
 | ENH-003 | Medium | Open | Sticky "problems occurred" latching health indicator with manual clear. |
+| F-058 | Medium | Open | E2E screenshot tests write to read-only Nix store path — 6+ false failures in pure sandbox. |
 
 ### Resolved
 
@@ -522,6 +542,11 @@ See `docs/project/defects.md` for full details.
 | ENH-001 | Low | Resolved | Sample rate in status bar (`ef7a063`). |
 | F-049 | Medium | Resolved | Measurement wizard session isolation (`914add6`). |
 | F-050 | Medium | Resolved | Dashboard brightness fix (`1b527d8`). |
+| F-051 | Medium | Resolved | Spectrum background restored to black (`774c2ee`). |
+| F-052 | Medium | Resolved | Meter contrast improved (`774c2ee`). |
+| F-053 | Low | Resolved | PHYS IN opacity increased (`774c2ee`). |
+| F-054 | Low | Resolved | Graph HP bypass arc z-order (`93567db`). |
+| F-055 | Medium | Resolved | Graph gain nodes added (`93567db`). |
 
 ## External Dependencies
 
