@@ -22,7 +22,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from .pw_helpers import pw_dump, find_gain_node, set_mult, find_quantum, find_filter_info
+from .pw_helpers import pw_dump, find_gain_node, read_mult, set_mult, find_quantum, find_filter_info
 
 log = logging.getLogger(__name__)
 
@@ -113,10 +113,16 @@ async def get_config():
     gains = {}
     for name in GAIN_NODE_NAMES:
         node_id, mult = find_gain_node(pw_data, name)
+        # F-057: If pw-dump found the convolver but Mult is 0.0 (param
+        # not found in convolver params), fall back to pw-cli enum-params.
+        if node_id is not None and mult == 0.0:
+            live_mult = await read_mult(node_id, name)
+            if live_mult is not None:
+                mult = live_mult
         gains[name] = {
             "mult": mult,
             "label": GAIN_LABELS.get(name, name),
-            "found": node_id is not None,
+            "found": node_id is not None and mult > 0.0,
         }
 
     quantum = find_quantum(pw_data)

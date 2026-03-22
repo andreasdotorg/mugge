@@ -10,7 +10,7 @@ PipeWire subprocess helpers are in ``pw_helpers.py`` (shared with
 
 import logging
 
-from .pw_helpers import pw_dump, find_gain_node, set_mult
+from .pw_helpers import pw_dump, find_gain_node, read_mult, set_mult
 
 log = logging.getLogger(__name__)
 
@@ -47,8 +47,14 @@ class AudioMuteManager:
         for name in GAIN_NODE_NAMES:
             node_id, current_mult = find_gain_node(pw_data, name)
             if node_id is None:
-                errors.append(f"node '{name}' not found")
-                continue
+                errors.append(f"convolver node not found")
+                break
+            # F-057: If pw-dump didn't expose this gain param (0.0),
+            # fall back to pw-cli enum-params.
+            if current_mult == 0.0:
+                live_mult = await read_mult(node_id, name)
+                if live_mult is not None:
+                    current_mult = live_mult
             pre_mute[name] = current_mult
             ok = await set_mult(node_id, name, 0.0)
             if not ok:
