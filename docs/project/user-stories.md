@@ -2453,41 +2453,64 @@ for a ported sub" or "compare these three 8-inch woofers side by side."
 
 ---
 
-## US-044: Protect Against Accidental CamillaDSP Bypass (Safety)
+## US-044: Protect Against Accidental Filter-Chain Bypass (Safety)
 
 **As** the system owner,
-**I want** OS-level protections that prevent any process other than CamillaDSP
-from writing audio directly to the USBStreamer hardware device,
+**I want** OS-level and PipeWire-level protections that prevent any audio
+process from reaching the USBStreamer output without passing through the
+PipeWire filter-chain convolver's gain staging, crossover filters, and driver
+protection HPFs,
 **so that** the amplifier chain (4x450W into 7W-rated drivers) is never driven
-without CamillaDSP's gain staging, crossover filters, and driver protection
-HPFs in the signal path.
+with unattenuated, unfiltered audio.
 
-**Status:** selected (**PO gap: no phase assignment. Owner decision needed — production safety, arguably more urgent than measurement safety. Independent of measurement pipeline, could run in parallel.**)
-**Depends on:** US-000a (security hardening baseline)
+**Status:** selected (owner-selected 2026-03-21, priority 2. AC rewritten for D-040 architecture, 2026-03-21. Was: CamillaDSP-based AC, now reflects PW filter-chain single-graph architecture.)
+**Depends on:** US-000a (security hardening baseline), US-059 (GraphManager operational — link topology enforcement)
 **Blocks:** none (but should be addressed before production gig use)
-**Decisions:** relates to D-014 (hardware limiter, deferred), D-029 (per-speaker HPF), D-031 (mandatory subsonic protection)
+**Decisions:** D-040 (CamillaDSP abandoned, PW filter-chain), D-039/D-043 (GraphManager sole link manager), D-014 (hardware limiter, deferred), D-029 (per-speaker HPF), D-031 (mandatory subsonic protection)
 
-**Background:** CamillaDSP's gain staging is the only active protection between
-the 450W amplifier channels and the speakers. If CamillaDSP is bypassed -- by
-crash, misconfiguration, or a process writing directly to the USBStreamer ALSA
-device -- the drivers are unprotected. S-010 (safety near-miss during
-near-field measurement) demonstrated this risk in practice. AE analysis shows
-10,800W total amplifier capacity at full gain without CamillaDSP attenuation.
+**Background (updated for D-040):** Post-D-040, all audio processing runs
+within a single PipeWire graph. The filter-chain convolver provides FIR
+crossover + room correction, and four `linear` builtin gain nodes provide
+per-channel attenuation (Mult params, persist across PW restarts per C-009).
+The GraphManager (D-039/D-043) is the sole link manager — it controls which
+PipeWire nodes are connected to what.
+
+The bypass risk has changed from the CamillaDSP era. Previously, a process
+could write directly to the USBStreamer ALSA `hw:` device, bypassing
+CamillaDSP entirely (S-010 near-miss). Now, the risk is:
+
+1. **A PipeWire client creates a direct link** to the USBStreamer sink node,
+   bypassing the filter-chain convolver. WirePlumber's auto-linking could do
+   this for any new PipeWire stream unless suppressed (D-043: WP auto-link
+   suppression deployed, but depends on WP rules staying correct).
+2. **A process bypasses PipeWire entirely** by opening the USBStreamer ALSA
+   `hw:` device directly (same risk as pre-D-040, but less likely since
+   CamillaDSP no longer holds the ALSA device exclusively).
+3. **The filter-chain convolver crashes or is misconfigured** — if the
+   convolver node disappears from the PW graph, the GraphManager loses its
+   DSP stage and links break. But a replacement auto-link from WP or manual
+   `pw-link` could reconnect sources directly to the USBStreamer.
+
+AE analysis shows 10,800W total amplifier capacity at full gain without
+attenuation. The `linear` gain nodes currently attenuate to 0.001 (-60 dB
+mains) and 0.000631 (-64 dB subs).
 
 **Acceptance criteria:**
-- [ ] ALSA/PipeWire device permissions prevent non-CamillaDSP processes from writing directly to the USBStreamer `hw:` device. Only the CamillaDSP service user/group has write access.
-- [ ] udev rules restrict access to the ALSA Loopback capture device (CamillaDSP's input side) to authorized processes only.
-- [ ] Dedicated user and/or group for CamillaDSP with exclusive write access to the USBStreamer output device. Other users (including `ela`) cannot open the device for playback without explicit group membership.
-- [ ] Monitoring/watchdog detects if CamillaDSP stops unexpectedly and takes protective action (e.g., mutes amp output via USBStreamer mixer control, or triggers a safe-state sequence).
-- [ ] The protection scheme does not interfere with normal audio routing through PipeWire/CamillaDSP (i.e., Mixxx and Reaper continue to route audio via the Loopback device, which CamillaDSP captures and processes).
-- [ ] Protections survive reboot (udev rules, group memberships, and systemd watchdog configuration are persistent).
-- [ ] Documentation: the protection scheme is described in `docs/architecture/rt-audio-stack.md` or a dedicated safety architecture document, explaining what is protected, how, and what failure modes remain.
+- [ ] **ALSA device lockout:** udev rules or ALSA permissions prevent non-PipeWire processes from opening the USBStreamer `hw:` device for playback. PipeWire (running as user `ela`) retains exclusive access. Other users and ALSA-direct tools (e.g., `aplay`, `speaker-test`) are blocked from writing to the device.
+- [ ] **WirePlumber auto-link hardening:** WP rules confirmed to suppress auto-linking for ALL new PipeWire streams to the USBStreamer sink. Only the GraphManager's explicit `pw-link` commands create links to USBStreamer output ports. WP rule tested: launching a new PW audio client (e.g., `pw-play`) does NOT auto-connect to USBStreamer.
+- [ ] **GraphManager link audit:** The GraphManager's `get_links` RPC reports all active links to USBStreamer ports. A monitoring check (periodic or event-driven) detects any link to USBStreamer that was NOT established by the GraphManager and raises an alert (log + web UI status bar warning).
+- [ ] **Filter-chain health watchdog:** A systemd watchdog or GraphManager health check detects if the filter-chain convolver node disappears from the PW graph. On detection: (a) triggers F-040 MUTE (sets all `linear` gain node Mult params to 0.0 via `pw-cli set-param`), (b) logs an alert, (c) web UI status bar shows MUTED state. The mute is latched — requires explicit UNMUTE action.
+- [ ] **Gain node integrity check:** On startup and periodically, verify that all four `linear` gain nodes exist in the PW graph with Mult values <= 1.0. Alert if any gain node is missing or has Mult > 1.0 (which would indicate amplification rather than attenuation). This catches accidental `pw-cli set-param` errors.
+- [ ] **Protections survive reboot:** udev rules, WP suppression rules, and watchdog configuration are persistent. Verified by US-062-style reboot test (D-001 pattern): reboot Pi, confirm protections active, confirm no bypass path exists.
+- [ ] **No interference with normal routing:** The protection scheme does not interfere with the GraphManager's link management, the filter-chain convolver's operation, or the F-040 MUTE/UNMUTE mechanism. Mixxx and Reaper continue to route audio through the convolver via GraphManager-managed links.
+- [ ] **Documentation:** The protection scheme is described in `docs/operations/safety.md` (operational procedures) and `docs/architecture/rt-audio-stack.md` (architectural overview), explaining: what is protected, the three bypass vectors and their mitigations, what failure modes remain unmitigated.
 
 **DoD:**
-- [ ] All AC items verified on the Pi with the production audio stack running
-- [ ] Security specialist review of the permission scheme (no accidental lockout of legitimate audio paths)
-- [ ] Audio engineer confirmation that the watchdog/mute mechanism does not introduce audible artifacts during normal operation
-- [ ] Architect sign-off on the integration with the existing PipeWire/CamillaDSP/ALSA layering
+- [ ] All AC items verified on the Pi with the production audio stack running (DJ mode + convolver active)
+- [ ] Security specialist review: ALSA lockout does not break PipeWire's access to USBStreamer, no accidental lockout of legitimate audio paths
+- [ ] Audio engineer confirmation: watchdog mute mechanism does not introduce audible artifacts during normal operation, mute response time < 500ms
+- [ ] Architect sign-off: integration with GraphManager link management, WirePlumber rules, filter-chain convolver, and F-040 MUTE/UNMUTE mechanism is coherent and does not create conflicting control paths
+- [ ] Advocatus Diaboli review: adversarial assessment of remaining bypass vectors after all mitigations deployed
 
 ---
 
@@ -3452,6 +3475,588 @@ the web UI.
 
 ---
 
+## US-066: Spectrum and Meter Polish
+
+**As** the live sound engineer,
+**I want** the spectrum analyzer and channel meters in the web UI to be
+visually polished, accurately labeled for the current PW filter-chain
+architecture, and fed with real audio data from the pcm-bridge,
+**so that** the monitoring dashboard is a reliable, professional-looking tool
+I can trust during gigs and soundchecks.
+
+**Status:** selected (owner-selected 2026-03-21. Priority 1 for this session. PO-drafted 2026-03-21 per owner request.)
+**Depends on:** US-060 (LevelsCollector provides PW-native meter data), US-063 (MetadataCollector removes F-030 xrun risk — web UI safe to run alongside DJ)
+**Blocks:** none
+**Decisions:** D-040 (CamillaDSP abandoned — labels must reflect PW filter-chain), D-020 (web UI platform)
+
+**Background:** The spectrum analyzer (`spectrum.js`, 650+ lines) and 24-channel
+meter layout (`dashboard.js`) were built during D-020 Stage 1+2 and are
+functionally solid. However, several issues have accumulated:
+
+- **F-026 (HIGH):** Spectrum display is unstable on a steady tone — the
+  mountain range "wobbles" due to clock drift between the PCM sample
+  accumulator and the `requestAnimationFrame` render loop. The FFT analysis
+  itself is correct, but the accumulator-to-render synchronization causes
+  visual jitter.
+- **TK-112:** Per-bin amplitude coloring committed (`cbdcf9d`) but never
+  confirmed by the owner with real audio flowing. Needs visual validation.
+- **TK-227:** Dashboard meter group labels ("APP→DSP", "DSP→OUT") reflect the
+  pre-D-040 CamillaDSP architecture. Post-D-040, these should say
+  "APP→CONV" (or "APP→Filter") and "CONV→OUT" (or "Filter→OUT") to reflect
+  the PW filter-chain convolver.
+- **pcm-bridge deployment:** TK-151 validated build + runtime on Pi. S-022
+  deployment was started but incomplete (worker became unresponsive). Until
+  pcm-bridge is running on the Pi and serving data on port 9100, the spectrum
+  canvas shows "No live audio" and the `/ws/pcm` binary WebSocket has no data
+  source. The spectrum analyzer is fully wired but has nothing to display.
+- **PHYS IN meters:** The 8-channel PHYS IN group (ADA8200 analog inputs) is
+  rendered as a placeholder — no backend data source exists. This group should
+  either show real data (if USBStreamer capture levels are available via
+  LevelsCollector) or be visually marked as inactive/unavailable rather than
+  rendering empty bars.
+
+**Acceptance criteria:**
+- [ ] **F-026 fix (spectrum stability):** Steady tone (e.g., 1kHz sine) renders as a stable peak without visible wobble or drift. Root cause: synchronize the PCM accumulator with the render cycle so FFT frames align consistently. Validated in mock mode with synthetic PCM data and on Pi with real audio.
+- [ ] **TK-112 validation (spectrum coloring):** Per-bin amplitude coloring (`cbdcf9d`) visually validated with real audio signal flowing on Pi. Owner confirms the color palette is readable and useful. If rejected, provide alternative palette options.
+- [ ] **TK-227 fix (D-040 labels):** Dashboard meter group labels updated from CamillaDSP terminology to PW filter-chain terminology in `index.html` and `dashboard.js`: "APP→DSP" becomes "APP→CONV", "DSP→OUT" becomes "CONV→OUT". Comments and JSDoc updated to match.
+- [ ] **Status bar mini meter labels:** Corresponding `title` attributes on `sb-mini-app`, `sb-mini-dspout` canvases in `index.html` updated to match new terminology.
+- [ ] **pcm-bridge deployment verified:** pcm-bridge binary built and running on Pi as a systemd user service, serving level data on `127.0.0.1:9100`. The web UI `/ws/pcm` WebSocket receives real PCM data and the spectrum canvas displays a live frequency response. Deployment follows S-022 + TK-151 pattern.
+- [ ] **PHYS IN group state:** If USBStreamer capture levels are available via LevelsCollector, wire them to the PHYS IN meter group. If not yet available, display "No data" or dim the group label to indicate inactive status (rather than rendering silent-looking bars that could be confused with actual zero-level input).
+- [ ] **No regressions:** Existing meter rendering (MAIN, APP, DSPOUT groups), spectrum fallback mode (1/3-octave bars from `/ws/monitoring`), and status bar mini meters all continue to function. All existing E2E tests pass.
+
+**DoD:**
+- [ ] F-026 fix implemented and validated (steady tone test in mock mode + Pi)
+- [ ] TK-112 coloring confirmed or revised per owner feedback
+- [ ] TK-227 labels updated in HTML and JS (dashboard + status bar)
+- [ ] pcm-bridge running on Pi, spectrum displaying real audio
+- [ ] PHYS IN group shows data or is clearly marked inactive
+- [ ] UX visual verification: screenshot at 1280px reviewed and approved by UX specialist (owner directive 2026-03-21 gate)
+- [ ] No E2E test regressions (existing dashboard and status bar tests pass)
+- [ ] Audio engineer confirmation: meter group names and channel labels correctly reflect the post-D-040 signal flow
+
+---
+
+## US-067: PipeWire Speaker-Room-Microphone Simulator for End-to-End Testing
+
+**As** the development team,
+**I want** a physics-based audio simulation environment that models the
+speaker → room → microphone signal chain as PipeWire filter-chain nodes,
+running entirely inside the Nix build environment without hardware,
+**so that** the automated room correction pipeline can be regression-tested
+end-to-end against known acoustic scenarios on every commit, verifying that
+sweep → capture → deconvolve → compute correction → apply → re-measure →
+verify-improvement works correctly.
+
+**Status:** draft (PO-drafted 2026-03-22 per owner request.)
+**Depends on:** US-059 (GraphManager + filter-chain operational), US-052 (signal-gen for sweep generation), US-050 (mock backend / test harness infrastructure), US-039 (driver database schema — T/S parameters for speaker models)
+**Blocks:** none directly, but enables regression testing for US-008-US-013 (room correction pipeline stories) and Design Principle #7 (mandatory verification measurement)
+**Decisions:** D-040 (PW filter-chain architecture), D-001 (minimum-phase FIR), D-003 (16k taps), D-004 (independent subs), D-008 (per-venue measurement)
+
+**Background:** The automated room correction pipeline (`src/room-correction/`)
+is the next major deliverable. Currently, end-to-end testing uses
+`MockSoundDevice` — a Python-level mock that convolves sweep audio with
+synthetic room IRs in memory (see `mock/room_simulator.py`,
+`tests/test_mock_e2e.py`). This validates the DSP math but does NOT exercise:
+
+- The actual PipeWire graph topology (links, nodes, routing)
+- The production filter-chain convolver (FFTW3/NEON partitioned convolution)
+- The signal-gen RPC interface (sweep generation, capture coordination)
+- The GraphManager's mode transition and link management
+- Real-time timing (quantum boundaries, buffer alignment)
+- The pcm-bridge level metering path
+
+The simulator fills this gap by running three simulation stages as PipeWire
+filter-chain nodes in a headless PipeWire instance inside the Nix sandbox:
+
+1. **Speaker simulator** — physics-based per-channel models derived from
+   actual Thiele/Small parameters and enclosure geometry, not hand-tuned
+   frequency response curves. The T/S model computes the speaker's
+   electro-mechanical transfer function from first principles:
+   - **Low-frequency response** from fs, Qts, Vas, Sd, and enclosure model
+     (sealed Qtc or ported alignment with port tuning Fb)
+   - **Enclosure interaction** — sealed vs ported dramatically shapes the
+     low-end rolloff and group delay. A sub with Qts=0.7 in a sealed box
+     behaves very differently at 30Hz than one with Qts=0.35 in a ported
+     box tuned to 28Hz. The correction pipeline must handle both.
+   - **Electrical impedance** (Re, Le / semi-inductance) affecting the
+     amplifier-speaker interaction
+   - **Baffle step diffraction** for wideband boxes (affects 300-800Hz
+     transition region based on baffle width)
+   - Fallback: when T/S data is unavailable (e.g., Bose proprietary
+     drivers with null T/S in the database), use measured near-field
+     response data from `configs/speakers/` as an empirical FIR model.
+   Models connect to the driver database (US-039 schema: `configs/drivers/`)
+   and speaker identity files (`configs/speakers/identities/`).
+2. **Room simulator** — convolves with synthetic Room Impulse Responses (RIRs)
+   generated by the existing image source method (`mock/room_simulator.py`),
+   extended with controllable parameters: room dimensions (→ axial mode
+   frequencies), surface absorption per wall (→ RT60), speaker and mic
+   positions (→ propagation delays, comb filtering). Must accurately model
+   the 30-80Hz modal region that is critical for psytrance venue correction.
+3. **Microphone simulator** — applies the UMIK-1 frequency response
+   characteristics (sensitivity curve from calibration file `7161942.txt`,
+   noise floor model) and presents as a PipeWire capture source
+   indistinguishable from the real microphone to downstream consumers.
+
+**Signal path in simulation:**
+```
+signal-gen (PW stream) → production convolver (filter-chain, FIR crossover+correction)
+  → speaker-sim (filter-chain node, per-channel speaker model FIR)
+  → room-sim (filter-chain node, per-channel RIR convolution)
+  → mic-sim (filter-chain node, UMIK-1 response + noise)
+  → capture ports (signal-gen capture / pcm-bridge / measurement script)
+```
+
+**Existing infrastructure to build on:**
+- `mock/room_simulator.py` — image source method with 1st/2nd order
+  reflections, room modes as biquad resonances, noise floor, configurable
+  via `room_config.yml`. Already generates WAV-exportable IRs.
+- `mock/export_room_irs.py` — exports room IRs as float32 WAV files for
+  PW filter-chain convolver loading.
+- `tests/test_mock_e2e.py` — Python-level sweep→deconvolve→verify test.
+- Nix `checks` infrastructure for `nix flake check` regression gating.
+
+**Acceptance criteria:**
+
+*Simulation models (AE consultation required for parameters):*
+- [ ] **Speaker model (T/S-based):** Physics-based per-channel models computed from Thiele/Small parameters and enclosure geometry. The model computes the speaker's electro-mechanical transfer function:
+  - (a) **Sealed enclosure model:** From fs, Qts, Vas, enclosure volume → Qtc, f3, and the second-order highpass rolloff below resonance. Group delay computed from the transfer function.
+  - (b) **Ported enclosure model:** From fs, Qts, Vas, box volume, port tuning Fb → fourth-order bandpass alignment. Must model the port resonance dip and the rapid cone excursion rise below Fb (relevant for the subsonic HPF protection in D-031).
+  - (c) **Electrical impedance:** Re (DC resistance), Le (voice coil inductance) or semi-inductance model for the impedance rise at high frequencies. Affects the amplifier-speaker voltage-to-current transfer.
+  - (d) **Baffle step diffraction:** For wideband enclosures, model the baffle step transition (~300-800Hz depending on baffle width) as a 6dB shelving function. AE provides baffle dimensions.
+  - (e) **Sensitivity normalization:** Reference sensitivity (dB SPL/W/m or dB SPL/2.83V/m) from driver data sets the absolute level.
+  - (f) **T/S fallback:** When T/S parameters are unavailable (e.g., Bose proprietary drivers — `configs/drivers/bose-ps28-iii/driver.yml` has null T/S), use measured near-field response data from `configs/speakers/identities/` as an empirical minimum-phase FIR model instead.
+  - Models read from the US-039 driver database schema (`configs/drivers/{id}/driver.yml`) and speaker identity files (`configs/speakers/identities/`). Output is a minimum-phase FIR, 4096 taps minimum. AE validates that the T/S-derived response matches expectations for each driver type.
+- [ ] **Room model:** Synthetic RIR generation extending `mock/room_simulator.py` with: (a) per-wall absorption coefficients (not just uniform), (b) frequency-dependent absorption (high frequencies absorb more than low — critical for realistic RT60 decay), (c) at least 3rd-order reflections for rooms < 50m², (d) accurate axial mode modelling in the 20-80Hz range (mode frequencies = c/2L for each room dimension), (e) configurable room scenarios via YAML. AE validates that the 42Hz mode at +12dB in the default scenario produces a realistic correction target.
+- [ ] **Microphone model:** FIR filter applying UMIK-1 calibration curve (from `7161942.txt`), plus additive Gaussian noise floor at -90 dBFS (AE-validated floor level for UMIK-1 in a typical venue). Output is a PipeWire capture source.
+- [ ] **Pre-defined room scenarios:** At minimum 3 YAML configs: (a) "small club" (8x6x3m, moderate absorption, strong 42Hz mode — default from existing `room_config.yml`), (b) "large hall" (20x15x5m, low absorption, long RT60, sub-30Hz modes), (c) "outdoor/tent" (minimal reflections, short RT60, primarily direct path). AE validates that each scenario is acoustically plausible.
+
+*PipeWire integration:*
+- [ ] **Headless PipeWire instance:** A test fixture starts a headless PipeWire daemon (pipewire + wireplumber) inside the Nix sandbox with a custom config that loads the simulation filter-chain. No audio hardware required. The fixture manages lifecycle: start PW → load filter-chain → run test → stop PW.
+- [ ] **Filter-chain configuration:** Speaker-sim, room-sim, and mic-sim run as filter-chain convolver nodes in the same PipeWire graph as the production convolver. Configuration generated from room scenario YAML (speaker/room/mic model WAVs are pre-computed and loaded by the filter-chain config).
+- [ ] **Signal path wiring:** The full signal path (signal-gen → production convolver → speaker-sim → room-sim → mic-sim → capture) is established via `pw-link` or GraphManager, replicating the production topology with the simulation chain inserted between the convolver output and the "physical" output.
+- [ ] **Graph topology matches production:** The PipeWire node/link topology in simulation must be structurally equivalent to production (same node types, same link patterns, same port names) with the simulation chain appended. GraphManager should be able to manage this topology.
+
+*Nix sandbox integration:*
+- [ ] **Runs in `nix flake check`:** The simulation-based tests run as a Nix check target (e.g., `test-room-sim-e2e`). Must work in the Nix build sandbox (no network, no audio hardware, no X11/Wayland).
+- [ ] **PipeWire in Nix sandbox:** The headless PipeWire instance runs with `PIPEWIRE_RUNTIME_DIR` and `XDG_RUNTIME_DIR` set to a temporary directory inside the sandbox. WirePlumber auto-link suppression rules from D-043 are applied. No dbus dependency (or dbus-daemon started in the sandbox if required by PW).
+- [ ] **Deterministic output:** Given the same room scenario YAML and the same input signal, the simulation produces bit-identical output (no random noise in the room model by default — noise is opt-in via a `noise_floor_dbfs` parameter). This enables reproducible regression testing.
+
+*End-to-end test scenarios:*
+- [ ] **T-067-1: Sweep-deconvolve round-trip.** Send a log sweep through the full simulation chain. Deconvolve the captured recording. Verify the recovered impulse response matches the expected composite IR (speaker × room × mic) within 1dB across 20Hz-20kHz.
+- [ ] **T-067-2: Room mode correction.** (a) Measure the simulated room (small club scenario, 42Hz mode at +12dB). (b) Run the correction pipeline to generate correction filters. (c) Apply correction filters to the production convolver. (d) Re-measure. (e) Verify the 42Hz mode is attenuated to within ±3dB of the target curve. This is the core Design Principle #7 test.
+- [ ] **T-067-3: Time alignment.** Simulate two speakers at different distances (e.g., main at 3m, sub at 5m). Verify the correction pipeline computes the correct delay difference (within ±0.5 samples) and that applying the computed delay aligns the arrivals.
+- [ ] **T-067-4: Two-sub scenario.** Simulate two subwoofers at different positions with different room interactions. Verify each sub gets an independent correction filter and delay value.
+- [ ] **T-067-5: Crossover verification.** Verify that the combined minimum-phase FIR filters (crossover + correction) correctly separate the main and sub frequency bands at the configured crossover frequency (default 80Hz). Main HP rolloff > 48dB/oct below crossover, sub LP rolloff > 48dB/oct above crossover.
+- [ ] **No regressions:** All existing `test_mock_e2e.py` tests continue to pass (Python-level mock is not replaced, only augmented).
+
+**DoD:**
+- [ ] Speaker, room, and microphone simulation models implemented
+- [ ] PipeWire headless test fixture working in Nix sandbox
+- [ ] Filter-chain config generation from room scenario YAML
+- [ ] At least 5 E2E test scenarios passing in `nix flake check` (T-067-1 through T-067-5)
+- [ ] 3 pre-defined room scenarios committed and AE-validated
+- [ ] Audio engineer sign-off: acoustic models are physically plausible and the correction pipeline produces reasonable results against them
+- [ ] Architect sign-off: PipeWire sandbox integration is robust (no leaked processes, no race conditions, deterministic cleanup)
+- [ ] Advocatus Diaboli review: simulation is accurate enough that tests passing against it provide meaningful confidence for real-venue deployment (i.e., the simulation doesn't "cheat" by being too easy to correct)
+
+**Risks and open questions (to resolve during DECOMPOSE phase):**
+- **PipeWire in Nix sandbox feasibility:** Running a headless PipeWire daemon inside a Nix build sandbox may require special handling (XDG_RUNTIME_DIR, dbus, tmpdir permissions). Spike needed to validate this works before full implementation.
+- **Speaker model fidelity:** How accurate do the speaker models need to be? If the correction pipeline generates filters that work against the simulation but fail in reality, the tests give false confidence. AE guidance needed on minimum model complexity.
+- **Performance in CI:** Running a full PipeWire graph in the Nix sandbox may be slow. The 5 E2E tests should complete within 5 minutes total (target — adjust based on spike results).
+- **Room model vs real rooms:** The image source method is a simplification — real rooms have diffraction, furniture, non-rectangular geometry, frequency-dependent scattering. Is 2nd/3rd-order image source sufficient, or do we need a more sophisticated model for the 20-80Hz range?
+
+---
+
+## US-068: Dedicated `pi4audio` Service Account for Audio Process Isolation
+
+**As** the system owner,
+**I want** all audio infrastructure services (PipeWire, WirePlumber,
+GraphManager, signal-gen, pcm-bridge, web-ui) to run under a dedicated
+`pi4audio` system account, separate from the interactive `ela` user session,
+**so that** the audio stack has a well-defined security boundary, survives
+user session interruptions, and enables proper access control on audio
+devices and PipeWire sockets.
+
+**Status:** draft (PO-drafted 2026-03-22 per architect recommendation. Separate story from T-044-1 revision. Lower priority — recommended for next sprint.)
+**Depends on:** US-044 (bypass protection — udev rules and service isolation share the same security boundary), US-059 (GraphManager operational)
+**Blocks:** none (but strengthens US-044's ALSA lockout and simplifies future NixOS migration per US-019)
+**Decisions:** D-040 (PW filter-chain architecture), D-043 (GraphManager sole link manager)
+
+**Background:** Currently, all services run as user `ela` via systemd user
+units (`~/.config/systemd/user/`). This conflates the interactive desktop
+session (labwc, Mixxx, Reaper) with the audio infrastructure (PipeWire,
+GraphManager, signal-gen, etc.). The result:
+
+- **No process isolation:** A user-session crash (labwc, wayland) can take
+  down PipeWire and the entire audio stack. A logging-out event terminates
+  all user services.
+- **Weak device ownership:** The US-044 udev lockout uses `OWNER=ela`,
+  meaning any process running as `ela` (including Mixxx, Reaper, shell
+  sessions) can open the USBStreamer ALSA device directly. A dedicated
+  `pi4audio` user with exclusive device ownership narrows the attack surface
+  to only the audio infrastructure processes.
+- **Hardcoded paths:** Service files, deploy script, and configs reference
+  `/home/ela/` throughout (~15-20 files). Migrating to a service account
+  requires updating all path references.
+- **Linger dependency:** The `ela` user must have `loginctl enable-linger`
+  for boot-time service start. A dedicated service account with its own
+  linger is cleaner and survives user password changes / session
+  reconfiguration.
+
+**Architecture (architect recommendation):**
+
+Two user contexts on the Pi:
+
+| Process | User | Why |
+|---------|------|-----|
+| PipeWire daemon | `pi4audio` | Core audio server — must survive user session changes |
+| WirePlumber | `pi4audio` | Session manager — same lifecycle as PipeWire |
+| GraphManager | `pi4audio` | Link topology manager — same lifecycle |
+| signal-gen | `pi4audio` | RT signal generator — infrastructure service |
+| pcm-bridge | `pi4audio` | Level metering — infrastructure service |
+| web-ui (FastAPI) | `pi4audio` | Monitoring dashboard — infrastructure service |
+| filter-chain convolver | `pi4audio` | Loaded by PipeWire — same user |
+| Mixxx | `ela` | DJ application — connects to PipeWire via socket |
+| Reaper | `ela` | DAW — connects to PipeWire via socket |
+| labwc | `ela` | Wayland compositor — desktop session |
+| wayvnc | `ela` | Remote desktop — desktop session |
+
+**PipeWire cross-user access:** Mixxx and Reaper (running as `ela`) connect
+to PipeWire (running as `pi4audio`) via a group-accessible PipeWire socket.
+Both users are members of a shared `audio` (or `pi4audio`) group.
+`PIPEWIRE_REMOTE` environment variable in `ela`'s session points to
+`pi4audio`'s PipeWire socket path.
+
+**Acceptance criteria:**
+
+*Account setup:*
+- [ ] **`pi4audio` system user created:** `adduser --system --group --home /var/lib/pi4audio --shell /usr/sbin/nologin pi4audio`. Home directory at `/var/lib/pi4audio` (not `/home/pi4audio` — system account convention). Added to `audio` group for ALSA device access.
+- [ ] **Linger enabled:** `loginctl enable-linger pi4audio` — services start at boot without login.
+- [ ] **XDG directories created:** `/var/lib/pi4audio/.config/pipewire/`, `.config/wireplumber/`, `.config/systemd/user/` etc. Ownership `pi4audio:pi4audio`.
+
+*Service migration (6 services):*
+- [ ] **PipeWire + WirePlumber:** systemd user units installed under `pi4audio`'s user unit directory. PipeWire config (`10-audio-settings.conf`, `20-usbstreamer.conf`, `25-loopback-8ch.conf`, `30-filter-chain-convolver.conf`) deployed to `/var/lib/pi4audio/.config/pipewire/pipewire.conf.d/`. WirePlumber rules (`50-*.conf`, `51-*.conf`, `52-*.conf`, `53-*.conf`, `90-*.conf`) deployed to `/var/lib/pi4audio/.config/wireplumber/`.
+- [ ] **GraphManager:** `pi4audio-graph-manager.service` runs as `pi4audio`. Binary at `/var/lib/pi4audio/bin/pi4audio-graph-manager` or system-wide `/usr/local/bin/`.
+- [ ] **signal-gen:** `pi4audio-signal-gen.service` runs as `pi4audio`. Listens on `127.0.0.1:4001`.
+- [ ] **pcm-bridge:** `pcm-bridge@.service` runs as `pi4audio`. Listens on `127.0.0.1:9100`.
+- [ ] **web-ui:** `pi4-audio-webui.service` runs as `pi4audio`. WorkingDirectory updated from `/home/ela/web-ui` to `/var/lib/pi4audio/web-ui`. TLS certs deployed to `pi4audio`-owned directory.
+
+*PipeWire cross-user socket:*
+- [ ] **Socket accessible to `ela`:** PipeWire (running as `pi4audio`) creates its socket at a known path (`/run/user/<pi4audio-uid>/pipewire-0`). The socket file is group-readable/writable for the `audio` group. User `ela` is in the `audio` group.
+- [ ] **`PIPEWIRE_REMOTE` configured:** `ela`'s session environment (labwc autostart or `.bashrc`) exports `PIPEWIRE_REMOTE=/run/user/<pi4audio-uid>/pipewire-0` so that Mixxx, Reaper, and `pw-cli` connect to `pi4audio`'s PipeWire instance.
+- [ ] **JACK bridge works cross-user:** `pw-jack mixxx` running as `ela` successfully connects to `pi4audio`'s PipeWire and creates JACK client ports. Verified: Mixxx audio output appears in the PipeWire graph.
+
+*udev update:*
+- [ ] **Device ownership transferred:** `90-usbstreamer-lockout.rules` updated from `OWNER="ela"` to `OWNER="pi4audio"`. Only the `pi4audio` user (running PipeWire) can open USBStreamer ALSA playback and control devices. User `ela` is blocked from direct ALSA access (strengthens US-044 AC-1).
+
+*Deploy script update:*
+- [ ] **`deploy.sh` updated for split ownership:** User configs deploy to `/var/lib/pi4audio/.config/` (not `/home/ela/.config/`). `ela`-specific configs (labwc, Mixxx) remain at `/home/ela/.config/`. The `--pi` target accepts both `pi4audio@host` and `ela@host` contexts, or uses SSH multiplexing to deploy to both in one run.
+- [ ] **Path references updated:** All hardcoded `/home/ela/` references in service files, configs, and scripts updated to `/var/lib/pi4audio/` for infrastructure services. `ela`-specific paths (Mixxx config, labwc, Reaper) remain unchanged.
+
+*Verification:*
+- [ ] **Boot test:** Reboot Pi. `pi4audio` services start automatically (PipeWire, WP, GM, signal-gen, pcm-bridge, web-ui). Mixxx does not auto-start until `ela` logs in (or labwc session starts).
+- [ ] **Audio routing test:** Mixxx (as `ela`) plays audio through the convolver (as `pi4audio`) to USBStreamer. Full signal path verified.
+- [ ] **Isolation test:** Killing `ela`'s labwc session does NOT terminate PipeWire or any `pi4audio` service. The audio stack survives user session logout.
+- [ ] **No regressions:** US-062 boot-to-DJ test passes, US-044 bypass protections remain effective, GM link topology unchanged.
+
+**DoD:**
+- [ ] All 6 infrastructure services running as `pi4audio` on Pi
+- [ ] Mixxx and Reaper successfully connecting cross-user to PipeWire
+- [ ] Boot test PASS (D-001 reboot pattern)
+- [ ] Isolation test PASS (user session kill does not affect audio stack)
+- [ ] udev ownership updated and verified
+- [ ] Deploy script updated and tested (`--dry-run` shows correct paths)
+- [ ] Security specialist review: service account permissions are minimal (no sudo, no login shell, no SSH)
+- [ ] Architect sign-off: cross-user PipeWire socket design is robust and does not introduce latency or reliability regressions
+- [ ] No regressions on US-062 (boot-to-DJ) and US-044 (bypass protection)
+
+**Scope estimate (architect):** 15-20 files across systemd units, PipeWire/WP configs, deploy script, udev rules, and service unit paths.
+
+---
+
+## US-069: Speaker Setup and Design Tool
+
+**As** the sound engineer and speaker builder,
+**I want** a design-time tool that lets me select drivers from the T/S database,
+specify enclosure parameters, view estimated acoustic plots, derive operational
+parameters (target curves, protection filters, level matching), and export
+configurations to the production pipeline,
+**so that** I can make physics-informed speaker design decisions and generate
+production-ready parameters without manual calculation or external software.
+
+**Status:** draft (PO-drafted 2026-03-22 per owner request. AE review received
+2026-03-22 — MVP/Phase 2 split, T/S parameter sets, and modeling algorithms
+incorporated.)
+**Depends on:** US-039 (driver database schema — data source), US-043 (CLI
+search/filter — driver selection and basic enclosure calculations)
+**Blocks:** none directly, but outputs feed US-011b (speaker profile target
+curves), US-010 (correction filter target), D-031 (protection filter
+parameters), US-067 (simulator speaker model)
+**Decisions:** D-009 (cut-only correction), D-029 (per-speaker boost budget),
+D-031 (mandatory subsonic protection), D-035 (power budget validation)
+
+**Note:** This is a **design-time** tool, not a runtime component. It runs on
+the development machine (or on the Pi during venue setup) and produces static
+configuration files. It does not run during audio playback. The tool reads from
+the existing T/S database (`configs/drivers/`, 2300+ drivers from US-039/US-040
+scrapers) and writes to the speaker identity and profile layers.
+
+**Note:** US-043 already provides a CLI `enclosure` command with basic
+sealed/ported alignment calculations. US-069 extends this with interactive
+visualization, multi-driver enclosure modeling, protection filter derivation,
+target curve generation, and pipeline export. US-043 remains the lightweight
+CLI for quick queries; US-069 is the comprehensive design workflow.
+
+**Note:** The three-layer hierarchy (Driver -> Speaker Identity -> Speaker
+Profile) means this tool operates across all three layers: it reads from the
+Driver layer (US-039), generates Speaker Identity parameters (mandatory_hpf_hz,
+max_boost_db, compensation_eq), and feeds into Speaker Profile creation
+(US-011b crossover, channel assignment, target curves).
+
+### Acceptance criteria
+
+**1. Driver selection and browsing:**
+- [ ] Browse/search the T/S database by manufacturer, model, driver_type,
+  diameter, and T/S parameter ranges (leverages US-043 search infrastructure)
+- [ ] Display full driver record including all T/S parameters, measurements,
+  and application notes
+- [ ] Side-by-side comparison of 2+ drivers with key parameters highlighted
+  (suitability ranking for sealed vs ported enclosures based on Qts)
+- [ ] Flag drivers with incomplete T/S data and indicate which analyses are
+  unavailable due to missing parameters
+
+**2. Enclosure modeling (sealed):**
+- [ ] Sealed enclosure model from: fs, Qts, Vas, enclosure volume (Vb)
+- [ ] Computes: system Qtc, f3 (-3dB point), system sensitivity relative to
+  free-air
+- [ ] Supports standard alignments: Butterworth (Qtc=0.707), Bessel
+  (Qtc=0.577), Chebychev (Qtc=1.0), and custom Qtc
+- [ ] Multi-driver sealed: isobaric (halved Vas, -3dB sensitivity) and
+  parallel (doubled Sd/Vd, +3dB sensitivity) configurations
+- [ ] Stuffing compensation: user-adjustable apparent volume increase factor
+  (typically 1.0-1.4x)
+
+**3. Enclosure modeling (ported — single-tuned):**
+- [ ] Single-tuned ported model from: fs, Qts, Qes, Qms, Vas, box volume (Vb),
+  port tuning frequency (Fb). AE note: Qes is essential for ported (not just
+  Qts) because alignment selection (optimal fb/fs ratio) depends on Qes directly
+- [ ] Computes: f3, system response including port resonance, port air velocity
+  at rated power
+- [ ] B4 (Butterworth 4th-order) alignment suggestion: optimal Vb and Fb for
+  maximally flat response, using Thiele's alignment tables (Qes -> fb/fs ratio,
+  Vb/Vas ratio)
+- [ ] QB3 and C4 alignment alternatives for comparison
+- [ ] Port dimension calculator: given Fb, Vb, and desired port area, computes
+  required port length (accounts for end correction). Warns when port velocity
+  exceeds 5% of speed of sound (chuffing threshold)
+
+**4. Enclosure modeling (extended — Phase 2):**
+- [ ] Dual-tuned port (e.g., Bose PS28 III 58/88Hz staggered ports): two
+  coupled Helmholtz resonators. AE note: significantly more complex than
+  single-tuned; the PS28 III already has measured data, so the model isn't
+  needed for our own hardware. Low MVP priority
+- [ ] Passive radiator: modeled as mass-loaded port equivalent (mapped PR
+  parameters Qmp, Qep, Vasp reuse the ported model). AE note: worth doing
+  in Phase 2 because PRs are common in small sealed-looking subs
+- [ ] Bandpass (4th and 6th order): dual-chamber modeling with port tuning.
+  AE note: rarely used in PA, low priority
+- [ ] Transmission line: quarter-wave stub model with stuffing density parameter
+
+**5. Estimated plots:**
+- [ ] **Frequency response (magnitude):** SPL vs frequency (20Hz-20kHz) showing
+  the system's anechoic free-field natural rolloff and enclosure resonances.
+  Plotted on standard semi-log axes (log frequency, linear dB). AE note: this
+  is the anechoic response — real in-room response differs below ~300Hz (room
+  modes) and above ~2kHz (directivity). Design tool output is a starting point
+  refined by per-venue measurement (D-008)
+- [ ] **Impedance curve:** |Z| vs frequency showing resonance peak(s), minimum
+  impedance, and impedance phase. Useful for amplifier matching (flags when
+  minimum impedance drops below amp's rated load)
+- [ ] **Group delay:** group delay vs frequency derived numerically from the
+  enclosure transfer function: compute H(f) at dense frequency grid, extract
+  unwrapped phase, group_delay = -diff(phase)/diff(omega). AE note: do not
+  attempt closed-form for ported (4th-order expressions are messy); numerical
+  approach works for any enclosure model including Phase 2 additions. Overlaid
+  with psychoacoustic audibility thresholds from
+  `docs/theory/enclosure-topologies.md` Section 2 (Blauert & Laws: 1.6ms at
+  1kHz, scaled by frequency)
+- [ ] **Cone excursion vs frequency:** Xpeak vs frequency at user-specified
+  power level. Overlaid with Xmax and Xmech limits. Highlights frequency
+  regions where excursion exceeds Xmax (mechanical damage risk)
+- [ ] **Comparative overlay:** any two enclosure configurations plotted on the
+  same axes for direct comparison (e.g., sealed vs ported, different box volumes)
+- [ ] Plot output: interactive (matplotlib/plotly for local use) and static PNG
+  export for documentation
+
+**6. Operational parameter derivation:**
+
+- [ ] **(a) Target curve generation:** Given the modeled speaker response,
+  compute a correction target curve that complements the speaker's natural
+  rolloff. Algorithm (per AE):
+  1. Compute in-box frequency response from T/S model
+  2. Choose target shape: flat, Harman-like (0.5-1.0 dB/oct downward slope
+     from ~100Hz), psytrance (flat bass to ~200Hz, gentle -0.5 dB/oct above),
+     or custom user-defined
+  3. Correction = target - modeled_response (dB domain subtraction)
+  4. Apply D-009 constraint: positive values (boost) handled per D-029
+     framework (global attenuation headroom reservation first)
+  5. Apply 1/3 octave minimum smoothing — don't correct the fine structure
+     of the T/S model's predicted response (it's idealized; real drivers have
+     breakup modes the model doesn't capture)
+  Output: FRD file for the room correction pipeline (US-010). AE note: this
+  target is a starting point refined by per-venue measurement (D-008)
+
+- [ ] **(b) Thermal protection envelope:** Compute frequency-dependent power
+  limits from Pe_max, Re, and impedance curve (modeled or measured). MVP:
+  steady-state power envelope — at each frequency, compute maximum voltage
+  delivering Pe_max watts into |Z(f)|, convert to dBFS ceiling. AE note:
+  voice coil thermal time constant is 10-60s; psytrance has continuous
+  spectral energy, so steady-state model is appropriate and conservative.
+  Phase 2: IEC 268-style thermal time-constant model for dynamic power
+  limiting (short-term vs continuous ratings, valuable for live mode transient
+  peaks)
+
+- [ ] **(c) Excursion-limiting HPF derivation:** Two approaches (AE
+  recommendation: implement both):
+  - **Fast default:** 0.7x port tuning frequency (0.72x for our Bose, per
+    D-031). Standard industry approximation — works well for typical ported
+    enclosures. Physics: below port tuning, port mass ceases to provide
+    restoring force, excursion rises at 12 dB/oct
+  - **Computed refinement:** From the enclosure transfer function, compute
+    actual excursion curve: `x(f) = V_in / (BL * Zvc(f)) * |H_mech(f)|`.
+    Find frequency where x(f) = Xmax at maximum expected input level. More
+    accurate than fixed ratio because it accounts for actual BL, Xmax, and
+    the specific box alignment. Requires: BL, Xmax, Sd, Re (adds ~20 lines
+    on top of the transfer function already computed)
+  - Set mandatory_hpf_hz to the higher of: 0.7x port tuning or computed
+    Xmax-limited frequency (conservative envelope)
+  - HPF order: 48 dB/oct default per D-031. AE note: steep enough to
+    protect without audible phase effects because HPF is embedded in the
+    combined minimum-phase FIR, not a separate IIR stage
+  - Output: mandatory_hpf_hz and hpf_order for speaker identity file
+
+- [ ] **(d) Level matching / sensitivity normalization:** Compute sensitivity
+  differences between mains and subs to determine gain trim. Canonical
+  reference: **dB SPL/W/m** (per AE recommendation). Rationale: our system
+  uses separate amp channels per speaker with different impedances; level
+  matching by power gives the correct result (equal power -> equal SPL).
+  dB/2.83V/m is misleading because a 4-ohm sub appears 3dB more sensitive
+  than it actually is per watt. Conversion when database has dB/2.83V/m:
+  `sensitivity_dBW = sensitivity_dB283V - 10*log10(Z_nom/8)`. Also display
+  dB/2.83V/m for reference. Output: recommended gain_trim_db per speaker
+  channel for the profile's gain staging (D-029 framework)
+
+- [ ] **(e) Power budget check:** Given the amplifier's voltage gain, DAC
+  0dBFS level, and the driver's impedance curve, compute worst-case power
+  delivery per D-035. Warn when amp can deliver more than Pe_max. Compute
+  headroom margin in dB. This feeds US-011b's power budget validation
+
+**7. Baffle step diffraction modeling (Phase 2):**
+AE recommendation: not MVP. The measurement pipeline captures baffle step
+automatically (it's part of the in-room response), and the correction filter
+handles it. The T/S model doesn't predict it — baffle step is a wave-
+diffraction phenomenon, not part of the lumped-parameter model. Phase 2:
+- [ ] Model the ~6dB step between 2pi (full-space) and 4pi (half-space)
+  radiation caused by finite baffle width
+- [ ] Inputs: baffle width (mm), driver offset from nearest edge (mm),
+  baffle shape (rectangular vs circular — rectangular has sharper step)
+- [ ] Rectangular baffle approximation per Olson/Vanderkooy-Lipshitz (~50
+  lines of code). Compute baffle step frequency: f_step ~ c/(2*pi*w)
+- [ ] Apply baffle step to the modeled frequency response (smooth transition
+  from +6dB at low frequencies to 0dB reference above f_step)
+- [ ] Optional: baffle step compensation filter suggestion (shelf EQ
+  parameters or FIR correction target adjustment)
+
+**8. Pipeline export:**
+- [ ] **Speaker identity export:** Generate or update a speaker identity YAML
+  file (`configs/speakers/identities/{name}.yml`) with: mandatory_hpf_hz,
+  max_boost_db, max_power_watts, impedance_ohm, sensitivity, compensation_eq
+  — all derived from the modeling session
+- [ ] **Target curve export:** Write target curve as FRD file for the room
+  correction pipeline (US-010 input)
+- [ ] **Protection filter export:** Write HPF parameters to the speaker
+  identity for D-031 config generator consumption
+- [ ] **Simulator model export:** Write enclosure transfer function parameters
+  for US-067's speaker simulation stage (T/S params + enclosure type + volume
+  + tuning)
+- [ ] **Gain staging export:** Write sensitivity and gain_trim_db values for
+  US-011b's profile gain structure
+- [ ] **Design report:** Generate a human-readable summary (Markdown) of the
+  design session: selected driver, enclosure parameters, derived operational
+  values, plots, and warnings. Saved alongside the speaker identity for
+  provenance
+
+**9. Minimum viable T/S parameter sets (per AE):**
+- [ ] Sealed model minimum (7 params): fs, Qts, Vas, Re, Sd, Xmax,
+  sensitivity (or BL+Mms+Sd to derive sensitivity). Qes/Qms nice-to-have
+  (decompose Qts but not essential if Qts is known)
+- [ ] Ported model minimum (9 params): sealed set + Qes, Qms. AE note: Qes
+  is promoted from nice-to-have to essential for ported because alignment
+  selection (optimal fb/fs, Vb/Vas ratios) depends on Qes directly
+- [ ] Excursion refinement: above + BL (for computed excursion curve). If BL
+  missing, derive from sensitivity + Mms + Re
+- [ ] Impedance modeling (Phase 2): above + Le for accuracy above 1kHz. AE
+  note: not critical for subs
+- [ ] Full electromechanical model: above + BL, Mms, Cms (redundant if
+  fs+Mms known, but validates consistency)
+- [ ] Tool clearly indicates which analyses are available given the driver's
+  populated T/S fields, and gracefully degrades for incomplete data
+
+**10. Implementation:**
+- [ ] Python package at `src/speaker-design/` (or integrated into existing
+  `src/room-correction/` if architecturally appropriate)
+- [ ] CLI interface for scriptable use: `speaker-design model --driver
+  markaudio-chn-50p --enclosure sealed --volume 2.5`
+- [ ] Web UI integration (Phase 2): accessible from the web UI's Config tab
+  or a dedicated Speaker Design tab
+- [ ] Core modeling functions are pure (no I/O) for unit testability
+- [ ] All formulas documented with references to Small (1973), Thiele (1971),
+  Beranek (2012), and `docs/theory/enclosure-topologies.md`
+
+### Definition of Done
+
+- [ ] Core enclosure models (sealed + ported) implemented and unit-tested
+  against published reference designs (at least 3 known-good driver/enclosure
+  combinations where manufacturer provides predicted F3 and Qtc)
+- [ ] All 5 plot types render correctly for a sealed and ported test case
+- [ ] Protection filter derivation (HPF, thermal envelope) produces values
+  consistent with manually-verified Bose PS28 III identity (mandatory_hpf_hz
+  42Hz, per D-031)
+- [ ] Pipeline export generates valid speaker identity YAML that passes
+  US-039 schema validation
+- [ ] Target curve export produces valid FRD file parseable by the room
+  correction pipeline
+- [ ] Level matching computation validated: sensitivity difference between
+  two known drivers matches manual calculation within 0.5dB
+- [ ] Audio engineer review: acoustic models are physically correct and
+  produce reasonable results across the parameter space
+- [ ] Architect review: tool integrates cleanly with the three-layer
+  hierarchy and pipeline export paths are consistent
+- [ ] AD review: tool does not mask dangerous configurations (e.g., cannot
+  suppress thermal or excursion warnings)
+
+### Risks
+
+1. **Incomplete T/S data:** Many drivers in the database (e.g., Bose
+   proprietary) have null T/S fields. The tool must degrade gracefully —
+   showing available analyses and clearly indicating what's missing
+2. **Model accuracy:** Lumped-parameter T/S models are approximate. Real
+   driver behavior deviates at high excursion, high frequency, and thermal
+   limits. The tool should present results as estimates, not guarantees
+3. **Dual-tuned port modeling:** The Bose PS28 III's staggered dual-port
+   design (58/88Hz) is unusual. Standard single-tuned ported models won't
+   match its behavior. May need empirical FIR fallback from measured near-
+   field response
+4. **Scope creep:** Per AE MVP/Phase 2 split: sealed + single-tuned ported
+   covers >90% of real-world speaker cabinets. MVP includes frequency
+   response, excursion, group delay plots, HPF derivation (dual-approach),
+   thermal envelope (steady-state), target curve generation, level matching,
+   and pipeline export. Phase 2: dual-tuned ports, passive radiator, bandpass,
+   baffle step, impedance modeling (Le), thermal time-constant model
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -3568,4 +4173,10 @@ US-059 ──> US-063 (PW Metadata Collector, pw-top replacement) ──> US-060
 US-059 + US-060 ──> US-064 (PW Graph Visualization Tab, supersedes US-038)
 US-059 + US-051 ──> US-065 (Configuration Tab — Gain, Quantum, Filter Info)
 US-059 ──> US-062 (Boot-to-DJ Mode, minimum viable auto-launch)
+US-060 + US-063 ──> US-066 (Spectrum and Meter Polish — F-026, TK-112, TK-227, pcm-bridge)
+US-059 + US-052 + US-050 + US-039 ──> US-067 (PW Speaker-Room-Mic Simulator — T/S-based speaker models, E2E correction pipeline testing)
+US-067 ──> US-008..US-013 (room correction pipeline stories — regression testing enabled)
+US-044 + US-059 ──> US-068 (Dedicated pi4audio service account — process isolation, udev ownership, deploy script update)
+US-039 + US-043 ──> US-069 (Speaker Setup & Design Tool — T/S modeling, plots, protection filters, target curves, pipeline export)
+US-069 ──> US-011b + US-010 + US-067 (design tool outputs feed profile schema, correction targets, and simulator models)
 ```
