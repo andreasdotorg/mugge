@@ -641,6 +641,175 @@ EOF
 > `~/.config/pipewire/pipewire.conf.d/30-filter-chain-convolver.conf` on the Pi.
 > See `docs/architecture/rt-audio-stack.md` Section 4 for details.
 
+### Current Architecture: PipeWire Filter-Chain Convolver (D-040)
+
+The following subsections document the current DSP setup. For the full
+configuration reference with all properties explained, see the lab note
+`docs/lab-notes/US-059-filter-chain-config-reference.md`.
+
+#### Configuration Files
+
+All PipeWire configuration lives in `~/.config/pipewire/pipewire.conf.d/` on the
+Pi, loaded as drop-in files in lexicographic order:
+
+| File | Purpose |
+|------|---------|
+| `10-audio-settings.conf` | Global clock: 48kHz, quantum range 256-1024 |
+| `20-usbstreamer.conf` | ADA8200 capture adapter (8ch input via ADAT) |
+| `21-usbstreamer-playback.conf` | USBStreamer playback adapter (8ch output, graph driver) |
+| `30-filter-chain-convolver.conf` | FIR convolver + gain nodes (4ch) |
+
+These files are version-controlled in this repository under `configs/pipewire/`.
+
+#### Deploy Configuration to Pi
+
+```bash
+# Copy config files to the Pi
+scp configs/pipewire/10-audio-settings.conf \
+    configs/pipewire/20-usbstreamer.conf \
+    configs/pipewire/21-usbstreamer-playback.conf \
+    configs/pipewire/30-filter-chain-convolver.conf \
+    ela@mugge:~/.config/pipewire/pipewire.conf.d/
+
+# Copy FIR coefficient WAV files
+sudo mkdir -p /etc/pi4audio/coeffs
+sudo cp coeffs/combined_*.wav /etc/pi4audio/coeffs/
+
+# SAFETY: Warn the owner before restarting PipeWire!
+# Restarting PipeWire causes USBStreamer transients through the amp chain.
+# Turn off amplifiers first. See docs/operations/safety.md.
+systemctl --user restart pipewire
+```
+
+#### Filter-Chain Convolver Overview
+
+The convolver processes 4 speaker channels through combined minimum-phase FIR
+filters (crossover + room correction). Channels 4-7 (headphones, IEM) bypass
+the convolver entirely — GraphManager links them directly to the USBStreamer.
+
+```
+Internal filter-chain signal flow:
+
+AUX0 ──> conv_left_hp  ──> gain_left_hp  ──> AUX0  (Left main)
+AUX1 ──> conv_right_hp ──> gain_right_hp ──> AUX1  (Right main)
+AUX2 ──> conv_sub1_lp  ──> gain_sub1_lp  ──> AUX2  (Sub 1)
+AUX3 ──> conv_sub2_lp  ──> gain_sub2_lp  ──> AUX3  (Sub 2)
+```
+
+Each channel has two stages:
+1. **Convolver** (`builtin/convolver`): 16,384-tap FIR with combined crossover
+   slope + room correction. Coefficient WAV files at `/etc/pi4audio/coeffs/`.
+2. **Gain node** (`builtin/linear`): Flat attenuation via `y = x * Mult`.
+   Workaround for PW 1.4.9 silently ignoring `config.gain` on convolvers.
+
+#### Gain Control
+
+Per-channel gain is set via `linear` builtin nodes with `Mult` parameters:
+
+| Gain Node | Current Mult | Equivalent dB | Speaker |
+|-----------|-------------|---------------|---------|
+| `gain_left_hp` | 0.001 | -60 dB | Left main |
+| `gain_right_hp` | 0.001 | -60 dB | Right main |
+| `gain_sub1_lp` | 0.000631 | -64 dB | Sub 1 |
+| `gain_sub2_lp` | 0.000631 | -64 dB | Sub 2 |
+
+Adjust gain at runtime (find the convolver node ID first):
+
+```bash
+# Find the convolver node ID (look for "FIR Convolver")
+pw-dump 43 | jq '.[0].info.params.Props[1].params'
+
+# Set gain for left main to -50 dB (0.00316)
+pw-cli s 43 Props '{ params = [ "gain_left_hp:Mult" 0.00316 ] }'
+```
+
+**Safety rule:** Never increase gain (increase Mult) without owner confirmation.
+Mult must never exceed 1.0 (US-044 watchdog enforces this). See
+`docs/operations/safety.md` for gain staging limits (D-009).
+
+Default Mult values in `30-filter-chain-convolver.conf` persist across PipeWire
+restarts. Runtime `pw-cli` changes are session-only — they revert to `.conf`
+defaults on PipeWire restart.
+
+#### Quantum Switching
+
+DJ mode uses quantum 1024 (~21ms), live mode uses quantum 256 (~5.3ms):
+
+```bash
+# Switch to DJ mode (quantum 1024)
+pw-metadata -n settings 0 clock.force-quantum 1024
+
+# Switch to live mode (quantum 256)
+pw-metadata -n settings 0 clock.force-quantum 256
+```
+
+GraphManager handles quantum transitions automatically during mode switches.
+
+#### Verification
+
+```bash
+# Verify PipeWire is running
+systemctl --user status pipewire
+
+# Verify convolver node exists
+pw-cli ls Node | grep -i convolver
+
+# Check current gain values
+pw-dump 43 | jq '.[0].info.params.Props[1].params'
+
+# Monitor DSP load in real time
+pw-top
+```
+
+#### GraphManager
+
+GraphManager (Rust binary, SCHED_FIFO 80) is the sole PipeWire link manager
+(D-039). It creates and destroys PipeWire links to route audio between
+applications, the convolver, and the USBStreamer.
+
+```bash
+# GraphManager runs as a systemd user service
+systemctl --user status pi4audio-graph-manager
+
+# GraphManager listens on localhost port 4002 (RPC)
+# The web UI communicates with it for graph visualization and mode transitions
+```
+
+Key responsibilities:
+- Creates links: app → convolver → USBStreamer (speaker channels)
+- Creates bypass links: app → USBStreamer (headphone/IEM channels)
+- Manages mode transitions (DJ ↔ Live) including quantum changes
+- Enforces link topology — prevents WirePlumber from creating rogue links (D-043)
+
+#### pcm-bridge (Level Metering)
+
+pcm-bridge (Rust binary) provides lock-free atomic level metering at 10 Hz via
+TCP JSON on port 9100. The web UI consumes this for real-time level meters.
+
+```bash
+# pcm-bridge runs as a systemd user service
+systemctl --user status pi4audio-pcm-bridge
+
+# Check level data (JSON stream)
+nc localhost 9100
+```
+
+#### Signal Generator
+
+signal-gen (Rust binary) provides RT-safe measurement audio generation. Hard
+capped at -20 dBFS for safety. Controlled via RPC on port 4001.
+
+```bash
+# signal-gen runs as a systemd user service
+systemctl --user status pi4audio-signal-gen
+```
+
+---
+
+> **Historical reference: CamillaDSP (pre-D-040).** The following subsections
+> document the original CamillaDSP-based architecture. They are retained for
+> reference but do not describe the current system.
+
 ### 6.1 Install CamillaDSP
 
 ```bash
