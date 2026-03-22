@@ -584,7 +584,27 @@ committing. The orchestrator is not exempt from Rule 13. The change-manager
 refuses to commit when the matrix is not satisfied, even if the orchestrator
 overrides (L-019).
 
-### Rule 14: Communication discipline — theory of mind for agents (L-040)
+### Rule 14: Work item references use document IDs only (L-049)
+
+**NEVER use ephemeral internal task tracker IDs** (e.g., "task #121") in
+communication with the owner or between agents. These IDs are session-scoped
+and meaningless outside the current session.
+
+**ALWAYS use document-based IDs** from the project's persistent tracking:
+- Stories: US-NNN (e.g., US-066)
+- Defects: F-NNN (e.g., F-073)
+- Decisions: D-NNN (e.g., D-040)
+
+Internal task tracker IDs are for the orchestrator's and PM's internal
+bookkeeping ONLY. They must never appear in:
+- Messages to the owner
+- Messages between agents (use document IDs instead)
+- Status reports or summaries
+
+When assigning work to a worker, describe the task using the story/defect ID
+and what needs to be done. When reporting to the owner, use document IDs.
+
+### Rule 15: Communication discipline — theory of mind for agents (L-040)
 
 **Mental model:** Agents are independent processes. They do NOT read
 incoming messages while executing a tool call. Messages queue in an inbox
