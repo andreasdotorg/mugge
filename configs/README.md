@@ -98,6 +98,18 @@ Deployed to the Pi at `~/.config/wireplumber/wireplumber.conf.d/` (user-level).
 | `50-usbstreamer-disable-acp.conf` | Disables WirePlumber ACP for the USBStreamer. Prevents auto-detected duplex nodes from conflicting with the filter-chain convolver's playback access. Required companion to `20-usbstreamer.conf` capture-only adapter (F-015 fix). |
 | `51-loopback-disable-acp.conf` | Historical: Disables WirePlumber ACP for the loopback device (pre-D-040, used for CamillaDSP bridge). |
 | `52-umik1-low-priority.conf` | Lowers UMIK-1 priority so WirePlumber does not select it as default audio source. |
+| `53-deny-usbstreamer-alsa.conf` | T-044-2: Loads the USBStreamer ALSA deny policy Lua script. Blocks unauthorized PW clients from creating nodes targeting the USBStreamer device. |
+| `scripts/deny-usbstreamer-alsa.lua` | T-044-2: Lua policy script that destroys any node targeting USBStreamer ALSA unless it is a whitelisted static adapter (`ada8200-in`, `alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0`). Defense-in-depth layer. |
+
+---
+
+## udev (`udev/`)
+
+Deployed to the Pi at `/etc/udev/rules.d/` (system-level, requires sudo).
+
+| File | Description |
+|------|-------------|
+| `90-usbstreamer-lockout.rules` | US-044 ALSA device lockout: restricts USBStreamer playback (`pcmC*D*p`) and control (`controlC*`) nodes to `OWNER=ela MODE=0600`. Prevents non-PipeWire processes from opening the device for playback. Capture nodes are intentionally not locked. |
 
 ---
 

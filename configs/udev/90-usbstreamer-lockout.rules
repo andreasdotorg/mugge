@@ -1,0 +1,29 @@
+# US-044 AC-1: ALSA device lockout for USBStreamer playback and control nodes.
+#
+# Restricts direct ALSA access to the USBStreamer so only user ela (running
+# PipeWire) can open the device. Other users and ALSA-direct tools (aplay,
+# speaker-test) are blocked from writing to the device.
+#
+# Three-layer defense (this is layer 2 — udev permissions):
+#   1. PipeWire exclusive ALSA hold (EBUSY when PW is running)
+#   2. udev OWNER=ela MODE=0600 (this file — blocks other users always)
+#   3. GraphManager link audit (T-044-3)
+#
+# Only playback (pcmC*D*p) and control (controlC*) nodes are locked.
+# Capture nodes are NOT locked (no safety benefit, could interfere with
+# measurement via UMIK-1 or future LevelsCollector wiring).
+#
+# Deploy to: /etc/udev/rules.d/90-usbstreamer-lockout.rules
+# Reload:    sudo udevadm control --reload-rules && sudo udevadm trigger
+# Verify:    ls -l /dev/snd/pcmC*D0p /dev/snd/controlC*
+#            aplay -D hw:USBStreamer,0 /dev/zero  # expect: Permission denied (other user) or EBUSY (PW running)
+#
+# USB ID: 2752:0016 (miniDSP USBStreamer)
+
+# Match USBStreamer ALSA playback devices (pcmC*D*p).
+# ATTRS{id} traverses to the parent sound card node where the ALSA card ID
+# ("USBStreamer") is defined. KERNEL filters to playback-only subdevices.
+SUBSYSTEM=="sound", ATTRS{id}=="USBStreamer", KERNEL=="pcmC*D*p", OWNER="ela", MODE="0600"
+
+# Match USBStreamer ALSA control devices (controlC*).
+SUBSYSTEM=="sound", ATTRS{id}=="USBStreamer", KERNEL=="controlC*", OWNER="ela", MODE="0600"
