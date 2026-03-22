@@ -397,6 +397,7 @@
               HOME="''${HOME:-/tmp}" PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:$PATH" cargo test --no-default-features --release 2>&1
               echo ""
               echo "All test suites passed."
+              echo "(pcm-bridge and signal-gen: run nix run .#test-pcm-bridge / .#test-signal-gen on Linux)"
             ''}";
           };
 
@@ -416,6 +417,33 @@
               export PI_AUDIO_MOCK=1
               cd ${toString ./.}/src/web-ui
               exec ${testPython}/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+            ''}";
+          };
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          # PipeWire Rust tools — require libpipewire (Linux only).
+          test-pcm-bridge = {
+            type = "app";
+            program = "${pkgs.writeShellScript "test-pcm-bridge" ''
+              export HOME="''${HOME:-/tmp}"
+              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.pkg-config}/bin:$PATH"
+              export PKG_CONFIG_PATH="${pkgs.pipewire.dev}/lib/pkgconfig''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+              export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
+              export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include -isystem ${pkgs.glibc.dev}/include"
+              cd ${toString ./.}/src/pcm-bridge
+              exec cargo test "$@"
+            ''}";
+          };
+
+          test-signal-gen = {
+            type = "app";
+            program = "${pkgs.writeShellScript "test-signal-gen" ''
+              export HOME="''${HOME:-/tmp}"
+              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.pkg-config}/bin:$PATH"
+              export PKG_CONFIG_PATH="${pkgs.pipewire.dev}/lib/pkgconfig''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+              export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
+              export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include -isystem ${pkgs.glibc.dev}/include"
+              cd ${toString ./.}/src/signal-gen
+              exec cargo test "$@"
             ''}";
           };
         };
