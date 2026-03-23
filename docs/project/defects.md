@@ -2588,10 +2588,10 @@ persistence behavior must be documented correctly.
 - `SETUP-MANUAL.md` (gain persistence reference)
 - `~/.config/pipewire/pipewire.conf.d/30-filter-chain-convolver.conf` (on Pi)
 
-## F-067: SETUP-MANUAL.md writing quality and stale CamillaDSP references (OPEN)
+## F-067: SETUP-MANUAL.md writing quality and stale CamillaDSP references (RESOLVED)
 
 **Severity:** Medium (documentation quality — blocks US-071 owner acceptance)
-**Status:** OPEN
+**Status:** Resolved (`c859d80`, 2026-03-23)
 **Found in:** Owner Gate 3 review of US-071 (2026-03-22)
 **Affects:** SETUP-MANUAL.md
 **Found by:** Owner (Gabriela Bogk)
@@ -2621,6 +2621,11 @@ remains 9/9 technically (all ACs met) but owner Gate 3 review FAILED.
 
 **Files:**
 - `SETUP-MANUAL.md`
+
+**Resolution (2026-03-23, commit `c859d80`):** Full prose rewrite of
+SETUP-MANUAL.md and CamillaDSP reference scrub. Needs owner re-review to
+confirm Gate 3 is now satisfied. US-071 remains in REVIEW phase pending
+owner acceptance.
 
 ---
 
@@ -2724,10 +2729,10 @@ observability improvement.
 
 ---
 
-## F-072: US-044 GM safety alerts not surfaced to web UI status bar (OPEN)
+## F-072: US-044 GM safety alerts not surfaced to web UI status bar (RESOLVED)
 
 **Severity:** Medium
-**Status:** Open
+**Status:** Resolved (`ca52456`, 2026-03-23)
 **Found in:** US-044 gap analysis (worker-functional, task #114)
 **Affects:** US-044 (Bypass Protection), AC-3, AC-4, AC-5
 **Found by:** worker-functional
@@ -2754,6 +2759,10 @@ indicators. Single implementation task covering all three ACs.
 - `src/graph-manager/src/rpc.rs` (new/extended RPC response)
 - `src/web-ui/app/ws_system.py` (consume GM safety state)
 - `src/web-ui/static/js/statusbar.js` (display safety indicators)
+
+**Resolution (2026-03-23, commit `ca52456`):** GM safety alerts (link audit
+violations, watchdog mute state, gain integrity warnings) now surfaced to the
+web UI status bar. Addresses US-044 AC-3/4/5. Pi deployment pending.
 
 ---
 
@@ -2839,10 +2848,10 @@ be served directly from the repo.
 
 ---
 
-## F-083: No spectrum display on dashboard (OPEN)
+## F-083: No spectrum display on dashboard (RESOLVED)
 
 **Severity:** High
-**Status:** Open
+**Status:** Resolved (`179dafa`, 2026-03-23)
 **Found in:** Owner web UI review on Pi (2026-03-22, post S-022 deploy)
 **Affects:** Dashboard tab, US-066 (Spectrum and Meter Polish)
 **Found by:** Owner
@@ -2898,12 +2907,23 @@ signal-gen accepts RPC). Issue is purely PipeWire stream activation timing. Fix
 needs rework to ensure format negotiation succeeds before activation (i.e., links
 must exist before `set_active(true)`).
 
+**Resolution (2026-03-23, commit `179dafa`):** Root cause was wrong SPA audio format
+constant in `audio-common/src/audio_format.rs`: `SPA_AUDIO_FORMAT_F32LE` was `0x11A`
+(actually U18_BE) instead of correct `0x11B` (F32_LE). PipeWire's `negotiate_format()`
+failed because no audioconvert could match U18_BE — the ENOTSUP was a FORMAT MISMATCH,
+not a timing issue. Fix: correct constant + clean up stream flags (standalone:
+AUTOCONNECT|MAP_BUFFERS, managed: MAP_BUFFERS|RT_PROCESS). Also fixed: premature
+`set_active(true)`, conditional `node.group`/`node.always-process` for managed mode
+only. **Validated locally:** both pcm-bridge and signal-gen streams reach Streaming
+state, pcm-bridge reads -20 dBFS peak / -23 dBFS RMS from signal-gen sine wave.
+Pi deployment pending (owner travelling, no Pi access).
+
 ---
 
-## F-084: No level meters on dashboard (OPEN)
+## F-084: No level meters on dashboard (RESOLVED)
 
 **Severity:** High
-**Status:** Open
+**Status:** Resolved (`179dafa`, 2026-03-23 — same fix as F-083)
 **Found in:** Owner web UI review on Pi (2026-03-22, post S-022 deploy)
 **Affects:** Dashboard tab, US-066 (Spectrum and Meter Polish)
 **Found by:** Owner
@@ -2918,6 +2938,10 @@ pcm-bridge because PW links are never created). See F-083 for full analysis.
 
 **Fix:** Resolving F-081 (FD leak) + F-083 auto-connect issue will fix both
 F-083 and F-084 simultaneously.
+
+**Resolution (2026-03-23):** Fixed by same commit as F-083 (`179dafa`). The SPA
+format constant fix allows pcm-bridge streams to reach Streaming state and receive
+audio data. Level meters now receive real data locally. Pi deployment pending.
 
 **Files:**
 - `src/web-ui/static/js/dashboard.js` (meter bar rendering)
