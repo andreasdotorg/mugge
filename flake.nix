@@ -516,8 +516,9 @@
               export LOCAL_DEMO_SG_BIN="${signal-gen}/bin/pi4audio-signal-gen"
               export LOCAL_DEMO_PCM_BIN="${pcm-bridge}/bin/pcm-bridge"
               export LOCAL_DEMO_PYTHON="${testPython}/bin/python"
+              export LOCAL_DEMO_PW_TEST_ENV="${./scripts/local-pw-test-env.sh}"
               export PATH="${testPython}/bin:$PATH"
-              exec ${toString ./.}/scripts/local-demo.sh "$@"
+              exec ${pkgs.bash}/bin/bash ${./scripts/local-demo.sh} "$@"
             ''}";
           };
         };
