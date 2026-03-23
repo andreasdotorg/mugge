@@ -87,7 +87,9 @@ def test_monitoring_dsp_state_updates(page):
 def test_spectrum_canvas_has_content(page):
     """Spectrum canvas renders non-blank content after monitoring data arrives."""
     # Wait for monitoring data to arrive first
-    page.locator("#sb-dsp-state").wait_for(state="visible")
+    # Use "attached" not "visible" — sb-dsp-state is a text-only span with
+    # zero dimensions in headless Chromium without fonts (Nix sandbox).
+    page.locator("#sb-dsp-state").wait_for(state="attached")
     page.wait_for_function(
         "document.getElementById('sb-dsp-state').textContent !== '--'",
         timeout=5000,
