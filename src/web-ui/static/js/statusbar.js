@@ -264,10 +264,50 @@
             modeEl.classList.remove("c-grey");
         }
 
+        // F-072: Safety alerts from GraphManager (watchdog + gain integrity)
+        if (data.safety_alerts) {
+            updateSafetyAlert(data.safety_alerts);
+        }
+
         // Sync mute state from server (F-040)
         if (data.is_muted != null && data.is_muted !== isMuted && !isMeasuring) {
             isMuted = data.is_muted;
             updatePanicButton();
+        }
+    }
+
+    function updateSafetyAlert(alerts) {
+        var el = document.getElementById("sb-safety-alert");
+        var textEl = document.getElementById("sb-safety-text");
+        if (!el || !textEl) return;
+
+        var gmConnected = alerts.gm_connected;
+        var watchdogLatched = alerts.watchdog_latched;
+        var gainOk = alerts.gain_integrity_ok;
+        var missingNodes = alerts.watchdog_missing_nodes || [];
+        var gainViolations = alerts.gain_integrity_violations || [];
+
+        // Always show the safety indicator
+        el.classList.remove("hidden");
+
+        if (!gmConnected) {
+            // GM disconnected — unknown safety state
+            PiAudio.setText("sb-safety-text", "?", "c-grey");
+            el.title = "GraphManager disconnected — safety status unknown";
+        } else if (watchdogLatched) {
+            // Watchdog mute is ACTIVE — critical alert
+            PiAudio.setText("sb-safety-text", "MUTED", "c-red");
+            el.title = "Watchdog safety mute ACTIVE — missing: " +
+                missingNodes.join(", ");
+        } else if (!gainOk) {
+            // Gain integrity violation
+            PiAudio.setText("sb-safety-text", "GAIN!", "c-red");
+            el.title = "Gain integrity violation: " +
+                gainViolations.join("; ");
+        } else {
+            // All clear
+            PiAudio.setText("sb-safety-text", "OK", "c-green");
+            el.title = "Safety checks passing";
         }
     }
 

@@ -53,6 +53,8 @@ class FilterChainCollector:
         # Latest polled data
         self._links: dict | None = None
         self._state: dict | None = None
+        self._watchdog: dict | None = None
+        self._gain_integrity: dict | None = None
 
         self._task: asyncio.Task | None = None
 
@@ -98,6 +100,44 @@ class FilterChainCollector:
     def dsp_health_snapshot(self) -> dict:
         """Build the DSP health fragment for /ws/system."""
         return self._build_dsp_status()
+
+    def safety_snapshot(self) -> dict:
+        """Build the safety alerts fragment for /ws/system.
+
+        Returns watchdog and gain integrity status from GraphManager.
+        When GM is disconnected, returns an empty/unknown state so the
+        frontend can distinguish 'no data' from 'all clear'.
+        """
+        if not self._connected:
+            return {
+                "gm_connected": False,
+                "watchdog_latched": False,
+                "watchdog_missing_nodes": [],
+                "gain_integrity_ok": True,
+                "gain_integrity_violations": [],
+            }
+
+        wd = self._watchdog or {}
+        gi = self._gain_integrity or {}
+
+        watchdog_data = wd.get("watchdog", {})
+        gi_data = gi.get("gain_integrity", {})
+
+        # Parse gain integrity: consecutive_violations > 0 means active issue
+        gi_violations = gi_data.get("consecutive_violations", 0)
+        gi_last = gi_data.get("last_result", "") or ""
+        gi_violating = []
+        if gi_last.startswith("VIOLATION:"):
+            gi_violating = [gi_last[len("VIOLATION:"):].strip()]
+
+        return {
+            "gm_connected": True,
+            "watchdog_latched": watchdog_data.get("latched", False),
+            "watchdog_missing_nodes": watchdog_data.get(
+                "missing_nodes", []),
+            "gain_integrity_ok": gi_violations == 0,
+            "gain_integrity_violations": gi_violating,
+        }
 
     # -- Internal helpers --
 
@@ -269,6 +309,17 @@ class FilterChainCollector:
                 state_resp = await self._send_command({"cmd": "get_state"})
                 if state_resp and state_resp.get("ok"):
                     self._state = state_resp
+
+                # Query safety status (F-072: watchdog + gain integrity).
+                wd_resp = await self._send_command(
+                    {"cmd": "watchdog_status"})
+                if wd_resp and wd_resp.get("ok"):
+                    self._watchdog = wd_resp
+
+                gi_resp = await self._send_command(
+                    {"cmd": "gain_integrity_status"})
+                if gi_resp and gi_resp.get("ok"):
+                    self._gain_integrity = gi_resp
 
                 await asyncio.sleep(0.5)
             except asyncio.CancelledError:

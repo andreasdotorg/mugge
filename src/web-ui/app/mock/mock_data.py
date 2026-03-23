@@ -481,6 +481,13 @@ class MockDataGenerator:
             },
             "uptime_seconds": self._elapsed() + 3600,
             "mode": s["mode"],
+            "safety_alerts": {
+                "gm_connected": s.get("gm_connected", True),
+                "watchdog_latched": False,
+                "watchdog_missing_nodes": [],
+                "gain_integrity_ok": True,
+                "gain_integrity_violations": [],
+            },
             "processes": {
                 "mixxx_cpu": self._proc_jitter(s["mixxx_cpu"], t),
                 "reaper_cpu": self._proc_jitter(s["reaper_cpu"], t),

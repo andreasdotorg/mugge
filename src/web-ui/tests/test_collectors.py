@@ -1056,3 +1056,165 @@ class TestPipeWireCollectorRPC:
                 assert pw._backoff == 1.0
                 pw._disconnect()
         _run_async(_test())
+
+
+# ── 9. FilterChainCollector safety snapshot (F-072) ────────────
+
+# GM RPC response fixtures for safety queries
+_GM_WATCHDOG_OK = {
+    "type": "response", "cmd": "watchdog_status", "ok": True,
+    "watchdog": {
+        "latched": False,
+        "missing_nodes": [],
+        "pre_mute_gains": [],
+    },
+}
+
+_GM_WATCHDOG_LATCHED = {
+    "type": "response", "cmd": "watchdog_status", "ok": True,
+    "watchdog": {
+        "latched": True,
+        "missing_nodes": ["pi4audio-convolver", "pi4audio-convolver-out"],
+        "pre_mute_gains": [["gain_left_hp", 0.001], ["gain_right_hp", 0.001]],
+    },
+}
+
+_GM_GAIN_INTEGRITY_OK = {
+    "type": "response", "cmd": "gain_integrity_status", "ok": True,
+    "gain_integrity": {
+        "last_result": "ok: gain_left_hp=0.001000, gain_right_hp=0.001000",
+        "consecutive_ok": 5,
+        "consecutive_violations": 0,
+        "total_checks": 10,
+    },
+}
+
+_GM_GAIN_INTEGRITY_VIOLATION = {
+    "type": "response", "cmd": "gain_integrity_status", "ok": True,
+    "gain_integrity": {
+        "last_result": "VIOLATION: gain_left_hp=2.000000",
+        "consecutive_ok": 0,
+        "consecutive_violations": 1,
+        "total_checks": 11,
+    },
+}
+
+
+class TestFilterChainSafetySnapshot:
+    """F-072: FilterChainCollector.safety_snapshot() tests."""
+
+    def test_disconnected_safety_snapshot(self, fc_collector):
+        """When GM is disconnected, safety_snapshot reports unknown state."""
+        snap = fc_collector.safety_snapshot()
+        assert snap["gm_connected"] is False
+        assert snap["watchdog_latched"] is False
+        assert snap["gain_integrity_ok"] is True
+        assert snap["watchdog_missing_nodes"] == []
+        assert snap["gain_integrity_violations"] == []
+
+    def test_connected_all_ok(self, fc_collector):
+        """When GM reports all clear, safety snapshot reflects that."""
+        fc_collector._connected = True
+        fc_collector._watchdog = _GM_WATCHDOG_OK
+        fc_collector._gain_integrity = _GM_GAIN_INTEGRITY_OK
+        snap = fc_collector.safety_snapshot()
+        assert snap["gm_connected"] is True
+        assert snap["watchdog_latched"] is False
+        assert snap["gain_integrity_ok"] is True
+        assert snap["watchdog_missing_nodes"] == []
+        assert snap["gain_integrity_violations"] == []
+
+    def test_watchdog_latched(self, fc_collector):
+        """When watchdog is latched, safety snapshot reports it."""
+        fc_collector._connected = True
+        fc_collector._watchdog = _GM_WATCHDOG_LATCHED
+        fc_collector._gain_integrity = _GM_GAIN_INTEGRITY_OK
+        snap = fc_collector.safety_snapshot()
+        assert snap["watchdog_latched"] is True
+        assert "pi4audio-convolver" in snap["watchdog_missing_nodes"]
+
+    def test_gain_integrity_violation(self, fc_collector):
+        """When gain integrity fails, safety snapshot reports violation."""
+        fc_collector._connected = True
+        fc_collector._watchdog = _GM_WATCHDOG_OK
+        fc_collector._gain_integrity = _GM_GAIN_INTEGRITY_VIOLATION
+        snap = fc_collector.safety_snapshot()
+        assert snap["gain_integrity_ok"] is False
+        assert len(snap["gain_integrity_violations"]) > 0
+
+    def test_safety_rpc_integration(self):
+        """Integration test: safety data flows from mock GM to snapshot."""
+        async def _test():
+            server, port, _ = await _make_gm_server({
+                "get_links": _GM_LINKS_DJ,
+                "get_state": _GM_STATE_DJ,
+                "watchdog_status": _GM_WATCHDOG_LATCHED,
+                "gain_integrity_status": _GM_GAIN_INTEGRITY_OK,
+            })
+            async with server:
+                fc = FilterChainCollector(host="127.0.0.1", port=port)
+                await fc.start()
+                await asyncio.sleep(1.0)
+                snap = fc.safety_snapshot()
+                await fc.stop()
+
+            assert snap["gm_connected"] is True
+            assert snap["watchdog_latched"] is True
+            assert "pi4audio-convolver" in snap["watchdog_missing_nodes"]
+            assert snap["gain_integrity_ok"] is True
+
+        _run_async(_test())
+
+
+class TestBuildSystemSnapshotSafety:
+    """F-072: safety_alerts field in _build_system_snapshot."""
+
+    def test_safety_alerts_present_in_system_snapshot(self):
+        """_build_system_snapshot includes safety_alerts key."""
+        app = MagicMock()
+        app.state.system_collector = None
+        app.state.pw = None
+        app.state.cdsp = None
+        data = _build_system_snapshot(app)
+        assert "safety_alerts" in data
+
+    def test_safety_alerts_from_real_collector(self):
+        """safety_alerts comes from FilterChainCollector.safety_snapshot()."""
+        app = MagicMock()
+        fc = FilterChainCollector()
+        fc._connected = True
+        fc._watchdog = _GM_WATCHDOG_LATCHED
+        fc._gain_integrity = _GM_GAIN_INTEGRITY_OK
+        fc._links = {
+            "ok": True, "mode": "dj", "desired": 12,
+            "actual": 12, "missing": 0, "links": [],
+        }
+        app.state.system_collector = None
+        app.state.pw = None
+        app.state.cdsp = fc
+        data = _build_system_snapshot(app)
+        assert data["safety_alerts"]["watchdog_latched"] is True
+        assert data["safety_alerts"]["gm_connected"] is True
+
+    def test_safety_alerts_disconnected_when_no_collector(self):
+        """When no FilterChainCollector, safety_alerts shows disconnected."""
+        app = MagicMock()
+        app.state.system_collector = None
+        app.state.pw = None
+        app.state.cdsp = None
+        data = _build_system_snapshot(app)
+        assert data["safety_alerts"]["gm_connected"] is False
+
+    def test_safety_alerts_keys_match_mock(self, mock_gen_a):
+        """safety_alerts keys from mock must exist in real snapshot."""
+        mock_data = mock_gen_a.system()
+        app = MagicMock()
+        app.state.system_collector = None
+        app.state.pw = None
+        app.state.cdsp = None
+        real_data = _build_system_snapshot(app)
+        for key in mock_data["safety_alerts"]:
+            assert key in real_data["safety_alerts"], (
+                f"Key 'safety_alerts.{key}' in mock but missing "
+                f"from _build_system_snapshot"
+            )

@@ -135,6 +135,13 @@ def _build_system_snapshot(app) -> dict:
         }),
         "uptime_seconds": sys_snap.get("uptime_seconds"),
         "mode": cdsp_snap.get("gm_mode", "dj") if cdsp_snap else "dj",
+        "safety_alerts": cdsp_col.safety_snapshot() if cdsp_col else {
+            "gm_connected": False,
+            "watchdog_latched": False,
+            "watchdog_missing_nodes": [],
+            "gain_integrity_ok": True,
+            "gain_integrity_violations": [],
+        },
         "processes": sys_snap.get("processes", {
             "mixxx_cpu": 0.0,
             "reaper_cpu": 0.0,
