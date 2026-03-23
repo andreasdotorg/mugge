@@ -5024,8 +5024,12 @@ bugs in link topology / reconciler / stream activation are caught locally
 before Pi deployment, and the room correction pipeline can be regression-tested
 against simulated rooms end-to-end on every commit.
 
-**Status:** selected (owner-selected 2026-03-23. Amended from draft: upgraded
-to production-replica fidelity per owner directive. Original draft 2026-03-22.)
+**Status:** in-progress (IMPLEMENT phase. Core infrastructure merged to main
+`9d31713` 2026-03-23: production-replica PW test env with virtual USBStreamer/
+ADA8200 nodes, filter-chain convolver + Dirac impulses + 4 gain nodes, GM
+measurement mode, managed-mode services. Rule 13: Architect + QE APPROVED.
+Remaining: AC #4-#7 (automated verification, nix integration target, reusable
+library, Rust test consolidation). Original: owner-selected 2026-03-23.)
 **Depends on:** US-059 (GraphManager operational — manages links in the test
 graph, DONE), signal-gen and pcm-bridge binaries buildable via Nix
 **Blocks:** US-050 Tier 2 (E2E measurement harness builds on this), US-067
