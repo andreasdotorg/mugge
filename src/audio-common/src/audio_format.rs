@@ -34,7 +34,7 @@ pub fn build_audio_format(channels: u32, rate: u32, positions: &[u32]) -> Vec<u8
     const SPA_FORMAT_AUDIO_position: u32 = 0x10005;
     const SPA_MEDIA_TYPE_audio: u32 = 1;
     const SPA_MEDIA_SUBTYPE_raw: u32 = 1;
-    const SPA_AUDIO_FORMAT_F32LE: u32 = 0x11A;
+    const SPA_AUDIO_FORMAT_F32LE: u32 = 0x11B;
 
     let mut buf = Vec::with_capacity(200);
 

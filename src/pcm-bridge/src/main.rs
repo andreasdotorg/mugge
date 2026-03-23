@@ -42,7 +42,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use clap::{Parser, ValueEnum};
-use log::{error, info, warn};
+use log::{info, warn};
 
 /// Operating mode for the audio stream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -233,7 +233,6 @@ fn build_stream_props(args: &Args) -> pipewire::properties::Properties {
                 "media.class" => "Stream/Input/Audio",
                 "node.name" => "pi4audio-pcm-bridge",
                 "node.description" => "PCM Bridge for Web UI",
-                "node.always-process" => "true",
                 "node.passive" => "true",
                 "audio.channels" => &*channels_str,
                 "stream.capture.sink" => "true",
@@ -249,7 +248,6 @@ fn build_stream_props(args: &Args) -> pipewire::properties::Properties {
                 "media.class" => "Stream/Input/Audio",
                 "node.name" => "pi4audio-pcm-bridge-capture",
                 "node.description" => "PCM Bridge Capture",
-                "node.always-process" => "true",
                 "audio.channels" => &*channels_str,
                 "target.object" => target,
             }
@@ -292,6 +290,8 @@ fn run_pipewire(
     let channels_usize = channels as usize;
     let process_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let process_count_cb = process_count.clone();
+
+    let _stream_ptr = stream.as_raw_ptr();
 
     let _listener = stream
         .add_local_listener()
@@ -338,20 +338,22 @@ fn run_pipewire(
                 pipewire_sys::pw_stream_queue_buffer(stream.as_raw_ptr(), raw_buf);
             }
         })
-        .state_changed(|stream, _data, old, new| {
+        .state_changed(|_stream, _data, old, new| {
             info!("PipeWire stream state: {:?} -> {:?}", old, new);
-            if matches!(new, pipewire::stream::StreamState::Paused) {
-                if let Err(e) = stream.set_active(true) {
-                    error!("Failed to activate PipeWire stream: {}", e);
-                }
-            }
         })
         .register()
         .expect("Failed to register stream listener");
 
-    let mut flags = pipewire::stream::StreamFlags::MAP_BUFFERS
-        | pipewire::stream::StreamFlags::RT_PROCESS
-        | pipewire::stream::StreamFlags::DRIVER;
+    // F-083: Standalone mode uses AUTOCONNECT without DRIVER or RT_PROCESS.
+    // The target sink's driver schedules our follower node (same approach
+    // as pw-play). DRIVER causes -95/ENOTSUP from audioadapter
+    // negotiate_format. node.always-process is omitted in standalone mode
+    // so PW assigns us to the target's scheduling group normally.
+    // Managed mode uses RT_PROCESS (driver is USBStreamer via node.group).
+    let mut flags = pipewire::stream::StreamFlags::MAP_BUFFERS;
+    if args.managed {
+        flags |= pipewire::stream::StreamFlags::RT_PROCESS;
+    }
     if !args.managed {
         flags |= pipewire::stream::StreamFlags::AUTOCONNECT;
     }
@@ -365,6 +367,10 @@ fn run_pipewire(
         .expect("Failed to connect PipeWire stream");
 
     info!("PipeWire stream connected ({:?} mode), entering main loop", args.mode);
+
+    // F-083: No deferred activation timer needed. Standalone mode uses
+    // AUTOCONNECT without DRIVER — the target sink's driver schedules
+    // our node. Managed mode activation is handled by GraphManager.
 
     let mainloop_ptr = mainloop.as_raw_ptr();
     let _shutdown_timer = mainloop.loop_().add_timer({
@@ -669,12 +675,19 @@ mod tests {
         #[test]
         fn props_both_modes_always_process() {
             ensure_pw_init();
+            // Non-managed modes: no node.always-process (F-083: prevents
+            // PW scheduling issues in standalone mode).
             let monitor_args = make_args(Mode::Monitor, "sink", None, 3);
             let capture_args = make_args(Mode::Capture, "sink", Some("src"), 8);
             let monitor_props = build_stream_props(&monitor_args);
             let capture_props = build_stream_props(&capture_args);
-            assert_eq!(monitor_props.get("node.always-process"), Some("true"));
-            assert_eq!(capture_props.get("node.always-process"), Some("true"));
+            assert_eq!(monitor_props.get("node.always-process"), None);
+            assert_eq!(capture_props.get("node.always-process"), None);
+            // Managed mode: has node.always-process to keep the node
+            // scheduled when the group driver is running.
+            let managed_args = make_managed_args(Mode::Monitor, "sink", 3);
+            let managed_props = build_stream_props(&managed_args);
+            assert_eq!(managed_props.get("node.always-process"), Some("true"));
         }
 
         #[test]

@@ -593,6 +593,8 @@ fn run_pipewire(
     // Playback stream (Section 3.1)
     // -----------------------------------------------------------------------
 
+    let rate_str = args.rate.to_string();
+    let latency_str = format!("{}/{}", args.rate / 10, args.rate); // 100ms default latency
     let mut playback_props = pipewire::properties::properties! {
         "media.type" => "Audio",
         "media.category" => "Playback",
@@ -600,11 +602,18 @@ fn run_pipewire(
         "media.class" => "Stream/Output/Audio",
         "node.name" => "pi4audio-signal-gen",
         "node.description" => "RT Signal Generator",
-        "node.group" => "pi4audio.usbstreamer",
         "audio.channels" => &*channels_str,
         "audio.position" => "AUX0,AUX1,AUX2,AUX3,AUX4,AUX5,AUX6,AUX7",
-        "node.always-process" => "true",
+        "node.rate" => &*format!("1/{rate_str}"),
+        "node.latency" => &*latency_str,
     };
+    if args.managed {
+        // Managed mode: always-process keeps the node scheduled even when
+        // the graph would otherwise suspend. node.group ties scheduling
+        // to the USBStreamer driver.
+        playback_props.insert("node.always-process", "true");
+        playback_props.insert("node.group", "pi4audio.usbstreamer");
+    }
     if !args.managed && !args.target.is_empty() {
         playback_props.insert("target.object", &*args.target);
     }
@@ -637,6 +646,8 @@ fn run_pipewire(
     let playback_capture_buf = capture_buf.clone();
     let playback_conn_state = conn_state.clone();
     let channels = args.channels as usize;
+
+    let _playback_stream_ptr = playback_stream.as_raw_ptr();
 
     // Register the playback process callback.
     let _playback_listener = playback_stream
@@ -718,13 +729,12 @@ fn run_pipewire(
         pipewire::stream::StreamFlags::MAP_BUFFERS
             | pipewire::stream::StreamFlags::RT_PROCESS
     } else {
-        // Standalone mode: PipeWire auto-links to target.
-        // DRIVER makes this stream self-clocking (needed when no
-        // group driver exists).
+        // Standalone mode (F-083): No DRIVER or RT_PROCESS. The target
+        // sink's driver schedules our node. Without node.always-process,
+        // PW assigns us to the target's driver normally (like pw-play).
+        // DRIVER causes -95 ENOTSUP from audioadapter negotiate_format.
         pipewire::stream::StreamFlags::AUTOCONNECT
             | pipewire::stream::StreamFlags::MAP_BUFFERS
-            | pipewire::stream::StreamFlags::RT_PROCESS
-            | pipewire::stream::StreamFlags::DRIVER
     };
 
     playback_stream
@@ -750,7 +760,7 @@ fn run_pipewire(
     // from audioadapter negotiate_format when target doesn't exist).
     // -----------------------------------------------------------------------
 
-    let (_capture_stream, _capture_listener) = if !args.capture_target.is_empty() {
+    let (_capture_stream, _capture_listener, _capture_stream_ptr) = if !args.capture_target.is_empty() {
         let mut capture_props = pipewire::properties::properties! {
             "media.type" => "Audio",
             "media.category" => "Capture",
@@ -758,11 +768,13 @@ fn run_pipewire(
             "media.class" => "Stream/Input/Audio",
             "node.name" => "pi4audio-signal-gen-capture",
             "node.description" => "RT Signal Generator (UMIK-1 capture)",
-            "node.group" => "pi4audio.usbstreamer",
             "audio.channels" => "1",
             "audio.position" => "MONO",
-            "node.always-process" => "true",
         };
+        if args.managed {
+            capture_props.insert("node.always-process", "true");
+            capture_props.insert("node.group", "pi4audio.usbstreamer");
+        }
         if !args.managed {
             capture_props.insert("target.object", &*args.capture_target);
         }
@@ -780,6 +792,8 @@ fn run_pipewire(
         let mut capture_params: [&libspa::pod::Pod; 1] = [capture_fmt_pod];
 
         let cap_buf_for_cb = capture_buf.clone();
+
+        let capture_stream_ptr = capture_stream.as_raw_ptr();
 
         // Register the capture process callback.
         let listener = capture_stream
@@ -851,10 +865,9 @@ fn run_pipewire(
             pipewire::stream::StreamFlags::MAP_BUFFERS
                 | pipewire::stream::StreamFlags::RT_PROCESS
         } else {
-            // Standalone mode: PipeWire auto-links to target.
+            // Standalone mode (F-083): No DRIVER (causes ENOTSUP).
             pipewire::stream::StreamFlags::AUTOCONNECT
                 | pipewire::stream::StreamFlags::MAP_BUFFERS
-                | pipewire::stream::StreamFlags::RT_PROCESS
         };
 
         capture_stream
@@ -872,10 +885,10 @@ fn run_pipewire(
             info!("PipeWire capture stream connected (target: {})", args.capture_target);
         }
 
-        (Some(capture_stream), Some(listener))
+        (Some(capture_stream), Some(listener), Some(capture_stream_ptr))
     } else {
         info!("Capture stream disabled (--capture-target is empty)");
-        (None, None)
+        (None, None, None)
     };
 
     // -----------------------------------------------------------------------
@@ -889,6 +902,10 @@ fn run_pipewire(
         args.device_watch.clone(),
     );
     info!("PipeWire registry listener registered (watching: {})", args.device_watch);
+
+    // F-083: No deferred activation timer needed. Standalone mode uses
+    // AUTOCONNECT without DRIVER — the target sink's driver schedules
+    // our nodes. Managed mode activation is handled by GraphManager.
 
     // Shutdown timer: poll the AtomicBool every 100ms and quit the PW loop.
     // We capture the raw pointer because MainLoop is not Clone.
