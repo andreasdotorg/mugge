@@ -18,10 +18,8 @@ ExecStart=/home/ela/bin/pcm-bridge \
 Restart=on-failure
 RestartSec=2
 
-# RT scheduling: inherited from PipeWire.
-# pcm-bridge uses RT_PROCESS streams, so PipeWire's data thread invokes
-# our process callbacks at its own RT priority (SCHED_FIFO/88). The binary
-# itself runs at normal priority; only the PW callback thread is RT.
+# RT scheduling: PipeWire's data loop thread runs at the server's
+# priority (SCHED_FIFO/88). The binary itself runs at normal priority.
 OOMScoreAdjust=-500
 LimitMEMLOCK=infinity
 LimitRTPRIO=88

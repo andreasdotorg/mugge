@@ -239,7 +239,6 @@
             pkgs.libsndfile
           ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
             pkgs.alsa-lib
-            pkgs.libjack2
             # PipeWire dev deps for cargo build of PW crates
             pkgs.pipewire
             pkgs.pkg-config
