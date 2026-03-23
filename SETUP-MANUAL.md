@@ -1,21 +1,11 @@
 # Raspberry Pi 4B Portable Audio Workstation — Setup Manual
 
-> **⚠️ DEPRECATION NOTICE**
->
-> This document is superseded by the structured documentation in `docs/`.
-> It is retained as a historical reference but is no longer actively maintained.
-> For current information, see:
-> - `docs/architecture/rt-audio-stack.md` — Current RT audio stack (PW filter-chain convolver)
-> - `docs/operations/safety.md` — Safety operations manual
-> - `docs/guide/howto/development.md` — Development tasks, testing, deployment
-> - `docs/project/` — Project status, tasks, decisions, assumptions
->
-> **D-040 (2026-03-16): CamillaDSP abandoned.** The system now uses PipeWire's
-> built-in filter-chain convolver for all FIR processing (crossover + room
-> correction). CamillaDSP is installed but its service is stopped. Sections 4,
-> 6, and other parts of this manual that describe CamillaDSP as the active DSP
-> engine are **historical** — the current architecture is documented in
-> `docs/architecture/rt-audio-stack.md`.
+> **Note:** For additional reference material, see the structured documentation
+> in `docs/`. In particular:
+> - `docs/architecture/rt-audio-stack.md` — detailed RT audio stack architecture
+> - `docs/operations/safety.md` — safety operations manual
+> - `docs/guide/howto/development.md` — development tasks, testing, deployment
+> - `docs/project/` — project status, decisions, assumptions
 >
 > Ground truth hierarchy (D-023): Hardware state → docs/ → SETUP-MANUAL.md
 
@@ -26,7 +16,7 @@
 3. [Base OS Setup & Optimization](#3-base-os-setup--optimization)
 4. [Audio Stack Architecture](#4-audio-stack-architecture)
 5. [PipeWire Configuration](#5-pipewire-configuration)
-6. [CamillaDSP — Crossover & Room Correction](#6-camilladsp--crossover--room-correction)
+6. [DSP — FIR Crossover & Room Correction](#6-dsp--fir-crossover--room-correction)
 7. [Mixxx — DJ Software](#7-mixxx--dj-software)
 8. [Reaper — Live Mixing & DAW](#8-reaper--live-mixing--daw)
 9. [MIDI Controllers](#9-midi-controllers)
@@ -54,9 +44,6 @@
 | minidsp UMIK-1 | Measurement microphone | USB to Pi |
 
 ### Signal Flow — DJ/PA Mode
-
-> **D-040 update:** The pre-D-040 diagram below has been replaced with the
-> current PipeWire filter-chain architecture. No ALSA Loopback or CamillaDSP.
 
 ```
                                     ┌──────────────────────────────────────┐
@@ -91,11 +78,6 @@
 ```
 
 ### Signal Flow — Live Performance Mode (Cole Porter)
-
-> **D-040 update:** Reaper outputs route through the same PipeWire
-> filter-chain convolver. Singer IEM bypasses the convolver entirely
-> (direct PipeWire link to USBStreamer ch 6-7). Quantum 256 for low
-> latency (~5.3ms PA path).
 
 ```
                                     ┌─────────────────────────────────────┐
@@ -176,27 +158,36 @@ Pi USB 3.0 port 2 ──── Powered USB 3.0 Hub
 
 ### ADAT Connection
 
-- USBStreamer B ADAT OUT → ADA8200 ADAT IN (TOSLINK optical cable)
-- ADA8200 ADAT OUT → USBStreamer B ADAT IN (second TOSLINK cable, for recording/mic input)
-- Both devices must be set to the **same sample rate** (48kHz recommended)
-- Clock: The USBStreamer is the clock master (USB-synced). The ADA8200 should be set to
-  **ADAT clock source** (external/ADAT sync) so it slaves to the USBStreamer's clock
-  coming via the ADAT stream.
+The USBStreamer and ADA8200 communicate over ADAT (Alesis Digital Audio Tape), which
+carries 8 channels of digital audio over a single TOSLINK optical cable at 48kHz.
+Two cables are needed: one from the USBStreamer's ADAT OUT to the ADA8200's ADAT IN
+(this carries the 8 output channels to the analog converters), and a second from the
+ADA8200's ADAT OUT back to the USBStreamer's ADAT IN (this carries the mic/line
+inputs back to the Pi for recording).
+
+Both devices must be set to the same sample rate (48kHz). The USBStreamer acts as the
+clock master because it derives its clock from USB, which is ultimately controlled by the
+Pi. The ADA8200 must be set to ADAT sync mode (external clock source) so it slaves to
+the USBStreamer's clock embedded in the ADAT stream. If the ADA8200 is set to internal
+clock, the two devices will drift apart over time, causing periodic clicks and dropouts.
 
 ### ADA8200 Settings
 
-- ADAT sync mode (not internal clock)
-- 48kHz sample rate
-- Phantom power ON for channels with condenser mics (ch1 for vocal mic)
-- Input gain: set per channel as needed
+Configure the ADA8200 to receive its clock from the ADAT stream (ADAT sync mode, not
+internal clock) and operate at 48kHz. Enable phantom power (+48V) on channel 1 for the
+vocal condenser microphone. Leave phantom power off on unused channels. Set the input
+gain for each channel according to the connected source -- the vocal mic on channel 1
+will need enough gain to bring the signal to a healthy level without clipping.
 
 ### Power
 
-- Pi 4B: Official USB-C power supply (5V/3A minimum), or a reliable 5V/3A supply in the flight case
-- Powered USB hub: its own power supply
-- ADA8200: IEC mains
-- Class D amp: its own power supply
-- Consider a single IEC inlet on the flight case with internal power distribution strip
+The system requires multiple independent power supplies. The Pi 4B needs the official
+USB-C power supply (5V, 3A minimum) or an equivalent reliable supply mounted inside the
+flight case. The powered USB hub has its own power supply. The ADA8200 and the Class D
+amplifier each connect to mains power via IEC cables. For a clean flight case build,
+consider a single IEC inlet on the case panel with an internal power distribution strip
+feeding all devices. This reduces setup time at venues to plugging in a single mains
+cable.
 
 ---
 
@@ -204,9 +195,15 @@ Pi USB 3.0 port 2 ──── Powered USB 3.0 Hub
 
 ### Starting Point
 
-You have Raspberry Pi OS Trixie (Debian 13 based) freshly installed.
+This guide assumes you have Raspberry Pi OS Trixie (Debian 13 based) freshly installed
+on a microSD card and can boot the Pi with a monitor, keyboard, and network connection
+(Ethernet recommended for the initial setup). Once the base system is configured, all
+further interaction can happen over SSH and VNC.
 
 ### 3.1 Initial System Update
+
+Before doing anything else, update the system to ensure you have the latest packages
+and security fixes:
 
 ```bash
 sudo apt update && sudo apt full-upgrade -y
@@ -215,7 +212,8 @@ sudo reboot
 
 ### 3.2 Firmware & Boot Configuration
 
-Edit boot config for audio optimization:
+The Pi 4's boot configuration controls GPU memory allocation, hardware features, and
+clock behavior. Several settings need adjustment for audio work. Edit the boot config:
 
 ```bash
 sudo nano /boot/firmware/config.txt
@@ -250,7 +248,10 @@ over_voltage=2
 
 ### 3.3 CPU Governor — Performance Mode
 
-Force the CPU to run at maximum frequency at all times:
+By default, the Pi 4's CPU frequency scales dynamically based on load. While this saves
+power, the frequency transitions introduce latency spikes that can cause audio glitches.
+For a dedicated audio workstation, the CPU should run at maximum frequency at all times.
+The performance governor locks the clock speed, eliminating governor transition latency:
 
 ```bash
 # Install cpufrequtils
@@ -275,7 +276,7 @@ The standard Raspberry Pi OS Trixie kernel (`6.12.47+rpt-rpi-v8`) is compiled wi
 `CONFIG_PREEMPT=y` (full preemption). For audio work, a fully preemptible kernel
 (`PREEMPT_RT`) provides bounded worst-case scheduling latency. US-003 T3e measured a
 maximum of 209 us under sustained DSP load on the RT kernel — well within the 5.33 ms
-processing deadline at chunksize 256.
+processing deadline at quantum 256.
 
 **Minimum version: `6.12.62+rpt-rpi-v8-rt` (D-022).** Earlier PREEMPT_RT kernels
 (including `6.12.47+rpt-rpi-v8-rt`) have an ABBA deadlock in the V3D GPU driver
@@ -320,6 +321,11 @@ zcat /proc/config.gz | grep PREEMPT
 
 ### 3.5 System Tuning for Audio
 
+A few kernel parameters need adjustment for audio work. Reducing swappiness prevents the
+kernel from paging out audio buffers to disk under memory pressure, which would cause
+massive latency spikes. Increasing the inotify watch limit accommodates Reaper, which
+monitors many files simultaneously.
+
 ```bash
 # Create audio tuning sysctl config
 sudo tee /etc/sysctl.d/99-audio.conf << 'EOF'
@@ -338,6 +344,11 @@ sudo sysctl --system
 
 ### 3.6 User Permissions for Real-Time Audio
 
+PipeWire and audio applications need the ability to use real-time scheduling (SCHED_FIFO)
+to meet their processing deadlines reliably. On Linux, this requires the user to be in
+the `audio` group and have appropriate PAM limits configured. Without these settings,
+PipeWire will fall back to normal scheduling priority, which may cause xruns under load.
+
 ```bash
 # Add your user to the audio group
 sudo usermod -aG audio $USER
@@ -350,14 +361,17 @@ sudo tee /etc/security/limits.d/99-audio.conf << 'EOF'
 EOF
 ```
 
-These settings allow audio processes to:
-- Use real-time scheduling priority up to 95
-- Lock memory (prevent swapping of audio buffers)
-- Use the highest nice priority
-
-**Log out and back in** (or reboot) for group membership to take effect.
+These settings allow any process running as a member of the audio group to use real-time
+scheduling priority up to 95, lock memory pages to prevent audio buffers from being
+swapped to disk, and use the highest nice priority for non-RT scheduling. You must log
+out and back in (or reboot) for the group membership change to take effect.
 
 ### 3.7 Disable Unnecessary Services
+
+Background services compete for CPU time and can cause unpredictable latency spikes.
+Bluetooth, modem management, printing services, and button daemons are not needed on a
+dedicated audio workstation and should be disabled. Keep Avahi (mDNS) enabled if you
+want to reach the Pi by hostname (e.g., `mugge.local`) rather than IP address.
 
 ```bash
 # Disable services that cause latency spikes
@@ -378,8 +392,11 @@ sudo systemctl disable --now cups-browsed.service 2>/dev/null
 
 ### 3.8 IRQ Affinity (Optional, Advanced)
 
-Pin the USB audio IRQ to a dedicated CPU core, and pin audio applications to other cores.
-This prevents cache thrashing.
+For the lowest possible latency, you can pin the USB audio interrupt to a dedicated CPU
+core and pin audio applications to other cores. This prevents cache thrashing: when the
+USB interrupt handler runs on the same core as PipeWire, it evicts PipeWire's data from
+the L1 cache, forcing a cache refill on the next audio processing cycle. By isolating
+the interrupt to its own core, the audio processing core's cache stays warm.
 
 ```bash
 # Find the USB IRQ for the USBStreamer
@@ -389,7 +406,7 @@ cat /proc/interrupts | grep xhci
 echo 8 | sudo tee /proc/irq/56/smp_affinity
 # (8 = binary 1000 = core 3)
 
-# Pin CamillaDSP to cores 0-1 using taskset (done in systemd unit, see below)
+# Pin PipeWire to cores 0-1 using taskset (done in systemd unit, see below)
 # Pin Mixxx/Reaper to cores 1-2
 ```
 
@@ -402,7 +419,7 @@ scheduler using kernel command line parameters:
 #
 # This dedicates core 3 exclusively to processes you pin to it (via taskset).
 # The kernel will never schedule anything else on core 3.
-# Then pin CamillaDSP to core 3: taskset -c 3 camilladsp ...
+# Then pin PipeWire to core 3: taskset -c 3 pipewire ...
 ```
 
 This is optional and should be tested — sometimes the kernel's default scheduling is fine.
@@ -411,18 +428,14 @@ This is optional and should be tested — sometimes the kernel's default schedul
 
 ## 4. Audio Stack Architecture
 
-> **D-040 (2026-03-16): This section describes the pre-D-040 architecture
-> (PipeWire + CamillaDSP via ALSA Loopback).** The current architecture uses
-> PipeWire's built-in filter-chain convolver — no ALSA Loopback, no external
-> DSP process. See `docs/architecture/rt-audio-stack.md` for the current
-> architecture, signal flow, and performance numbers.
+### PipeWire as Both Audio Server and DSP Engine
 
-### Architecture Decision: PipeWire as the Foundation
-
-**PipeWire** is the modern Linux audio server that replaces both PulseAudio and JACK.
-On Raspberry Pi OS Trixie (Debian 13), PipeWire is the default audio system.
-
-The architecture:
+PipeWire is the modern Linux audio server that replaces both PulseAudio and JACK. On
+Raspberry Pi OS Trixie (Debian 13), it is the default audio system. In this workstation,
+PipeWire serves a dual role: it provides the JACK API that Mixxx and Reaper connect to,
+and it runs the FIR convolver for crossover and room correction as a built-in
+filter-chain module. There is no external DSP process, no ALSA Loopback bridge, and no
+JACK wrapper -- the entire audio pipeline lives inside PipeWire's processing graph.
 
 ```
 ┌──────────────┐  ┌──────────────┐
@@ -431,42 +444,40 @@ The architecture:
 └──────┬───────┘  └──────┬───────┘
        │                 │
        ▼                 ▼
-┌─────────────────────────────────┐
-│   PipeWire (pw-jack bridge)     │
-│   Acts as JACK server           │
-│   Handles all routing           │
-└──────────────┬──────────────────┘
-               │
+┌─────────────────────────────────────────────┐
+│   PipeWire                                  │
+│   ├─ pw-jack bridge (JACK API for apps)     │
+│   ├─ filter-chain convolver (FIR DSP)       │
+│   │   ├─ ch0-1: Mains FIR (HP + correction)│
+│   │   ├─ ch2-3: Subs FIR (LP + correction) │
+│   │   └─ Gain nodes (linear Mult params)    │
+│   ├─ GraphManager (link topology control)   │
+│   └─ Direct links (headphone/IEM bypass)    │
+└──────────────┬──────────────────────────────┘
+               │ USB
                ▼
 ┌─────────────────────────────────┐
-│   CamillaDSP                    │
-│   ALSA loopback capture ←──────│── receives audio from PipeWire
-│   ALSA direct playback ────────│── outputs to USBStreamer
-│   Crossover + FIR convolution   │
-└─────────────────────────────────┘
-               │
-               ▼
-┌─────────────────────────────────┐
-│   USBStreamer B (ALSA hw:X,0)   │
+│   USBStreamer B (8ch ADAT)      │
 │   8 channels out via ADAT       │
 └─────────────────────────────────┘
 ```
 
-**Why this architecture:**
+This architecture has several key advantages. First, the convolver runs inside the
+PipeWire graph cycle, which means it adds no extra buffering latency beyond the
+quantum -- a dramatic improvement over architectures that bridge between audio servers
+via loopback devices. Second, PipeWire's convolver uses FFTW3 with ARM NEON
+optimizations, achieving 3-5.6x better CPU efficiency than external DSP engines on the
+Pi 4B's ARM processor (1.70% CPU at quantum 1024, 3.47% at quantum 256 -- see BM-2
+benchmarks). Third, all audio nodes are native PipeWire objects with individually
+linkable ports, which means the GraphManager can rewire the topology for different
+operational modes without restarting any services.
 
-- CamillaDSP operates at the ALSA level (below PipeWire) for minimum latency and
-  maximum efficiency on the DSP path
-- PipeWire provides the JACK API for Mixxx and Reaper, plus flexible routing
-- CamillaDSP captures from an ALSA loopback device that PipeWire writes to
-- CamillaDSP holds exclusive ALSA access to all 8 USBStreamer output channels
-- Monitor/headphone outputs (ch 4-7) pass through CamillaDSP without FIR
-  processing (no room correction needed for headphones)
-
-**Alternative: CamillaDSP with PipeWire filter chain**
-
-PipeWire has a built-in "filter chain" mechanism that can host CamillaDSP as a plugin.
-This is simpler to configure but slightly less flexible. We'll document the ALSA loopback
-approach as the primary method, with notes on the PipeWire filter chain alternative.
+> **Historical note:** This project originally used CamillaDSP as an external DSP
+> engine connected via ALSA Loopback. Decision D-040 (2026-03-16) abandoned
+> CamillaDSP in favor of PipeWire's built-in filter-chain convolver after BM-2
+> benchmarks showed the PipeWire approach was dramatically more CPU-efficient on
+> ARM hardware. CamillaDSP 3.0.1 remains installed on the Pi but its service is
+> stopped.
 
 ---
 
@@ -474,37 +485,30 @@ approach as the primary method, with notes on the PipeWire filter chain alternat
 
 ### 5.1 Install PipeWire (if not already present)
 
-```bash
-# On Trixie, PipeWire should be installed. Verify:
-pipewire --version
+On Raspberry Pi OS Trixie, PipeWire is the default audio system and should already be
+installed. Verify this by checking the version:
 
-# If not installed:
+```bash
+pipewire --version
+```
+
+If PipeWire is not installed for some reason, install it along with its companion
+packages. The `pipewire-jack` package provides the JACK API bridge that Mixxx and Reaper
+use, and `wireplumber` is the session manager that handles device detection:
+
+```bash
 sudo apt install -y pipewire pipewire-audio pipewire-jack pipewire-alsa \
     pipewire-pulse wireplumber
 
-# Install JACK tools for routing management
-sudo apt install -y qjackctl pw-jack
+# The pw-jack wrapper launches applications with PipeWire's JACK bridge
+sudo apt install -y pw-jack
 ```
 
-### 5.2 Create ALSA Loopback Device
+### 5.2 Verify Audio Devices
 
-The loopback device creates a virtual soundcard. PipeWire writes to it, CamillaDSP
-reads from it.
-
-```bash
-# Load the loopback module at boot
-echo "snd-aloop" | sudo tee -a /etc/modules-load.d/audio.conf
-
-# Load it now
-sudo modprobe snd-aloop
-
-# Configure the loopback with proper channel count
-sudo tee /etc/modprobe.d/snd-aloop.conf << 'EOF'
-# pcm_substreams=2: one for DJ mode (stereo), one for live mode
-# Note: channels is not a valid snd-aloop parameter (removed)
-options snd-aloop index=10 pcm_substreams=2
-EOF
-```
+With the PipeWire filter-chain architecture, there is no need for an ALSA Loopback
+device. Audio flows directly between PipeWire nodes within the same processing graph.
+The only ALSA device the system accesses directly is the USBStreamer itself.
 
 ### 5.3 Identify the USBStreamer
 
@@ -548,11 +552,13 @@ context.properties = {
 EOF
 ```
 
-Buffer size notes:
-- `quantum = 256` at 48kHz = 5.3ms latency (safe starting point for Pi 4)
-- You can try `quantum = 128` (2.7ms) if your system handles it without xruns
-- For the live performance scenario, 256 is more than acceptable
-- For DJing, latency is less critical (you're not monitoring through the system)
+The quantum value determines the audio buffer size and therefore the processing latency.
+At 48kHz, a quantum of 256 samples equals 5.3ms -- a safe starting point for the Pi 4
+that provides excellent latency for live performance. For DJ mode, the quantum is
+increased to 1024 at runtime (via `pw-metadata`) because latency is not critical when
+DJing and the larger buffer gives the convolver and Mixxx more CPU headroom. The
+`min-quantum` and `max-quantum` settings define the range within which runtime quantum
+changes are allowed.
 
 **Configure the USBStreamer as a PipeWire node:**
 
@@ -598,14 +604,22 @@ EOF
 Note: Adjust `hw:1,0` if the USBStreamer gets a different card number. The udev rule
 in 5.3 should keep it stable.
 
-**Important: Use AUX channel positions.** Using standard surround positions (FL, FR, RL,
-etc.) causes PipeWire to automatically upmix/downmix stereo sources to match the surround
-layout. Since our channels are discrete processing paths (not surround speakers), using
-`AUX0-AUX7` positions prevents this unwanted behavior.
+It is important to use the AUX channel position identifiers (AUX0 through AUX7) rather
+than standard surround positions like FL, FR, RL, and so on. When PipeWire sees standard
+surround channel positions, it automatically applies upmix and downmix processing to
+convert between different channel counts -- for example, folding a stereo source into a
+7.1 surround layout. Since the 8 channels in this system are discrete processing paths
+(left main, right main, sub 1, sub 2, headphone L/R, IEM L/R) rather than surround
+speaker positions, using AUX positions tells PipeWire to treat them as raw channels with
+no automatic mixing.
 
 ### 5.5 WirePlumber Routing Rules
 
-WirePlumber handles automatic connection of audio streams. Configure default routing:
+WirePlumber is PipeWire's session manager. By default, it automatically connects new
+audio streams to available sinks and sources. In this system, the GraphManager handles
+all link topology, so WirePlumber's auto-connect behavior must be disabled for the
+USBStreamer to prevent it from creating unwanted connections that interfere with the
+managed routing:
 
 ```bash
 mkdir -p ~/.config/wireplumber/wireplumber.conf.d/
@@ -619,7 +633,7 @@ monitor.alsa.rules = [
     actions = {
       update-props = {
         # Don't let WirePlumber auto-connect to the USBStreamer
-        # We manage connections explicitly via CamillaDSP and scripts
+        # GraphManager manages all link topology (D-043)
         node.autoconnect = false
       }
     }
@@ -630,22 +644,14 @@ EOF
 
 ---
 
-## 6. CamillaDSP — Crossover & Room Correction
+## 6. DSP — FIR Crossover & Room Correction
 
-> **D-040 (2026-03-16): CamillaDSP is no longer the active DSP engine.**
-> The system now uses PipeWire's built-in filter-chain convolver (FFTW3/NEON)
-> which is 3-5.6x more CPU-efficient than CamillaDSP on Pi 4B ARM. CamillaDSP
-> 3.0.1 remains installed but its systemd service is stopped. This entire
-> section is retained as **historical reference** for the original architecture.
-> The current convolver configuration is at
-> `~/.config/pipewire/pipewire.conf.d/30-filter-chain-convolver.conf` on the Pi.
-> See `docs/architecture/rt-audio-stack.md` Section 4 for details.
-
-### Current Architecture: PipeWire Filter-Chain Convolver (D-040)
-
-The following subsections document the current DSP setup. For the full
-configuration reference with all properties explained, see the lab note
-`docs/lab-notes/US-059-filter-chain-config-reference.md`.
+This section covers the DSP engine that handles crossover filtering and room correction.
+The system uses PipeWire's built-in filter-chain convolver, which applies combined
+minimum-phase FIR filters to each speaker output channel. The convolver runs as a native
+PipeWire node inside the audio processing graph, using FFTW3 with ARM NEON optimizations
+for efficient convolution on the Pi 4B. For the full configuration reference with all
+properties explained, see `docs/lab-notes/US-059-filter-chain-config-reference.md`.
 
 #### Configuration Files
 
@@ -704,7 +710,12 @@ Each channel has two stages:
 
 #### Gain Control
 
-Per-channel gain is set via `linear` builtin nodes with `Mult` parameters:
+Each speaker channel has an independent gain stage implemented as a `linear` builtin
+node with a `Mult` (multiply) parameter. The gain is expressed as a linear multiplier
+where 1.0 = 0 dB (unity), 0.001 = -60 dB, and 0.0 = muted. These gain nodes were
+introduced as a workaround for PipeWire 1.4.9 silently ignoring `config.gain` on
+convolver nodes. The current default values provide heavy attenuation as a safety
+measure:
 
 | Gain Node | Current Mult | Equivalent dB | Speaker |
 |-----------|-------------|---------------|---------|
@@ -713,7 +724,8 @@ Per-channel gain is set via `linear` builtin nodes with `Mult` parameters:
 | `gain_sub1_lp` | 0.000631 | -64 dB | Sub 1 |
 | `gain_sub2_lp` | 0.000631 | -64 dB | Sub 2 |
 
-Adjust gain at runtime (find the convolver node ID first):
+To adjust gain at runtime, you first need to find the convolver node ID, which is
+dynamic and changes across PipeWire restarts:
 
 ```bash
 # Find the convolver node ID (dynamic — changes across PW restarts):
@@ -736,7 +748,11 @@ defaults on PipeWire restart.
 
 #### Quantum Switching
 
-DJ mode uses quantum 1024 (~21ms), live mode uses quantum 256 (~5.3ms):
+The PipeWire quantum can be changed at runtime without restarting PipeWire or the
+convolver. DJ mode uses quantum 1024 (approximately 21ms latency at 48kHz) for maximum
+CPU efficiency, while live mode uses quantum 256 (approximately 5.3ms) to keep the PA
+path below the slapback perception threshold for the singer on stage. The quantum change
+takes effect on the next graph cycle.
 
 ```bash
 # Switch to DJ mode (quantum 1024)
@@ -746,7 +762,8 @@ pw-metadata -n settings 0 clock.force-quantum 1024
 pw-metadata -n settings 0 clock.force-quantum 256
 ```
 
-GraphManager handles quantum transitions automatically during mode switches.
+In normal operation, GraphManager handles quantum transitions automatically as part of
+mode switches. The commands above are for manual use during setup or troubleshooting.
 
 #### Verification
 
@@ -767,9 +784,15 @@ pw-top
 
 #### GraphManager
 
-GraphManager (Rust binary, SCHED_FIFO 80) is the sole PipeWire link manager
-(D-039). It creates and destroys PipeWire links to route audio between
-applications, the convolver, and the USBStreamer.
+GraphManager is a Rust binary that runs at SCHED_FIFO priority 80 and serves as the
+sole PipeWire link manager (D-039). It is responsible for creating and destroying the
+PipeWire links that route audio between applications, the convolver, and the USBStreamer.
+When Mixxx or Reaper appears in the PipeWire graph, GraphManager detects it and creates
+the appropriate link topology for that mode: speaker channels route through the convolver
+for FIR processing, while headphone and IEM channels bypass the convolver via direct
+links to the USBStreamer. GraphManager also handles mode transitions (DJ to Live and
+back), including changing the quantum via `pw-metadata`. It enforces the intended link
+topology by preventing WirePlumber from creating rogue auto-connections (D-043).
 
 ```bash
 # GraphManager runs as a systemd user service
@@ -779,20 +802,18 @@ systemctl --user status pi4audio-graph-manager
 # The web UI communicates with it for graph visualization and mode transitions
 ```
 
-Key responsibilities:
-- Creates links: app → convolver → USBStreamer (speaker channels)
-- Creates bypass links: app → USBStreamer (headphone/IEM channels)
-- Manages mode transitions (DJ ↔ Live) including quantum changes
-- Enforces link topology — prevents WirePlumber from creating rogue links (D-043)
-
 #### pcm-bridge (Level Metering)
 
-pcm-bridge (Rust binary) provides lock-free atomic level metering at 10 Hz via
-TCP JSON on port 9100. The web UI consumes this for real-time level meters.
+pcm-bridge is a Rust binary that taps into the PipeWire graph to provide real-time
+audio level data. It uses lock-free atomic operations to compute peak and RMS levels
+at 10 Hz, streaming the results as JSON over TCP on port 9100. The web UI's dashboard
+and status bar consume this data for the level meters, spectrum analyzer, and clip
+indicators. Restarting pcm-bridge is safe and does not affect the audio path -- it only
+interrupts the level display momentarily.
 
 ```bash
 # pcm-bridge runs as a systemd user service
-systemctl --user status pi4audio-pcm-bridge
+systemctl --user status pcm-bridge@monitor
 
 # Check level data (JSON stream)
 nc localhost 9100
@@ -800,8 +821,11 @@ nc localhost 9100
 
 #### Signal Generator
 
-signal-gen (Rust binary) provides RT-safe measurement audio generation. Hard
-capped at -20 dBFS for safety. Controlled via RPC on port 4001.
+signal-gen is a Rust binary that generates measurement audio (sine waves, sweeps, noise)
+for room correction and testing. Its output is hard-capped at -20 dBFS as a safety
+measure to prevent accidental high-level signals through the amplifier chain. It is
+controlled via RPC on localhost port 4001, and the web UI's Test tab provides a graphical
+interface for signal selection, frequency, and level control.
 
 ```bash
 # signal-gen runs as a systemd user service
@@ -810,28 +834,7 @@ systemctl --user status pi4audio-signal-gen
 
 ---
 
-### Performance Validation
-
-```bash
-# The CamillaDSP backend/GUI combo
-pip install --user camilladsp camilladsp-plot
-
-# Or from the dedicated GUI project:
-cd /tmp
-wget https://github.com/HEnquist/camillagui-backend/releases/download/v3.0.0/camillagui.tar.gz
-tar xzf camillagui.tar.gz -C /opt/camillagui
-```
-
-### 6.3 Directory Structure
-
-```bash
-sudo mkdir -p /etc/camilladsp/{configs,coeffs,filters}
-sudo chown -R $USER:$USER /etc/camilladsp
-```
-
-Place your FIR impulse response WAV files in `/etc/camilladsp/coeffs/`.
-
-### 6.4 Filter Design Philosophy: Why Combined Minimum-Phase FIR
+### 6.1 Filter Design Philosophy: Why Combined Minimum-Phase FIR
 
 This system uses **combined minimum-phase FIR filters** that integrate both the
 crossover and room correction into a single convolution per output channel. This is
@@ -873,8 +876,8 @@ softens the attack — the opposite of what you want.
   the wideband speakers and vice versa.
 
 - **One convolution instead of two processing stages.** The crossover shape is baked
-  into the FIR coefficients along with the room correction. CamillaDSP runs one
-  convolution per channel — potentially *less* CPU than IIR + FIR in series, and
+  into the FIR coefficients along with the room correction. The PipeWire convolver runs
+  one convolution per channel -- potentially *less* CPU than IIR + FIR in series, and
   certainly a simpler, more predictable signal path.
 
 - **Unified phase response.** When IIR and FIR are in series, their phase responses
@@ -882,600 +885,35 @@ softens the attack — the opposite of what you want.
   but also the IIR crossover's phase distortion. With a combined filter, the entire
   magnitude and phase response is designed as a single coherent entity.
 
-**The tradeoff:** Filter generation is more complex. You can't just tweak a crossover
-frequency in CamillaDSP's YAML — you need to regenerate the FIR coefficients. This is
-why the automated room correction pipeline (separate document) is essential. But once
-the filters are generated, the runtime is simpler and better-sounding.
+**The tradeoff:** Filter generation is more complex. You cannot adjust the crossover
+frequency at runtime -- you need to regenerate the FIR coefficients. This is why the
+automated room correction pipeline (separate document) is essential. But once the
+filters are generated, the runtime is simpler and better-sounding.
 
-### 6.5 CamillaDSP Configuration — DJ/PA Mode
-
-This configuration handles:
-- Stereo input from the loopback (from Mixxx via PipeWire)
-- Mixer: stereo → 8 channels (L, R, Sub1, Sub2, HP L, HP R, IEM L, IEM R)
-- Combined minimum-phase FIR per speaker output (crossover + room correction)
-- Independent delay per sub (for time alignment at the listening position)
-- Independent gain per output
-- 8-channel output to USBStreamer (ch0-3: speakers with DSP, ch4-5: engineer
-  headphone passthrough, ch6-7: singer IEM muted in DJ mode)
-
-```bash
-cat > /etc/camilladsp/configs/dj-pa.yml << 'YAMLEOF'
----
-devices:
-  samplerate: 48000
-  chunksize: 2048
-  queuelimit: 4
-  capture:
-    type: Alsa
-    channels: 2
-    device: "hw:Loopback,1,0"
-    format: S32LE
-  playback:
-    type: Alsa
-    channels: 8
-    device: "hw:USBStreamer,0"
-    format: S32LE
-
-filters:
-  # ---- Combined FIR filters (crossover + room correction) ----
-  # Each filter contains the crossover slope AND room correction for that
-  # specific output channel, generated as a single minimum-phase FIR.
-  # See the automated room correction pipeline for how these are created.
-
-  # Left wideband: highpass crossover + room correction
-  fir_left:
-    type: Conv
-    parameters:
-      type: Wav
-      filename: /etc/camilladsp/coeffs/combined_left_hp.wav
-      channel: 0
-
-  # Right wideband: highpass crossover + room correction
-  fir_right:
-    type: Conv
-    parameters:
-      type: Wav
-      filename: /etc/camilladsp/coeffs/combined_right_hp.wav
-      channel: 0
-
-  # Sub 1: lowpass crossover + room correction for sub 1 position
-  fir_sub1:
-    type: Conv
-    parameters:
-      type: Wav
-      filename: /etc/camilladsp/coeffs/combined_sub1_lp.wav
-      channel: 0
-
-  # Sub 2: lowpass crossover + room correction for sub 2 position
-  fir_sub2:
-    type: Conv
-    parameters:
-      type: Wav
-      filename: /etc/camilladsp/coeffs/combined_sub2_lp.wav
-      channel: 0
-
-  # ---- Per-sub delay for time alignment ----
-  # These compensate for the physical distance difference between each sub
-  # and the mains, as measured at the listening position (center of dancefloor).
-  # Positive delay = this output arrives later (sub is closer to listener).
-  # Set to 0.0 initially; the measurement pipeline determines the values.
-  delay_sub1:
-    type: Delay
-    parameters:
-      delay: 0.0
-      unit: ms
-      subsample: false
-
-  delay_sub2:
-    type: Delay
-    parameters:
-      delay: 0.0
-      unit: ms
-      subsample: false
-
-  # ---- Gain trims ----
-  gain_left:
-    type: Gain
-    parameters:
-      gain: 0.0
-      inverted: false
-      mute: false
-
-  gain_right:
-    type: Gain
-    parameters:
-      gain: 0.0
-      inverted: false
-      mute: false
-
-  gain_sub1:
-    type: Gain
-    parameters:
-      gain: 0.0
-      inverted: false
-      mute: false
-
-  gain_sub2:
-    type: Gain
-    parameters:
-      gain: 0.0
-      inverted: false
-      mute: false
-
-mixers:
-  # Expand stereo to 8 channels for USBStreamer
-  # ch0: Left wideband, ch1: Right wideband
-  # ch2: Sub1 (mono sum), ch3: Sub2 (mono sum)
-  # ch4: Engineer HP L, ch5: Engineer HP R
-  # ch6: Singer IEM L (muted), ch7: Singer IEM R (muted)
-  stereo_to_octa:
-    channels:
-      in: 2
-      out: 8
-    mapping:
-      # Channel 0: Left wideband
-      - dest: 0
-        sources:
-          - channel: 0
-            gain: 0
-            inverted: false
-      # Channel 1: Right wideband
-      - dest: 1
-        sources:
-          - channel: 1
-            gain: 0
-            inverted: false
-      # Channel 2: Sub 1 = L+R summed (-6dB each to avoid clipping)
-      - dest: 2
-        sources:
-          - channel: 0
-            gain: -6
-            inverted: false
-          - channel: 1
-            gain: -6
-            inverted: false
-      # Channel 3: Sub 2 = L+R summed (-6dB each)
-      - dest: 3
-        sources:
-          - channel: 0
-            gain: -6
-            inverted: false
-          - channel: 1
-            gain: -6
-            inverted: false
-      # Channel 4: Engineer headphone L (pre-DSP passthrough)
-      - dest: 4
-        sources:
-          - channel: 0
-            gain: 0
-            inverted: false
-      # Channel 5: Engineer headphone R (pre-DSP passthrough)
-      - dest: 5
-        sources:
-          - channel: 1
-            gain: 0
-            inverted: false
-      # Channels 6-7: Singer IEM — muted in DJ mode (no singer on stage)
-      # CamillaDSP outputs silence on unmapped channels
-
-pipeline:
-  # Step 1: Mix stereo to 8 channels
-  - type: Mixer
-    name: stereo_to_octa
-
-  # Step 2: Combined FIR (crossover + room correction) per channel
-  - type: Filter
-    channel: 0
-    names:
-      - fir_left
-      - gain_left
-
-  - type: Filter
-    channel: 1
-    names:
-      - fir_right
-      - gain_right
-
-  # Sub 1: FIR + delay + gain
-  - type: Filter
-    channel: 2
-    names:
-      - fir_sub1
-      - delay_sub1
-      - gain_sub1
-
-  # Sub 2: FIR + delay + gain (independent from Sub 1)
-  - type: Filter
-    channel: 3
-    names:
-      - fir_sub2
-      - delay_sub2
-      - gain_sub2
-YAMLEOF
-```
-
-**Why `chunksize: 2048`?** With combined FIR filters (crossover + room correction),
-the filter length is typically 8192-16384 taps. CamillaDSP's partitioned convolution
-works most efficiently when the chunksize is a reasonable fraction of the filter length.
-A chunksize of 2048 at 48kHz adds 42.7ms of processing latency — fine for a PA
-(equivalent to listening from ~15 meters away), and allows the convolution engine to
-use larger, more efficient FFT blocks for the bulk of the computation.
-
-### 6.6 CamillaDSP Configuration — Live Performance Mode
-
-In live performance mode, Reaper handles routing for 8 channels. All channels pass
-through CamillaDSP — it holds exclusive ALSA access to the USBStreamer. Channels
-0-3 (speakers) get FIR processing; channels 4-5 (engineer headphones) and 6-7
-(singer IEM) are passed through without DSP processing.
-
-**Key difference from DJ/PA mode: `chunksize: 256` for low latency (D-011).**
-
-In live mode, the singer is on stage hearing both her IEM feed (through CamillaDSP
-passthrough) and the PA in the room (CamillaDSP FIR path). If the PA path has 43ms
-of latency (chunksize 2048), she hears a slapback echo of her own voice from the
-speakers — disorienting and unacceptable. With `chunksize: 256` (5.3ms), the total
-PA path is ~21ms (CamillaDSP + PipeWire quantum 256 + USB + ADAT), which is
-equivalent to standing ~7m from the speaker and below the slapback perception
-threshold.
-
-The cost: CamillaDSP's partitioned convolution is less efficient with smaller first
-partitions — roughly 2x the CPU compared to chunksize 2048. This is why we keep
-chunksize 2048 for DJ/PA mode (where Mixxx is heavier and latency doesn't matter)
-and only drop to 256 for live mode (where Reaper is lighter on CPU). US-001
-benchmarks confirmed this is within budget: 16k taps at chunksize 256 = ~20% CPU.
-
-```bash
-cat > /etc/camilladsp/configs/live.yml << 'YAMLEOF'
----
-devices:
-  samplerate: 48000
-  chunksize: 256
-  queuelimit: 4
-  capture:
-    type: Alsa
-    channels: 2
-    device: "hw:Loopback,1,0"
-    format: S32LE
-  playback:
-    type: Alsa
-    channels: 8
-    device: "hw:USBStreamer,0"
-    format: S32LE
-
-filters:
-  # Combined FIR filters — same files as DJ/PA mode (same venue = same filters)
-  fir_left:
-    type: Conv
-    parameters:
-      type: Wav
-      filename: /etc/camilladsp/coeffs/combined_left_hp.wav
-      channel: 0
-
-  fir_right:
-    type: Conv
-    parameters:
-      type: Wav
-      filename: /etc/camilladsp/coeffs/combined_right_hp.wav
-      channel: 0
-
-  fir_sub1:
-    type: Conv
-    parameters:
-      type: Wav
-      filename: /etc/camilladsp/coeffs/combined_sub1_lp.wav
-      channel: 0
-
-  fir_sub2:
-    type: Conv
-    parameters:
-      type: Wav
-      filename: /etc/camilladsp/coeffs/combined_sub2_lp.wav
-      channel: 0
-
-  delay_sub1:
-    type: Delay
-    parameters:
-      delay: 0.0
-      unit: ms
-      subsample: false
-
-  delay_sub2:
-    type: Delay
-    parameters:
-      delay: 0.0
-      unit: ms
-      subsample: false
-
-  gain_left:
-    type: Gain
-    parameters:
-      gain: 0.0
-      inverted: false
-      mute: false
-
-  gain_right:
-    type: Gain
-    parameters:
-      gain: 0.0
-      inverted: false
-      mute: false
-
-  gain_sub1:
-    type: Gain
-    parameters:
-      gain: 0.0
-      inverted: false
-      mute: false
-
-  gain_sub2:
-    type: Gain
-    parameters:
-      gain: 0.0
-      inverted: false
-      mute: false
-
-mixers:
-  # Same stereo_to_octa mixer as DJ/PA mode — Reaper outputs stereo to loopback,
-  # CamillaDSP expands to 8 channels for the USBStreamer.
-  # ch0-3: speakers (FIR processed), ch4-5: engineer HP (passthrough),
-  # ch6-7: singer IEM (passthrough — Reaper's IEM mix is on the stereo bus)
-  stereo_to_octa:
-    channels:
-      in: 2
-      out: 8
-    mapping:
-      - dest: 0
-        sources:
-          - channel: 0
-            gain: 0
-            inverted: false
-      - dest: 1
-        sources:
-          - channel: 1
-            gain: 0
-            inverted: false
-      - dest: 2
-        sources:
-          - channel: 0
-            gain: -6
-            inverted: false
-          - channel: 1
-            gain: -6
-            inverted: false
-      - dest: 3
-        sources:
-          - channel: 0
-            gain: -6
-            inverted: false
-          - channel: 1
-            gain: -6
-            inverted: false
-      - dest: 4
-        sources:
-          - channel: 0
-            gain: 0
-            inverted: false
-      - dest: 5
-        sources:
-          - channel: 1
-            gain: 0
-            inverted: false
-      - dest: 6
-        sources:
-          - channel: 0
-            gain: 0
-            inverted: false
-      - dest: 7
-        sources:
-          - channel: 1
-            gain: 0
-            inverted: false
-
-pipeline:
-  # Step 1: Mix stereo to 8 channels
-  - type: Mixer
-    name: stereo_to_octa
-
-  # Step 2: FIR processing on speaker channels only (ch0-3)
-  # Channels 4-7 (headphones, IEM) pass through unprocessed
-  - type: Filter
-    channel: 0
-    names:
-      - fir_left
-      - gain_left
-
-  - type: Filter
-    channel: 1
-    names:
-      - fir_right
-      - gain_right
-
-  - type: Filter
-    channel: 2
-    names:
-      - fir_sub1
-      - delay_sub1
-      - gain_sub1
-
-  - type: Filter
-    channel: 3
-    names:
-      - fir_sub2
-      - delay_sub2
-      - gain_sub2
-YAMLEOF
-```
-
-### 6.7 CamillaDSP — Bypass/Passthrough Config (for testing)
-
-```bash
-cat > /etc/camilladsp/configs/passthrough.yml << 'YAMLEOF'
----
-devices:
-  samplerate: 48000
-  chunksize: 1024
-  queuelimit: 4
-  capture:
-    type: Alsa
-    channels: 2
-    device: "hw:Loopback,1,0"
-    format: S32LE
-  playback:
-    type: Alsa
-    channels: 8
-    device: "hw:USBStreamer,0"
-    format: S32LE
-
-pipeline: []
-YAMLEOF
-```
-
-### 6.8 Time Alignment Measurement Procedure
+### 6.2 Time Alignment
 
 The delay values for Sub 1 and Sub 2 compensate for physical distance differences
-between each speaker and the listening position. The goal: all speakers' sound arrives
-at the measurement point (center of dancefloor) at the same time.
+between each speaker and the listening position. The goal is for all speakers' sound to
+arrive at the measurement point (center of the dancefloor) at the same time.
 
-**Principle:** Sound travels at ~343 m/s (at 20°C). Each meter of distance difference
-equals ~2.9ms of delay. If Sub 1 is 2 meters closer to the listener than the mains,
-Sub 1 needs ~5.8ms of delay added so its sound arrives at the same time as the mains.
+Sound travels at approximately 343 m/s at 20 degrees C. Each meter of distance
+difference translates to about 2.9ms of delay. For example, if Sub 1 is 2 meters closer
+to the listener than the mains, Sub 1 needs approximately 5.8ms of delay added so its
+sound arrives simultaneously with the mains.
 
-**Measurement procedure:**
+The measurement procedure works as follows: place the UMIK-1 at the measurement
+position, then send a broadband impulse through each speaker channel individually while
+recording via the UMIK-1. From each recorded impulse response, detect the arrival time
+(onset of energy). The speaker with the longest arrival time becomes the reference
+(delay = 0), and all other speakers receive positive delay equal to the difference
+between the reference arrival time and their own.
 
-1. Place the UMIK-1 at the measurement position (center of dancefloor)
-2. Send a broadband impulse (e.g., a sharp click or swept sine) to **only** the left
-   main speaker, capture the impulse response, note the arrival time
-3. Repeat for the right main speaker
-4. Repeat for Sub 1
-5. Repeat for Sub 2
-6. The speaker with the longest arrival time is the reference (delay = 0)
-7. All other speakers get `delay = reference_arrival - their_arrival`
+The automated room correction pipeline (see "Automated Room Correction Pipeline" in
+CLAUDE.md) handles this measurement and delay computation automatically. For manual
+adjustment, use `pw-cli` to set delay values at runtime, or update the filter-chain
+configuration file and reload PipeWire.
 
-**Using CamillaDSP's websocket API for live adjustment:**
-
-```bash
-# Install the Python control library
-pip install camilladsp
-
-# Python script to set sub delays:
-python3 << 'PYEOF'
-from camilladsp import CamillaClient
-client = CamillaClient("127.0.0.1", 1234)
-client.connect()
-
-# Read current config
-config = client.config.active()
-
-# Adjust delay_sub1 (in ms)
-config["filters"]["delay_sub1"]["parameters"]["delay"] = 5.8
-# Adjust delay_sub2
-config["filters"]["delay_sub2"]["parameters"]["delay"] = 3.2
-
-# Apply without restart
-client.config.set_active(config)
-PYEOF
-```
-
-This can also be done through the CamillaDSP web GUI, or automated as part of the
-room correction measurement pipeline (separate document).
-
-**For the automated pipeline:** The measurement script will play a test signal through
-each output channel individually, record the impulse response via the UMIK-1, detect
-the arrival time of each, compute the relative delays, and write them into the
-CamillaDSP configuration. See the automated room correction document for details.
-
-### 6.9 Test CamillaDSP
-
-```bash
-# Validate config
-camilladsp -c /etc/camilladsp/configs/passthrough.yml
-
-# Run in foreground (for testing)
-camilladsp -v /etc/camilladsp/configs/dj-pa.yml
-
-# Watch for errors — common issues:
-# - Wrong ALSA device path (check with aplay -l)
-# - Missing WAV coefficient files
-# - Sample rate mismatch between config and hardware
-```
-
-### 6.10 CamillaDSP as a Systemd Service
-
-```bash
-sudo tee /etc/systemd/system/camilladsp.service << 'EOF'
-[Unit]
-Description=CamillaDSP Audio Processing
-After=sound.target
-Wants=sound.target
-
-[Service]
-Type=simple
-User=pi
-Group=audio
-ExecStart=/usr/local/bin/camilladsp -s /etc/camilladsp/active.yml -p 1234 -w
-Restart=on-failure
-RestartSec=3
-Nice=-15
-CPUSchedulingPolicy=fifo
-CPUSchedulingPriority=10
-LimitRTPRIO=95
-LimitMEMLOCK=infinity
-# Pin to CPU cores 2-3 (leave 0-1 for apps)
-# CPUAffinity=2 3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Create a symlink for the active configuration
-ln -sf /etc/camilladsp/configs/dj-pa.yml /etc/camilladsp/active.yml
-
-sudo systemctl daemon-reload
-sudo systemctl enable camilladsp
-```
-
-The `-p 1234` flag enables the websocket server for remote control/GUI.
-The `-w` flag makes CamillaDSP wait for the config file to be valid before starting.
-
-### 6.11 Switching Configurations
-
-```bash
-# Create a simple script to switch modes
-cat > ~/bin/audio-mode << 'SCRIPT'
-#!/bin/bash
-set -e
-
-CONFIG_DIR="/etc/camilladsp/configs"
-ACTIVE_LINK="/etc/camilladsp/active.yml"
-
-case "$1" in
-  dj|pa)
-    ln -sf "$CONFIG_DIR/dj-pa.yml" "$ACTIVE_LINK"
-    echo "Switched to DJ/PA mode"
-    ;;
-  live)
-    ln -sf "$CONFIG_DIR/live.yml" "$ACTIVE_LINK"
-    echo "Switched to Live Performance mode"
-    ;;
-  passthrough)
-    ln -sf "$CONFIG_DIR/passthrough.yml" "$ACTIVE_LINK"
-    echo "Switched to Passthrough mode"
-    ;;
-  *)
-    echo "Usage: audio-mode {dj|live|passthrough}"
-    exit 1
-    ;;
-esac
-
-# Reload CamillaDSP
-sudo systemctl restart camilladsp
-echo "CamillaDSP restarted with new config"
-SCRIPT
-
-chmod +x ~/bin/audio-mode
-```
-
-### 6.12 FIR Filter Length — Frequency Resolution Analysis
+### 6.3 FIR Filter Length — Frequency Resolution Analysis
 
 The filter length determines the lowest frequency the FIR can accurately correct.
 This matters because we need solid room mode correction down to at least 30Hz (the
@@ -1514,57 +952,38 @@ basic control; 5+ cycles gives accurate control of both magnitude and phase.
 **Target: 16,384 taps for both DJ/PA and Live modes.** This gives us correction down
 to 20Hz with headroom, 2.9Hz frequency resolution, and a 341ms filter window.
 
-**CPU impact vs. chunksize interaction:**
+**CPU impact:** The PipeWire filter-chain convolver uses FFTW3 with ARM NEON
+optimizations. BM-2 benchmarks (2026-03-16) measured the convolver CPU cost with
+16,384-tap FIR filters on 4 speaker channels:
 
-CamillaDSP uses non-uniformly partitioned convolution. The first partition equals the
-chunksize, processed in the time domain (or via small FFT). Remaining partitions use
-progressively larger FFTs. The key cost relationship:
+| PipeWire Quantum | Convolver CPU | Use Case |
+|---|---|---|
+| 1024 (DJ mode) | 1.70% | Maximum efficiency for DJ/PA |
+| 256 (Live mode) | 3.47% | Low latency for live performance |
 
-| chunksize | First partition | Efficiency with 16k-tap FIR | Measured CPU (4ch FIR, 8ch output) |
-|---|---|---|---|
-| 2048 (DJ mode) | 2048 samples | Excellent — only 8 partitions needed | 5.2% (T1a) |
-| 512 | 512 samples | Good — 32 partitions, more FFT overhead | 10.4% (T1b) |
-| 256 (Live mode, D-011) | 256 samples | Good — 64 partitions | 20.4% (T1c) |
+These numbers are dramatically lower than earlier benchmarks with an external DSP
+engine (which required 5-20% CPU for the same workload). The CPU savings free
+significant headroom for Mixxx and Reaper. Both A1 (DJ CPU budget) and A2 (Live CPU
+budget) are validated with comfortable margin.
 
-**These figures are measured on Pi 4B hardware** (US-001 benchmarks). The upstream
-benchmark (8ch x 262k taps @ 192kHz = ~55% CPU) used a different configuration.
-Our situation — 4 FIR channels + 4 passthrough channels, 16k taps @ 48kHz — is
-well within budget for both modes.
-
-**Assumption A1:** 16,384 taps at chunksize 2048 fits Pi 4 budget alongside Mixxx.
-**VALIDATED** — 5.2% CPU (T1a).
-
-**Assumption A2:** 16,384 taps at chunksize 256 fits Pi 4 budget alongside Reaper.
-**VALIDATED** — 20.4% CPU (T1c). Chunksize reduced from 512 to 256 per D-011.
-
-### 6.13 Test Plan — Performance Validation
+### 6.4 Test Plan — Performance Validation
 
 These tests validate that the Pi 4 can handle the full audio workload reliably.
 Run them on the actual Pi 4 with the actual USB audio setup.
 
-> **D-040 update (2026-03-16):** Test T1 (CamillaDSP CPU) is **SUPERSEDED** by
-> BM-2 benchmarks. CamillaDSP is no longer the active DSP engine. PipeWire's
-> built-in filter-chain convolver handles all FIR processing at dramatically lower
-> CPU cost. T2-T5 remain relevant but are updated for the D-040 architecture.
+#### Test T1: Convolver CPU — VALIDATED (BM-2)
 
-#### ~~Test T1: CamillaDSP baseline CPU~~ — SUPERSEDED by BM-2
+BM-2 benchmarks (PipeWire filter-chain convolver, 16k taps x 4ch, FFTW3/NEON,
+2026-03-16) confirmed that the convolver CPU cost is well within budget:
 
-BM-2 benchmark results (PipeWire filter-chain convolver, 16k taps x 4ch,
-FFTW3/NEON, 2026-03-16):
+| Quantum | Convolver CPU |
+|---------|--------------|
+| 1024 (DJ) | 1.70% |
+| 256 (Live) | 3.47% |
 
-| Quantum | Convolver CPU | Equivalent old test |
-|---------|--------------|---------------------|
-| 1024 (DJ) | 1.70% | ~~T1a~~ (was: < 30%) |
-| 256 (Live) | 3.47% | ~~T1c~~ (was: < 60%) |
-
-**Result:** A1 (DJ CPU budget) and A2 (Live CPU budget) are **VALIDATED**. The
-PipeWire convolver uses 3-5.6x less CPU than CamillaDSP at comparable settings.
-First successful PW-native DJ session (GM-12): 40+ minutes, zero xruns, 58% idle,
-71C peak temperature.
-
-The original T1 decision tree (chunksize fallbacks) is obsolete — there is no
-separate chunksize parameter in the D-040 architecture. The PipeWire quantum is
-the single latency-controlling parameter.
+The first successful PipeWire-native DJ session (GM-12) ran for over 40 minutes with
+zero xruns, 58% idle CPU, and a peak temperature of 71 degrees C. Assumptions A1 and
+A2 are validated.
 
 #### Test T2: End-to-end latency measurement
 
@@ -1575,9 +994,9 @@ Measure the actual round-trip latency of the full signal path.
 # Send an impulse from Reaper output ch1, record on Reaper input ch1
 # Measure the delay between sent and received impulse in Reaper
 
-# Expected latency breakdown (D-040, live mode):
+# Expected latency breakdown (live mode):
 # PipeWire quantum:          256 samples  =  5.3ms
-# (no CamillaDSP chunksize — convolver runs in-graph)
+# (convolver runs in-graph, no extra buffering)
 # USB round-trip (2x):       ~2ms
 # ADAT encode/decode (2x):   ~0.5ms
 # TOTAL expected:            ~8ms
@@ -1588,13 +1007,10 @@ Measure the actual round-trip latency of the full signal path.
 | T2a | DJ/PA (quantum 1024) | ~24ms | < 30ms |
 | T2b | Live (quantum 256) | ~8ms | < 15ms |
 
-> **D-040 improvement:** Pre-D-040, T2b expected ~21ms (CamillaDSP chunksize +
-> quantum). Post-D-040, the convolver runs within the PipeWire graph cycle,
-> eliminating the separate CamillaDSP buffering stage. Theoretical PA path latency
-> at quantum 256 is ~5.3ms — well below the 25ms slapback threshold.
-
-**Status:** Formal measurement pending. A3 (PA latency < 25ms) is **VALIDATED**
-theoretically (~5.3ms at quantum 256).
+Because the convolver runs within the PipeWire graph cycle rather than as a separate
+buffering stage, the PA path latency at quantum 256 is approximately 5.3ms -- well
+below the 25ms slapback threshold. Formal loopback measurement is pending, but A3
+(PA latency < 25ms) is validated theoretically.
 
 #### Test T3: Xrun stability under load
 
@@ -1701,14 +1117,12 @@ sudo apt install -y mixxx
 
 ### 7.3 Mixxx Audio Configuration
 
-Launch Mixxx (needs display — use VNC for initial setup):
-
-1. **Preferences → Sound Hardware**
-2. Set **Sound API** to **JACK**
-3. Set **Main Output** to the PipeWire JACK ports that route to the ALSA loopback
-   (which CamillaDSP reads from)
-4. Set **Buffer Size** to **256 samples** (matches PipeWire quantum)
-5. Set **Sample Rate** to **48000**
+Launch Mixxx via VNC for initial setup. In the Preferences dialog under Sound Hardware,
+set the Sound API to JACK. Mixxx will connect to PipeWire's JACK bridge, which exposes
+PipeWire ports as JACK ports. Set the Main Output to the PipeWire JACK ports -- the
+GraphManager will handle linking Mixxx's output to the filter-chain convolver and
+USBStreamer. Set the buffer size to 256 samples (matching the PipeWire quantum) and
+the sample rate to 48000 Hz.
 
 ### 7.4 Hercules DJControl Mix Ultra — MIDI Mapping
 
@@ -1746,17 +1160,21 @@ USBStreamer, not the controller's built-in audio).
 
 ### 7.5 Mixxx Startup Script
 
+The startup script ensures PipeWire's JACK bridge is active and sets the quantum to
+1024 for DJ mode before launching Mixxx. The GraphManager handles link topology
+automatically once Mixxx appears in the PipeWire graph.
+
 ```bash
 cat > ~/bin/start-mixxx << 'SCRIPT'
 #!/bin/bash
 # Ensure PipeWire JACK bridge is running
 pw-jack true 2>/dev/null
 
-# Set audio mode to DJ
-~/bin/audio-mode dj
+# Set quantum to 1024 for DJ mode (max efficiency)
+pw-metadata -n settings 0 clock.force-quantum 1024
 
 # Start Mixxx with JACK
-exec mixxx --resourcePath /usr/share/mixxx/
+exec pw-jack mixxx --resourcePath /usr/share/mixxx/
 SCRIPT
 chmod +x ~/bin/start-mixxx
 ```
@@ -1809,13 +1227,16 @@ Create a Reaper project template for the Cole Porter performance:
 | 6: Engineer Monitor | Submix | → JACK out 5-6 (→ PW convolver passthrough → headphones) |
 | 7: IEM Bus | Submix | → JACK out 7-8 (→ direct PW link → IEM, bypasses convolver) |
 
-> **D-040 update:** The routing column above reflects the post-D-040 architecture.
-> FOH and sub buses route through the PipeWire filter-chain convolver for FIR
-> processing. The singer's IEM (bus 7) bypasses the convolver entirely via a direct
-> PipeWire link to USBStreamer ch 6-7, adding only quantum latency (~5.3ms at
-> quantum 256). No ALSA Loopback is involved.
+The FOH and sub buses route through the PipeWire filter-chain convolver for FIR
+processing. The singer's IEM (bus 7) bypasses the convolver entirely via a direct
+PipeWire link to USBStreamer channels 6-7, adding only quantum latency (approximately
+5.3ms at quantum 256). This bypass is managed by the GraphManager.
 
 ### 8.4 Reaper Startup Script
+
+The startup script sets the quantum to 256 for live mode (low latency) and launches
+Reaper. The GraphManager detects the mode change and adjusts the link topology
+accordingly, including creating the singer IEM bypass link.
 
 ```bash
 cat > ~/bin/start-reaper << 'SCRIPT'
@@ -1823,8 +1244,8 @@ cat > ~/bin/start-reaper << 'SCRIPT'
 # Ensure PipeWire JACK bridge is running
 pw-jack true 2>/dev/null
 
-# Set audio mode to Live
-~/bin/audio-mode live
+# Set quantum to 256 for live mode (low latency)
+pw-metadata -n settings 0 clock.force-quantum 256
 
 # Start Reaper
 exec ~/opt/REAPER/reaper
@@ -1918,108 +1339,74 @@ For persistent MIDI routing, use WirePlumber rules or scripts in the auto-start 
 
 ## 10. Headless Operation & Auto-Start
 
-> **D-040/D-022: This section is largely stale.** The production system uses
-> labwc (Wayland compositor) with hardware V3D GL — not Xvfb. CamillaDSP
-> systemd references should be replaced with PipeWire user services. Mixxx
-> auto-start uses `pw-jack mixxx` with labwc, not Xvfb. See the deployed
-> systemd services in `configs/systemd/user/` for current auto-start configs.
+The production system runs labwc (a Wayland compositor) with hardware V3D GL compositing.
+Mixxx and Reaper both need a display server for their GUIs, and labwc provides this.
+The lightdm display manager is disabled; instead, labwc runs as a systemd user service,
+which means the compositor starts automatically on boot without a graphical login screen.
+Remote access is provided by wayvnc (section 11).
 
 ### 10.1 Headless Boot Setup
 
-```bash
-# Disable the desktop environment auto-start (save resources)
-sudo systemctl set-default multi-user.target
+The Pi boots to multi-user mode (no desktop environment auto-start). The labwc compositor
+runs as a systemd user service instead. This avoids the overhead of a full desktop
+environment while still providing the display server that audio applications need.
 
-# But keep the X server available for VNC/remote sessions
-sudo apt install -y xserver-xorg x11-xserver-utils
+```bash
+# Set the default boot target to multi-user (no graphical login)
+sudo systemctl set-default multi-user.target
 ```
 
 ### 10.2 Auto-Start Audio Stack on Boot
 
-Create a systemd service that starts the entire audio stack:
+The audio stack starts automatically via systemd user services. PipeWire (including the
+filter-chain convolver) is managed by the system's default PipeWire user service, which
+is enabled by default on Raspberry Pi OS Trixie. The GraphManager and pcm-bridge run as
+additional systemd user services.
+
+On boot, the following services start in order:
+
+1. **pipewire.service** (user) -- audio server with filter-chain convolver
+2. **wireplumber.service** (user) -- session manager
+3. **pi4audio-graph-manager.service** (user) -- link topology manager
+4. **pcm-bridge@monitor.service** (user) -- level metering
+5. **pi4-audio-webui.service** (user) -- web UI
+
+You can verify the audio stack is running with:
 
 ```bash
-sudo tee /etc/systemd/system/audio-workstation.service << 'EOF'
-[Unit]
-Description=Audio Workstation Stack
-After=sound.target pipewire.service
-Wants=camilladsp.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-User=pi
-ExecStart=/home/pi/bin/audio-stack-start
-ExecStop=/home/pi/bin/audio-stack-stop
-
-[Install]
-WantedBy=multi-user.target
-EOF
-```
-
-```bash
-mkdir -p ~/bin
-
-cat > ~/bin/audio-stack-start << 'SCRIPT'
-#!/bin/bash
-set -e
-
-# Wait for PipeWire to be ready
-sleep 2
-
-# Start the user PipeWire session if not already running
-# (systemd --user services should handle this, but as a safety net)
-if ! pgrep -u $USER pipewire > /dev/null; then
-    systemctl --user start pipewire pipewire-pulse wireplumber
-    sleep 1
-fi
-
-# CamillaDSP is started by its own systemd service (camilladsp.service)
-# Just verify it's running
-sleep 1
-if systemctl is-active --quiet camilladsp; then
-    echo "CamillaDSP is running"
-else
-    echo "WARNING: CamillaDSP is not running"
-fi
-
-echo "Audio stack started"
-SCRIPT
-chmod +x ~/bin/audio-stack-start
-
-cat > ~/bin/audio-stack-stop << 'SCRIPT'
-#!/bin/bash
-echo "Audio stack stopping"
-SCRIPT
-chmod +x ~/bin/audio-stack-stop
-
-sudo systemctl daemon-reload
-sudo systemctl enable audio-workstation
+systemctl --user status pipewire
+systemctl --user status pi4audio-graph-manager
+systemctl --user status pcm-bridge@monitor
+systemctl --user status pi4-audio-webui
 ```
 
 ### 10.3 Auto-Start Mixxx or Reaper
 
-For auto-starting an application, you can create additional systemd user services.
-However, both Mixxx and Reaper need a display. For headless auto-start with a virtual
-framebuffer:
+Both Mixxx and Reaper need a display server for their GUIs. The labwc Wayland compositor
+(running as a systemd user service) provides this. Since the labwc session is always
+available, you can launch applications either automatically via systemd or manually via
+VNC.
+
+The recommended approach is to **not** auto-start the audio application. The audio stack
+(PipeWire, convolver, GraphManager) starts automatically on boot and is ready to accept
+connections. You then connect via VNC (section 11) and manually launch either Mixxx or
+Reaper depending on the gig type. This avoids starting the wrong application and gives
+you full control over the session.
+
+If you do want auto-start for a dedicated single-mode setup, create a systemd user
+service that depends on the labwc session:
 
 ```bash
-# Install virtual framebuffer
-sudo apt install -y xvfb
-
-# Create a Mixxx auto-start service (example for DJ mode)
 mkdir -p ~/.config/systemd/user/
 
 cat > ~/.config/systemd/user/mixxx.service << 'EOF'
 [Unit]
 Description=Mixxx DJ Software
-After=pipewire.service
+After=pipewire.service labwc.service
 
 [Service]
 Type=simple
-Environment=DISPLAY=:99
-ExecStartPre=/usr/bin/Xvfb :99 -screen 0 1024x768x24 &
-ExecStart=/usr/bin/mixxx
+ExecStart=/usr/bin/pw-jack /usr/bin/mixxx
 Restart=on-failure
 RestartSec=5
 
@@ -2030,11 +1417,6 @@ EOF
 # Enable if you want Mixxx to start automatically
 # systemctl --user enable mixxx
 ```
-
-**Alternative approach:** Don't auto-start the application. Instead:
-1. Boot the Pi — audio stack comes up automatically
-2. SSH/VNC in and start Mixxx or Reaper manually depending on the gig type
-3. This is more flexible and avoids starting the wrong application
 
 ### 10.4 Status LED / Indicator (Optional)
 
@@ -2049,7 +1431,7 @@ echo $GPIO > /sys/class/gpio/export 2>/dev/null
 echo out > /sys/class/gpio/gpio$GPIO/direction
 
 while true; do
-    if systemctl is-active --quiet camilladsp; then
+    if systemctl --user is-active --quiet pipewire; then
         # Solid on = audio stack running
         echo 1 > /sys/class/gpio/gpio$GPIO/value
     else
@@ -2071,61 +1453,58 @@ chmod +x ~/bin/status-led
 
 ### 11.1 SSH (Primary)
 
+SSH is the primary means of accessing the Pi for system administration, file transfer,
+and running terminal commands. Password authentication is disabled for security (the Pi
+is exposed on venue networks); only key-based authentication is accepted.
+
 ```bash
 # SSH should already be enabled. Verify:
 sudo systemctl enable --now ssh
 
-# Generate a key pair on your laptop and copy it:
-# (on your laptop) ssh-copy-id pi@raspberrypi.local
+# On your laptop, generate a key pair and copy it to the Pi:
+# ssh-copy-id ela@mugge
 ```
+
+Once key-based auth is set up, you can connect with `ssh ela@mugge` from any machine
+on the same network. For file transfers, use `scp` or `sftp`.
 
 ### 11.2 VNC (for GUI applications)
 
+The system uses wayvnc (D-018), which integrates natively with the labwc Wayland
+compositor. Unlike X11-based VNC solutions, wayvnc provides full mouse and keyboard
+input to the compositor and all applications running under it. This is critical for
+operating Mixxx and Reaper remotely.
+
+wayvnc listens on TCP port 5900 (the standard VNC port). It requires password
+authentication, which is configured during initial setup:
+
 ```bash
-# Install RealVNC server (included in Raspberry Pi OS) or TigerVNC
-sudo apt install -y tigervnc-standalone-server tigervnc-common
+# wayvnc should already be installed. Verify:
+wayvnc --version
 
-# Set VNC password
-vncpasswd
-
-# Create a VNC startup script
-cat > ~/.vnc/xstartup << 'EOF'
-#!/bin/sh
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
-exec openbox-session &
-EOF
-chmod +x ~/.vnc/xstartup
-
-# Install a lightweight window manager
-sudo apt install -y openbox
-
-# Start VNC server on demand (not at boot — saves resources)
-# Resolution for your laptop/tablet:
-vncserver :1 -geometry 1920x1080 -depth 24
+# wayvnc runs as part of the labwc session or can be started manually:
+wayvnc 0.0.0.0 5900
 ```
 
-**To connect:** Use any VNC client (RealVNC Viewer, TigerVNC viewer) and connect to
-`raspberrypi.local:5901`
+To connect, use any VNC client (Remmina on Linux, RealVNC Viewer, or similar) and
+connect to `mugge:5900` or `192.168.178.185:5900`. The connection provides the same
+desktop view that would appear on a connected monitor, with full interactive control.
 
 ### 11.3 Web UI
 
-> **D-040:** The CamillaDSP Web GUI is no longer used. The pi4audio web UI at
-> `https://mugge:8080` provides dashboard, spectrum, meters, graph view, and
-> config controls for the PipeWire filter-chain architecture.
+The pi4audio web UI provides a comprehensive dashboard for monitoring and controlling
+the audio system from any browser on the local network. Access it at
+`https://mugge:8080`. It runs as a systemd user service:
 
 ```bash
-# The web UI runs as a systemd user service:
-systemctl --user status pi4audio-webui
-
-# Access from any browser on the same network:
-# https://mugge:8080
+systemctl --user status pi4-audio-webui
 ```
 
 The web UI is a single-page application with 7 tabs and a persistent status bar.
-All real-time data arrives over WebSocket connections; no polling or page reloads
-are required. The UI is responsive and works on mobile devices (phones/tablets)
-for on-stage monitoring.
+All real-time data arrives over WebSocket connections, so there is no polling or
+page reloading -- level meters, spectrum analyzers, and system health indicators
+update continuously. The UI is responsive and works on mobile devices (phones and
+tablets) for on-stage monitoring during performances.
 
 #### Status Bar (persistent, all tabs)
 
@@ -2259,69 +1638,67 @@ allow runtime MIDI routing configuration.
 
 ## 12. Performance Tuning & Monitoring
 
-> **D-040: CPU budgets and health checks below are stale.** CamillaDSP is no
-> longer the active DSP engine. Post-D-040, PipeWire's filter-chain convolver
-> handles all FIR processing at dramatically lower CPU cost (1.70% DJ / 3.47%
-> live vs 5.23% / 19.25% with CamillaDSP). Monitor PipeWire with
-> `systemctl --user status pipewire` and `pw-top`. See
-> `docs/architecture/rt-audio-stack.md` for current performance data (BM-2).
-
 ### 12.1 Monitor CPU Usage
 
 ```bash
 # Real-time CPU monitor (per-core)
 htop
 
-# Audio-specific monitoring
-# Watch for xruns (buffer underruns):
-cat /proc/asound/card1/pcm0p/sub0/status
-
-# D-040: CamillaDSP no longer active. Use pw-top for PipeWire DSP load:
-# pw-top
+# Audio-specific monitoring — PipeWire DSP load and xrun count:
+pw-top
 ```
 
-### 12.2 Expected CPU Budget (approximate — validate with Test Plan 6.13)
+### 12.2 Expected CPU Budget
 
-**DJ/PA Mode** (chunksize 2048, efficient convolution):
+The PipeWire filter-chain convolver is dramatically more efficient than external DSP
+engines on the Pi 4B's ARM processor. The following budgets are based on BM-2 benchmarks
+and the GM-12 production session.
+
+**DJ/PA Mode** (quantum 1024):
 
 | Component | CPU Usage | Source |
 |---|---|---|
-| PipeWire + WirePlumber | 2-5% | estimated |
-| CamillaDSP (16k FIR x 4ch, 8ch output, chunksize 2048) | ~5% | measured (T1a) |
-| Mixxx (2 decks, no effects) | 15-25% | estimated |
+| PipeWire + WirePlumber + convolver | ~4% | BM-2 (convolver: 1.70%) |
+| Mixxx (2 decks, hardware V3D GL) | ~25% | GM-12 session |
+| GraphManager + pcm-bridge + web UI | ~3% | estimated |
 | System overhead | 5-10% | estimated |
-| **Total** | **~30-45%** | |
+| **Total** | **~35-42%** | GM-12: 58% idle confirms |
 
-**Live Mode** (chunksize 256 per D-011, lower latency):
+**Live Mode** (quantum 256):
 
 | Component | CPU Usage | Source |
 |---|---|---|
-| PipeWire + WirePlumber | 2-5% | estimated |
-| CamillaDSP (16k FIR x 4ch, 8ch output, chunksize 256) | ~20% | measured (T1c) |
+| PipeWire + WirePlumber + convolver | ~6% | BM-2 (convolver: 3.47%) |
 | Reaper (8 tracks, basic mixing) | 10-20% | estimated |
+| GraphManager + pcm-bridge + web UI | ~3% | estimated |
 | System overhead | 5-10% | estimated |
-| **Total** | **~35-55%** | |
+| **Total** | **~30-40%** | |
 
-The live mode budget is comfortable. US-001 benchmarks validated that 16,384-tap
-FIR at chunksize 256 uses ~20% CPU — well within budget alongside Reaper.
+Both modes have comfortable CPU headroom. The convolver cost is negligible compared to
+the application workload.
 
 ### 12.3 Temperature Monitoring
 
-The Pi 4 throttles at 80°C. In a flight case, cooling is critical.
+The Pi 4's SoC begins thermal throttling at 80 degrees C, reducing the CPU clock speed
+to prevent damage. In a closed flight case at a warm venue (25-32 degrees C ambient),
+sustained audio processing can push temperatures into the throttling zone if cooling is
+inadequate. Thermal throttling causes the CPU to miss audio processing deadlines,
+resulting in xruns.
 
 ```bash
-# Check temperature
+# Check current temperature
 vcgencmd measure_temp
 
-# Monitor continuously
+# Monitor continuously (updates every second)
 watch -n 1 vcgencmd measure_temp
 ```
 
-**Cooling recommendations for a flight case:**
-- Passive heatsink: good for light loads, insufficient for sustained full-CPU audio
-- Small fan (5V, PWM-controlled via GPIO): recommended
-- The official Pi 4 case fan or a Pimoroni Fan SHIM works well
-- Ensure ventilation holes in the flight case
+For the flight case, a passive heatsink alone is not sufficient for sustained full-CPU
+audio work. A small 5V fan (40-50mm) directed at the SoC provides approximately 15
+degrees C of cooling, which is enough to keep the Pi below 75 degrees C even at 32
+degrees C ambient. The official Pi 4 case fan or a Pimoroni Fan SHIM both work well.
+The flight case must have ventilation holes to allow airflow, and the Pi should be
+positioned away from the Class D amplifier's exhaust (see D-012).
 
 ### 12.4 Automated Health Check Script
 
@@ -2342,8 +1719,11 @@ echo ""
 echo "--- Memory ---"
 free -h | head -2
 echo ""
-echo "--- PipeWire (audio + DSP) ---"
+echo "--- PipeWire (audio server + convolver) ---"
 systemctl --user is-active pipewire && echo "Running" || echo "STOPPED"
+echo ""
+echo "--- GraphManager ---"
+systemctl --user is-active pi4audio-graph-manager && echo "Running" || echo "STOPPED"
 echo ""
 echo "--- USB Audio ---"
 aplay -l 2>/dev/null | grep -i "usb\|streamer" || echo "NO USB AUDIO FOUND"
@@ -2352,7 +1732,6 @@ echo "--- MIDI Devices ---"
 aconnect -l 2>/dev/null | grep -i "client" | grep -v "Through\|System"
 echo ""
 echo "--- Xruns ---"
-# D-040: check PipeWire user journal instead of camilladsp
 journalctl --user -u pipewire --since "1 hour ago" --no-pager | grep -i "xrun" | tail -5
 echo "(last hour)"
 SCRIPT
@@ -2363,87 +1742,87 @@ chmod +x ~/bin/health-check
 
 ## 13. Operational Modes
 
-> **D-040: These commands are stale.** CamillaDSP is no longer the active DSP
-> engine. Mode switching is now handled by GraphManager RPC or manual `pw-link`
-> commands. The quantum is changed via `pw-metadata`. See
-> `docs/architecture/rt-audio-stack.md` for current operational procedures.
+Mode switching is handled by the GraphManager, which manages the PipeWire link topology
+for each mode. The quantum (buffer size) is changed via `pw-metadata`, which takes
+effect immediately without restarting PipeWire. You can also use the web UI Config tab
+to change modes and quantum values.
 
-### Quick Reference (Historical — Pre-D-040)
+### Quick Reference
 
 | Task | Command |
 |---|---|
-| Switch to DJ mode | `audio-mode dj` then start Mixxx |
-| Switch to Live mode | `audio-mode live` then start Reaper |
-| Switch to passthrough | `audio-mode passthrough` |
-| Check system health | `health-check` |
-| Start VNC for remote GUI | `vncserver :1 -geometry 1920x1080` |
-| ~~View CamillaDSP GUI~~ | ~~Browse to `http://raspberrypi.local:5005`~~ (D-040: use web UI at `https://mugge:8080`) |
-| ~~Restart audio stack~~ | ~~`sudo systemctl restart camilladsp`~~ (D-040: `systemctl --user restart pipewire` — **warn owner first, transient risk**) |
+| Switch to DJ quantum | `pw-metadata -n settings 0 clock.force-quantum 1024` |
+| Switch to Live quantum | `pw-metadata -n settings 0 clock.force-quantum 256` |
+| Start Mixxx (DJ mode) | `pw-jack mixxx` (via labwc/VNC session) |
+| Start Reaper (Live mode) | `~/opt/REAPER/reaper` (via labwc/VNC session) |
+| Check system health | `~/bin/health-check` |
+| View web UI | Browse to `https://mugge:8080` |
+| Connect via VNC | VNC client to `mugge:5900` |
+| Restart PipeWire | `systemctl --user restart pipewire` (**warn owner first -- transient risk through amp chain**) |
 
 ### Pre-Gig Checklist
 
-1. Power on the Pi and wait ~30 seconds for boot
+1. Power on the Pi and wait approximately 30 seconds for boot
 2. Verify all USB devices are connected (`lsusb`)
-3. Run `health-check` to verify the audio stack
-4. Switch to the correct mode (`audio-mode dj` or `audio-mode live`)
-5. Start the application (Mixxx or Reaper) via VNC or auto-start
-6. Send a test signal through the system
+3. Run `~/bin/health-check` to verify the audio stack
+4. Connect via VNC and start either Mixxx or Reaper depending on the gig type
+5. The GraphManager automatically creates the correct link topology when the
+   application appears in the PipeWire graph
+6. Send a test signal through the system to verify audio flow
 7. If doing room correction at the venue, run the measurement procedure
-   (see separate Automated Room Correction document)
+   (see the Automated Room Correction Pipeline section in CLAUDE.md)
 
 ---
 
 ## 14. Troubleshooting
 
-> **D-040: Troubleshooting steps referencing CamillaDSP are historical.**
-> The audio pipeline is now PipeWire filter-chain only. For current
-> troubleshooting, check `systemctl --user status pipewire`,
-> `pw-top`, `pw-link -l`, and the web UI at `https://mugge:8080`.
-> See `docs/architecture/rt-audio-stack.md` Section 7 for verification commands.
-
 ### No Sound Output
 
+When troubleshooting audio issues, work through the signal path from hardware up
+to application level.
+
 ```bash
-# 1. Check if USBStreamer is recognized
+# 1. Check if USBStreamer is recognized by ALSA
 aplay -l
 # Should list the USBStreamer
 
-# 2. Check PipeWire status (D-040: CamillaDSP no longer active)
+# 2. Check PipeWire status
 systemctl --user status pipewire
 journalctl --user -u pipewire -f
 
-# 3. Check PipeWire
-systemctl --user status pipewire
-pw-top  # Live view of PipeWire processing
+# 3. Check PipeWire processing graph and DSP load
+pw-top
 
-# 4. Check ALSA loopback
-cat /proc/asound/cards
-# Should show the Loopback device
+# 4. Check link topology — are nodes connected?
+pw-link -l
 
-# 5. Test direct ALSA output (bypass everything)
+# 5. Check GraphManager status
+systemctl --user status pi4audio-graph-manager
+
+# 6. Test direct ALSA output (bypasses PipeWire entirely)
 speaker-test -D hw:1,0 -c 8 -r 48000 -t sine
 ```
 
 ### Xruns / Audio Glitches
 
+Xruns (buffer underruns) cause audible clicks, pops, or gaps in the audio output.
+They indicate that the audio processing did not complete within the quantum deadline.
+
 ```bash
-# 1. Check CPU temperature (throttling?)
+# 1. Check CPU temperature — throttling at 80C causes xruns
 vcgencmd measure_temp
 
-# 2. Check CPU governor
+# 2. Check CPU governor — must be "performance" for audio work
 cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-# Should say "performance"
 
-# 3. Increase buffer size
-# In pipewire config: change quantum to 512 or 1024
-# In CamillaDSP config: increase chunksize
+# 3. Increase the quantum (trade latency for stability)
+pw-metadata -n settings 0 clock.force-quantum 1024
 
-# 4. Check for IRQ conflicts
+# 4. Check for IRQ conflicts on USB
 cat /proc/interrupts | grep xhci
-# USB interrupts should not be overwhelming one core
 
-# 5. Check if FIR filters are too long
-# Reduce filter length in the WAV files
+# 5. Check PipeWire scheduling priority (should be SCHED_FIFO 88)
+ps -eo pid,cls,rtprio,comm | grep pipewire
 ```
 
 ### MIDI Controller Not Detected
@@ -2462,21 +1841,6 @@ pw-link -lI | grep -i midi
 # 4. Check permissions
 ls -la /dev/snd/
 # Your user should have access (being in the 'audio' group)
-```
-
-### CamillaDSP Won't Start
-
-```bash
-# 1. Validate the configuration
-camilladsp -c /etc/camilladsp/active.yml
-# This checks syntax without starting
-
-# 2. Check if the ALSA devices exist
-aplay -l  # playback
-arecord -l  # capture (including loopback)
-
-# 3. Check if another process has locked the ALSA device
-fuser -v /dev/snd/*
 ```
 
 ### PipeWire Issues
@@ -2498,15 +1862,14 @@ pw-link -l
 ## Appendix A: Complete Package List
 
 ```bash
-# All packages needed (run this on a fresh Trixie install)
+# Core packages needed (run this on a fresh Trixie install)
 sudo apt install -y \
     pipewire pipewire-audio pipewire-jack pipewire-alsa pipewire-pulse \
     wireplumber \
     cpufrequtils \
     mixxx \
-    tigervnc-standalone-server tigervnc-common \
-    openbox \
-    xvfb xserver-xorg x11-xserver-utils \
+    wayvnc \
+    labwc \
     htop \
     build-essential \
     python3-pip \
@@ -2516,53 +1879,42 @@ sudo apt install -y \
 
 ## Appendix B: File Layout
 
-> **D-040 update:** CamillaDSP configs under `/etc/camilladsp/` are historical.
-> FIR coefficients moved to `/etc/pi4audio/coeffs/`. The PipeWire filter-chain
-> convolver config is at `~/.config/pipewire/pipewire.conf.d/30-convolver.conf`.
-> GraphManager manages link topology and mode transitions.
-
 ```
-/etc/pi4audio/                      — D-040: production audio config
+/etc/pi4audio/                          — Production audio configuration
 ├── coeffs/
-│   ├── combined_left_hp.wav       — Combined FIR: HP crossover + room correction (left)
-│   ├── combined_right_hp.wav      — Combined FIR: HP crossover + room correction (right)
-│   ├── combined_sub1_lp.wav       — Combined FIR: LP crossover + room correction (sub 1)
-│   └── combined_sub2_lp.wav       — Combined FIR: LP crossover + room correction (sub 2)
+│   ├── combined_left_hp.wav           — Combined FIR: HP crossover + room correction (left)
+│   ├── combined_right_hp.wav          — Combined FIR: HP crossover + room correction (right)
+│   ├── combined_sub1_lp.wav           — Combined FIR: LP crossover + room correction (sub 1)
+│   └── combined_sub2_lp.wav           — Combined FIR: LP crossover + room correction (sub 2)
 └── udev/
-    └── 99-usbstreamer.rules       — USB audio device rules
-
-/etc/camilladsp/                    — HISTORICAL (D-040: CamillaDSP stopped)
-├── active.yml                     → symlink to former active config
-├── configs/
-│   ├── dj-pa.yml                  — DJ/PA mode config (unused)
-│   ├── live.yml                   — Live performance config (unused)
-│   └── passthrough.yml            — Bypass/test config (unused)
-└── coeffs/                        — Old coeffs location (moved to /etc/pi4audio/coeffs/)
+    └── 99-usbstreamer.rules           — USB audio device rules
 
 ~/bin/
-├── audio-stack-start              — Boot-time audio initialization
-├── audio-stack-stop               — Shutdown
-├── start-mixxx                    — Launch Mixxx with correct settings
-├── start-reaper                   — Launch Reaper with correct settings
-├── health-check                   — System status report
-└── status-led                     — GPIO status indicator
+├── graph-manager                      — GraphManager binary (link topology + mode management)
+├── pcm-bridge                         — Level metering binary
+├── signal-gen                         — Measurement signal generator binary
+├── start-mixxx                        — Launch Mixxx with correct quantum
+├── start-reaper                       — Launch Reaper with correct quantum
+├── health-check                       — System status report
+└── status-led                         — GPIO status indicator (optional)
 
 ~/.config/pipewire/pipewire.conf.d/
-├── 10-audio-settings.conf         — Sample rate, quantum
-├── 20-usbstreamer.conf            — USBStreamer device config
-└── 30-convolver.conf              — Filter-chain convolver (FIR + gain nodes)
+├── 10-audio-settings.conf             — Global clock: 48kHz, quantum range 256-1024
+├── 20-usbstreamer.conf                — ADA8200 capture adapter (8ch input via ADAT)
+├── 21-usbstreamer-playback.conf       — USBStreamer playback adapter (8ch output, graph driver)
+└── 30-filter-chain-convolver.conf     — FIR convolver + gain nodes (4ch)
 
 ~/.config/wireplumber/wireplumber.conf.d/
-└── 50-audio-routing.conf          — Device management (D-043: linking disabled)
+└── 50-audio-routing.conf              — Device management (D-043: WirePlumber linking disabled)
 ```
 
 ## Appendix C: Important Notes & Caveats
 
 ### PipeWire Quantum — Dual-Mode Latency Design
 
-> **D-040 update:** CamillaDSP chunksize is no longer relevant. Post-D-040, the
-> PipeWire quantum is the **single** latency-controlling parameter. The filter-chain
-> convolver processes within the same PipeWire graph cycle, adding no extra buffering.
+The PipeWire quantum is the single latency-controlling parameter for the entire audio
+pipeline. The filter-chain convolver processes within the same PipeWire graph cycle,
+adding no extra buffering beyond the quantum itself.
 
 | Mode | PipeWire Quantum | PA Path Latency | CPU (BM-2) | Rationale |
 |---|---|---|---|---|
@@ -2573,43 +1925,47 @@ sudo apt install -y \
 also hears the PA acoustically in the room. If the PA path has >25ms latency, she
 perceives a distinct slapback echo of her own voice — disorienting and
 performance-destroying. At ~5.3ms (quantum 256), the PA path is equivalent to
-standing ~1.8 meters from the speakers — a dramatic improvement over the pre-D-040
-architecture (~22ms projected at chunksize 256 + quantum 256).
+standing approximately 1.8 meters from the speakers.
 
 **The tradeoff:** Smaller quantum = more FFT partitions in the convolution = higher
 CPU. The live config uses ~2x the convolver CPU of the DJ config (3.47% vs 1.70%).
 This is acceptable because Reaper (live mode app) is lighter than Mixxx (DJ mode
 app). Validated by BM-2 benchmarks (2026-03-16).
 
-**Singer IEM bypass (D-040):** Unlike the pre-D-040 architecture where all 8
-channels routed through CamillaDSP, the singer's IEM (ch 6-7) now bypasses the
-convolver entirely via a direct PipeWire link to USBStreamer output ports (~5ms).
-Engineer headphone channels still route through the convolver passthrough path.
+**Singer IEM bypass:** The singer's IEM channels (6-7) bypass the convolver entirely
+via a direct PipeWire link to USBStreamer output ports, adding only quantum latency
+(approximately 5ms). Engineer headphone channels still route through the convolver
+passthrough path.
 
 ### Sample Rate Consistency
 
-Everything in the chain must be at 48kHz:
-- PipeWire default rate: 48000
-- Filter-chain convolver config: 48000
-- USBStreamer: 48000 (configured by ALSA)
-- ADA8200: 48kHz ADAT
-- All FIR coefficient WAV files: 48kHz sample rate
-
-A sample rate mismatch anywhere will cause silence, noise, or pitch-shifted audio.
+Every component in the audio chain must operate at the same sample rate. This system
+uses 48kHz throughout: PipeWire's default rate, the filter-chain convolver configuration,
+the USBStreamer (configured by ALSA), the ADA8200 (48kHz ADAT), and all FIR coefficient
+WAV files. A sample rate mismatch at any point in the chain will cause silence, noise,
+or pitch-shifted audio. If you hear chipmunk voices or extremely slow playback, check
+sample rate consistency first.
 
 ### USB Bandwidth
 
 The Pi 4's USB 3.0 controller (VL805) shares bandwidth between both USB 3.0 ports.
-With the USBStreamer (8ch × 48kHz × 32bit × 2 directions = ~24.6 Mbps) plus MIDI
-controllers, you're well within USB 3.0's 5 Gbps, but the VL805's actual throughput
-is lower than theoretical. If you experience issues, try:
-- Moving the USBStreamer to a USB 2.0 port (it's USB 2.0 Audio Class anyway)
-- Moving MIDI controllers to USB 2.0 ports
-- Using the USB 3.0 ports for just the hub
+The USBStreamer's bandwidth requirement is modest: 8 channels at 48kHz and 32-bit in
+both directions works out to approximately 24.6 Mbps, which is well within USB 3.0's
+theoretical 5 Gbps. However, the VL805 chip's actual throughput is lower than the
+theoretical maximum, and sharing the bus with multiple devices can introduce timing
+jitter. If you experience audio dropouts or USB errors, try moving the USBStreamer to
+one of the USB 2.0 ports (it is a USB 2.0 Audio Class device anyway, so it does not
+benefit from USB 3.0 speeds) and keeping the MIDI controllers on the hub connected to
+the other USB port.
 
 ### Flight Case Considerations
 
-- Ventilation: The Pi 4 at sustained 100% will reach 70-80°C. Include a fan.
-- Cable strain relief: Secure all USB and ADAT connections
-- Power sequencing: The Pi should boot last (after the ADA8200 is stable)
-- Consider a small OLED display (I2C) showing system status instead of LEDs
+The flight case design needs to address several practical concerns. Ventilation is
+critical: the Pi 4 under sustained audio load reaches 70-80 degrees C without active
+cooling, and a closed case makes this worse. Include a fan and ventilation holes (see
+section 12.3 and D-012). All USB and ADAT optical connections should have strain relief
+to prevent accidental disconnection during transport or performance. For power
+sequencing, the ADA8200 should be powered on before the Pi boots, so that the
+USBStreamer's ADAT clock is available when PipeWire starts. If budget allows, a small
+I2C OLED display mounted on the case panel can show system status (temperature, CPU
+load, mode) at a glance without needing a phone or laptop.
