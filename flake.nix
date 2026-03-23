@@ -507,6 +507,19 @@
               exec cargo test --locked -p pi4audio-signal-gen "$@"
             ''}";
           };
+
+          # Local demo stack: PipeWire test env + GM + signal-gen + pcm-bridge + web-ui.
+          local-demo = {
+            type = "app";
+            program = "${pkgs.writeShellScript "local-demo" ''
+              export LOCAL_DEMO_GM_BIN="${graph-manager}/bin/pi4audio-graph-manager"
+              export LOCAL_DEMO_SG_BIN="${signal-gen}/bin/pi4audio-signal-gen"
+              export LOCAL_DEMO_PCM_BIN="${pcm-bridge}/bin/pcm-bridge"
+              export LOCAL_DEMO_PYTHON="${testPython}/bin/python"
+              export PATH="${testPython}/bin:$PATH"
+              exec ${toString ./.}/scripts/local-demo.sh "$@"
+            ''}";
+          };
         };
       }
     ))
