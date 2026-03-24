@@ -34,10 +34,13 @@ cleanup() {
     echo ""
     echo "[local-demo] Shutting down..."
 
-    # Kill child processes in reverse order
+    # Kill child processes in reverse order.
+    # pkill -P kills children first (e.g., uvicorn's --reload multiprocessing
+    # child) to prevent orphaned processes holding ports after cleanup.
     for (( i=${#PIDS[@]}-1 ; i>=0 ; i-- )) ; do
         local pid="${PIDS[$i]}"
         if kill -0 "$pid" 2>/dev/null; then
+            pkill -P "$pid" 2>/dev/null || true
             kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
         fi
@@ -227,7 +230,7 @@ export PI4AUDIO_LEVELS_PORT=9100
 export PI4AUDIO_SKIP_GM_RECOVERY=1
 
 cd "$REPO_DIR/src/web-ui"
-"$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8080 &
+"$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload &
 PIDS+=($!)
 sleep 2
 
