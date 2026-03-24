@@ -5,11 +5,16 @@
 //! and sum-of-squares per channel. A server thread calls [`LevelTracker::take_snapshot`]
 //! at 10 Hz to harvest the accumulated values as dBFS, resetting the accumulators.
 //!
-//! All state is stored in atomic integers (bit-punned f32→u32) so the RT callback
-//! never blocks. The design is single-writer (PW callback) / single-reader (levels
-//! server thread), but uses atomics for correctness without locks.
+//! ## Double-buffer design
+//!
+//! Two accumulator buffers (A and B) eliminate the race condition that existed
+//! in the previous per-field atomic swap design. The PW callback always writes
+//! to the "active" buffer (selected by an atomic index). `take_snapshot()`
+//! atomically flips the index — redirecting the writer to the other buffer —
+//! then reads the now-stale buffer at leisure. One atomic swap replaces N+1
+//! individual swaps, guaranteeing a consistent snapshot.
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 /// Maximum number of channels supported.
 const MAX_CHANNELS: usize = 32;
@@ -80,18 +85,44 @@ impl Default for LevelSnapshot {
     }
 }
 
-/// Lock-free per-channel level tracker.
+/// One half of the double buffer. Holds per-channel accumulators and a
+/// shared frame count. All fields are atomic for lock-free RT access.
+struct AccumulatorBuffer {
+    peak: [AtomicU32; MAX_CHANNELS],
+    sum_sq: [AtomicU32; MAX_CHANNELS],
+    sample_count: AtomicU32,
+}
+
+impl AccumulatorBuffer {
+    fn new() -> Self {
+        Self {
+            peak: std::array::from_fn(|_| AtomicU32::new(0)),
+            sum_sq: std::array::from_fn(|_| AtomicU32::new(0)),
+            sample_count: AtomicU32::new(0),
+        }
+    }
+
+    /// Reset all accumulators to zero. Called by the reader after swapping
+    /// the active index, so no writer contention.
+    fn reset(&self, channels: usize) {
+        self.sample_count.store(0, Ordering::Relaxed);
+        for ch in 0..channels {
+            self.peak[ch].store(0, Ordering::Relaxed);
+            self.sum_sq[ch].store(0, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Lock-free per-channel level tracker using double buffering.
 ///
-/// Single writer (PW process callback) accumulates peak and sum-of-squares.
-/// Single reader (levels server) harvests via [`take_snapshot`].
+/// Single writer (PW process callback) accumulates peak and sum-of-squares
+/// into the active buffer. Single reader (levels server) flips the active
+/// index and reads the stale buffer without contention.
 pub struct LevelTracker {
     channels: usize,
-    /// Per-channel peak (max |sample|), stored as f32 bits in AtomicU32.
-    peak: [AtomicU32; MAX_CHANNELS],
-    /// Per-channel sum of squares, stored as f32 bits in AtomicU32.
-    sum_sq: [AtomicU32; MAX_CHANNELS],
-    /// Total frame count accumulated since last snapshot (shared across channels).
-    sample_count: AtomicU32,
+    buffers: [AccumulatorBuffer; 2],
+    /// Index (0 or 1) of the buffer the writer is currently using.
+    active: AtomicUsize,
 }
 
 // Safety: LevelTracker uses only atomics for shared state. No raw pointers,
@@ -103,14 +134,10 @@ impl LevelTracker {
     /// Create a new level tracker for the given number of channels.
     pub fn new(channels: usize) -> Self {
         assert!(channels <= MAX_CHANNELS, "channels {} exceeds MAX_CHANNELS {}", channels, MAX_CHANNELS);
-        const ZERO_BITS: u32 = 0; // 0.0f32.to_bits() == 0
-        let peak = std::array::from_fn(|_| AtomicU32::new(ZERO_BITS));
-        let sum_sq = std::array::from_fn(|_| AtomicU32::new(ZERO_BITS));
         Self {
             channels,
-            peak,
-            sum_sq,
-            sample_count: AtomicU32::new(0),
+            buffers: [AccumulatorBuffer::new(), AccumulatorBuffer::new()],
+            active: AtomicUsize::new(0),
         }
     }
 
@@ -125,6 +152,12 @@ impl LevelTracker {
             return;
         }
 
+        // Read the active index once per call. If take_snapshot() flips
+        // the index mid-quantum, this entire quantum's data lands in the
+        // same buffer — no partial contamination.
+        let idx = self.active.load(Ordering::Acquire);
+        let buf = &self.buffers[idx];
+
         for frame in 0..n_frames {
             let base = frame * channels;
             for ch in 0..channels {
@@ -132,23 +165,32 @@ impl LevelTracker {
                 let abs_sample = sample.abs();
 
                 // Update peak (max |sample|)
-                atomic_max_f32(&self.peak[ch], abs_sample);
+                atomic_max_f32(&buf.peak[ch], abs_sample);
 
                 // Accumulate sum of squares for RMS
-                atomic_add_f32(&self.sum_sq[ch], sample * sample);
+                atomic_add_f32(&buf.sum_sq[ch], sample * sample);
             }
         }
 
-        let prev = self.sample_count.load(Ordering::Relaxed);
+        let prev = buf.sample_count.load(Ordering::Relaxed);
         let new_count = prev.saturating_add(n_frames as u32);
-        self.sample_count.store(new_count, Ordering::Relaxed);
+        buf.sample_count.store(new_count, Ordering::Relaxed);
     }
 
     /// Harvest the accumulated levels as a dBFS snapshot and reset accumulators.
     ///
-    /// Called from the levels server thread at ~10 Hz.
+    /// Called from the levels server thread at ~10 Hz. Atomically flips the
+    /// active buffer index so the writer starts using the other buffer, then
+    /// reads the stale buffer without any race.
     pub fn take_snapshot(&self) -> LevelSnapshot {
-        let n = self.sample_count.swap(0, Ordering::AcqRel);
+        // Flip the active index: writer switches to the other buffer.
+        // XOR with 1 toggles between 0 and 1.
+        let old_idx = self.active.fetch_xor(1, Ordering::AcqRel);
+        let stale = &self.buffers[old_idx];
+
+        // Read the stale buffer. The writer is now using the other buffer,
+        // so these reads are uncontested.
+        let n = stale.sample_count.load(Ordering::Relaxed);
 
         let mut snap = LevelSnapshot {
             channels: self.channels,
@@ -156,18 +198,19 @@ impl LevelTracker {
         };
 
         for ch in 0..self.channels {
-            let peak_bits = self.peak[ch].swap(0u32, Ordering::AcqRel);
-            let peak_linear = f32::from_bits(peak_bits);
+            let peak_linear = f32::from_bits(stale.peak[ch].load(Ordering::Relaxed));
             snap.peak_dbfs[ch] = linear_to_dbfs(peak_linear);
 
-            let sum_sq_bits = self.sum_sq[ch].swap(0u32, Ordering::AcqRel);
-            let sum_sq = f32::from_bits(sum_sq_bits);
+            let sum_sq = f32::from_bits(stale.sum_sq[ch].load(Ordering::Relaxed));
 
             if n > 0 {
                 let rms_linear = (sum_sq / n as f32).sqrt();
                 snap.rms_dbfs[ch] = linear_to_dbfs(rms_linear);
             }
         }
+
+        // Reset the stale buffer so it's clean for next time.
+        stale.reset(self.channels);
 
         snap
     }
@@ -324,5 +367,87 @@ mod tests {
         atomic_add_f32(&atom, 0.5);
         let val = f32::from_bits(atom.load(Ordering::Relaxed));
         assert!((val - 1.0).abs() < 0.001);
+    }
+
+    // -- Double-buffer specific tests --
+
+    #[test]
+    fn double_buffer_alternates() {
+        let tracker = LevelTracker::new(1);
+        assert_eq!(tracker.active.load(Ordering::Relaxed), 0);
+
+        // First snapshot flips active from 0 -> 1
+        tracker.process(&[0.5], 1);
+        let _snap = tracker.take_snapshot();
+        assert_eq!(tracker.active.load(Ordering::Relaxed), 1);
+
+        // Second snapshot flips active from 1 -> 0
+        tracker.process(&[0.3], 1);
+        let _snap = tracker.take_snapshot();
+        assert_eq!(tracker.active.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn double_buffer_stale_is_clean_after_snapshot() {
+        let tracker = LevelTracker::new(1);
+        tracker.process(&[1.0; 100], 1);
+
+        // Snapshot reads buffer 0 (stale), writer moves to buffer 1
+        let snap = tracker.take_snapshot();
+        assert!((snap.peak_dbfs[0] - 0.0).abs() < 0.01);
+
+        // Buffer 0 should be reset. Next snapshot (reads buffer 1)
+        // should see only what was written after the first snapshot.
+        let snap2 = tracker.take_snapshot();
+        // Buffer 1 had nothing written to it yet, so silence
+        assert_eq!(snap2.peak_dbfs[0], -120.0);
+
+        // Now write to buffer 0 (active is back to 0 after two flips)
+        tracker.process(&[0.25; 10], 1);
+        let snap3 = tracker.take_snapshot();
+        let expected = linear_to_dbfs(0.25);
+        assert!((snap3.peak_dbfs[0] - expected).abs() < 0.1);
+    }
+
+    #[test]
+    fn double_buffer_no_cross_contamination() {
+        // Simulate interleaved write/read to verify no data leaks
+        // between buffers.
+        let tracker = LevelTracker::new(2);
+
+        // Write to buffer 0
+        tracker.process(&[0.8, 0.2, 0.8, 0.2], 2);
+
+        // Snapshot reads buffer 0, writer moves to buffer 1
+        let snap1 = tracker.take_snapshot();
+        assert!((snap1.peak_dbfs[0] - linear_to_dbfs(0.8)).abs() < 0.1);
+        assert!((snap1.peak_dbfs[1] - linear_to_dbfs(0.2)).abs() < 0.1);
+
+        // Write different data to buffer 1
+        tracker.process(&[0.1, 0.9, 0.1, 0.9], 2);
+
+        // Snapshot reads buffer 1
+        let snap2 = tracker.take_snapshot();
+        assert!((snap2.peak_dbfs[0] - linear_to_dbfs(0.1)).abs() < 0.1);
+        assert!((snap2.peak_dbfs[1] - linear_to_dbfs(0.9)).abs() < 0.1);
+    }
+
+    #[test]
+    fn double_buffer_process_after_snapshot_lands_in_new_buffer() {
+        let tracker = LevelTracker::new(1);
+
+        // Write to buffer 0
+        tracker.process(&[0.5; 48], 1);
+
+        // Flip: now writer targets buffer 1
+        let snap = tracker.take_snapshot();
+        assert!((snap.peak_dbfs[0] - linear_to_dbfs(0.5)).abs() < 0.1);
+
+        // This write goes to buffer 1
+        tracker.process(&[0.3; 48], 1);
+
+        // Flip again: reads buffer 1
+        let snap2 = tracker.take_snapshot();
+        assert!((snap2.peak_dbfs[0] - linear_to_dbfs(0.3)).abs() < 0.1);
     }
 }
