@@ -5,31 +5,73 @@
  * Dense single-screen layout — no scrolling, no wasted pixels.
  */
 
+@font-face {
+    font-family: "JetBrains Mono";
+    src: url("fonts/JetBrainsMono-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "JetBrains Mono";
+    src: url("fonts/JetBrainsMono-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
 :root {
-    --bg: #0c0e12;
-    --bg-panel: #14161a;
-    --bg-meter: #181b20;
-    --bg-bar: #2a2e38;
+    /* -- Surfaces -- */
+    --bg: #0a0d14;
+    --bg-panel: #111621;
+    --bg-meter: #151a26;
+    --bg-bar: #252d3a;
+    --bg-elevated: #1c2230;
     --border: #556;
+
+    /* -- Text -- */
     --text: #c8cdd6;
     --text-dim: #8a94a4;
     --text-micro: #6b7585;
     --text-label: #a0aab8;
 
-    --green: #79e25b;
-    --yellow: #e2c039;
-    --red: #e5453a;
-    --blue: #42a5f5;
-    --cyan: #00acc1;
-    --orange: #ff6f00;
-    --amber: var(--orange);
+    /* -- Semantic signal -- */
+    --safe: #79e25b;
+    --warning: #e2c039;
+    --danger: #e5453a;
+    --danger-bg: rgba(229, 69, 58, 0.15);
 
+    /* -- Brand / interactive -- */
+    --primary: #00bcd4;
+    --primary-dim: #00838f;
+    --accent: #f0a030;
+    --accent-bright: #ffb74d;
+
+    /* -- Pipeline groups -- */
+    --group-main: #a0aab8;
+    --group-app: #00bcd4;
+    --group-dsp: #43a047;
+    --group-hw: #e2a639;
+    --group-gain: #2e7d32;
+
+    /* -- Meter -- */
     --meter-peak: #ffffff;
 
+    /* -- Legacy aliases (transitional — remove after full migration) -- */
+    --green: var(--safe);
+    --yellow: var(--warning);
+    --red: var(--danger);
+    --blue: var(--primary);
+    --cyan: var(--primary);
+    --orange: var(--accent);
+    --amber: var(--accent);
+
+    /* -- Layout -- */
     --nav-height: 28px;
     --status-bar-height: 36px;
-    --font-body: "Inter", "JetBrains Mono", system-ui, sans-serif;
-    --font-numeric: "Space Mono", "JetBrains Mono", "Fira Code", monospace;
+    --font-body: "JetBrains Mono", system-ui, monospace;
+    --font-numeric: "JetBrains Mono", monospace;
 }
 
 * {
@@ -293,12 +335,17 @@ html, body {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    background: var(--blue);
+    background: var(--primary);
     color: #fff;
     padding: 1px 6px;
     border-radius: 8px;
     line-height: 1.4;
 }
+
+.sb-mode-badge--dj { background: var(--accent); }
+.sb-mode-badge--live { background: var(--primary); }
+.sb-mode-badge--monitoring { background: var(--group-main); color: #111; }
+.sb-mode-badge--measurement { background: var(--warning); color: #111; }
 
 /* -- Panic button (MUTE / ABORT) ----------------------------------------- */
 
@@ -867,6 +914,14 @@ html, body {
 
 /* -- Color utilities ------------------------------------------------------ */
 
+/* Semantic utility classes (canonical) */
+.c-safe { color: var(--safe) !important; }
+.c-warning { color: var(--warning) !important; }
+.c-danger { color: var(--danger) !important; }
+.c-primary { color: var(--primary) !important; }
+.c-accent { color: var(--accent) !important; }
+
+/* Legacy aliases (transitional — remove after full migration) */
 .c-green { color: var(--green) !important; }
 .c-yellow { color: var(--yellow) !important; }
 .c-orange { color: var(--orange) !important; }
@@ -2211,10 +2266,10 @@ html, body {
 /* -- Graph Visualization (US-064) ---------------------------------------- */
 
 :root {
-    --gv-color-app: #00acc1;
-    --gv-color-dsp: #43a047;
-    --gv-color-hw: #e2a639;
-    --gv-color-main: #a0aab8;
+    --gv-color-app: var(--group-app);
+    --gv-color-dsp: var(--group-dsp);
+    --gv-color-hw: var(--group-hw);
+    --gv-color-main: var(--group-main);
     --gv-node-bg: #1a1d23;
     --gv-border: #556;
     --gv-border-absent: #778;
@@ -2224,7 +2279,7 @@ html, body {
     --gv-port-idle: #667;
     --gv-text-port: #aab;
     --gv-text-ghost: #667;
-    --gv-bypass: var(--blue);
+    --gv-bypass: var(--primary);
 }
 
 .gv-container {
@@ -2336,12 +2391,12 @@ html, body {
 /* GM-managed highlighting */
 
 .gv-node--managed .gv-node-rect {
-    stroke: var(--green);
+    stroke: var(--primary);
     stroke-width: 2;
 }
 
 .gv-link--managed {
-    stroke: var(--green);
+    stroke: var(--primary);
 }
 
 /* -- Ports -- */
@@ -2455,7 +2510,7 @@ html, body {
 }
 
 .gv-arrowhead-gm {
-    fill: var(--green);
+    fill: var(--primary);
 }
 
 /* -- Fade transitions for mode switching -- */
