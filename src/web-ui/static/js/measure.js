@@ -453,7 +453,7 @@
                 (msg.measured_spl_db != null ? msg.measured_spl_db.toFixed(1) + " dB" : "--") +
             '</span>' +
             '<span class="mw-gcal-result-status ' +
-                (msg.passed !== false ? 'c-green' : 'c-red') + '">' +
+                (msg.passed !== false ? 'c-safe' : 'c-danger') + '">' +
                 (msg.passed !== false ? "OK" : "FAIL") +
             '</span>';
 
@@ -557,16 +557,16 @@
         if (statusEl) {
             if (msg.phase === "pending") {
                 statusEl.textContent = msg.message || "Pending...";
-                statusEl.className = "mw-pipeline-status c-yellow";
+                statusEl.className = "mw-pipeline-status c-warning";
             } else if (msg.phase === "complete") {
                 statusEl.textContent = "Complete";
-                statusEl.className = "mw-pipeline-status c-green";
+                statusEl.className = "mw-pipeline-status c-safe";
             } else if (msg.phase === "error") {
                 statusEl.textContent = msg.message || "Error";
-                statusEl.className = "mw-pipeline-status c-red";
+                statusEl.className = "mw-pipeline-status c-danger";
             } else {
                 statusEl.textContent = msg.message || msg.phase || "In progress...";
-                statusEl.className = "mw-pipeline-status c-yellow";
+                statusEl.className = "mw-pipeline-status c-warning";
             }
         }
     }
