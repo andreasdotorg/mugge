@@ -38,7 +38,10 @@ pub(crate) mod ring_buffer {
 }
 
 use levels::GraphClock;
+mod notifier;
 mod server;
+
+use notifier::Notifier;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -159,9 +162,16 @@ fn main() {
     // Level tracker shared between audio process callback and the levels server.
     let level_tracker = Arc::new(levels::LevelTracker::new(args.channels as usize));
 
+    // US-077 Phase 4: event notifiers replace independent poll timers.
+    // The PW process callback signals these after writing data; server
+    // threads wait on them instead of sleeping.
+    let pcm_notifier = Arc::new(Notifier::new());
+    let levels_notifier = Arc::new(Notifier::new());
+
     // Spawn the socket server thread.
     let server_ring = ring.clone();
     let server_shutdown = shutdown.clone();
+    let server_pcm_notifier = pcm_notifier.clone();
     let quantum = args.quantum as usize;
     let channels = args.channels as usize;
     let server_thread = std::thread::Builder::new()
@@ -172,6 +182,7 @@ fn main() {
                 &listen_addr,
                 server_ring,
                 server_shutdown,
+                server_pcm_notifier,
                 quantum,
                 channels,
             );
@@ -183,18 +194,20 @@ fn main() {
         let (levels_kind, levels_addr) = parse_listen(listen);
         let tracker = level_tracker.clone();
         let shutdown = shutdown.clone();
+        let notifier = levels_notifier.clone();
         info!("Level metering enabled: {:?}:{}", levels_kind, levels_addr);
         std::thread::Builder::new()
             .name("levels-server".into())
             .spawn(move || {
-                server::run_levels_server(levels_kind, &levels_addr, tracker, shutdown);
+                server::run_levels_server(levels_kind, &levels_addr, tracker, shutdown, notifier);
             })
             .expect("Failed to spawn levels server thread")
     });
 
     // Run PipeWire audio backend on the main thread.
     info!("Using PipeWire native audio backend");
-    run_pipewire(&args, ring.clone(), level_tracker.clone(), shutdown.clone());
+    run_pipewire(&args, ring.clone(), level_tracker.clone(), shutdown.clone(),
+                 pcm_notifier, levels_notifier);
 
     info!("Audio loop exited, waiting for server thread...");
     let _ = server_thread.join();
@@ -262,6 +275,8 @@ fn run_pipewire(
     ring: Arc<ring_buffer::RingBuffer>,
     level_tracker: Arc<levels::LevelTracker>,
     shutdown: Arc<AtomicBool>,
+    pcm_notifier: Arc<Notifier>,
+    levels_notifier: Arc<Notifier>,
 ) {
     use std::time::Duration;
 
@@ -289,6 +304,8 @@ fn run_pipewire(
 
     let ring_for_cb = ring;
     let levels_for_cb = level_tracker;
+    let pcm_notify_cb = pcm_notifier;
+    let levels_notify_cb = levels_notifier;
     let channels_usize = channels as usize;
     let process_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let process_count_cb = process_count.clone();
@@ -370,6 +387,11 @@ fn run_pipewire(
                     );
                     ring_for_cb.write_interleaved(float_slice, channels_usize, clock);
                     levels_for_cb.process(float_slice, channels_usize, clock);
+
+                    // US-077 Phase 4: wake server threads (RT-safe: atomic
+                    // store + futex wake, no allocation/lock).
+                    pcm_notify_cb.notify();
+                    levels_notify_cb.notify();
                 }
 
                 pipewire_sys::pw_stream_queue_buffer(stream.as_raw_ptr(), raw_buf);

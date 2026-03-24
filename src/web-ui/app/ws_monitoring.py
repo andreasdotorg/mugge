@@ -50,6 +50,13 @@ async def ws_monitoring(
     log.info("Monitoring WS connected (real)")
     try:
         while True:
+            # US-077 Phase 4: wait for new data from pcm-bridge instead of
+            # sleeping. Falls back to 200ms timeout when pcm-bridge is
+            # disconnected, so the WS still pushes updates for DSP health.
+            if levels is not None:
+                await levels.wait_new_data(timeout=0.2)
+            else:
+                await asyncio.sleep(0.1)
             if cdsp is not None:
                 data = cdsp.monitoring_snapshot()
             else:
@@ -62,7 +69,6 @@ async def ws_monitoring(
                 data["pos"] = pos
                 data["nsec"] = nsec
             await ws.send_text(json.dumps(data))
-            await asyncio.sleep(0.1)
     except WebSocketDisconnect:
         log.info("Monitoring WS disconnected")
     except Exception:

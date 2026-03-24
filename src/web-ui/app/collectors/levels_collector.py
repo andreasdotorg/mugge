@@ -43,6 +43,10 @@ class LevelsCollector:
         # Latest snapshot: {channels, peak, rms}
         self._snapshot: dict | None = None
 
+        # US-077 Phase 4: event set when a new snapshot arrives from
+        # pcm-bridge. ws_monitoring awaits this instead of sleeping.
+        self._new_data: asyncio.Event = asyncio.Event()
+
         self._task: asyncio.Task | None = None
 
     async def start(self) -> None:
@@ -88,6 +92,21 @@ class LevelsCollector:
         if snap is None:
             return (0, 0)
         return (snap.get("pos", 0), snap.get("nsec", 0))
+
+    async def wait_new_data(self, timeout: float = 0.2) -> bool:
+        """Wait for new data from pcm-bridge, with timeout.
+
+        Returns True if new data arrived, False on timeout. Clears the
+        event so the next call blocks until more data arrives.
+
+        US-077 Phase 4: used by ws_monitoring to replace asyncio.sleep.
+        """
+        try:
+            await asyncio.wait_for(self._new_data.wait(), timeout=timeout)
+            self._new_data.clear()
+            return True
+        except asyncio.TimeoutError:
+            return False
 
     # -- Internal --
 
@@ -144,6 +163,7 @@ class LevelsCollector:
 
                 data = json.loads(line.decode())
                 self._snapshot = data
+                self._new_data.set()  # US-077: wake ws_monitoring
 
             except asyncio.TimeoutError:
                 log.warning("pcm-bridge levels read timeout — reconnecting")

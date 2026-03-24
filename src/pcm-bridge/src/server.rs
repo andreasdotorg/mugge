@@ -24,6 +24,7 @@ use std::time::Duration;
 use log::{error, info, warn};
 
 use crate::levels::LevelTracker;
+use crate::notifier::Notifier;
 use crate::ring_buffer::RingBuffer;
 use crate::ListenKind;
 
@@ -33,12 +34,13 @@ pub fn run_server(
     addr: &str,
     ring: Arc<RingBuffer>,
     shutdown: Arc<AtomicBool>,
+    notifier: Arc<Notifier>,
     quantum: usize,
     channels: usize,
 ) {
     match kind {
-        ListenKind::Tcp => run_tcp(addr, ring, shutdown, quantum, channels),
-        ListenKind::Unix => run_unix(addr, ring, shutdown, quantum, channels),
+        ListenKind::Tcp => run_tcp(addr, ring, shutdown, notifier, quantum, channels),
+        ListenKind::Unix => run_unix(addr, ring, shutdown, notifier, quantum, channels),
     }
 }
 
@@ -52,6 +54,7 @@ fn run_tcp(
     addr: &str,
     ring: Arc<RingBuffer>,
     shutdown: Arc<AtomicBool>,
+    notifier: Arc<Notifier>,
     quantum: usize,
     channels: usize,
 ) {
@@ -65,7 +68,7 @@ fn run_tcp(
     info!("TCP server listening on {}", addr);
 
     let mut clients: Vec<PcmClient<TcpStream>> = Vec::new();
-    broadcast_loop(&listener, &mut clients, &ring, &shutdown, quantum, channels,
+    broadcast_loop(&listener, &mut clients, &ring, &shutdown, &notifier, quantum, channels,
         |stream, peer| {
             info!("TCP client connected: {}", peer);
             let _ = stream.set_nodelay(true);
@@ -90,6 +93,7 @@ fn run_unix(
     path: &str,
     ring: Arc<RingBuffer>,
     shutdown: Arc<AtomicBool>,
+    notifier: Arc<Notifier>,
     quantum: usize,
     channels: usize,
 ) {
@@ -105,7 +109,7 @@ fn run_unix(
     info!("Unix socket server listening on {}", path);
 
     let mut clients: Vec<PcmClient<UnixStream>> = Vec::new();
-    broadcast_loop(&listener, &mut clients, &ring, &shutdown, quantum, channels,
+    broadcast_loop(&listener, &mut clients, &ring, &shutdown, &notifier, quantum, channels,
         |stream, _peer| {
             info!("Unix socket client connected");
             let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
@@ -131,11 +135,16 @@ fn run_unix(
 /// Accepts new connections, maintains a list of clients with independent read
 /// positions, and broadcasts each quantum of PCM data to all connected clients.
 /// Disconnected or slow clients are dropped via `retain_mut`.
+///
+/// US-077 Phase 4: the loop waits on a `Notifier` signaled by the PW process
+/// callback instead of polling with `thread::sleep`. Data emission is driven
+/// by the PW graph clock.
 fn broadcast_loop<L, S, Setup, Accept>(
     listener: &L,
     clients: &mut Vec<PcmClient<S>>,
     ring: &Arc<RingBuffer>,
     shutdown: &Arc<AtomicBool>,
+    notifier: &Notifier,
     quantum: usize,
     channels: usize,
     setup: Setup,
@@ -156,7 +165,9 @@ where
     out_buf[4..8].copy_from_slice(&frame_count.to_le_bytes());
     // graph_pos and graph_nsec are written per-quantum below
 
-    let send_interval = Duration::from_micros((quantum as u64 * 1_000_000) / 48000);
+    // Timeout for notifier wait — used for shutdown polling and new-connection
+    // acceptance when no audio data is flowing.
+    let wait_timeout = Duration::from_millis(200);
 
     while !shutdown.load(Ordering::Relaxed) {
         // Accept all pending new connections.
@@ -170,17 +181,17 @@ where
 
         let wp = ring.write_pos();
 
-        // Not enough data for a full quantum — sleep and retry.
-        // Use the earliest read_pos among clients (or wp if no clients).
+        // Not enough data for a full quantum — wait for notification from
+        // the PW process callback (US-077 Phase 4: replaces thread::sleep).
         let min_read = clients.iter().map(|c| c.read_pos).min().unwrap_or(wp);
         if wp < min_read + quantum {
-            std::thread::sleep(send_interval / 2);
+            notifier.wait(wait_timeout);
             continue;
         }
 
-        // If no clients, just advance past data to avoid stale buffer reads.
+        // If no clients, wait for notification or new connection.
         if clients.is_empty() {
-            std::thread::sleep(send_interval);
+            notifier.wait(wait_timeout);
             continue;
         }
 
@@ -242,7 +253,7 @@ where
                 for client in clients.iter_mut() {
                     client.read_pos = ring.write_pos();
                 }
-                std::thread::sleep(send_interval / 2);
+                notifier.wait(wait_timeout);
             }
         }
     }
@@ -250,17 +261,22 @@ where
 
 // ---- Level metering server (US060-3) ----
 
-/// Run the level metering server. Sends JSON snapshots at 10 Hz to all
+/// Run the level metering server. Sends JSON snapshots at ~10 Hz to all
 /// connected clients. Each snapshot is a single JSON line (newline-delimited).
+///
+/// US-077 Phase 4: the server waits on a `Notifier` signaled by the PW
+/// process callback instead of sleeping for a fixed 100ms. This makes
+/// snapshot emission driven by the PW graph clock.
 pub fn run_levels_server(
     kind: ListenKind,
     addr: &str,
     tracker: Arc<LevelTracker>,
     shutdown: Arc<AtomicBool>,
+    notifier: Arc<Notifier>,
 ) {
     match kind {
-        ListenKind::Tcp => run_levels_tcp(addr, tracker, shutdown),
-        ListenKind::Unix => run_levels_unix(addr, tracker, shutdown),
+        ListenKind::Tcp => run_levels_tcp(addr, tracker, shutdown, notifier),
+        ListenKind::Unix => run_levels_unix(addr, tracker, shutdown, notifier),
     }
 }
 
@@ -268,6 +284,7 @@ fn run_levels_tcp(
     addr: &str,
     tracker: Arc<LevelTracker>,
     shutdown: Arc<AtomicBool>,
+    notifier: Arc<Notifier>,
 ) {
     let listener = TcpListener::bind(addr).unwrap_or_else(|e| {
         error!("Failed to bind levels TCP {}: {}", addr, e);
@@ -281,6 +298,12 @@ fn run_levels_tcp(
     // Track connected clients. Each gets its own writer.
     let clients: Arc<std::sync::Mutex<Vec<TcpStream>>> =
         Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    // US-077 Phase 4: ~10 Hz rate maintained by accumulating quanta
+    // notifications. Wait up to 100ms for the next notification; take
+    // a snapshot when woken or on timeout.
+    let snapshot_interval = Duration::from_millis(100);
+    let mut last_snapshot = std::time::Instant::now();
 
     while !shutdown.load(Ordering::Relaxed) {
         // Accept new connections.
@@ -298,7 +321,19 @@ fn run_levels_tcp(
             }
         }
 
+        // Wait for PW process callback notification or timeout.
+        let elapsed = last_snapshot.elapsed();
+        if elapsed < snapshot_interval {
+            let remaining = snapshot_interval - elapsed;
+            notifier.wait(remaining);
+            // After waking, check if enough time has passed for a snapshot.
+            if last_snapshot.elapsed() < snapshot_interval {
+                continue; // Not time yet — loop back to accept + wait.
+            }
+        }
+
         // Take a snapshot and broadcast to all clients.
+        last_snapshot = std::time::Instant::now();
         let snap = tracker.take_snapshot();
         let json = format_level_json(&snap);
 
@@ -313,9 +348,6 @@ fn run_levels_tcp(
             }
         });
         drop(locked);
-
-        // 10 Hz = 100ms interval.
-        std::thread::sleep(Duration::from_millis(100));
     }
 
     info!("Levels TCP server shutting down");
@@ -325,6 +357,7 @@ fn run_levels_unix(
     path: &str,
     tracker: Arc<LevelTracker>,
     shutdown: Arc<AtomicBool>,
+    notifier: Arc<Notifier>,
 ) {
     let _ = std::fs::remove_file(path);
     let listener = UnixListener::bind(path).unwrap_or_else(|e| {
@@ -338,6 +371,9 @@ fn run_levels_unix(
 
     let clients: Arc<std::sync::Mutex<Vec<UnixStream>>> =
         Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    let snapshot_interval = Duration::from_millis(100);
+    let mut last_snapshot = std::time::Instant::now();
 
     while !shutdown.load(Ordering::Relaxed) {
         match listener.accept() {
@@ -353,6 +389,17 @@ fn run_levels_unix(
             }
         }
 
+        // Wait for PW process callback notification or timeout.
+        let elapsed = last_snapshot.elapsed();
+        if elapsed < snapshot_interval {
+            let remaining = snapshot_interval - elapsed;
+            notifier.wait(remaining);
+            if last_snapshot.elapsed() < snapshot_interval {
+                continue;
+            }
+        }
+
+        last_snapshot = std::time::Instant::now();
         let snap = tracker.take_snapshot();
         let json = format_level_json(&snap);
 
@@ -367,8 +414,6 @@ fn run_levels_unix(
             }
         });
         drop(locked);
-
-        std::thread::sleep(Duration::from_millis(100));
     }
 
     let _ = std::fs::remove_file(path);
