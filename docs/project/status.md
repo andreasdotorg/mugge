@@ -691,6 +691,7 @@ See `docs/project/defects.md` for full details.
 | F-089 | Medium | Open | `journalctl --user` returns "No entries" on Pi. User service logs not persisted to disk. Only visible in `systemctl --user status` ring buffer. |
 | F-094 | Medium | Open | rsync --delete wiped TLS certs from ~/web-ui/ during S-027 deploy. Need cert exclusion or relocation. |
 | F-095 | High | Open | journald 62% CPU on Pi. Root cause: GM spawns `pw-cli info` per node per poll cycle — ~562 log lines/sec floods journald. Fix: batch queries via `pw-dump` or native PW protocol. |
+| F-096 | Low | Open | `test_happy_path_completes` in `test_measurement_wizard.py` flaky failure. Appeared in US-077 Phase 3 E2E (1/203 failed). Phase 3 changes don't touch wizard code. Suspected mock session timing race. Per L-042: fix or quarantine. |
 
 ### Resolved
 

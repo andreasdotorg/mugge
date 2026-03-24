@@ -3326,3 +3326,40 @@ remains the primary cause.
 
 **Files:**
 - `src/graph-manager/src/` (node polling logic — identify subprocess spawn loop)
+
+---
+
+## F-096: Measurement wizard test_happy_path_completes flaky failure (OPEN)
+
+**Severity:** Low (test reliability — intermittent, does not affect production)
+**Status:** Open
+**Found in:** US-077 Phase 3 E2E run (2026-03-24)
+**Affects:** `src/web-ui/tests/e2e/test_measurement_wizard.py:158`
+**Found by:** worker-demo-fix (US-077 Phase 3 E2E verification)
+
+**Description:** `test_happy_path_completes` in `test_measurement_wizard.py`
+fails intermittently. The failure appeared between Phase 2 (203 passed, 0
+failed) and Phase 3 (203 passed, 1 failed). Phase 3 changes are limited to
+`dashboard.js`, `statusbar.js`, and `spectrum.js` — none of which are in the
+measurement wizard subsystem. The earlier QE run (1,304 tests, 0 failures)
+also passed this test. This points to a timing-dependent flaky test rather
+than a regression introduced by Phase 3.
+
+**Root cause (suspected):** Measurement wizard mock session timing — likely
+related to the same mock state isolation issues as F-049, but manifesting as
+an intermittent failure rather than a hang. The test may have a race condition
+between the wizard's state machine transitions and Playwright's assertions.
+
+**Evidence:**
+- QE full suite (2026-03-24 earlier): 194 E2E passed, 9 xpassed, 0 failed
+- US-077 Phase 2 E2E: 203 passed, 2 skipped, 0 failed
+- US-077 Phase 3 E2E: 203 passed, 1 failed (this test)
+- Phase 3 diff does not touch measurement wizard code
+
+**Fix approach:** Investigate test timing — add explicit waits for wizard
+state transitions, or tighten mock session determinism. Per L-042 and
+testing-process.md: a flaky test is a bug, not an inconvenience. Must be
+fixed or quarantined with `@pytest.mark.skip` referencing this defect ID.
+
+**Related:** F-049 (measurement wizard session isolation — resolved
+`914add6`, but may not have fully addressed all timing issues)
