@@ -35,15 +35,20 @@
 
     var NS = "http://www.w3.org/2000/svg";
 
-    // -- Node type colors --
+    // -- Node type colors (resolved from CSS vars at init) --
 
-    var NODE_COLORS = {
-        source: "#00838f",
-        dsp:    "#2e7d32",
-        gain:   "#1b5e20",
-        output: "#c17900",
-        other:  "#8a94a4"
-    };
+    var NODE_COLORS = null;
+
+    function initNodeColors() {
+        var cv = PiAudio.cssVar;
+        NODE_COLORS = {
+            source: cv("--group-app"),
+            dsp:    cv("--group-gain"),
+            gain:   cv("--group-gain"),
+            output: cv("--group-hw"),
+            other:  cv("--group-main")
+        };
+    }
 
     // -- State --
 
@@ -638,7 +643,7 @@
             }
         }
         if (!devicesOk) {
-            modeLabel.setAttribute("fill", "#e5453a");
+            modeLabel.setAttribute("fill", PiAudio.cssVar("--danger"));
         }
 
         fitViewBox();
@@ -847,6 +852,7 @@
     // -- View lifecycle --
 
     function init() {
+        initNodeColors();
         svgEl = document.getElementById("gv-svg");
         if (!svgEl) return;
         svgEl.appendChild(buildDefs());

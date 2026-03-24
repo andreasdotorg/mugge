@@ -44,14 +44,22 @@
         physinState.push({ peak: -120, peakHold: -120, peakHoldTime: 0, clipTime: 0 });
     }
 
-    // -- Group rendering configs --
+    // -- Group rendering configs (colors resolved from CSS vars at init) --
 
     var groups = {
-        main:   { channels: [0, 1],                   stateArr: captureState,  barW: 7, gap: 2, color: "#8a94a4" },
-        app:    { channels: [2, 3, 4, 5, 6, 7],       stateArr: captureState,  barW: 5, gap: 1, color: "#00838f" },
-        dspout: { channels: [0, 1, 2, 3, 4, 5, 6, 7], stateArr: playbackState, barW: 5, gap: 1, color: "#2e7d32" },
-        physin: { channels: [0, 1, 2, 3, 4, 5, 6, 7], stateArr: physinState,   barW: 5, gap: 1, color: "#c17900" }
+        main:   { channels: [0, 1],                   stateArr: captureState,  barW: 7, gap: 2, color: null },
+        app:    { channels: [2, 3, 4, 5, 6, 7],       stateArr: captureState,  barW: 5, gap: 1, color: null },
+        dspout: { channels: [0, 1, 2, 3, 4, 5, 6, 7], stateArr: playbackState, barW: 5, gap: 1, color: null },
+        physin: { channels: [0, 1, 2, 3, 4, 5, 6, 7], stateArr: physinState,   barW: 5, gap: 1, color: null }
     };
+
+    function initGroupColors() {
+        var cv = PiAudio.cssVar;
+        groups.main.color   = cv("--group-main");
+        groups.app.color    = cv("--primary-dim");
+        groups.dspout.color = cv("--group-gain");
+        groups.physin.color = cv("--group-hw");
+    }
 
     var animating = false;
 
@@ -73,8 +81,8 @@
     }
 
     function barColor(peakDb, baseColor) {
-        if (peakDb >= -3) return "#e5453a";
-        if (peakDb >= -12) return "#e2c039";
+        if (peakDb >= -3) return PiAudio.cssVar("--danger");
+        if (peakDb >= -12) return PiAudio.cssVar("--warning");
         return baseColor;
     }
 
@@ -167,7 +175,7 @@
         var dspWarn = dspState === "degraded";
         var dspText = dspOk ? "Run" : dspWarn ? "Deg" : cdsp.state;
         PiAudio.setText("sb-dsp-state", dspText,
-            dspOk ? "c-green" : dspWarn ? "c-yellow" : "c-red");
+            dspOk ? "c-safe" : dspWarn ? "c-warning" : "c-danger");
 
         // Links: actual/desired (F-044: replaces percentage display)
         // F-088: fallback shows em-dash — buffer_level is hardcoded 0 when GM disconnected.
@@ -227,7 +235,7 @@
         if (pwConnected) {
             var xruns = data.camilladsp.xruns || 0;
             PiAudio.setText("sb-xruns", String(xruns),
-                xruns > 5 ? "c-red" : xruns > 0 ? "c-yellow" : "c-green");
+                xruns > 5 ? "c-danger" : xruns > 0 ? "c-warning" : "c-safe");
         } else {
             PiAudio.setText("sb-xruns", "\u2014", "no-data");
         }
@@ -237,7 +245,7 @@
         var pwFifo = sched.pipewire_policy === "SCHED_FIFO";
         var gmFifo = sched.graphmgr_policy === "SCHED_FIFO";
         var fifoText = sched.pipewire_priority + "/" + sched.graphmgr_priority;
-        var fifoColor = pwFifo ? "c-green" : "c-red";
+        var fifoColor = pwFifo ? "c-safe" : "c-danger";
         PiAudio.setText("sb-fifo", fifoText, fifoColor);
 
         // Memory gauge
@@ -262,6 +270,14 @@
         if (modeEl) {
             modeEl.textContent = data.mode.toUpperCase();
             modeEl.classList.remove("c-grey");
+            // Apply mode-specific badge color class
+            modeEl.classList.remove("sb-mode-badge--dj", "sb-mode-badge--live",
+                "sb-mode-badge--monitoring", "sb-mode-badge--measurement");
+            var modeLower = data.mode.toLowerCase();
+            if (modeLower === "dj") modeEl.classList.add("sb-mode-badge--dj");
+            else if (modeLower === "live") modeEl.classList.add("sb-mode-badge--live");
+            else if (modeLower === "monitoring") modeEl.classList.add("sb-mode-badge--monitoring");
+            else if (modeLower === "measurement") modeEl.classList.add("sb-mode-badge--measurement");
         }
 
         // F-072: Safety alerts from GraphManager (watchdog + gain integrity)
@@ -296,17 +312,17 @@
             el.title = "GraphManager disconnected — safety status unknown";
         } else if (watchdogLatched) {
             // Watchdog mute is ACTIVE — critical alert
-            PiAudio.setText("sb-safety-text", "MUTED", "c-red");
+            PiAudio.setText("sb-safety-text", "MUTED", "c-danger");
             el.title = "Watchdog safety mute ACTIVE — missing: " +
                 missingNodes.join(", ");
         } else if (!gainOk) {
             // Gain integrity violation
-            PiAudio.setText("sb-safety-text", "GAIN!", "c-red");
+            PiAudio.setText("sb-safety-text", "GAIN!", "c-danger");
             el.title = "Gain integrity violation: " +
                 gainViolations.join("; ");
         } else {
             // All clear
-            PiAudio.setText("sb-safety-text", "OK", "c-green");
+            PiAudio.setText("sb-safety-text", "OK", "c-safe");
             el.title = "Safety checks passing";
         }
     }
@@ -405,6 +421,7 @@
     // -- Initialization --
 
     function init() {
+        initGroupColors();
         // Get canvas 2D contexts for mini meters
         var mainCanvas = document.getElementById("sb-mini-main");
         var appCanvas = document.getElementById("sb-mini-app");

@@ -159,60 +159,71 @@ var PiAudio = (function () {
 
     // -- Shared DOM helpers --
 
+    // -- CSS variable cache (read once at init) --
+
+    var _cssVarCache = {};
+    function cssVar(name) {
+        if (!_cssVarCache[name]) {
+            _cssVarCache[name] = getComputedStyle(document.documentElement)
+                .getPropertyValue(name).trim();
+        }
+        return _cssVarCache[name];
+    }
+
     function setText(id, text, colorClass) {
         var el = document.getElementById(id);
         if (!el) return;
         el.textContent = text;
-        el.className = el.className.replace(/\bc-(green|yellow|red|blue|cyan|grey)\b/g, "").replace(/\bno-data\b/g, "").trim();
+        el.className = el.className.replace(/\bc-(safe|warning|danger|primary|accent|green|yellow|red|blue|cyan|grey)\b/g, "").replace(/\bno-data\b/g, "").trim();
         if (colorClass) el.classList.add(colorClass);
     }
 
     function cpuColor(pct) {
-        if (pct >= 80) return "c-red";
-        if (pct >= 60) return "c-yellow";
-        return "c-green";
+        if (pct >= 80) return "c-danger";
+        if (pct >= 60) return "c-warning";
+        return "c-safe";
     }
 
     function cpuColorRaw(pct) {
-        if (pct >= 80) return "var(--red)";
-        if (pct >= 60) return "var(--yellow)";
-        return "var(--green)";
+        if (pct >= 80) return "var(--danger)";
+        if (pct >= 60) return "var(--warning)";
+        return "var(--safe)";
     }
 
     function tempColor(temp) {
-        if (temp >= 80) return "c-red";
-        if (temp >= 75) return "c-yellow";
-        return "c-green";
+        if (temp >= 80) return "c-danger";
+        if (temp >= 75) return "c-warning";
+        return "c-safe";
     }
 
     function tempColorRaw(temp) {
-        if (temp >= 80) return "var(--red)";
-        if (temp >= 75) return "var(--yellow)";
-        return "var(--green)";
+        if (temp >= 80) return "var(--danger)";
+        if (temp >= 75) return "var(--warning)";
+        return "var(--safe)";
     }
 
     function memColor(pct) {
-        if (pct >= 85) return "c-red";
-        if (pct >= 70) return "c-yellow";
-        return "c-green";
+        if (pct >= 85) return "c-danger";
+        if (pct >= 70) return "c-warning";
+        return "c-safe";
     }
 
     function memColorRaw(pct) {
-        if (pct >= 85) return "var(--red)";
-        if (pct >= 70) return "var(--yellow)";
-        return "var(--green)";
+        if (pct >= 85) return "var(--danger)";
+        if (pct >= 70) return "var(--warning)";
+        return "var(--safe)";
     }
 
     function dspLoadColor(pct) {
-        if (pct >= 75) return "c-red";
-        if (pct >= 50) return "c-yellow";
-        return "c-green";
+        if (pct >= 75) return "c-danger";
+        if (pct >= 50) return "c-warning";
+        return "c-safe";
     }
 
     function dspLoadColorRaw(pct) {
-        if (pct >= 75) return "var(--red)";
-        if (pct >= 50) return "var(--yellow)";
-        return "var(--green)";
+        if (pct >= 75) return "var(--danger)";
+        if (pct >= 50) return "var(--warning)";
+        return "var(--safe)";
     }
 
     function setGauge(id, pct, text, color) {
@@ -229,17 +240,17 @@ var PiAudio = (function () {
     }
 
     function splColor(db) {
-        if (db >= 100) return "c-red";
-        if (db >= 95) return "c-orange";
-        if (db >= 85) return "c-yellow";
-        return "c-green";
+        if (db >= 100) return "c-danger";
+        if (db >= 95) return "c-accent";
+        if (db >= 85) return "c-warning";
+        return "c-safe";
     }
 
     function splColorRaw(db) {
-        if (db >= 100) return "var(--red)";
-        if (db >= 95) return "#ff6f00";
-        if (db >= 85) return "var(--yellow)";
-        return "var(--green)";
+        if (db >= 100) return "var(--danger)";
+        if (db >= 95) return "var(--accent)";
+        if (db >= 85) return "var(--warning)";
+        return "var(--safe)";
     }
 
     // -- Initialization --
@@ -277,6 +288,7 @@ var PiAudio = (function () {
         registerGlobalConsumer: registerGlobalConsumer,
         notifyGlobalConsumers: dispatchToGlobalConsumers,
         connectWebSocket: connectWebSocket,
+        cssVar: cssVar,
         setText: setText,
         cpuColor: cpuColor,
         cpuColorRaw: cpuColorRaw,

@@ -47,13 +47,18 @@
     var FRAC_6 = (-6 - DB_MIN) / (DB_MAX - DB_MIN);
     var FRAC_3 = (-3 - DB_MIN) / (DB_MAX - DB_MIN);
 
-    // Group base colors (minimeters palette)
-    var GROUP_COLORS = {
-        main:   { base: "#8a94a4", bright: "#b0b8c8" },  // blue-silver
-        app:    { base: "#00838f", bright: "#00acc1" },   // dark cyan
-        dspout: { base: "#2e7d32", bright: "#43a047" },   // forest green
-        physin: { base: "#c17900", bright: "#e2a639" }    // dark amber
-    };
+    // Group base colors — resolved from CSS variables at init time
+    var GROUP_COLORS = null;
+
+    function initGroupColors() {
+        var cv = PiAudio.cssVar;
+        GROUP_COLORS = {
+            main:   { base: cv("--group-main"),  bright: "#b0b8c8" },
+            app:    { base: cv("--primary-dim"), bright: cv("--group-app") },
+            dspout: { base: cv("--group-gain"),  bright: cv("--group-dsp") },
+            physin: { base: cv("--group-hw"),    bright: "#e8b84a" }
+        };
+    }
 
     var DB_SCALE_MARKS = [0, -6, -12, -24, -48];
 
@@ -99,9 +104,9 @@
     }
 
     function dbReadoutColor(db) {
-        if (db >= -3) return "#e5453a";
-        if (db >= -12) return "#e2c039";
-        return "#79e25b";
+        if (db >= -3) return PiAudio.cssVar("--danger");
+        if (db >= -12) return PiAudio.cssVar("--warning");
+        return PiAudio.cssVar("--safe");
     }
 
     function markGroupInactive(groupId, labelId, labelText) {
@@ -237,9 +242,9 @@
             var grad = ctx.createLinearGradient(0, h, 0, 0);
             grad.addColorStop(0, gc.base);
             grad.addColorStop(Math.min(FRAC_12, 1), gc.bright);
-            grad.addColorStop(Math.min(FRAC_6, 1), "#e2c039");
-            grad.addColorStop(Math.min(FRAC_3, 1), "#e5453a");
-            grad.addColorStop(1, "#e5453a");
+            grad.addColorStop(Math.min(FRAC_6, 1), PiAudio.cssVar("--warning"));
+            grad.addColorStop(Math.min(FRAC_3, 1), PiAudio.cssVar("--danger"));
+            grad.addColorStop(1, PiAudio.cssVar("--danger"));
             ctx.fillStyle = grad;
             ctx.fillRect(0, h - peakFillH, w, peakFillH);
         }
@@ -455,6 +460,7 @@
     // -- View lifecycle --
 
     function init() {
+        initGroupColors();
         buildMeterGroup("meters-main", MAIN_LABELS, MAIN_CHANNELS,
             mainCanvases, mainColumns, "capture", "main");
         buildMeterGroup("meters-app", APP_LABELS, APP_CHANNELS,

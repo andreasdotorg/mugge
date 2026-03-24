@@ -82,9 +82,16 @@
 
     var OUTLINE_STYLE = "rgba(220, 220, 240, 0.7)";
     var OUTLINE_WIDTH = 1.5;
-    var BG_COLOR = "#050608";
-    var GRID_COLOR = "rgba(200, 205, 214, 0.22)";
-    var LABEL_COLOR = "#9aa3b0";
+    var BG_COLOR = null;       // resolved from --bg-meter at init
+    var GRID_COLOR = null;     // resolved from --text-dim at init
+    var LABEL_COLOR = null;    // resolved from --text-label at init
+
+    function initSpectrumColors() {
+        var cv = PiAudio.cssVar;
+        BG_COLOR = cv("--bg-meter");
+        GRID_COLOR = "rgba(200, 205, 214, 0.22)";
+        LABEL_COLOR = cv("--text-label");
+    }
 
     // Smoothing
     var ANALYSER_SMOOTHING = 0.3;
@@ -215,8 +222,8 @@
 
     // Color stops: position [0..1] maps to dB range [DB_MIN..DB_MAX]
     var COLOR_LUT_STOPS = [
-        { pos: 0.00, r: 30,  g: 20,  b: 60,  a: 0.80 },  // -60 dB: deep indigo
-        { pos: 0.15, r: 80,  g: 40,  b: 120, a: 0.80 },  // -51 dB: dark purple
+        { pos: 0.00, r: 20,  g: 22,  b: 55,  a: 0.80 },  // -60 dB: navy-indigo
+        { pos: 0.15, r: 70,  g: 35,  b: 115, a: 0.80 },  // -51 dB: dark purple
         { pos: 0.30, r: 140, g: 50,  b: 160, a: 0.80 },  // -42 dB: magenta
         { pos: 0.50, r: 220, g: 80,  b: 40,  a: 0.80 },  // -30 dB: red-orange
         { pos: 0.65, r: 226, g: 166, b: 57,  a: 0.80 },  // -21 dB: amber
@@ -670,6 +677,7 @@
     // =====================================================================
 
     function init(canvasId) {
+        initSpectrumColors();
         canvas = document.getElementById(canvasId);
         if (!canvas) return;
         ctx = canvas.getContext("2d");
