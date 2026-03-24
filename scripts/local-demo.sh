@@ -169,8 +169,8 @@ echo "[local-demo] Starting pcm-bridge (levels on port 9100, managed mode)..."
 "$PCM_BIN" \
     --managed \
     --mode monitor \
-    --levels-listen tcp:127.0.0.1:9100 \
-    --listen tcp:127.0.0.1:9090 \
+    --levels-listen tcp:0.0.0.0:9100 \
+    --listen tcp:0.0.0.0:9090 \
     --channels 4 \
     --rate 48000 &
 PIDS+=($!)
@@ -208,7 +208,7 @@ export PI4AUDIO_LEVELS_HOST=127.0.0.1
 export PI4AUDIO_LEVELS_PORT=9100
 
 cd "$REPO_DIR/src/web-ui"
-"$PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port 8080 --reload &
+"$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload &
 PIDS+=($!)
 sleep 2
 
