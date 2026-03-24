@@ -13,11 +13,26 @@
 //! atomically flips the index — redirecting the writer to the other buffer —
 //! then reads the now-stale buffer at leisure. One atomic swap replaces N+1
 //! individual swaps, guaranteeing a consistent snapshot.
+//!
+//! ## Graph clock
+//!
+//! Each process callback stamps the buffer with the PipeWire graph clock
+//! (`graph_position` in frames, `graph_nsec` in nanoseconds). The snapshot
+//! carries the most recent clock values for downstream consumers.
 
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{fence, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 /// Maximum number of channels supported.
 const MAX_CHANNELS: usize = 32;
+
+/// PipeWire graph clock stamp captured in the process callback.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct GraphClock {
+    /// Monotonic frame position from `pw_time.ticks`.
+    pub position: u64,
+    /// Monotonic nanoseconds from `pw_time.now`.
+    pub nsec: u64,
+}
 
 /// Convert a linear amplitude to dBFS. Returns -120.0 for zero or negative.
 pub fn linear_to_dbfs(linear: f32) -> f32 {
@@ -64,7 +79,7 @@ fn atomic_add_f32(atom: &AtomicU32, val: f32) {
     }
 }
 
-/// Per-channel level snapshot in dBFS.
+/// Per-channel level snapshot in dBFS, with graph clock.
 #[derive(Debug, Clone)]
 pub struct LevelSnapshot {
     /// Number of active channels in the arrays below.
@@ -73,6 +88,8 @@ pub struct LevelSnapshot {
     pub peak_dbfs: [f32; MAX_CHANNELS],
     /// RMS level per channel in dBFS (root-mean-square since last snapshot).
     pub rms_dbfs: [f32; MAX_CHANNELS],
+    /// Most recent PipeWire graph clock from this accumulation window.
+    pub graph_clock: GraphClock,
 }
 
 impl Default for LevelSnapshot {
@@ -81,16 +98,20 @@ impl Default for LevelSnapshot {
             channels: 0,
             peak_dbfs: [-120.0; MAX_CHANNELS],
             rms_dbfs: [-120.0; MAX_CHANNELS],
+            graph_clock: GraphClock::default(),
         }
     }
 }
 
-/// One half of the double buffer. Holds per-channel accumulators and a
-/// shared frame count. All fields are atomic for lock-free RT access.
+/// One half of the double buffer. Holds per-channel accumulators, a
+/// shared frame count, and the most recent graph clock stamp. All
+/// fields are atomic for lock-free RT access.
 struct AccumulatorBuffer {
     peak: [AtomicU32; MAX_CHANNELS],
     sum_sq: [AtomicU32; MAX_CHANNELS],
     sample_count: AtomicU32,
+    graph_position: AtomicU64,
+    graph_nsec: AtomicU64,
 }
 
 impl AccumulatorBuffer {
@@ -99,6 +120,8 @@ impl AccumulatorBuffer {
             peak: std::array::from_fn(|_| AtomicU32::new(0)),
             sum_sq: std::array::from_fn(|_| AtomicU32::new(0)),
             sample_count: AtomicU32::new(0),
+            graph_position: AtomicU64::new(0),
+            graph_nsec: AtomicU64::new(0),
         }
     }
 
@@ -106,6 +129,8 @@ impl AccumulatorBuffer {
     /// the active index, so no writer contention.
     fn reset(&self, channels: usize) {
         self.sample_count.store(0, Ordering::Relaxed);
+        self.graph_position.store(0, Ordering::Relaxed);
+        self.graph_nsec.store(0, Ordering::Relaxed);
         for ch in 0..channels {
             self.peak[ch].store(0, Ordering::Relaxed);
             self.sum_sq[ch].store(0, Ordering::Relaxed);
@@ -145,7 +170,10 @@ impl LevelTracker {
     ///
     /// This is called from the RT audio thread. It uses only atomic operations
     /// (no allocations, no locks, no syscalls).
-    pub fn process(&self, samples: &[f32], channels: usize) {
+    ///
+    /// `clock` carries the PipeWire graph clock for this quantum. Pass
+    /// `GraphClock::default()` if clock data is unavailable (sentinel 0,0).
+    pub fn process(&self, samples: &[f32], channels: usize, clock: GraphClock) {
         debug_assert_eq!(channels, self.channels);
         let n_frames = samples.len() / channels;
         if n_frames == 0 {
@@ -175,6 +203,11 @@ impl LevelTracker {
         let prev = buf.sample_count.load(Ordering::Relaxed);
         let new_count = prev.saturating_add(n_frames as u32);
         buf.sample_count.store(new_count, Ordering::Relaxed);
+
+        // Stamp the most recent clock values. Each quantum overwrites the
+        // previous stamp — the snapshot returns the latest.
+        buf.graph_position.store(clock.position, Ordering::Relaxed);
+        buf.graph_nsec.store(clock.nsec, Ordering::Relaxed);
     }
 
     /// Harvest the accumulated levels as a dBFS snapshot and reset accumulators.
@@ -183,6 +216,11 @@ impl LevelTracker {
     /// active buffer index so the writer starts using the other buffer, then
     /// reads the stale buffer without any race.
     pub fn take_snapshot(&self) -> LevelSnapshot {
+        // Full fence ensures all prior writes by the RT thread are visible
+        // before we flip the index. This prevents the reader from seeing a
+        // partially-written buffer on weakly-ordered architectures (ARM).
+        fence(Ordering::SeqCst);
+
         // Flip the active index: writer switches to the other buffer.
         // XOR with 1 toggles between 0 and 1.
         let old_idx = self.active.fetch_xor(1, Ordering::AcqRel);
@@ -209,6 +247,11 @@ impl LevelTracker {
             }
         }
 
+        snap.graph_clock = GraphClock {
+            position: stale.graph_position.load(Ordering::Relaxed),
+            nsec: stale.graph_nsec.load(Ordering::Relaxed),
+        };
+
         // Reset the stale buffer so it's clean for next time.
         stale.reset(self.channels);
 
@@ -219,6 +262,10 @@ impl LevelTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn clock(pos: u64, nsec: u64) -> GraphClock {
+        GraphClock { position: pos, nsec }
+    }
 
     #[test]
     fn dbfs_zero_is_minus_120() {
@@ -257,13 +304,14 @@ mod tests {
         assert_eq!(snap.peak_dbfs[1], -120.0);
         assert_eq!(snap.rms_dbfs[0], -120.0);
         assert_eq!(snap.rms_dbfs[1], -120.0);
+        assert_eq!(snap.graph_clock, GraphClock::default());
     }
 
     #[test]
     fn tracker_silent_input() {
         let tracker = LevelTracker::new(2);
         let silence = vec![0.0f32; 256 * 2];
-        tracker.process(&silence, 2);
+        tracker.process(&silence, 2, GraphClock::default());
         let snap = tracker.take_snapshot();
         assert_eq!(snap.peak_dbfs[0], -120.0);
         assert_eq!(snap.rms_dbfs[0], -120.0);
@@ -272,7 +320,7 @@ mod tests {
     #[test]
     fn tracker_unity_sine_peak() {
         let tracker = LevelTracker::new(1);
-        tracker.process(&[1.0], 1);
+        tracker.process(&[1.0], 1, GraphClock::default());
         let snap = tracker.take_snapshot();
         assert!((snap.peak_dbfs[0] - 0.0).abs() < 0.01);
     }
@@ -281,7 +329,7 @@ mod tests {
     fn tracker_unity_dc_rms() {
         let tracker = LevelTracker::new(1);
         let dc: Vec<f32> = vec![1.0; 100];
-        tracker.process(&dc, 1);
+        tracker.process(&dc, 1, GraphClock::default());
         let snap = tracker.take_snapshot();
         assert!((snap.rms_dbfs[0] - 0.0).abs() < 0.01);
     }
@@ -290,7 +338,7 @@ mod tests {
     fn tracker_half_amplitude_rms() {
         let tracker = LevelTracker::new(1);
         let half: Vec<f32> = vec![0.5; 1000];
-        tracker.process(&half, 1);
+        tracker.process(&half, 1, GraphClock::default());
         let snap = tracker.take_snapshot();
         assert!((snap.rms_dbfs[0] - (-6.02)).abs() < 0.1);
     }
@@ -299,7 +347,7 @@ mod tests {
     fn tracker_multichannel_independent() {
         let tracker = LevelTracker::new(2);
         let samples = [1.0, 0.1, 1.0, 0.1, 1.0, 0.1, 1.0, 0.1];
-        tracker.process(&samples, 2);
+        tracker.process(&samples, 2, GraphClock::default());
         let snap = tracker.take_snapshot();
         assert!((snap.peak_dbfs[0] - 0.0).abs() < 0.01);
         assert!((snap.peak_dbfs[1] - (-20.0)).abs() < 0.1);
@@ -308,7 +356,7 @@ mod tests {
     #[test]
     fn tracker_reset_after_snapshot() {
         let tracker = LevelTracker::new(1);
-        tracker.process(&[1.0], 1);
+        tracker.process(&[1.0], 1, GraphClock::default());
         let snap1 = tracker.take_snapshot();
         assert!((snap1.peak_dbfs[0] - 0.0).abs() < 0.01);
         let snap2 = tracker.take_snapshot();
@@ -319,8 +367,8 @@ mod tests {
     #[test]
     fn tracker_multiple_process_calls_accumulate() {
         let tracker = LevelTracker::new(1);
-        tracker.process(&[0.5, 0.3, 0.4], 1);
-        tracker.process(&[0.2, 0.8, 0.1], 1);
+        tracker.process(&[0.5, 0.3, 0.4], 1, GraphClock::default());
+        tracker.process(&[0.2, 0.8, 0.1], 1, GraphClock::default());
         let snap = tracker.take_snapshot();
         let expected_peak = linear_to_dbfs(0.8);
         assert!((snap.peak_dbfs[0] - expected_peak).abs() < 0.1);
@@ -331,7 +379,7 @@ mod tests {
     #[test]
     fn tracker_negative_samples_use_abs_for_peak() {
         let tracker = LevelTracker::new(1);
-        tracker.process(&[-0.9, 0.3, -0.7], 1);
+        tracker.process(&[-0.9, 0.3, -0.7], 1, GraphClock::default());
         let snap = tracker.take_snapshot();
         let expected = linear_to_dbfs(0.9);
         assert!((snap.peak_dbfs[0] - expected).abs() < 0.1);
@@ -376,13 +424,11 @@ mod tests {
         let tracker = LevelTracker::new(1);
         assert_eq!(tracker.active.load(Ordering::Relaxed), 0);
 
-        // First snapshot flips active from 0 -> 1
-        tracker.process(&[0.5], 1);
+        tracker.process(&[0.5], 1, GraphClock::default());
         let _snap = tracker.take_snapshot();
         assert_eq!(tracker.active.load(Ordering::Relaxed), 1);
 
-        // Second snapshot flips active from 1 -> 0
-        tracker.process(&[0.3], 1);
+        tracker.process(&[0.3], 1, GraphClock::default());
         let _snap = tracker.take_snapshot();
         assert_eq!(tracker.active.load(Ordering::Relaxed), 0);
     }
@@ -390,20 +436,15 @@ mod tests {
     #[test]
     fn double_buffer_stale_is_clean_after_snapshot() {
         let tracker = LevelTracker::new(1);
-        tracker.process(&[1.0; 100], 1);
+        tracker.process(&[1.0; 100], 1, GraphClock::default());
 
-        // Snapshot reads buffer 0 (stale), writer moves to buffer 1
         let snap = tracker.take_snapshot();
         assert!((snap.peak_dbfs[0] - 0.0).abs() < 0.01);
 
-        // Buffer 0 should be reset. Next snapshot (reads buffer 1)
-        // should see only what was written after the first snapshot.
         let snap2 = tracker.take_snapshot();
-        // Buffer 1 had nothing written to it yet, so silence
         assert_eq!(snap2.peak_dbfs[0], -120.0);
 
-        // Now write to buffer 0 (active is back to 0 after two flips)
-        tracker.process(&[0.25; 10], 1);
+        tracker.process(&[0.25; 10], 1, GraphClock::default());
         let snap3 = tracker.take_snapshot();
         let expected = linear_to_dbfs(0.25);
         assert!((snap3.peak_dbfs[0] - expected).abs() < 0.1);
@@ -411,22 +452,16 @@ mod tests {
 
     #[test]
     fn double_buffer_no_cross_contamination() {
-        // Simulate interleaved write/read to verify no data leaks
-        // between buffers.
         let tracker = LevelTracker::new(2);
 
-        // Write to buffer 0
-        tracker.process(&[0.8, 0.2, 0.8, 0.2], 2);
+        tracker.process(&[0.8, 0.2, 0.8, 0.2], 2, GraphClock::default());
 
-        // Snapshot reads buffer 0, writer moves to buffer 1
         let snap1 = tracker.take_snapshot();
         assert!((snap1.peak_dbfs[0] - linear_to_dbfs(0.8)).abs() < 0.1);
         assert!((snap1.peak_dbfs[1] - linear_to_dbfs(0.2)).abs() < 0.1);
 
-        // Write different data to buffer 1
-        tracker.process(&[0.1, 0.9, 0.1, 0.9], 2);
+        tracker.process(&[0.1, 0.9, 0.1, 0.9], 2, GraphClock::default());
 
-        // Snapshot reads buffer 1
         let snap2 = tracker.take_snapshot();
         assert!((snap2.peak_dbfs[0] - linear_to_dbfs(0.1)).abs() < 0.1);
         assert!((snap2.peak_dbfs[1] - linear_to_dbfs(0.9)).abs() < 0.1);
@@ -436,18 +471,72 @@ mod tests {
     fn double_buffer_process_after_snapshot_lands_in_new_buffer() {
         let tracker = LevelTracker::new(1);
 
-        // Write to buffer 0
-        tracker.process(&[0.5; 48], 1);
+        tracker.process(&[0.5; 48], 1, GraphClock::default());
 
-        // Flip: now writer targets buffer 1
         let snap = tracker.take_snapshot();
         assert!((snap.peak_dbfs[0] - linear_to_dbfs(0.5)).abs() < 0.1);
 
-        // This write goes to buffer 1
-        tracker.process(&[0.3; 48], 1);
+        tracker.process(&[0.3; 48], 1, GraphClock::default());
 
-        // Flip again: reads buffer 1
         let snap2 = tracker.take_snapshot();
         assert!((snap2.peak_dbfs[0] - linear_to_dbfs(0.3)).abs() < 0.1);
+    }
+
+    // -- Graph clock tests --
+
+    #[test]
+    fn graph_clock_captured_in_snapshot() {
+        let tracker = LevelTracker::new(1);
+        tracker.process(&[0.5; 256], 1, clock(48000, 1_000_000_000));
+        let snap = tracker.take_snapshot();
+        assert_eq!(snap.graph_clock.position, 48000);
+        assert_eq!(snap.graph_clock.nsec, 1_000_000_000);
+    }
+
+    #[test]
+    fn graph_clock_latest_wins() {
+        let tracker = LevelTracker::new(1);
+        tracker.process(&[0.5; 256], 1, clock(48000, 1_000_000_000));
+        tracker.process(&[0.5; 256], 1, clock(96000, 2_000_000_000));
+        let snap = tracker.take_snapshot();
+        assert_eq!(snap.graph_clock.position, 96000);
+        assert_eq!(snap.graph_clock.nsec, 2_000_000_000);
+    }
+
+    #[test]
+    fn graph_clock_reset_after_snapshot() {
+        let tracker = LevelTracker::new(1);
+        tracker.process(&[0.5; 256], 1, clock(48000, 1_000_000_000));
+        let _snap = tracker.take_snapshot();
+
+        let snap2 = tracker.take_snapshot();
+        assert_eq!(snap2.graph_clock, GraphClock::default());
+    }
+
+    #[test]
+    fn graph_clock_monotonic_across_snapshots() {
+        let tracker = LevelTracker::new(1);
+
+        // Simulate 3 quanta with monotonically increasing clocks.
+        tracker.process(&[0.5; 256], 1, clock(256, 5_333_333));
+        let snap1 = tracker.take_snapshot();
+
+        tracker.process(&[0.5; 256], 1, clock(512, 10_666_666));
+        let snap2 = tracker.take_snapshot();
+
+        tracker.process(&[0.5; 256], 1, clock(768, 16_000_000));
+        let snap3 = tracker.take_snapshot();
+
+        assert!(snap2.graph_clock.position > snap1.graph_clock.position);
+        assert!(snap3.graph_clock.position > snap2.graph_clock.position);
+        assert!(snap2.graph_clock.nsec > snap1.graph_clock.nsec);
+        assert!(snap3.graph_clock.nsec > snap2.graph_clock.nsec);
+    }
+
+    #[test]
+    fn graph_clock_default_when_no_data() {
+        let tracker = LevelTracker::new(1);
+        let snap = tracker.take_snapshot();
+        assert_eq!(snap.graph_clock, GraphClock::default());
     }
 }

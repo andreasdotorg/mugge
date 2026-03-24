@@ -36,6 +36,8 @@ pub(crate) mod levels {
 pub(crate) mod ring_buffer {
     pub use audio_common::ring_buffer::*;
 }
+
+use levels::GraphClock;
 mod server;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -290,6 +292,8 @@ fn run_pipewire(
     let channels_usize = channels as usize;
     let process_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
     let process_count_cb = process_count.clone();
+    let clock_logged = std::sync::Arc::new(AtomicBool::new(false));
+    let clock_logged_cb = clock_logged.clone();
 
     let _stream_ptr = stream.as_raw_ptr();
 
@@ -322,6 +326,39 @@ fn run_pipewire(
                     return;
                 }
 
+                // Read PipeWire graph clock via pw_stream_get_time_n.
+                let clock = {
+                    let mut pw_time: std::mem::MaybeUninit<pipewire_sys::pw_time> =
+                        std::mem::MaybeUninit::zeroed();
+                    let ret = pipewire_sys::pw_stream_get_time_n(
+                        stream.as_raw_ptr() as *mut _,
+                        pw_time.as_mut_ptr(),
+                        std::mem::size_of::<pipewire_sys::pw_time>(),
+                    );
+                    if ret == 0 {
+                        let t = pw_time.assume_init();
+                        GraphClock {
+                            position: t.ticks,
+                            nsec: if t.now >= 0 { t.now as u64 } else { 0 },
+                        }
+                    } else {
+                        GraphClock::default()
+                    }
+                };
+
+                // Log the first graph clock values at startup.
+                if clock.position != 0
+                    && !clock_logged_cb.load(Ordering::Relaxed)
+                    && clock_logged_cb
+                        .compare_exchange(false, true, Ordering::Relaxed, Ordering::Relaxed)
+                        .is_ok()
+                {
+                    info!(
+                        "First graph clock: position={}, nsec={}",
+                        clock.position, clock.nsec
+                    );
+                }
+
                 let byte_count = (*chunk).size as usize;
                 let bytes_per_frame = channels_usize * std::mem::size_of::<f32>();
                 let n_frames = byte_count / bytes_per_frame;
@@ -331,8 +368,8 @@ fn run_pipewire(
                         data_ptr as *const f32,
                         n_frames * channels_usize,
                     );
-                    ring_for_cb.write_interleaved(float_slice, channels_usize);
-                    levels_for_cb.process(float_slice, channels_usize);
+                    ring_for_cb.write_interleaved(float_slice, channels_usize, clock);
+                    levels_for_cb.process(float_slice, channels_usize, clock);
                 }
 
                 pipewire_sys::pw_stream_queue_buffer(stream.as_raw_ptr(), raw_buf);

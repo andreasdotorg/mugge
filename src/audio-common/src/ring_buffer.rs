@@ -5,8 +5,60 @@
 //!
 //! If the writer laps a reader, the reader detects the gap and skips ahead
 //! (drop-oldest semantics). The writer never blocks.
+//!
+//! ## Clock metadata
+//!
+//! Each write is accompanied by a `ChunkMeta` entry in a parallel metadata
+//! ring. Consumers can read `(graph_position, graph_nsec, n_frames)` for
+//! each chunk to correlate PCM data with PipeWire graph clock timestamps.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+
+use crate::level_tracker::GraphClock;
+
+/// Metadata for one write chunk in the ring buffer.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ChunkMeta {
+    /// PipeWire graph clock frame position at this chunk.
+    pub graph_position: u64,
+    /// PipeWire graph clock nanoseconds at this chunk.
+    pub graph_nsec: u64,
+    /// Number of frames in this chunk.
+    pub n_frames: u32,
+}
+
+/// Metadata slot stored atomically in the metadata ring.
+/// Each slot holds position, nsec, and n_frames as separate atomics
+/// so the RT writer can stamp them without locks.
+struct MetaSlot {
+    graph_position: AtomicU64,
+    graph_nsec: AtomicU64,
+    n_frames: AtomicU64, // stored as u64 for alignment; only lower 32 bits used
+}
+
+impl MetaSlot {
+    fn new() -> Self {
+        Self {
+            graph_position: AtomicU64::new(0),
+            graph_nsec: AtomicU64::new(0),
+            n_frames: AtomicU64::new(0),
+        }
+    }
+
+    fn store(&self, meta: &ChunkMeta) {
+        self.graph_position.store(meta.graph_position, Ordering::Relaxed);
+        self.graph_nsec.store(meta.graph_nsec, Ordering::Relaxed);
+        self.n_frames.store(meta.n_frames as u64, Ordering::Relaxed);
+    }
+
+    fn load(&self) -> ChunkMeta {
+        ChunkMeta {
+            graph_position: self.graph_position.load(Ordering::Relaxed),
+            graph_nsec: self.graph_nsec.load(Ordering::Relaxed),
+            n_frames: self.n_frames.load(Ordering::Relaxed) as u32,
+        }
+    }
+}
 
 /// Lock-free ring buffer for interleaved float32 PCM audio.
 ///
@@ -23,6 +75,14 @@ pub struct RingBuffer {
     /// Monotonically increasing write position in frames.
     /// Readers see this via Acquire ordering.
     write_pos: AtomicUsize,
+    /// Parallel metadata ring — one slot per frame-capacity entry.
+    /// Indexed by `meta_write_count % meta_capacity`. Each write()
+    /// call stamps one slot.
+    meta: Box<[MetaSlot]>,
+    /// Number of metadata slots (= capacity, power of 2).
+    meta_capacity: usize,
+    /// Monotonically increasing metadata write counter.
+    meta_write_pos: AtomicUsize,
 }
 
 // Safety: the ring buffer is designed for SPSC use. The writer (PW callback)
@@ -36,11 +96,15 @@ impl RingBuffer {
     /// Create a new ring buffer. `capacity` is rounded up to the next power of 2.
     pub fn new(capacity: usize, channels: usize) -> Self {
         let capacity = capacity.next_power_of_two();
+        let meta: Vec<MetaSlot> = (0..capacity).map(|_| MetaSlot::new()).collect();
         Self {
             data: vec![0.0f32; capacity * channels].into_boxed_slice(),
             capacity,
             channels,
             write_pos: AtomicUsize::new(0),
+            meta: meta.into_boxed_slice(),
+            meta_capacity: capacity,
+            meta_write_pos: AtomicUsize::new(0),
         }
     }
 
@@ -48,7 +112,8 @@ impl RingBuffer {
     ///
     /// Called from the PipeWire process callback (single writer).
     /// `samples` contains `n_frames * channels` interleaved floats.
-    pub fn write_interleaved(&self, samples: &[f32], channels: usize) {
+    /// `clock` carries the PipeWire graph clock for this chunk.
+    pub fn write_interleaved(&self, samples: &[f32], channels: usize, clock: GraphClock) {
         debug_assert_eq!(channels, self.channels);
         let n_frames = samples.len() / channels;
         if n_frames == 0 {
@@ -94,6 +159,16 @@ impl RingBuffer {
                 );
             }
         }
+
+        // Stamp metadata for this chunk.
+        let mwp = self.meta_write_pos.load(Ordering::Relaxed);
+        let meta_idx = mwp & (self.meta_capacity - 1);
+        self.meta[meta_idx].store(&ChunkMeta {
+            graph_position: clock.position,
+            graph_nsec: clock.nsec,
+            n_frames: n_frames as u32,
+        });
+        self.meta_write_pos.store(mwp + 1, Ordering::Release);
 
         // Publish the new write position. Release ordering ensures the
         // data writes above are visible to readers before they see the
@@ -144,6 +219,17 @@ impl RingBuffer {
         Some(out)
     }
 
+    /// Read the most recent metadata entry. Returns `None` if no writes
+    /// have occurred yet.
+    pub fn latest_meta(&self) -> Option<ChunkMeta> {
+        let mwp = self.meta_write_pos.load(Ordering::Acquire);
+        if mwp == 0 {
+            return None;
+        }
+        let idx = (mwp - 1) & (self.meta_capacity - 1);
+        Some(self.meta[idx].load())
+    }
+
     /// Ring buffer capacity in frames.
     pub fn capacity(&self) -> usize {
         self.capacity
@@ -154,6 +240,10 @@ impl RingBuffer {
 mod tests {
     use super::*;
 
+    fn no_clock() -> GraphClock {
+        GraphClock::default()
+    }
+
     #[test]
     fn write_and_read_basic() {
         let ring = RingBuffer::new(16, 2);
@@ -161,7 +251,7 @@ mod tests {
 
         // Write 4 frames of stereo data.
         let data: Vec<f32> = (0..8).map(|i| i as f32).collect();
-        ring.write_interleaved(&data, 2);
+        ring.write_interleaved(&data, 2, no_clock());
         assert_eq!(ring.write_pos(), 4);
 
         // Read back.
@@ -175,11 +265,11 @@ mod tests {
 
         // Write 6 frames.
         let data1: Vec<f32> = (0..6).map(|i| i as f32).collect();
-        ring.write_interleaved(&data1, 1);
+        ring.write_interleaved(&data1, 1, no_clock());
 
         // Write 4 more frames (wraps around: 6+4=10, capacity=8).
         let data2: Vec<f32> = (10..14).map(|i| i as f32).collect();
-        ring.write_interleaved(&data2, 1);
+        ring.write_interleaved(&data2, 1, no_clock());
 
         // Read the last 4 frames (positions 6..10).
         let out = ring.read_interleaved(6, 4).unwrap();
@@ -191,9 +281,9 @@ mod tests {
         let ring = RingBuffer::new(4, 1);
 
         // Write 4 frames.
-        ring.write_interleaved(&[1.0, 2.0, 3.0, 4.0], 1);
+        ring.write_interleaved(&[1.0, 2.0, 3.0, 4.0], 1, no_clock());
         // Write 4 more (overwrites the first 4).
-        ring.write_interleaved(&[5.0, 6.0, 7.0, 8.0], 1);
+        ring.write_interleaved(&[5.0, 6.0, 7.0, 8.0], 1, no_clock());
 
         // Try to read from position 0 — lapped, should return None.
         assert!(ring.read_interleaved(0, 4).is_none());
@@ -206,7 +296,7 @@ mod tests {
     #[test]
     fn not_enough_data() {
         let ring = RingBuffer::new(8, 2);
-        ring.write_interleaved(&[1.0, 2.0, 3.0, 4.0], 2); // 2 frames
+        ring.write_interleaved(&[1.0, 2.0, 3.0, 4.0], 2, no_clock()); // 2 frames
 
         // Try to read 4 frames — not enough data yet.
         assert!(ring.read_interleaved(0, 4).is_none());
@@ -214,5 +304,45 @@ mod tests {
         // Read 2 frames should work.
         let out = ring.read_interleaved(0, 2).unwrap();
         assert_eq!(out, vec![1.0, 2.0, 3.0, 4.0]);
+    }
+
+    // -- Metadata tests --
+
+    #[test]
+    fn meta_none_before_write() {
+        let ring = RingBuffer::new(8, 1);
+        assert!(ring.latest_meta().is_none());
+    }
+
+    #[test]
+    fn meta_captured_on_write() {
+        let ring = RingBuffer::new(8, 1);
+        let clk = GraphClock { position: 1024, nsec: 21_333_333 };
+        ring.write_interleaved(&[0.5; 256], 1, clk);
+
+        let meta = ring.latest_meta().unwrap();
+        assert_eq!(meta.graph_position, 1024);
+        assert_eq!(meta.graph_nsec, 21_333_333);
+        assert_eq!(meta.n_frames, 256);
+    }
+
+    #[test]
+    fn meta_latest_wins() {
+        let ring = RingBuffer::new(8, 1);
+        ring.write_interleaved(&[0.5; 4], 1, GraphClock { position: 100, nsec: 1000 });
+        ring.write_interleaved(&[0.5; 4], 1, GraphClock { position: 200, nsec: 2000 });
+
+        let meta = ring.latest_meta().unwrap();
+        assert_eq!(meta.graph_position, 200);
+        assert_eq!(meta.graph_nsec, 2000);
+    }
+
+    #[test]
+    fn meta_n_frames_correct() {
+        let ring = RingBuffer::new(1024, 2);
+        ring.write_interleaved(&[0.0; 512], 2, no_clock()); // 256 frames
+
+        let meta = ring.latest_meta().unwrap();
+        assert_eq!(meta.n_frames, 256);
     }
 }
