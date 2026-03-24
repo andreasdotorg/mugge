@@ -201,6 +201,23 @@ fi
 
 # ---- 8. Start web-ui ----
 echo ""
+# Kill stale uvicorn processes that may hold port 8080 from a previous run.
+# --reload spawns a multiprocessing child that can survive parent cleanup.
+if "$PYTHON" -c "
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    s.bind(('0.0.0.0', 8080))
+    s.close()
+except OSError:
+    sys.exit(1)
+" 2>/dev/null; then
+    :
+else
+    echo "[local-demo] Port 8080 in use — killing stale processes..."
+    pkill -f 'uvicorn app.main:app.*8080' 2>/dev/null || true
+    sleep 1
+fi
 echo "[local-demo] Starting web-ui (port 8080, real collectors)..."
 export PI_AUDIO_MOCK=0
 export PI4AUDIO_GM_HOST=127.0.0.1
@@ -210,7 +227,7 @@ export PI4AUDIO_LEVELS_PORT=9100
 export PI4AUDIO_SKIP_GM_RECOVERY=1
 
 cd "$REPO_DIR/src/web-ui"
-"$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload &
+"$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8080 &
 PIDS+=($!)
 sleep 2
 

@@ -132,10 +132,23 @@ EOF
 
 # Start PipeWire + WirePlumber (WP activates nodes; GM manages links per D-039)
 cmd_start() {
-    # Check if already running
+    # Check if both already running
+    local pw_running=false wp_running=false
     if [ -f "$PW_PIDFILE" ] && kill -0 "$(cat "$PW_PIDFILE")" 2>/dev/null; then
+        pw_running=true
+    fi
+    if [ -f "$WP_PIDFILE" ] && kill -0 "$(cat "$WP_PIDFILE")" 2>/dev/null; then
+        wp_running=true
+    fi
+    if $pw_running && $wp_running; then
         echo "PipeWire already running (PID $(cat "$PW_PIDFILE"))"
+        echo "WirePlumber already running (PID $(cat "$WP_PIDFILE"))"
         return 0
+    fi
+    # If partially running, stop everything and restart cleanly
+    if $pw_running || $wp_running; then
+        echo "Partial state detected — restarting..."
+        cmd_stop
     fi
 
     setup_env
