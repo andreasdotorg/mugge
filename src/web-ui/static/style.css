@@ -22,41 +22,50 @@
 }
 
 :root {
-    /* -- Surfaces -- */
-    --bg: #0a0d14;
-    --bg-panel: #111621;
-    --bg-meter: #151a26;
-    --bg-bar: #252d3a;
-    --bg-elevated: #1c2230;
-    --border: #556;
+    /* -- Surfaces (purple-navy) -- */
+    --bg: #0c0b14;
+    --bg-panel: #131221;
+    --bg-meter: #171626;
+    --bg-bar: #28293a;
+    --bg-elevated: #1e1e30;
+    --border: #546;
 
-    /* -- Text -- */
+    /* -- Text (unchanged) -- */
     --text: #c8cdd6;
     --text-dim: #8a94a4;
     --text-micro: #6b7585;
     --text-label: #a0aab8;
 
-    /* -- Semantic signal -- */
+    /* -- Semantic signal (unchanged) -- */
     --safe: #79e25b;
     --warning: #e2c039;
     --danger: #e5453a;
     --danger-bg: rgba(229, 69, 58, 0.15);
 
-    /* -- Brand / interactive -- */
-    --primary: #00bcd4;
-    --primary-dim: #00838f;
+    /* -- Brand / interactive (L2 Soft Lilac) -- */
+    --primary: #b39ddb;
+    --primary-dim: #7e57c2;
     --accent: #f0a030;
     --accent-bright: #ffb74d;
 
     /* -- Pipeline groups -- */
     --group-main: #a0aab8;
-    --group-app: #00bcd4;
+    --group-app: #b39ddb;
     --group-dsp: #43a047;
     --group-hw: #e2a639;
     --group-gain: #2e7d32;
 
     /* -- Meter -- */
     --meter-peak: #ffffff;
+
+    /* -- Legacy aliases (transitional) -- */
+    --green: var(--safe);
+    --yellow: var(--warning);
+    --red: var(--danger);
+    --blue: var(--primary);
+    --cyan: var(--primary);
+    --orange: var(--accent);
+    --amber: var(--accent);
 
     /* -- Layout -- */
     --nav-height: 28px;
