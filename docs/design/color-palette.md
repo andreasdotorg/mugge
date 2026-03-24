@@ -1,46 +1,27 @@
-<!-- Proposed by UX Specialist on 2026-03-24. Pending owner approval on three open questions (see end of document). -->
+# Pi4 Audio Workstation -- Color Palette
 
-# Color Palette Audit and Proposal
-
-## Current State Analysis
-
-Reviewed `style.css` (2794 lines), plus all JS files (`dashboard.js`, `statusbar.js`, `spectrum.js`, `graph.js`, `app.js`, `system.js`). Full inventory of colors currently in use:
-
-### CSS Custom Properties (`:root`)
-- `--bg: #0c0e12` / `--bg-panel: #14161a` / `--bg-meter: #181b20` / `--bg-bar: #2a2e38` (surface hierarchy)
-- `--border: #556`
-- `--text: #c8cdd6` / `--text-dim: #8a94a4` / `--text-micro: #6b7585` / `--text-label: #a0aab8`
-- `--green: #79e25b` / `--yellow: #e2c039` / `--red: #e5453a` / `--blue: #42a5f5` / `--cyan: #00acc1` / `--orange: #ff6f00`
-- `--amber: var(--orange)` (alias, same value)
-- `--meter-peak: #ffffff`
-
-### Graph Visualization (second `:root` block)
-- `--gv-color-app: #00acc1` (cyan, matches `--cyan`)
-- `--gv-color-dsp: #43a047` (forest green)
-- `--gv-color-hw: #e2a639` (amber/gold)
-- `--gv-color-main: #a0aab8` (silver)
-- Plus node/link/port colors
-
-### JS Hardcoded Colors (scattered across 6 files)
-- Meter group palette: main `#8a94a4/#b0b8c8`, app `#00838f/#00acc1`, dspout `#2e7d32/#43a047`, physin `#c17900/#e2a639`
-- Meter threshold: green `#79e25b` / yellow `#e2c039` / red `#e5453a` (at -12dB/-3dB)
-- Graph node types: source `#00838f`, dsp `#2e7d32`, gain `#1b5e20`, output `#c17900`, other `#8a94a4`
-- Spectrum LUT: deep indigo -> purple -> magenta -> red-orange -> amber -> yellow -> warm white -> white
-
-### Problems Identified
-1. **Inconsistent greens:** `--green: #79e25b` (bright lime) vs graph `#2e7d32`/`#43a047` (forest greens) vs channel selected `rgba(46,125,50,...)`. Three distinct green families.
-2. **`--amber` = `--orange`:** The alias `--amber: var(--orange)` means amber/orange are conflated. The logo needs distinct amber vs orange.
-3. **`--blue: #42a5f5`** is a mid-blue that conflicts with the logo direction (navy/charcoal base + cyan/teal primary). The current blue serves as the primary interactive color, but the logo wants cyan/teal in that role.
-4. **No navy/charcoal.** The bg tones are pure neutral grey-blacks (#0c0e12, #14161a). The logo direction wants navy-shifted darks.
-5. **Hardcoded hex values in JS** duplicate CSS vars -- fragile and error-prone.
+> **Status:** APPROVED (2026-03-24). All design questions resolved by owner.
+> **Author:** UX Specialist. **Reviewed by:** Owner, Architect.
 
 ---
 
-## Proposed Unified Color Palette
+## Design Principles
 
-Aligned with the logo direction (navy/charcoal + cyan/teal + amber/orange), optimized for dark venue readability, and with clear semantic roles.
+1. **Dark venue first.** Every color must be readable at arm's length on a 1080p
+   HDMI display under stage lighting and in near-darkness.
+2. **Semantic over decorative.** Signal colors (safe/warning/danger) have strict
+   meaning. They are never used for branding or decoration.
+3. **Logo-aligned identity.** Navy/charcoal base, cyan/teal primary, amber accent --
+   shared visual DNA between logo and UI.
+4. **Color-blind safe.** Critical indicators never rely on color alone. Position,
+   luminance, text labels, and shape provide redundant cues.
 
-### 1. Surface / Background Hierarchy (navy-shifted)
+---
+
+## 1. Surface / Background Hierarchy
+
+Subtle navy undertone -- enough for brand identity, not so much that it
+looks "themed." WCAG contrast against `--text` is maintained.
 
 | Token | Hex | Role |
 |---|---|---|
@@ -50,113 +31,354 @@ Aligned with the logo direction (navy/charcoal + cyan/teal + amber/orange), opti
 | `--bg-bar` | `#252d3a` | Track/slider/inactive bar fill |
 | `--bg-elevated` | `#1c2230` | Elevated elements (tooltips, overlays) |
 
-These have a subtle navy undertone instead of neutral grey. The shift is minimal -- just enough to give the UI a distinct identity without degrading readability. Retains WCAG contrast against text.
+**Decision (Q1):** Subtle navy shift as proposed. Owner confirmed: do not go
+stronger. The goal is professional tool UI, not a themed skin.
 
-### 2. Text Hierarchy
+## 2. Text Hierarchy
 
 | Token | Hex | Role |
 |---|---|---|
-| `--text` | `#c8cdd6` | Primary text (unchanged, high contrast) |
+| `--text` | `#c8cdd6` | Primary text (high contrast) |
 | `--text-dim` | `#8a94a4` | Secondary labels, inactive text |
 | `--text-micro` | `#6b7585` | Tertiary, scale markings, hint text |
 | `--text-label` | `#a0aab8` | Meter labels, section headers |
 
-No change needed. These already provide good hierarchy and contrast.
+Unchanged from current UI. Already provides clean four-tier hierarchy.
 
-### 3. Semantic Signal Colors (the traffic-light system)
+## 3. Semantic Signal Colors
+
+The traffic-light system. Used ONLY for system state indication.
+
+| Token | Hex | Semantic Role | Used For |
+|---|---|---|---|
+| `--safe` | `#79e25b` | Nominal / connected / OK | Connection dots, level meters (< -12 dB), process status "running" |
+| `--warning` | `#e2c039` | Approaching limit / caution | Level meters (-12 to -3 dB), CPU > 60%, temp > 75C, mem > 70% |
+| `--danger` | `#e5453a` | Clipping / error / critical | Level meters (> -3 dB), CLIP indicator, panic button, xruns, disconnects |
+| `--danger-bg` | `rgba(229, 69, 58, 0.15)` | Danger background tint | Panic button bg, error row bg, abort button bg |
+
+**Rule:** `--safe` (green) is strictly limited to "nominal/connected" semantics.
+It is NOT used for managed-node highlighting, branding, or decoration (see Q3 below).
+
+### Accessibility
+
+- Luminance ratios: safe (~0.52) vs danger (~0.13) = 4:1 in grayscale.
+- All three colors are distinguishable under protanopia/deuteranopia due to
+  yellow's high luminance separating it from both red and green.
+- UI never relies on color alone: meters use bar height, clips use "CLIP" text,
+  event log uses border-left + colored text + icon, panic button uses pulsing
+  animation + text label.
+
+## 4. Brand / Interactive Colors
 
 | Token | Hex | Role | Notes |
 |---|---|---|---|
-| `--safe` | `#79e25b` | Safe / nominal / connected | Bright lime-green, high visibility |
-| `--warning` | `#e2c039` | Warning / approaching limit | Golden yellow |
-| `--danger` | `#e5453a` | Danger / clipping / error | Warm red |
+| `--primary` | `#00bcd4` | Primary interactive | Buttons, active tabs, sliders, focus rings, managed-node highlights |
+| `--primary-dim` | `#00838f` | Muted primary | Inactive hover, subtle highlights, dark teal |
+| `--accent` | `#f0a030` | Accent / highlight | DJ mode badge, active measurement step, SPL caution zone |
+| `--accent-bright` | `#ffb74d` | Bright accent | Emphasis text on dark backgrounds |
 
-These remain unchanged. They are already excellent: high saturation, easily distinguishable, and the green-yellow-red progression is universally understood. All three are distinguishable under protanopia/deuteranopia because the yellow has high luminance vs the red and green.
+**Key change:** `--blue: #42a5f5` (mid-blue) is retired. `--primary: #00bcd4`
+(cyan/teal) takes over all interactive roles, aligning with the logo.
 
-**Accessibility note:** The green/red pair alone is problematic for ~8% of males with red-green color blindness. However, our UI never uses color alone -- meters use positional information (height), clip indicators use text labels ("CLIP"), and warning/danger events use border-left + text color together. The luminance difference between safe (#79e25b, relative luminance ~0.52) and danger (#e5453a, ~0.13) is 4:1, which provides differentiation even in grayscale. For additional safety, a `--danger-bg: rgba(229, 69, 58, 0.15)` background pattern on danger states is recommended (already used on the panic button).
+`--orange: #ff6f00` is retired. `--accent: #f0a030` (warm amber) replaces it,
+providing clear visual separation from `--danger` (red).
 
-### 4. Brand / Interactive Colors
+### Mode Badge Colors
 
-| Token | Hex | Role | Notes |
-|---|---|---|---|
-| `--primary` | `#00bcd4` | Primary interactive (buttons, active tabs, sliders, focus rings) | Cyan/teal -- the logo's primary accent. Brighter than current `--cyan: #00acc1` for better tap-target visibility. |
-| `--primary-dim` | `#00838f` | Muted primary (inactive hover, subtle highlights) | Dark teal |
-| `--accent` | `#f0a030` | Accent / highlight (mode badges, active measurement, SPL caution) | Warm amber -- distinct from both `--warning` and `--danger`. More orange than yellow. |
-| `--accent-bright` | `#ffb74d` | Bright accent (for emphasis on dark backgrounds) | Light amber |
+**Decision (Q2):** Mode badges are color-differentiated:
 
-**This is the key change.** The current `--blue: #42a5f5` becomes `--primary: #00bcd4`. All interactive elements shift from mid-blue to cyan/teal, aligning with the logo. The old `--blue` is retired.
-
-The accent shifts from `--orange: #ff6f00` (pure orange, too close to danger-red) to `--accent: #f0a030` (warm amber, visually distinct from danger). This gives us the logo's amber tone while keeping clear separation from the danger signal.
-
-### 5. Pipeline / Graph Group Colors
-
-| Token | Hex | Role | Notes |
-|---|---|---|---|
-| `--group-main` | `#a0aab8` | Main L/R output meters, graph "main" nodes | Silver (unchanged) |
-| `--group-app` | `#00bcd4` | Application source (Mixxx/Reaper) meters | Cyan, matches `--primary` |
-| `--group-dsp` | `#43a047` | DSP/convolver output meters | Forest green (unchanged) |
-| `--group-hw` | `#e2a639` | Hardware I/O (PHYS IN, USBStreamer) | Amber/gold (unchanged) |
-| `--group-gain` | `#2e7d32` | Gain nodes in graph view | Dark green (unchanged) |
-
-These map directly to the graph visualization and meter group colors. The only change is app (source) shifting from `#00838f` to `#00bcd4` to match the new primary.
-
-### 6. Spectrum Palette
-
-The existing amplitude-based LUT (indigo -> purple -> magenta -> red-orange -> amber -> yellow -> warm white -> white) is perceptually excellent. It maps low amplitude to cool colors and high amplitude to warm/bright colors, which is intuitive. Recommendation is to keep it but nudge the cold end toward navy to match the background:
-
-| Position | Current | Proposed | dB Approx |
-|---|---|---|---|
-| 0.00 | `rgb(30, 20, 60)` deep indigo | `rgb(20, 22, 55)` navy-indigo | -60 dB |
-| 0.15 | `rgb(80, 40, 120)` dark purple | `rgb(70, 35, 115)` (minimal change) | -51 dB |
-| 0.30-1.00 | unchanged | unchanged | -42 to 0 dB |
-
-This is a very minor tweak -- the spectrum's warm-end colors (amber, yellow, white) already align with the logo palette naturally.
-
-### 7. Token Migration: Old -> New
-
-| Old Token | New Token | Notes |
+| Mode | Badge Color | Token |
 |---|---|---|
-| `--green` | `--safe` | Semantic rename |
-| `--yellow` | `--warning` | Semantic rename |
-| `--red` | `--danger` | Semantic rename |
-| `--blue` | `--primary` | Cyan/teal replaces mid-blue |
-| `--cyan` | `--primary` | Merged with blue |
-| `--orange` | `--accent` | Warm amber replaces pure orange |
-| `--amber` | `--accent` | Was an alias for orange anyway |
+| DJ | Amber | `--accent` (`#f0a030`) |
+| Live | Cyan | `--primary` (`#00bcd4`) |
+| Monitoring | Silver | `--group-main` (`#a0aab8`) |
+| Measurement | Golden yellow | `--warning` (`#e2c039`) |
 
-For backward compatibility, keep the old names as aliases during transition:
+Rationale: DJ and Live are the two performance modes. Amber (warm/energetic)
+maps naturally to DJ/psytrance. Cyan (cool/precise) maps to Live vocal
+performance. Monitoring and Measurement are non-performance modes and use
+subdued/informational colors.
+
+### Managed-Node Highlight
+
+**Decision (Q3):** Graph-view nodes/links managed by the GraphManager use
+`--primary` (cyan), NOT `--safe` (green). Green is reserved strictly for
+"nominal/connected" semantic state. Managed means "system-controlled" -- a
+structural property, not a health indicator.
+
+## 5. Pipeline / Graph Group Colors
+
+Four distinct hues for the four pipeline stages, used consistently across
+meters, mini-meters, status bar, and graph visualization.
+
+| Token | Hex | Role | Muted Variant |
+|---|---|---|---|
+| `--group-main` | `#a0aab8` | Main L/R output (silver) | `#8a94a4` |
+| `--group-app` | `#00bcd4` | App source: Mixxx/Reaper (cyan) | `#00838f` |
+| `--group-dsp` | `#43a047` | DSP/convolver output (forest green) | `#2e7d32` |
+| `--group-hw` | `#e2a639` | Hardware I/O: USBStreamer/PHYS IN (amber) | `#c17900` |
+
+The graph visualization maps these to node header colors. The muted variants
+are used as the darker base in meter gradients and mini-meter bars.
+
+### CSS variable mapping for graph view
+
 ```css
---green: var(--safe);
---yellow: var(--warning);
---red: var(--danger);
---blue: var(--primary);
---cyan: var(--primary);
---orange: var(--accent);
---amber: var(--accent);
+--gv-color-app:  var(--group-app);
+--gv-color-dsp:  var(--group-dsp);
+--gv-color-hw:   var(--group-hw);
+--gv-color-main: var(--group-main);
+```
+
+Graph node types map to groups:
+- `source` -> `--group-app`
+- `dsp` -> `--group-dsp`
+- `gain` -> `--group-dsp` (muted: `#2e7d32`)
+- `output` -> `--group-hw`
+- `other` -> `--group-main`
+
+## 6. Spectrum Palette
+
+Amplitude-based color LUT. Perceptually maps low-to-high energy as
+cool-to-warm. The cold end shifts slightly toward navy to match backgrounds.
+
+| Position | RGBA | dB Approx | Description |
+|---|---|---|---|
+| 0.00 | `rgba(20, 22, 55, 0.80)` | -60 dB | Navy-indigo (shifted from pure indigo) |
+| 0.15 | `rgba(70, 35, 115, 0.80)` | -51 dB | Dark purple |
+| 0.30 | `rgba(140, 50, 160, 0.80)` | -42 dB | Magenta |
+| 0.50 | `rgba(220, 80, 40, 0.80)` | -30 dB | Red-orange |
+| 0.65 | `rgba(226, 166, 57, 0.80)` | -21 dB | Amber |
+| 0.80 | `rgba(230, 210, 60, 0.80)` | -12 dB | Yellow |
+| 0.92 | `rgba(255, 240, 180, 0.90)` | -5 dB | Warm white |
+| 1.00 | `rgba(255, 255, 255, 0.95)` | 0 dB | Near-white |
+
+Only positions 0.00 and 0.15 changed (cold-end navy nudge). The warm end
+(amber/yellow/white) naturally aligns with the brand palette.
+
+## 7. Token Migration
+
+### Old -> New mapping
+
+| Old Token | New Token | Value Change |
+|---|---|---|
+| `--green` | `--safe` | Same hex `#79e25b` |
+| `--yellow` | `--warning` | Same hex `#e2c039` |
+| `--red` | `--danger` | Same hex `#e5453a` |
+| `--blue` | `--primary` | `#42a5f5` -> `#00bcd4` |
+| `--cyan` | `--primary` | `#00acc1` -> `#00bcd4` |
+| `--orange` | `--accent` | `#ff6f00` -> `#f0a030` |
+| `--amber` | `--accent` | Was alias for `--orange` |
+
+### Backward-compatibility aliases (transitional)
+
+```css
+:root {
+    /* New canonical tokens */
+    --safe: #79e25b;
+    --warning: #e2c039;
+    --danger: #e5453a;
+    --danger-bg: rgba(229, 69, 58, 0.15);
+    --primary: #00bcd4;
+    --primary-dim: #00838f;
+    --accent: #f0a030;
+    --accent-bright: #ffb74d;
+
+    /* Legacy aliases (remove after full migration) */
+    --green: var(--safe);
+    --yellow: var(--warning);
+    --red: var(--danger);
+    --blue: var(--primary);
+    --cyan: var(--primary);
+    --orange: var(--accent);
+    --amber: var(--accent);
+}
+```
+
+### CSS utility class migration
+
+| Old Class | New Class | Notes |
+|---|---|---|
+| `.c-green` | `.c-safe` | Add new, keep old as alias |
+| `.c-yellow` | `.c-warning` | Add new, keep old as alias |
+| `.c-red` | `.c-danger` | Add new, keep old as alias |
+| `.c-blue` | `.c-primary` | Add new, keep old as alias |
+| `.c-cyan` | `.c-primary` | Merge into primary |
+| `.c-orange` | `.c-accent` | Add new, keep old as alias |
+| `.c-amber` | `.c-accent` | Merge into accent |
+
+---
+
+## 8. Complete `:root` Block (target state)
+
+```css
+:root {
+    /* -- Surfaces -- */
+    --bg: #0a0d14;
+    --bg-panel: #111621;
+    --bg-meter: #151a26;
+    --bg-bar: #252d3a;
+    --bg-elevated: #1c2230;
+    --border: #556;
+
+    /* -- Text -- */
+    --text: #c8cdd6;
+    --text-dim: #8a94a4;
+    --text-micro: #6b7585;
+    --text-label: #a0aab8;
+
+    /* -- Semantic signal -- */
+    --safe: #79e25b;
+    --warning: #e2c039;
+    --danger: #e5453a;
+    --danger-bg: rgba(229, 69, 58, 0.15);
+
+    /* -- Brand / interactive -- */
+    --primary: #00bcd4;
+    --primary-dim: #00838f;
+    --accent: #f0a030;
+    --accent-bright: #ffb74d;
+
+    /* -- Pipeline groups -- */
+    --group-main: #a0aab8;
+    --group-app: #00bcd4;
+    --group-dsp: #43a047;
+    --group-hw: #e2a639;
+    --group-gain: #2e7d32;
+
+    /* -- Meter -- */
+    --meter-peak: #ffffff;
+
+    /* -- Legacy aliases (transitional) -- */
+    --green: var(--safe);
+    --yellow: var(--warning);
+    --red: var(--danger);
+    --blue: var(--primary);
+    --cyan: var(--primary);
+    --orange: var(--accent);
+    --amber: var(--accent);
+
+    /* -- Layout -- */
+    --nav-height: 28px;
+    --status-bar-height: 36px;
+    --font-body: "Inter", "JetBrains Mono", system-ui, sans-serif;
+    --font-numeric: "Space Mono", "JetBrains Mono", "Fira Code", monospace;
+}
 ```
 
 ---
 
-## UX Rationale
+## Implementation Checklist
 
-1. **Dark venue readability:** Navy backgrounds have slightly higher perceived contrast with cyan/teal text than neutral blacks with blue text. The warm amber accent cuts through even more effectively in low-light environments.
+### Phase 1: CSS foundation (no visual change yet)
 
-2. **Semantic clarity:** Renamed tokens (`--safe/warning/danger`) make the traffic-light system explicit. Developers can't accidentally use `--green` for a non-semantic purpose without noticing the mismatch.
+1. **`src/web-ui/static/style.css`** -- Update the `:root` block
+   - Add new canonical tokens (`--safe`, `--warning`, `--danger`, `--primary`,
+     `--primary-dim`, `--accent`, `--accent-bright`, `--danger-bg`,
+     `--bg-elevated`, `--group-*`)
+   - Shift background values to navy-tinted variants
+   - Keep old token names as aliases pointing to new tokens
+   - Update the second `:root` block (graph viz) to reference `--group-*`
+     tokens instead of hardcoded `--gv-color-*` hex values
+   - Add new utility classes (`.c-safe`, `.c-warning`, `.c-danger`,
+     `.c-primary`, `.c-accent`) alongside existing ones
 
-3. **Logo alignment:** Navy base + cyan primary + amber accent directly matches the proposed logo (crossover curve + meter bars). The UI and logo share the same visual DNA.
+2. **`src/web-ui/static/style.css`** -- Update mode badge
+   - `.sb-mode-badge` default stays `--primary`
+   - Add `.sb-mode-badge--dj { background: var(--accent); }`
+   - Add `.sb-mode-badge--live { background: var(--primary); }`
+   - Add `.sb-mode-badge--monitoring { background: var(--group-main); }`
+   - Add `.sb-mode-badge--measurement { background: var(--warning); }`
 
-4. **Spectrum compatibility:** The existing heat palette already progresses through amber/warm-white -- no conflict with the new scheme.
+3. **`src/web-ui/static/style.css`** -- Update managed-node highlight
+   - `.gv-node--managed .gv-node-rect { stroke: var(--primary); }` (was `--green`)
+   - `.gv-link--managed { stroke: var(--primary); }` (was `--green`)
+   - `.gv-arrowhead-gm { fill: var(--primary); }` (was `--green`)
 
-5. **Color-blind safety:** All critical state changes use position + luminance + text, never color alone. The safe/warning/danger trio has 4:1+ luminance ratios between each pair.
+### Phase 2: JS hardcoded colors -> CSS variable references
 
-6. **Minimal disruption:** Most colors are staying the same or shifting slightly. The biggest visual change is interactive elements going from blue (#42a5f5) to cyan/teal (#00bcd4), which is actually closer to what `--cyan` already was.
+4. **`src/web-ui/static/js/dashboard.js`**
+   - `GROUP_COLORS` object: replace hardcoded hex with
+     `getComputedStyle(document.documentElement).getPropertyValue('--group-*')`
+     at init time, or use CSS variables directly where possible
+   - `dbReadoutColor()`: replace hex values with `var(--safe)`, `var(--warning)`,
+     `var(--danger)` (these are inline styles set via JS, so use
+     `getComputedStyle` to read the CSS var values once at init)
+   - Meter gradient color stops: replace `#e2c039`/`#e5453a` with cached
+     CSS variable values
+
+5. **`src/web-ui/static/js/statusbar.js`**
+   - Mini-meter group configs: replace `color: "#8a94a4"` etc. with
+     cached CSS variable values for `--group-main`, `--group-app`, etc.
+   - `barColor()`: replace hardcoded hex thresholds with cached CSS vars
+
+6. **`src/web-ui/static/js/app.js`**
+   - `splColorRaw()`: replace `"#ff6f00"` with cached `--accent` value
+   - `cpuColorRaw()`, `tempColorRaw()`, `memColorRaw()`, `dspLoadColorRaw()`:
+     these already use `var(--red)` etc., so they will work via aliases. No
+     change needed in Phase 2; migrate to new token names in Phase 3.
+
+7. **`src/web-ui/static/js/graph.js`**
+   - `NODE_COLORS` object: replace hardcoded hex with cached CSS vars
+     (`--group-app`, `--group-dsp`, `--group-gain`, `--group-hw`, `--group-main`)
+   - Line 641 `"#e5453a"` -> cached `--danger`
+
+8. **`src/web-ui/static/js/spectrum.js`**
+   - `BG_COLOR`: replace `"#050608"` with cached `--bg-meter` (or a computed
+     slightly-darker variant)
+   - `COLOR_LUT_STOPS`: update positions 0.00 and 0.15 per Section 6 above
+   - `LABEL_COLOR`: replace with cached `--text-label`
+   - Grid/outline colors: replace hardcoded rgba values with computed variants
+     of `--text-dim`
+
+### Phase 3: Migrate CSS references to new token names
+
+9. **`src/web-ui/static/style.css`** -- Global search-and-replace
+   - `var(--green)` -> `var(--safe)` (throughout)
+   - `var(--yellow)` -> `var(--warning)`
+   - `var(--red)` -> `var(--danger)`
+   - `var(--blue)` -> `var(--primary)`
+   - `var(--cyan)` -> `var(--primary)`
+   - `var(--orange)` -> `var(--accent)`
+   - `var(--amber)` -> `var(--accent)`
+   - Update rgba() values that reference the old colors (e.g.,
+     `rgba(66, 165, 245, ...)` -> new primary-based rgba values with
+     `#00bcd4` = `rgb(0, 188, 212)`)
+
+10. **`src/web-ui/static/js/app.js`** -- Update function names and var refs
+    - `cpuColorRaw` etc.: `"var(--red)"` -> `"var(--danger)"`, etc.
+    - `cpuColor` etc.: `"c-red"` -> `"c-danger"`, etc.
+
+11. **`src/web-ui/templates/index.html`** (if any inline color refs)
+    - Update any HTML-level color class references
+
+12. **`src/web-ui/static/js/statusbar.js`** -- Mode badge class assignment
+    - Where mode badge background is set, apply the mode-specific CSS class
+      (`sb-mode-badge--dj`, `sb-mode-badge--live`, etc.)
+
+### Phase 4: Cleanup
+
+13. Remove legacy aliases from `:root` block
+14. Remove old utility classes (`.c-green`, `.c-blue`, etc.)
+15. Remove old `--gv-color-*` variables (replaced by `--group-*`)
+16. Verify all hardcoded hex values in JS are eliminated
+17. Visual regression test on 1080p HDMI display at the Pi
+
+### Execution Order
+
+Phases 1-2 can be done in a single commit -- they are backward-compatible
+(aliases keep old references working). Phase 3 is a large search-and-replace
+that should be its own commit. Phase 4 cleanup is a separate commit after
+visual verification.
+
+Recommended branch: `us-XXX-color-palette` (story number TBD).
 
 ---
 
-## Open Questions (pending owner decision)
+## Audit Trail
 
-1. **How navy should the backgrounds go?** The proposal uses a subtle shift. If the owner wants something more distinctly navy, backgrounds can push to `--bg-panel: #121a28` range. Trade-off: stronger brand identity vs risk of looking too "themed" for a tool UI.
-
-2. **Should the mode badge color change?** Currently `--blue` (will become `--primary`). Could use `--accent` for DJ mode and `--primary` for Live mode to differentiate at a glance.
-
-3. **Graph view managed-node highlight:** Currently `--green`. Should this stay as-is (indicates GM-controlled) or shift to `--primary` (indicates system-managed)?
+| Date | Event |
+|---|---|
+| 2026-03-24 | UX Specialist: initial audit and proposal with 3 open questions |
+| 2026-03-24 | Owner decisions: (Q1) subtle navy, (Q2) differentiated mode badges, (Q3) managed=primary |
+| 2026-03-24 | Document updated to APPROVED status with implementation checklist |

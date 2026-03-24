@@ -5310,6 +5310,48 @@ node names, no WirePlumber, GM integration, managed-mode services.
 
 ---
 
+## US-076: Web UI Color Palette Migration
+
+**As** the system operator,
+**I want** a consistent, deliberate color palette across the entire web UI,
+**so that** visual elements have clear semantic meaning, mode identification
+is instant, and the interface looks professional and cohesive.
+
+**Status:** selected (owner resolved all 3 open palette questions 2026-03-24. UX specialist preparing implementation checklist.)
+**Depends on:** none (CSS/JS only, no backend changes)
+**Blocks:** none (visual polish, can land independently)
+
+**Background:** The web UI accumulated ad-hoc color choices across multiple
+stories (US-051, US-064, US-065, US-066). Colors were chosen per-feature
+without a unified palette. The owner reviewed the full color inventory and
+resolved all open questions (background tone, mode badge differentiation,
+managed-node highlight).
+
+**Acceptance criteria:**
+- [ ] CSS variable renames: all color tokens consolidated into a single
+  semantic naming scheme (e.g., `--color-bg-primary`, `--color-accent-*`)
+  with no orphaned or duplicate variables
+- [ ] Background shifted from pure black to dark navy (owner-approved tone)
+- [ ] All JS-hardcoded color values consolidated into CSS variables — no
+  inline hex/rgb values in JavaScript files
+- [ ] Mode badge differentiation: DJ mode = amber, Live mode = cyan (distinct
+  at a glance, colorblind-safe pairing)
+- [ ] Managed-node highlight in graph view (US-064) changed to cyan (was
+  previous color — owner directive)
+- [ ] No visual regressions: all existing UI elements (meters, spectrum,
+  status bar, graph, config tab) retain correct appearance with new palette
+- [ ] Color palette documented (variable names, hex values, semantic meaning)
+  in a reference section accessible to future UI work
+
+**DoD:**
+- [ ] All CSS variables renamed and consolidated
+- [ ] All JS hardcoded colors migrated to CSS variables
+- [ ] E2E tests pass (no visual regressions)
+- [ ] UX specialist sign-off on final palette implementation
+- [ ] Owner acceptance (visual review)
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -5434,6 +5476,8 @@ US-039 + US-043 ──> US-069 (Speaker Setup & Design Tool — T/S modeling, pl
 US-069 ──> US-011b + US-010 + US-067 (design tool outputs feed profile schema, correction targets, and simulator models)
 US-060 ──> ENH-002 (Comprehensive Tooltips — touch-friendly tooltips for all dashboard elements)
 US-060 + US-055 ──> ENH-003 (Latching Health Alarm — persistent "problems occurred" indicator with acknowledgment)
+US-076 (Color Palette Migration — CSS variables, navy bg, mode badge amber/cyan, managed-node cyan)
+  No dependencies, no blockers. Pure visual/CSS/JS consolidation.
 US-070 (GitHub Actions CI — self-hosted aarch64 runner, branch protection on main, PR-based workflow)
   Prerequisites: all nix run .#test-* targets in flake.nix
   Enables: PR-based parallel development for all future stories
