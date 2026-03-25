@@ -899,3 +899,49 @@ must assume worktree isolation will fail and plan accordingly.
 5. **Prompting improvement needed.** The Agent tool should surface worktree
    creation failures as errors rather than silently falling back. To be
    addressed in future prompt engineering work.
+
+## L-053: Don't kill workers before owner validation
+
+**Date:** 2026-03-25
+**Context:** Workers were shut down immediately after reporting "done" on
+US-079/080/081/082 implementation. When the owner tested and found bugs
+(flat -60 dB spectrum line in US-080, meter irregularity in US-081), a
+fresh worker had to be spawned without any of the original context.
+
+**Problem:** The new worker had to re-read the codebase, understand the
+architecture, and figure out what the original worker did — all of which
+the original worker already knew. This wastes time and risks introducing
+new bugs from incomplete understanding.
+
+**Fix:** Keep workers alive through owner validation. Only shut down a
+worker after:
+1. The owner has tested the feature
+2. The owner has accepted it OR all reported issues have been fixed
+3. There is no reasonable chance of follow-up work on the same code
+
+**Trade-off:** Keeping workers alive costs memory. With a 3-worker budget,
+this means being strategic about which workers stay alive. Priority: keep
+workers alive for features currently under owner testing.
+
+## L-054: Browser cache causes phantom bugs after JS changes
+
+**Date:** 2026-03-25
+**Context:** Multiple "bugs" reported during this session were caused by
+stale cached JavaScript in the browser. After JS file changes were deployed
+(via local-demo or Pi), the browser served old versions of `spectrum.js`,
+`app.js`, `test.js`, etc. This caused:
+- "The meters aren't updating" (old meter code without PPM ballistics)
+- "The spectrum still flashes" (old spectrum code without F-098 fixes)
+- "The FFT selector doesn't appear" (old test.js without US-080 controls)
+
+Each time, the fix was a hard reload (Ctrl+Shift+R) in the browser.
+
+**Fix:**
+1. **Immediate:** Always hard reload (Ctrl+Shift+R) after any JS change.
+   Include this in test procedures and tell the owner.
+2. **Permanent:** Add cache-busting query params to static JS includes in
+   HTML templates (e.g., `<script src="spectrum.js?v=abc123">`). The hash
+   or version should change on every deployment. This eliminates the
+   entire class of phantom bugs.
+3. **Consider:** `Cache-Control: no-cache` header for development mode
+   (local-demo), strict caching for production (Pi).

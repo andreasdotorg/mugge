@@ -3489,7 +3489,7 @@ processing). Owner confirms spectrum "super stable now" on both tabs.
 
 **Filed:** 2026-03-25
 **Severity:** Medium (code quality / maintainability)
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-25 — FFT pipeline deduplicated as part of US-080 implementation)
 **Affects:** Web UI JavaScript (`test.js`, `spectrum.js`)
 **Found by:** Owner (during F-098 investigation)
 

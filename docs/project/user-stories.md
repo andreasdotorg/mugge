@@ -5681,7 +5681,7 @@ outputs,
 **so that** the spectrum analyzer and level meters show the full-range audio
 signal, which is what I need for room correction testing and verification.
 
-**Status:** draft (PM-filed 2026-03-25 per owner feedback. Next priority after
+**Status:** in-progress (IMPLEMENT complete 2026-03-25. GM routing table updated to tap pre-convolver signal for pcm-bridge. Originally: PM-filed 2026-03-25 per owner feedback. Next priority after
 F-098 lands. Foundation for US-080.)
 **Depends on:** F-098 (spectrum fix must land first — same relay code path),
 US-075 (local demo environment for testing)
@@ -5757,8 +5757,7 @@ with a UI selector and optionally overlay L-R difference,
 **so that** I can inspect the signal at every processing stage (source, pre-
 convolver, post-convolver per channel, post-gain) and analyze stereo image.
 
-**Status:** draft (PM-filed 2026-03-25 per owner feedback. Extends US-079
-foundation.)
+**Status:** in-progress (IMPLEMENT complete 2026-03-25. FFT size selector + auto-ranging Y axis implemented. Under validation — flat -60 dB line issue reported. Originally: PM-filed 2026-03-25 per owner feedback. Extends US-079 foundation.)
 **Depends on:** US-079 (pre-convolver capture point establishes the pattern),
 US-075 (local demo environment for testing)
 **Blocks:** none (but enables full signal chain debugging and stereo analysis)
@@ -5873,8 +5872,7 @@ latching clip indicator,
 **so that** I can monitor gain staging, detect clipping instantly, and
 maintain safe operating levels throughout a performance.
 
-**Status:** draft (PM-filed 2026-03-25 per owner approval of AE metering
-recommendation.)
+**Status:** in-progress (IMPLEMENT complete 2026-03-25. Segmented meters with PPM ballistics, peak hold, clip latch, 30 Hz snapshot rate. Under validation — meter irregularity reported. Originally: PM-filed 2026-03-25 per owner approval of AE metering recommendation.)
 **Depends on:** US-077 (single-clock timestamps for consistent meter updates)
 **Blocks:** none
 
@@ -5973,8 +5971,7 @@ PipeWire graph in addition to synthesized signals (sine, pink noise, sweep),
 meaningful screenshots with live content, and verify room correction with
 known reference tracks.
 
-**Status:** draft (PM-filed 2026-03-25 per owner request. Owner has MP3 file
-in home directory for testing.)
+**Status:** in-progress (IMPLEMENT complete 2026-03-25. symphonia decoder added, play_file RPC command, test tab UI control. Originally: PM-filed 2026-03-25 per owner request. Owner has MP3 file in home directory for testing.)
 **Depends on:** US-052 (signal-gen must be operational)
 **Blocks:** none (enhances US-053 test tab and US-080 spectrum tap testing)
 

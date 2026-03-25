@@ -1196,3 +1196,125 @@ design in Phase 4.
 architecture), D-043 (GM-managed links), F-064 (asyncio saturation root
 cause), Section 11 of `docs/architecture/rt-services.md` (detailed clock
 architecture).
+
+---
+
+## D-045: Project identity — mugge (2026-03-24)
+
+**Context:** The project was named "pi4-audio-workstation" / "pi4audio" —
+a generic hardware description. The Pi's hostname is already `mugge`
+(German musicians' slang for "small paid gig"). AD noted the software
+outlives any individual Pi. TW countered that personal names for personal
+projects are a strong tradition.
+
+**Decision:** Rename the project to "mugge" throughout. Phased: Phase A
+(documentation only, 2026-03-25) starts immediately. Phase B (code — Rust
+crate names, Nix packages, PW node names, systemd services, config paths)
+deferred until after the current sprint (US-078-082).
+
+**Rationale:** Owner decision. Personal project, personal name. The Pi's
+hostname already matches, and "mugge" is short, memorable, and meaningful
+to the owner.
+
+**Impact:** ~574 occurrences across ~116 files. Phase A is safe to do
+concurrently with other work (docs only). Phase B requires coordinated
+atomic commits per category (PW nodes, systemd, Nix) to avoid inconsistent
+state.
+
+**Related:** US-078 (implementation story)
+
+---
+
+## D-046: FFT default 4096, user-selectable with 4 presets (2026-03-25)
+
+**Context:** The spectrum analyzer used a fixed FFT size. Users need
+different frequency resolution / time resolution tradeoffs for different
+tasks: quick monitoring vs detailed analysis vs measurement.
+
+**Decision:** FFT size is user-selectable with 4 human-readable presets:
+- **Performance** (2048) — fast update, lower resolution
+- **Balanced** (4096, default) — good tradeoff for monitoring
+- **Analysis** (8192) — detailed frequency resolution
+- **Measurement** (16384) — maximum resolution for room correction
+
+Labels are human-readable (no raw FFT sizes shown). Mode-aware defaults
+(e.g., Measurement mode defaults to 16384) are future work. 50% overlap,
+Hann window mandatory for all presets.
+
+**Rationale:** Owner directive. Different use cases need different
+resolution. Human-readable labels prevent confusion for non-DSP users.
+
+**Impact:** US-080 implementation. Frontend JS FFT pipeline parameterized.
+No backend changes (FFT computed in browser).
+
+**Related:** US-080 (implementation story)
+
+---
+
+## D-047: Level meters show both peak AND RMS with PPM ballistics (2026-03-25)
+
+**Context:** The existing level meters showed peak-only with basic decay.
+Professional live sound metering requires both peak (transient safety) and
+RMS (sustained energy / perceived loudness) simultaneously.
+
+**Decision:**
+- Segmented bar meter per channel: RMS as filled region, peak as thin
+  marker line above RMS
+- PPM ballistics per IEC 60268-18 (standard peak programme meter)
+- 2-second peak hold, then 20 dB/s decay
+- Latching clip indicator: RED at 0 dBFS, stays red until user click
+  (analogous to industrial alarm latching)
+- Numeric readout shows BOTH peak and RMS in dBFS (1 decimal place)
+- Server snapshot rate increased from 10 Hz to 25-30 Hz (pcm-bridge
+  levels emission interval)
+- Render at 60 fps via `requestAnimationFrame` with interpolation between
+  server snapshots
+
+**Not needed (AE confirmed):** LUFS (broadcast), true peak (inter-sample),
+VU (too slow for PA safety).
+
+**Rationale:** Owner approved AE recommendation. PPM is the standard for
+live sound monitoring. Both peak and RMS are essential — peak for safety
+(clipping), RMS for gain staging (perceived loudness). Latching clip is
+non-negotiable for live sound: a clip 30 minutes ago is still important.
+
+**Impact:** US-081 implementation. pcm-bridge `server.rs` interval change
+(~1 line). Frontend JS meter rendering rewrite. `LevelTracker` already
+computes both peak and RMS (US-077 infrastructure).
+
+**Related:** US-081 (implementation story), US-077 (timestamp architecture),
+IEC 60268-18
+
+---
+
+## D-048: Display-side auto-ranging Y axis supersedes gain compensation (2026-03-25)
+
+**Context:** The spectrum analyzer Y axis needed to handle widely different
+signal levels at different tap points (e.g., post-gain at -60 dB vs
+pre-convolver at 0 dB). Two approaches were considered:
+
+1. **Option A (AE recommendation):** Software gain compensation — add
+   `20*log10(1/Mult)` dB offset to spectrum display when viewing post-gain
+   tap points. This normalizes the display to show "what the signal would
+   look like at unity gain."
+
+2. **Auto-ranging Y axis (owner decision):** The Y axis automatically
+   adjusts to the signal level. Slow attack (200ms — quickly follows
+   rising signals), even slower release (2s — doesn't jump around during
+   brief dips).
+
+**Decision:** Auto-ranging Y axis. Owner initially approved Option A, then
+replaced it with auto-ranging. The auto-range approach is more general —
+it works for any tap point at any level without needing to know the gain
+setting. It also provides a better user experience: the spectrum always
+fills the visible area regardless of signal level.
+
+**Rationale:** Auto-ranging is tap-point-agnostic (no need to query gain
+params per tap point) and provides better UX. The asymmetric attack/release
+(200ms / 2s) prevents visual instability from brief level changes while
+still tracking sustained level shifts quickly.
+
+**Impact:** US-080 implementation. Frontend JS spectrum renderer. No
+backend changes.
+
+**Related:** US-080 (implementation story), US-079 (pre-convolver tap)

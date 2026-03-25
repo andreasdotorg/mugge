@@ -83,6 +83,11 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-075 | **IMPLEMENT** | **TBD** | **Core implementation complete** (`9d31713` + `73af529` + `2749695`). Production-replica local PW test env: virtual USBStreamer/ADA8200 nodes with production names, filter-chain convolver with Dirac impulses + 4 gain nodes, GM measurement mode with watchdog armed/unarmed state machine, managed-mode signal-gen + pcm-bridge, stale uvicorn cleanup. **E2E verified:** 12 links, -20/-23 dBFS levels, web-ui connected, watchdog unarmed, GM stable in measurement mode. Rule 13: Architect + QE APPROVED. `nix run .#local-demo` ready for owner testing. Remaining: AC #4 (automated verification script), AC #5 (`nix run .#test-integration` target), AC #6 (reusable library API), AC #7 (Rust test consolidation). |
 | US-076 | done | **5/5** | **done** (owner-accepted 2026-03-25). Merged to main (`7388170`). All 4 phases complete: CSS variable consolidation, navy background, JS hardcoded color removal, mode badge differentiation (amber DJ / cyan Live), managed-node cyan highlight. 20 files, 447+/227-. 194 E2E pass. Rule 13: Architect APPROVED. Owner visual acceptance: APPROVED. |
 | US-077 | **TEST** | **8/9** | **All 4 phases committed** (2026-03-24). P1 `602301b` (clock capture), P2 `4aeb4d1` (wire format), P3 `d1d3097` (frontend), P4 `3147b41` (event-driven). D-044 + rt-services docs `f83c14f`. 570+ tests pass. Only 2 clocks remain (PW graph + browser rAF). Architect approved all phases. DoD met: #1 (all phases), **#2 (screenshot comparison PASS — evidence in docs/test-evidence/US-077/)**, **#3 (integration test PASS — 50 snapshots, monotonic pos+nsec)**, #5 (wire format docs), #6 (backward compat v1/v2 auto-detect), #7 (architect), #8 (AE APPROVED), #9 (QE APPROVED). Remaining: **#4 (Pi perf regression — blocked on Pi access)**. |
+| US-078 | **IMPLEMENT** | **TBD** | **Phase A (docs) IMPLEMENT complete** (2026-03-25). Docs-only rename to mugge. Phase B (code) deferred after current sprint. D-045. |
+| US-079 | **IMPLEMENT** | **TBD** | **IMPLEMENT complete** (2026-03-25). GM routing table updated to tap pre-convolver signal for pcm-bridge. Under validation. |
+| US-080 | **IMPLEMENT** | **TBD** | **IMPLEMENT complete** (2026-03-25). FFT size selector (4 presets, D-046) + auto-ranging Y axis (D-048). Under validation — flat -60 dB line issue reported. |
+| US-081 | **IMPLEMENT** | **TBD** | **IMPLEMENT complete** (2026-03-25). Segmented meters, PPM ballistics IEC 60268-18, 30 Hz snapshots, latching clip (D-047). Under validation — meter irregularity. |
+| US-082 | **IMPLEMENT** | **TBD** | **IMPLEMENT complete** (2026-03-25). symphonia decoder, play_file RPC, test tab file playback control. Under validation. |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -161,6 +166,22 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 **US-082 filed:** Audio File Playback in signal-gen (MP3/WAV/FLAC via `play_file` RPC). Owner request — supports testing and screenshot capture with real audio content. Depends on US-052.
 
 **Worker budget: 3 max.** Owner confirmed. Watch E2E memory. No branch switching, no worktrees.
+
+**Stories completed/progressed:**
+- US-076: **ACCEPTED** (owner visual acceptance, DoD 5/5)
+- US-079: IMPLEMENT complete (pre-convolver capture — GM routing table updated)
+- US-080: IMPLEMENT complete (FFT size selector + auto-ranging Y axis). Under validation — flat -60 dB line issue.
+- US-081: IMPLEMENT complete (peak+RMS meters, PPM ballistics, 30 Hz snapshots, clip latch). Under validation — meter irregularity.
+- US-082: IMPLEMENT complete (file playback via symphonia decoder, play_file RPC, test tab UI)
+- US-078 Phase A: IMPLEMENT complete (docs-only rename to mugge)
+
+**Defects resolved:** F-098 (all 3 root causes + test.js duplicate), F-099 (FFT pipeline deduplicated as part of US-080).
+
+**Defects filed:** F-099 (duplicate FFT pipeline, Medium, RESOLVED), F-100 (local-demo.sh orphan processes, Low, OPEN).
+
+**Decisions recorded:** D-045 (project identity: mugge), D-046 (FFT 4096 default, 4 presets), D-047 (peak+RMS meters, PPM IEC 60268-18, latching clip), D-048 (auto-ranging Y axis supersedes gain compensation).
+
+**Lessons learned:** L-053 (don't kill workers before owner validation), L-054 (browser cache causes phantom bugs — hard reload mandatory after JS changes).
 
 ### Session Progress (2026-03-23 / 2026-03-24)
 
