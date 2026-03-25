@@ -5826,6 +5826,88 @@ Architect consultation required before PLAN phase to confirm:
 
 ---
 
+## US-081: Peak + RMS Level Meters with Latching Clip Indicator
+
+**As** the sound engineer operating the PA system in any mode (DJ, Live,
+Measurement),
+**I want** level meters that display both peak and RMS simultaneously with a
+latching clip indicator,
+**so that** I can monitor gain staging, detect clipping instantly, and
+maintain safe operating levels throughout a performance.
+
+**Status:** draft (PM-filed 2026-03-25 per owner approval of AE metering
+recommendation.)
+**Depends on:** US-077 (single-clock timestamps for consistent meter updates)
+**Blocks:** none
+
+### Requirements (AE recommendation, owner approved 2026-03-25)
+
+**Display:**
+- Segmented bar meter per channel
+- **RMS:** filled region of the bar (shows sustained energy)
+- **Peak:** thin marker line above the RMS region (shows transient peaks)
+- Both always displayed together — never one without the other
+
+**Peak behavior:**
+- 2-second peak hold (marker stays at maximum for 2s after transient)
+- Then 20 dB/s decay back toward RMS level
+
+**Latching clip indicator:**
+- **RED** when peak reaches 0 dBFS (full-scale)
+- **Stays red** until user explicitly clicks to clear
+- Non-negotiable for live sound safety — a clip that happened 30 minutes
+  ago is still important information
+- Analogous to industrial alarm latching (see also ENH-003)
+
+**Numeric readout:**
+- Primary: peak level in dBFS (1 decimal place, e.g., "-12.3")
+- Secondary: RMS level (smaller text or tooltip)
+
+**Not needed (AE confirmed):**
+- LUFS (broadcast standard, irrelevant for PA)
+- True peak (inter-sample peaks — not meaningful for our DAC path)
+- VU (too slow for PA safety monitoring)
+
+**Consistency:**
+- Same meters in all modes (DJ, Live, Measurement)
+- Per-channel display (matches pcm-bridge channel count)
+
+### Implementation note
+
+**This is primarily UI work.** The server-side infrastructure already exists:
+- `LevelTracker` in pcm-bridge already computes both peak and RMS per channel
+  per chunk (US-077 double-buffer architecture)
+- Levels JSON v2 already transmits peak and RMS values with timestamps
+- Web-UI already has meter elements in the dashboard
+
+The work is:
+1. Update meter rendering: segmented bar with RMS fill + peak marker
+2. Add peak hold logic (2s hold, 20 dB/s decay) in JavaScript
+3. Add latching clip indicator (red dot/segment, click to clear)
+4. Add numeric readout (peak dBFS primary, RMS secondary)
+5. Update E2E tests for new meter appearance
+
+### Acceptance criteria
+
+- [ ] Meters show both peak (thin marker) and RMS (filled bar) simultaneously
+- [ ] Peak holds for 2 seconds, then decays at 20 dB/s
+- [ ] Clip indicator turns red at 0 dBFS and latches until user click
+- [ ] Numeric readout shows peak in dBFS (1 decimal place)
+- [ ] RMS shown as secondary readout (tooltip or smaller text)
+- [ ] Same meter behavior in DJ, Live, and Measurement modes
+- [ ] Meters work with local demo (`nix run .#local-demo`)
+
+### Definition of Done
+
+- [ ] Implementation committed and tests pass (`nix run .#test-all`)
+- [ ] E2E tests cover meter rendering, peak hold, clip latch/clear
+- [ ] Local demo verified with visible peak + RMS meters on sine signal
+- [ ] AE review (metering behavior correct for live sound monitoring)
+- [ ] UX review (meter readability, clip indicator visibility)
+- [ ] QE review (test coverage)
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -5960,4 +6042,5 @@ US-019 + US-059 ──> US-072 (NixOS Standalone Build — SD image + nixos-anyw
 US-072 ──> US-020 (redundancy — NixOS makes SD card cloning trivial)
 F-098 + US-075 ──> US-079 (Pre-Convolver Capture Point — pcm-bridge taps full-range input for room correction)
 US-079 + US-075 ──> US-080 (Multi-Point Spectrum Analyzer — selectable signal chain tap points, L-R overlay)
+US-077 ──> US-081 (Peak + RMS Level Meters with Latching Clip Indicator — UI work, LevelTracker already computes both)
 ```

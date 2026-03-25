@@ -3431,7 +3431,7 @@ US-052 (signal-gen story — amend), D-040 (PW filter-chain architecture)
 
 **Filed:** 2026-03-25
 **Severity:** High
-**Status:** RESOLVED (fix ready, awaiting CM commit)
+**Status:** RESOLVED (all 3 root causes fixed)
 **Affects:** Web UI spectrum analyzer, level meters
 **Found by:** Owner (local demo testing)
 
@@ -3469,4 +3469,59 @@ framing issue was a pre-existing latent bug exposed by US-077 Phase 4's
 switch to event-driven emission (higher-frequency, smaller frames increased
 the probability of TCP coalescing).
 
+### Root Cause 3: Duplicate FFT pipeline in test.js
+
+`test.js` contained its own copy of the FFT/spectrum pipeline (separate from
+`spectrum.js`). Root cause 1+2 fixes were applied to `spectrum.js` but not
+to `test.js`, causing residual glitches visible in the test tab (wider dB
+range) but not on the dashboard (-60 dB floor masked them).
+
+**Fix:** FFT accumulator race fixed in test.js (snapshot copy before
+processing). Owner confirms spectrum "super stable now" on both tabs.
+
+**Follow-up:** F-099 filed — refactor duplicate FFT code into shared module.
+
 **Related:** US-077 (single-clock architecture), L-042 (broken tests must be fixed)
+
+---
+
+## F-099: Duplicate FFT pipeline in test.js — refactor to shared module
+
+**Filed:** 2026-03-25
+**Severity:** Medium (code quality / maintainability)
+**Status:** OPEN
+**Affects:** Web UI JavaScript (`test.js`, `spectrum.js`)
+**Found by:** Owner (during F-098 investigation)
+
+### Description
+
+`test.js` contains its own duplicate copy of the FFT/spectrum pipeline
+(WebSocket message parsing, PCM deinterleaving, FFT accumulation, spectrum
+rendering). This is separate from and parallel to `spectrum.js` which handles
+the dashboard spectrum.
+
+This duplication directly caused the F-098 partial fix — root cause 1+2
+fixes were applied to `spectrum.js` but not to `test.js`, leaving the test
+tab with residual glitches. Any future fix to the spectrum pipeline will need
+to be applied in two places, which is error-prone and violates DRY.
+
+Owner feedback: "That's not clean architecture."
+
+### Fix
+
+Refactor the shared FFT pipeline (WebSocket PCM parsing, channel
+deinterleaving, FFT accumulation, spectrum rendering) into a single shared
+JavaScript module (e.g., `fft-pipeline.js` or `spectrum-core.js`). Both
+`spectrum.js` (dashboard) and `test.js` (test tab) should import and
+configure the shared module rather than duplicating the code.
+
+### Scope
+
+- Extract common FFT pipeline code into shared module
+- `spectrum.js` imports shared module (dashboard spectrum)
+- `test.js` imports shared module (test tab spectrum, possibly with wider
+  dB range configuration)
+- Verify both tabs produce identical spectrum output
+- Update E2E tests if selectors change
+
+**Related:** F-098 (root cause 3 was this duplication)
