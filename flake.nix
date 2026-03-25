@@ -143,7 +143,7 @@
           '';
         };
 
-        # Workspace source for pcm-bridge + signal-gen + audio-common.
+        # Workspace source for level-bridge + pcm-bridge + signal-gen + audio-common.
         # Cleaned to include only the workspace root and member crates.
         rustWorkspaceSrc = pkgs.lib.cleanSourceWith {
           src = ./src;
@@ -153,6 +153,7 @@
             baseName == "Cargo.toml" || baseName == "Cargo.lock"
             # Include workspace member directories
             || pkgs.lib.hasPrefix (toString ./src/audio-common) (toString path)
+            || pkgs.lib.hasPrefix (toString ./src/level-bridge) (toString path)
             || pkgs.lib.hasPrefix (toString ./src/pcm-bridge) (toString path)
             || pkgs.lib.hasPrefix (toString ./src/signal-gen) (toString path);
         };
@@ -169,7 +170,15 @@
         };
 
         # Rust PipeWire tools (Linux-only, need libpipewire).
-        # Built from the Cargo workspace (audio-common + pcm-bridge + signal-gen).
+        # Built from the Cargo workspace (audio-common + level-bridge + pcm-bridge + signal-gen).
+        level-bridge = pkgs.rustPlatform.buildRustPackage (rustPwBuildArgs // {
+          pname = "level-bridge";
+          version = "0.1.0";
+          src = rustWorkspaceSrc;
+          cargoLock.lockFile = ./src/Cargo.lock;
+          buildAndTestSubdir = "level-bridge";
+        });
+
         pcm-bridge = pkgs.rustPlatform.buildRustPackage (rustPwBuildArgs // {
           pname = "pcm-bridge";
           version = "0.1.0";
@@ -210,6 +219,9 @@
 
           # Wrapped Mixxx with nixGL + host PipeWire/JACK (for non-NixOS)
           mixxx-gl = mixxx-wrapped;
+
+          # Always-on PipeWire level metering bridge for web UI (D-049).
+          inherit level-bridge;
 
           # Passive PipeWire monitor-port PCM bridge for web UI.
           inherit pcm-bridge;
@@ -332,6 +344,7 @@
           '';
         } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           # Rust PipeWire tools — cargo test runs during buildRustPackage.
+          test-level-bridge = level-bridge;
           test-pcm-bridge = pcm-bridge;
           test-signal-gen = signal-gen;
 
@@ -481,6 +494,20 @@
           };
         } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           # PipeWire Rust tools — require libpipewire (Linux only).
+          test-level-bridge = {
+            type = "app";
+            program = "${pkgs.writeShellScript "test-level-bridge" ''
+              export HOME="''${HOME:-/tmp}"
+              export CARGO_TARGET_DIR="''${HOME}/.cargo-target/pi4audio-ws"
+              export PATH="${pkgs.cargo}/bin:${pkgs.rustc}/bin:${pkgs.pkg-config}/bin:${pkgs.stdenv.cc}/bin:$PATH"
+              export PKG_CONFIG_PATH="${pkgs.pipewire.dev}/lib/pkgconfig''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+              export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
+              export BINDGEN_EXTRA_CLANG_ARGS="-isystem ${pkgs.llvmPackages.libclang.lib}/lib/clang/${pkgs.llvmPackages.libclang.version}/include -isystem ${pkgs.glibc.dev}/include"
+              cd ${toString ./.}/src
+              exec cargo test --locked -p level-bridge "$@"
+            ''}";
+          };
+
           test-pcm-bridge = {
             type = "app";
             program = "${pkgs.writeShellScript "test-pcm-bridge" ''
@@ -515,6 +542,7 @@
             program = "${pkgs.writeShellScript "local-demo" ''
               export LOCAL_DEMO_GM_BIN="${graph-manager}/bin/pi4audio-graph-manager"
               export LOCAL_DEMO_SG_BIN="${signal-gen}/bin/pi4audio-signal-gen"
+              export LOCAL_DEMO_LB_BIN="${level-bridge}/bin/level-bridge"
               export LOCAL_DEMO_PCM_BIN="${pcm-bridge}/bin/pcm-bridge"
               export LOCAL_DEMO_PYTHON="${testPython}/bin/python"
               export LOCAL_DEMO_PW_TEST_ENV="${./scripts/local-pw-test-env.sh}"
@@ -547,13 +575,14 @@
             ];
           };
 
-          # Workspace source for pcm-bridge + signal-gen + audio-common.
+          # Workspace source for level-bridge + pcm-bridge + signal-gen + audio-common.
           workspaceSrc = pkgs.lib.cleanSourceWith {
             src = ./src;
             filter = path: type:
               let baseName = builtins.baseNameOf path; in
               baseName == "Cargo.toml" || baseName == "Cargo.lock"
               || pkgs.lib.hasPrefix (toString ./src/audio-common) (toString path)
+              || pkgs.lib.hasPrefix (toString ./src/level-bridge) (toString path)
               || pkgs.lib.hasPrefix (toString ./src/pcm-bridge) (toString path)
               || pkgs.lib.hasPrefix (toString ./src/signal-gen) (toString path);
           };
@@ -567,6 +596,13 @@
                 version = "0.1.0";
                 src = ./src/graph-manager;
                 cargoLock.lockFile = ./src/graph-manager/Cargo.lock;
+              });
+              level-bridge = pkgs.rustPlatform.buildRustPackage (rustPwArgs // {
+                pname = "level-bridge";
+                version = "0.1.0";
+                src = workspaceSrc;
+                cargoLock.lockFile = ./src/Cargo.lock;
+                buildAndTestSubdir = "level-bridge";
               });
               pcm-bridge = pkgs.rustPlatform.buildRustPackage (rustPwArgs // {
                 pname = "pcm-bridge";

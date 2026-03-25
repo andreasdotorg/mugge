@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local demo stack — launches the full pi4-audio workstation locally.
 #
-# Starts:  PipeWire + WirePlumber → GraphManager → signal-gen → pcm-bridge → web-ui
+# Starts:  PipeWire + WirePlumber → GraphManager → signal-gen → level-bridge → pcm-bridge → web-ui
 # Cleanup: Ctrl+C kills all child processes
 #
 # The PipeWire test environment mirrors the Pi's production topology with
@@ -62,6 +62,7 @@ trap cleanup EXIT INT TERM
 if [ -n "${LOCAL_DEMO_GM_BIN:-}" ]; then
     GM_BIN="$LOCAL_DEMO_GM_BIN"
     SG_BIN="$LOCAL_DEMO_SG_BIN"
+    LB_BIN="$LOCAL_DEMO_LB_BIN"
     PCM_BIN="$LOCAL_DEMO_PCM_BIN"
     PYTHON="${LOCAL_DEMO_PYTHON:-python}"
     echo "[local-demo] Using pre-resolved binary paths from nix."
@@ -80,12 +81,14 @@ else
     }
     GM_BIN=$(resolve_binary graph-manager pi4audio-graph-manager)
     SG_BIN=$(resolve_binary signal-gen pi4audio-signal-gen)
+    LB_BIN=$(resolve_binary level-bridge level-bridge)
     PCM_BIN=$(resolve_binary pcm-bridge pcm-bridge)
     PYTHON="python"
 fi
 
 echo "  graph-manager: $GM_BIN"
 echo "  signal-gen:    $SG_BIN"
+echo "  level-bridge:  $LB_BIN"
 echo "  pcm-bridge:    $PCM_BIN"
 
 # ---- 2. Generate dirac coefficients and convolver config ----
@@ -165,15 +168,36 @@ if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
 fi
 echo "[local-demo] signal-gen running (PID ${PIDS[-1]})"
 
-# ---- 6. Start pcm-bridge (managed mode) ----
+# ---- 6. Start level-bridge (self-linking, always-on levels) ----
+# Self-link mode: uses stream.capture.sink + target.object for WirePlumber
+# auto-linking. Taps convolver output monitor ports for level metering.
+echo ""
+echo "[local-demo] Starting level-bridge (levels on port 9100, self-link mode)..."
+"$LB_BIN" \
+    --self-link \
+    --mode monitor \
+    --target pi4audio-convolver \
+    --levels-listen tcp:0.0.0.0:9100 \
+    --channels 4 \
+    --rate 48000 &
+PIDS+=($!)
+sleep 1
+
+if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
+    echo "[local-demo] ERROR: level-bridge failed to start" >&2
+    exit 1
+fi
+echo "[local-demo] level-bridge running (PID ${PIDS[-1]})"
+
+# ---- 7. Start pcm-bridge (managed mode, PCM-only) ----
 # Managed mode: no stream.capture.sink, no --target. GM creates links
 # from convolver-out:output_AUX0..3 → pcm-bridge:input_1..4.
+# Level metering moved to level-bridge (D-049).
 echo ""
-echo "[local-demo] Starting pcm-bridge (levels on port 9100, managed mode)..."
+echo "[local-demo] Starting pcm-bridge (PCM on port 9090, managed mode)..."
 "$PCM_BIN" \
     --managed \
     --mode monitor \
-    --levels-listen tcp:0.0.0.0:9100 \
     --listen tcp:0.0.0.0:9090 \
     --channels 4 \
     --rate 48000 &
@@ -186,7 +210,7 @@ if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
 fi
 echo "[local-demo] pcm-bridge running (PID ${PIDS[-1]})"
 
-# ---- 7. Start signal-gen playing a sine wave ----
+# ---- 8. Start signal-gen playing a sine wave ----
 echo ""
 echo "[local-demo] Sending signal-gen play command (440 Hz sine, -20 dBFS)..."
 sleep 0.5
@@ -202,7 +226,7 @@ else
     echo "  echo '{\"cmd\":\"play\",\"signal\":\"sine\",\"freq\":440,\"level_dbfs\":-20,\"channels\":[1,2,3,4]}' > /dev/tcp/127.0.0.1/4001"
 fi
 
-# ---- 8. Start web-ui ----
+# ---- 9. Start web-ui ----
 echo ""
 # Kill stale uvicorn processes that may hold port 8080 from a previous run.
 # --reload spawns a multiprocessing child that can survive parent cleanup.
@@ -247,7 +271,8 @@ echo ""
 echo "  Web UI:       http://localhost:8080"
 echo "  GraphManager: tcp://127.0.0.1:4002 (RPC, measurement mode)"
 echo "  signal-gen:   tcp://127.0.0.1:4001 (RPC, managed mode)"
-echo "  pcm-bridge:   tcp://127.0.0.1:9100 (levels, managed mode)"
+echo "  level-bridge:  tcp://127.0.0.1:9100 (levels, self-link mode)"
+echo "  pcm-bridge:   tcp://127.0.0.1:9090 (PCM, managed mode)"
 echo ""
 echo "  PW nodes:     alsa_output.usb-MiniDSP_USBStreamer (null sink)"
 echo "                pi4audio-convolver (filter-chain, dirac passthrough)"

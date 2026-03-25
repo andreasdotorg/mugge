@@ -1,43 +1,33 @@
-//! pcm-bridge — PipeWire PCM streaming bridge for the web UI (D-049).
+//! level-bridge — Always-on PipeWire level metering for the web UI (D-049).
 //!
-//! On-demand spectrum tap managed by GraphManager. Streams raw PCM data
-//! to browser clients for FFT spectrum display.
+//! Lightweight service that taps PipeWire nodes and publishes per-channel
+//! peak/RMS levels as JSON over TCP at ~30 Hz. Extracted from pcm-bridge
+//! to separate always-on level metering from on-demand PCM streaming.
 //!
 //! Two operating modes:
 //!
-//! **Monitor mode** (default, `--mode monitor`): Taps the convolver's output
-//! ports via a native PipeWire stream. GraphManager creates the links from
-//! convolver-out to pcm-bridge (D-043). PipeWire fans out the same output
-//! to both USBStreamer and pcm-bridge natively.
+//! **Monitor mode** (default, `--mode monitor`): Taps a sink node's monitor
+//! ports (e.g., the convolver output).
 //!
-//! **Capture mode** (`--mode capture`): Reads from a PipeWire capture/source
-//! node directly (e.g., the USBStreamer ALSA input carrying ADA8200 ADAT
-//! channels). Uses `--node-name` to select the source.
+//! **Capture mode** (`--mode capture`): Reads from a source/capture node
+//! directly (e.g., the USBStreamer ALSA input).
 //!
-//! Multiple instances can run simultaneously (one per source, each on its
-//! own TCP port).
+//! **Self-linking** (`--self-link`): Uses PipeWire stream properties
+//! (`stream.capture.sink`, `target.object`) for automatic linking by
+//! WirePlumber, removing the need for GraphManager management.
 //!
-//! Wire format v2 (US-077):
-//!   - 1-byte version (0x02)
-//!   - 3-byte padding (0x00)
-//!   - 4-byte LE uint32: frame count
-//!   - 8-byte LE uint64: graph clock position (frames)
-//!   - 8-byte LE uint64: graph clock nsec (monotonic nanoseconds)
-//!   - N * channels * 4 bytes: interleaved float32 PCM samples
+//! **Level metering protocol:** JSON snapshots at ~30 Hz, newline-delimited.
+//!   `{"channels":N,"peak":[-3.1,-4.2,...],"rms":[-12.5,-14.0,...],"pos":N,"nsec":N}\n`
+//! Values are in dBFS, rounded to 1 decimal place. -120.0 means silence.
 //!
-//! **Level metering** has been extracted to the `level-bridge` crate (D-049).
-//! pcm-bridge is PCM-only.
-//!
-//! **Audio backend:** Native PipeWire `pw_stream`. GraphManager creates
-//! explicit links to pcm-bridge's input ports — no WirePlumber auto-linking
-//! needed. The `node.passive = true` property ensures pcm-bridge does not
-//! drive the graph scheduler and cannot cause xruns.
+//! **Audio backend:** Native PipeWire `pw_stream`. `node.passive = true`
+//! ensures level-bridge never drives the graph scheduler.
 
-pub(crate) mod ring_buffer {
-    pub use audio_common::ring_buffer::*;
+pub(crate) mod levels {
+    pub use audio_common::level_tracker::*;
 }
 
-use audio_common::level_tracker::GraphClock;
+use levels::GraphClock;
 mod notifier;
 mod server;
 
@@ -58,47 +48,46 @@ enum Mode {
     Capture,
 }
 
-/// PipeWire audio bridge for the web UI.
+/// PipeWire level metering bridge for the web UI (D-049).
 #[derive(Parser, Debug)]
-#[command(name = "pcm-bridge", version)]
+#[command(name = "level-bridge", version)]
 struct Args {
-    /// Operating mode: "monitor" taps the convolver output (passive,
+    /// Operating mode: "monitor" taps a sink's monitor ports (passive,
     /// no xruns). "capture" reads from a source node directly.
     #[arg(long, value_enum, default_value_t = Mode::Monitor)]
     mode: Mode,
 
-    /// Run under GraphManager supervision. pcm-bridge continues managing
-    /// its own connections, but uses the pi4audio- node naming convention
-    /// so GraphManager's ownership filter recognizes pcm-bridge links as
-    /// "not mine, don't touch."
+    /// Run under GraphManager supervision. Uses pi4audio- node naming
+    /// convention so GM's ownership filter recognizes level-bridge links.
+    /// When false (default), uses --self-link properties for WirePlumber
+    /// auto-linking.
     #[arg(long, env = "PI4AUDIO_MANAGED")]
     managed: bool,
 
-    /// Target node name for monitor mode. Matched against PipeWire
-    /// node.name. Used with --mode monitor.
-    #[arg(long, default_value = "loopback-8ch-sink")]
+    /// Enable self-linking via PipeWire stream properties. Sets
+    /// `stream.capture.sink = true` + `target.object` for monitor mode,
+    /// or `target.object` for capture mode. WirePlumber creates the links
+    /// automatically — no GraphManager management needed.
+    #[arg(long)]
+    self_link: bool,
+
+    /// Target node name. In monitor mode, the sink node to tap. In capture
+    /// mode, the source node to read from.
+    #[arg(long, default_value = "pi4audio-convolver")]
     target: String,
 
-    /// Source node name for capture mode. Matched against PipeWire
-    /// node.name. Used with --mode capture.
-    #[arg(long)]
-    node_name: Option<String>,
-
-    /// Listen address for PCM streaming. Use "tcp:HOST:PORT" for TCP or "unix:PATH" for Unix socket.
-    #[arg(long, default_value = "tcp:127.0.0.1:9090")]
-    listen: String,
+    /// Listen address for level metering (JSON at ~30 Hz).
+    /// Use "tcp:HOST:PORT" for TCP or "unix:PATH" for Unix socket.
+    #[arg(long, default_value = "tcp:127.0.0.1:9100")]
+    levels_listen: String,
 
     /// Number of audio channels to capture.
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 4)]
     channels: u32,
 
     /// Sample rate in Hz.
     #[arg(long, default_value_t = 48000)]
     rate: u32,
-
-    /// Frames per quantum (chunk size sent to clients).
-    #[arg(long, default_value_t = 256)]
-    quantum: u32,
 }
 
 /// Parse listen address into (kind, address) tuple.
@@ -123,20 +112,18 @@ fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     let args = Args::parse();
-    let (listen_kind, listen_addr) = parse_listen(&args.listen);
+    let (levels_kind, levels_addr) = parse_listen(&args.levels_listen);
 
     info!(
-        "pcm-bridge starting: mode={:?}, managed={}, target={}, listen={:?}:{}, channels={}, rate={}, quantum={}",
-        args.mode, args.managed, args.target, listen_kind, listen_addr, args.channels, args.rate, args.quantum,
+        "level-bridge starting: mode={:?}, managed={}, self_link={}, target={}, listen={:?}:{}, channels={}, rate={}",
+        args.mode, args.managed, args.self_link, args.target, levels_kind, levels_addr, args.channels, args.rate,
     );
 
     if args.managed {
-        info!("Managed mode: running under GraphManager supervision (self-managed connections)");
+        info!("Managed mode: running under GraphManager supervision");
     }
-
-    if args.mode == Mode::Capture {
-        let node = args.node_name.as_deref().unwrap_or("(none)");
-        info!("Capture mode: node-name={}", node);
+    if args.self_link {
+        info!("Self-link mode: PipeWire/WirePlumber auto-linking enabled");
     }
 
     // Shared shutdown flag — set by signal handlers, polled by server and audio backend.
@@ -149,44 +136,38 @@ fn main() {
         }
     }
 
-    // Ring buffer shared between audio process callback and the TCP server.
-    // 8192 frames is ~170ms at 48kHz — enough to absorb scheduling jitter
-    // without excessive memory use.
-    let ring = Arc::new(ring_buffer::RingBuffer::new(8192, args.channels as usize));
+    // Level tracker shared between audio process callback and the levels server.
+    let level_tracker = Arc::new(levels::LevelTracker::new(args.channels as usize));
 
     // US-077 Phase 4: event notifier replaces independent poll timer.
-    // The PW process callback signals this after writing data; the server
-    // thread waits on it instead of sleeping.
-    let pcm_notifier = Arc::new(Notifier::new());
+    // The PW process callback signals this after processing; the levels
+    // server thread waits on it instead of sleeping.
+    let levels_notifier = Arc::new(Notifier::new());
 
-    // Spawn the socket server thread.
-    let server_ring = ring.clone();
-    let server_shutdown = shutdown.clone();
-    let server_pcm_notifier = pcm_notifier.clone();
-    let quantum = args.quantum as usize;
-    let channels = args.channels as usize;
-    let server_thread = std::thread::Builder::new()
-        .name("pcm-server".into())
+    // Spawn the levels server thread.
+    let tracker_for_server = level_tracker.clone();
+    let shutdown_for_server = shutdown.clone();
+    let notifier_for_server = levels_notifier.clone();
+    let levels_thread = std::thread::Builder::new()
+        .name("levels-server".into())
         .spawn(move || {
-            server::run_server(
-                listen_kind,
-                &listen_addr,
-                server_ring,
-                server_shutdown,
-                server_pcm_notifier,
-                quantum,
-                channels,
+            server::run_levels_server(
+                levels_kind,
+                &levels_addr,
+                tracker_for_server,
+                shutdown_for_server,
+                notifier_for_server,
             );
         })
-        .expect("Failed to spawn server thread");
+        .expect("Failed to spawn levels server thread");
 
     // Run PipeWire audio backend on the main thread.
     info!("Using PipeWire native audio backend");
-    run_pipewire(&args, ring.clone(), shutdown.clone(), pcm_notifier);
+    run_pipewire(&args, level_tracker.clone(), shutdown.clone(), levels_notifier);
 
-    info!("Audio loop exited, waiting for server thread...");
-    let _ = server_thread.join();
-    info!("pcm-bridge shutdown complete");
+    info!("Audio loop exited, waiting for levels server thread...");
+    let _ = levels_thread.join();
+    info!("level-bridge shutdown complete");
 }
 
 // ---------------------------------------------------------------------------
@@ -205,38 +186,52 @@ fn build_stream_props(args: &Args) -> pipewire::properties::Properties {
                 "media.category" => "Capture",
                 "media.role" => "Monitor",
                 "media.class" => "Stream/Input/Audio",
-                "node.name" => "pi4audio-pcm-bridge",
-                "node.description" => "PCM Bridge for Web UI",
+                "node.name" => "pi4audio-level-bridge",
+                "node.description" => "Level Bridge for Web UI",
                 "node.always-process" => "true",
                 "node.passive" => "true",
                 "audio.channels" => &*channels_str,
             }
         }
-        Mode::Monitor => {
+        Mode::Monitor if args.self_link => {
             pipewire::properties::properties! {
                 "media.type" => "Audio",
                 "media.category" => "Capture",
                 "media.role" => "Monitor",
                 "media.class" => "Stream/Input/Audio",
-                "node.name" => "pi4audio-pcm-bridge",
-                "node.description" => "PCM Bridge for Web UI",
+                "node.name" => "pi4audio-level-bridge",
+                "node.description" => "Level Bridge for Web UI",
                 "node.passive" => "true",
                 "audio.channels" => &*channels_str,
                 "stream.capture.sink" => "true",
                 "target.object" => &*args.target,
             }
         }
+        Mode::Monitor => {
+            // Standalone without self-link: no auto-connect properties.
+            // Requires external link management (GM or manual pw-link).
+            pipewire::properties::properties! {
+                "media.type" => "Audio",
+                "media.category" => "Capture",
+                "media.role" => "Monitor",
+                "media.class" => "Stream/Input/Audio",
+                "node.name" => "pi4audio-level-bridge",
+                "node.description" => "Level Bridge for Web UI",
+                "node.passive" => "true",
+                "audio.channels" => &*channels_str,
+            }
+        }
         Mode::Capture => {
-            let target = args.node_name.as_deref().unwrap_or(&args.target);
             pipewire::properties::properties! {
                 "media.type" => "Audio",
                 "media.category" => "Capture",
                 "media.role" => "Production",
                 "media.class" => "Stream/Input/Audio",
-                "node.name" => "pi4audio-pcm-bridge-capture",
-                "node.description" => "PCM Bridge Capture",
+                "node.name" => "pi4audio-level-bridge-capture",
+                "node.description" => "Level Bridge Capture",
+                "node.passive" => "true",
                 "audio.channels" => &*channels_str,
-                "target.object" => target,
+                "target.object" => &*args.target,
             }
         }
     }
@@ -244,9 +239,9 @@ fn build_stream_props(args: &Args) -> pipewire::properties::Properties {
 
 fn run_pipewire(
     args: &Args,
-    ring: Arc<ring_buffer::RingBuffer>,
+    level_tracker: Arc<levels::LevelTracker>,
     shutdown: Arc<AtomicBool>,
-    pcm_notifier: Arc<Notifier>,
+    levels_notifier: Arc<Notifier>,
 ) {
     use std::time::Duration;
 
@@ -263,7 +258,7 @@ fn run_pipewire(
     let channels = args.channels;
     let props = build_stream_props(args);
 
-    let stream = pipewire::stream::Stream::new(&core, "pcm-bridge", props)
+    let stream = pipewire::stream::Stream::new(&core, "level-bridge", props)
         .expect("Failed to create PipeWire stream");
 
     let format_pod_bytes = build_audio_format(channels, args.rate, &[]);
@@ -272,15 +267,13 @@ fn run_pipewire(
     };
     let mut params: [&libspa::pod::Pod; 1] = [format_pod];
 
-    let ring_for_cb = ring;
-    let pcm_notify_cb = pcm_notifier;
+    let levels_for_cb = level_tracker;
+    let levels_notify_cb = levels_notifier;
     let channels_usize = channels as usize;
-    let process_count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let process_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let process_count_cb = process_count.clone();
-    let clock_logged = std::sync::Arc::new(AtomicBool::new(false));
+    let clock_logged = Arc::new(AtomicBool::new(false));
     let clock_logged_cb = clock_logged.clone();
-
-    let _stream_ptr = stream.as_raw_ptr();
 
     let _listener = stream
         .add_local_listener()
@@ -353,11 +346,11 @@ fn run_pipewire(
                         data_ptr as *const f32,
                         n_frames * channels_usize,
                     );
-                    ring_for_cb.write_interleaved(float_slice, channels_usize, clock);
+                    // Level-bridge only: no ring buffer write, just level tracking.
+                    levels_for_cb.process(float_slice, channels_usize, clock);
 
-                    // US-077 Phase 4: wake server thread (RT-safe: atomic
-                    // store + futex wake, no allocation/lock).
-                    pcm_notify_cb.notify();
+                    // Wake levels server thread (RT-safe: atomic store + futex wake).
+                    levels_notify_cb.notify();
                 }
 
                 pipewire_sys::pw_stream_queue_buffer(stream.as_raw_ptr(), raw_buf);
@@ -369,12 +362,7 @@ fn run_pipewire(
         .register()
         .expect("Failed to register stream listener");
 
-    // F-083: Standalone mode uses AUTOCONNECT without DRIVER or RT_PROCESS.
-    // The target sink's driver schedules our follower node (same approach
-    // as pw-play). DRIVER causes -95/ENOTSUP from audioadapter
-    // negotiate_format. node.always-process is omitted in standalone mode
-    // so PW assigns us to the target's scheduling group normally.
-    // Managed mode uses RT_PROCESS (driver is USBStreamer via node.group).
+    // Stream flags: same logic as pcm-bridge (F-083).
     let mut flags = pipewire::stream::StreamFlags::MAP_BUFFERS;
     if args.managed {
         flags |= pipewire::stream::StreamFlags::RT_PROCESS;
@@ -392,10 +380,6 @@ fn run_pipewire(
         .expect("Failed to connect PipeWire stream");
 
     info!("PipeWire stream connected ({:?} mode), entering main loop", args.mode);
-
-    // F-083: No deferred activation timer needed. Standalone mode uses
-    // AUTOCONNECT without DRIVER — the target sink's driver schedules
-    // our node. Managed mode activation is handled by GraphManager.
 
     let mainloop_ptr = mainloop.as_raw_ptr();
     let _shutdown_timer = mainloop.loop_().add_timer({
@@ -441,23 +425,23 @@ mod tests {
 
     #[test]
     fn parse_listen_tcp_prefix() {
-        let (kind, addr) = parse_listen("tcp:127.0.0.1:9090");
+        let (kind, addr) = parse_listen("tcp:127.0.0.1:9100");
         assert!(matches!(kind, ListenKind::Tcp));
-        assert_eq!(addr, "127.0.0.1:9090");
+        assert_eq!(addr, "127.0.0.1:9100");
     }
 
     #[test]
     fn parse_listen_unix_prefix() {
-        let (kind, addr) = parse_listen("unix:/run/pcm-bridge.sock");
+        let (kind, addr) = parse_listen("unix:/run/level-bridge.sock");
         assert!(matches!(kind, ListenKind::Unix));
-        assert_eq!(addr, "/run/pcm-bridge.sock");
+        assert_eq!(addr, "/run/level-bridge.sock");
     }
 
     #[test]
     fn parse_listen_bare_defaults_to_tcp() {
-        let (kind, addr) = parse_listen("0.0.0.0:8080");
+        let (kind, addr) = parse_listen("0.0.0.0:9100");
         assert!(matches!(kind, ListenKind::Tcp));
-        assert_eq!(addr, "0.0.0.0:8080");
+        assert_eq!(addr, "0.0.0.0:9100");
     }
 
     // --- CLI argument parsing tests ---
@@ -468,81 +452,74 @@ mod tests {
 
     #[test]
     fn cli_default_mode_is_monitor() {
-        let args = parse_args(&["pcm-bridge"]).unwrap();
+        let args = parse_args(&["level-bridge"]).unwrap();
         assert_eq!(args.mode, Mode::Monitor);
     }
 
     #[test]
     fn cli_mode_monitor_explicit() {
-        let args = parse_args(&["pcm-bridge", "--mode", "monitor"]).unwrap();
+        let args = parse_args(&["level-bridge", "--mode", "monitor"]).unwrap();
         assert_eq!(args.mode, Mode::Monitor);
     }
 
     #[test]
     fn cli_mode_capture() {
-        let args = parse_args(&["pcm-bridge", "--mode", "capture"]).unwrap();
+        let args = parse_args(&["level-bridge", "--mode", "capture"]).unwrap();
         assert_eq!(args.mode, Mode::Capture);
     }
 
     #[test]
     fn cli_invalid_mode_rejected() {
-        let result = parse_args(&["pcm-bridge", "--mode", "invalid"]);
+        let result = parse_args(&["level-bridge", "--mode", "invalid"]);
         assert!(result.is_err());
     }
 
     #[test]
-    fn cli_node_name_accepted() {
-        let args = parse_args(&[
-            "pcm-bridge",
-            "--mode", "capture",
-            "--node-name", "alsa_input.usb-MiniDSP_USBStreamer-00.pro-input-0",
-        ]).unwrap();
-        assert_eq!(
-            args.node_name.as_deref(),
-            Some("alsa_input.usb-MiniDSP_USBStreamer-00.pro-input-0"),
-        );
-    }
-
-    #[test]
-    fn cli_node_name_default_is_none() {
-        let args = parse_args(&["pcm-bridge"]).unwrap();
-        assert!(args.node_name.is_none());
-    }
-
-    #[test]
     fn cli_default_target() {
-        let args = parse_args(&["pcm-bridge"]).unwrap();
-        assert_eq!(args.target, "loopback-8ch-sink");
+        let args = parse_args(&["level-bridge"]).unwrap();
+        assert_eq!(args.target, "pi4audio-convolver");
     }
 
     #[test]
     fn cli_default_channels() {
-        let args = parse_args(&["pcm-bridge"]).unwrap();
-        assert_eq!(args.channels, 3);
+        let args = parse_args(&["level-bridge"]).unwrap();
+        assert_eq!(args.channels, 4);
     }
 
     #[test]
     fn cli_custom_channels() {
-        let args = parse_args(&["pcm-bridge", "--channels", "8"]).unwrap();
+        let args = parse_args(&["level-bridge", "--channels", "8"]).unwrap();
         assert_eq!(args.channels, 8);
     }
 
     #[test]
-    fn cli_default_listen() {
-        let args = parse_args(&["pcm-bridge"]).unwrap();
-        assert_eq!(args.listen, "tcp:127.0.0.1:9090");
+    fn cli_default_levels_listen() {
+        let args = parse_args(&["level-bridge"]).unwrap();
+        assert_eq!(args.levels_listen, "tcp:127.0.0.1:9100");
     }
 
     #[test]
     fn cli_managed_default_is_false() {
-        let args = parse_args(&["pcm-bridge"]).unwrap();
+        let args = parse_args(&["level-bridge"]).unwrap();
         assert!(!args.managed);
     }
 
     #[test]
     fn cli_managed_flag() {
-        let args = parse_args(&["pcm-bridge", "--managed"]).unwrap();
+        let args = parse_args(&["level-bridge", "--managed"]).unwrap();
         assert!(args.managed);
+    }
+
+    #[test]
+    fn cli_self_link_default_is_false() {
+        let args = parse_args(&["level-bridge"]).unwrap();
+        assert!(!args.self_link);
+    }
+
+    #[test]
+    fn cli_self_link_flag() {
+        let args = parse_args(&["level-bridge", "--self-link"]).unwrap();
+        assert!(args.self_link);
     }
 
     // --- PipeWire property tests ---
@@ -558,16 +535,15 @@ mod tests {
             });
         }
 
-        fn make_args(mode: Mode, target: &str, node_name: Option<&str>, channels: u32) -> Args {
+        fn make_args(mode: Mode, target: &str, channels: u32, self_link: bool) -> Args {
             Args {
                 mode,
                 managed: false,
+                self_link,
                 target: target.to_string(),
-                node_name: node_name.map(String::from),
-                listen: "tcp:127.0.0.1:9090".to_string(),
+                levels_listen: "tcp:127.0.0.1:9100".to_string(),
                 channels,
                 rate: 48000,
-                quantum: 256,
             }
         }
 
@@ -575,59 +551,82 @@ mod tests {
             Args {
                 mode,
                 managed: true,
+                self_link: false,
                 target: target.to_string(),
-                node_name: None,
-                listen: "tcp:127.0.0.1:9090".to_string(),
+                levels_listen: "tcp:127.0.0.1:9100".to_string(),
                 channels,
                 rate: 48000,
-                quantum: 256,
             }
         }
 
         #[test]
-        fn props_monitor_has_capture_sink() {
+        fn props_self_link_monitor_has_capture_sink() {
             ensure_pw_init();
-            let args = make_args(Mode::Monitor, "loopback-8ch-sink", None, 3);
+            let args = make_args(Mode::Monitor, "pi4audio-convolver", 4, true);
             let props = build_stream_props(&args);
             assert_eq!(props.get("stream.capture.sink"), Some("true"));
         }
 
         #[test]
-        fn props_monitor_role_is_monitor() {
+        fn props_self_link_monitor_has_target_object() {
             ensure_pw_init();
-            let args = make_args(Mode::Monitor, "loopback-8ch-sink", None, 3);
-            let props = build_stream_props(&args);
-            assert_eq!(props.get("media.role"), Some("Monitor"));
-        }
-
-        #[test]
-        fn props_monitor_target_object() {
-            ensure_pw_init();
-            let args = make_args(Mode::Monitor, "my-custom-sink", None, 8);
+            let args = make_args(Mode::Monitor, "my-custom-sink", 4, true);
             let props = build_stream_props(&args);
             assert_eq!(props.get("target.object"), Some("my-custom-sink"));
         }
 
         #[test]
-        fn props_monitor_channels() {
+        fn props_no_self_link_monitor_no_capture_sink() {
             ensure_pw_init();
-            let args = make_args(Mode::Monitor, "loopback-8ch-sink", None, 8);
+            let args = make_args(Mode::Monitor, "pi4audio-convolver", 4, false);
             let props = build_stream_props(&args);
-            assert_eq!(props.get("audio.channels"), Some("8"));
+            assert_eq!(props.get("stream.capture.sink"), None);
+        }
+
+        #[test]
+        fn props_no_self_link_monitor_no_target_object() {
+            ensure_pw_init();
+            let args = make_args(Mode::Monitor, "pi4audio-convolver", 4, false);
+            let props = build_stream_props(&args);
+            assert_eq!(props.get("target.object"), None);
+        }
+
+        #[test]
+        fn props_monitor_role_is_monitor() {
+            ensure_pw_init();
+            let args = make_args(Mode::Monitor, "pi4audio-convolver", 4, true);
+            let props = build_stream_props(&args);
+            assert_eq!(props.get("media.role"), Some("Monitor"));
         }
 
         #[test]
         fn props_monitor_node_name() {
             ensure_pw_init();
-            let args = make_args(Mode::Monitor, "loopback-8ch-sink", None, 3);
+            let args = make_args(Mode::Monitor, "pi4audio-convolver", 4, true);
             let props = build_stream_props(&args);
-            assert_eq!(props.get("node.name"), Some("pi4audio-pcm-bridge"));
+            assert_eq!(props.get("node.name"), Some("pi4audio-level-bridge"));
+        }
+
+        #[test]
+        fn props_monitor_channels() {
+            ensure_pw_init();
+            let args = make_args(Mode::Monitor, "pi4audio-convolver", 8, true);
+            let props = build_stream_props(&args);
+            assert_eq!(props.get("audio.channels"), Some("8"));
+        }
+
+        #[test]
+        fn props_monitor_passive() {
+            ensure_pw_init();
+            let args = make_args(Mode::Monitor, "pi4audio-convolver", 4, true);
+            let props = build_stream_props(&args);
+            assert_eq!(props.get("node.passive"), Some("true"));
         }
 
         #[test]
         fn props_capture_no_capture_sink() {
             ensure_pw_init();
-            let args = make_args(Mode::Capture, "loopback-8ch-sink", Some("usb-input"), 8);
+            let args = make_args(Mode::Capture, "alsa_input.usb", 8, true);
             let props = build_stream_props(&args);
             assert_eq!(props.get("stream.capture.sink"), None);
         }
@@ -635,70 +634,36 @@ mod tests {
         #[test]
         fn props_capture_role_is_production() {
             ensure_pw_init();
-            let args = make_args(Mode::Capture, "loopback-8ch-sink", Some("usb-input"), 8);
+            let args = make_args(Mode::Capture, "alsa_input.usb", 8, true);
             let props = build_stream_props(&args);
             assert_eq!(props.get("media.role"), Some("Production"));
         }
 
         #[test]
-        fn props_capture_target_uses_node_name() {
+        fn props_capture_target_object() {
             ensure_pw_init();
-            let args = make_args(
-                Mode::Capture,
-                "loopback-8ch-sink",
-                Some("alsa_input.usb-MiniDSP_USBStreamer-00.pro-input-0"),
-                8,
-            );
+            let args = make_args(Mode::Capture, "alsa_input.usb-MiniDSP", 8, true);
             let props = build_stream_props(&args);
-            assert_eq!(
-                props.get("target.object"),
-                Some("alsa_input.usb-MiniDSP_USBStreamer-00.pro-input-0"),
-            );
-        }
-
-        #[test]
-        fn props_capture_target_falls_back_to_target() {
-            ensure_pw_init();
-            let args = make_args(Mode::Capture, "fallback-sink", None, 2);
-            let props = build_stream_props(&args);
-            assert_eq!(props.get("target.object"), Some("fallback-sink"));
+            assert_eq!(props.get("target.object"), Some("alsa_input.usb-MiniDSP"));
         }
 
         #[test]
         fn props_capture_node_name_is_capture_variant() {
             ensure_pw_init();
-            let args = make_args(Mode::Capture, "loopback-8ch-sink", Some("usb-input"), 8);
+            let args = make_args(Mode::Capture, "alsa_input.usb", 8, true);
             let props = build_stream_props(&args);
-            assert_eq!(props.get("node.name"), Some("pi4audio-pcm-bridge-capture"));
+            assert_eq!(props.get("node.name"), Some("pi4audio-level-bridge-capture"));
         }
 
         #[test]
         fn props_both_modes_have_media_class() {
             ensure_pw_init();
-            let monitor_args = make_args(Mode::Monitor, "sink", None, 3);
-            let capture_args = make_args(Mode::Capture, "sink", Some("src"), 8);
+            let monitor_args = make_args(Mode::Monitor, "sink", 4, true);
+            let capture_args = make_args(Mode::Capture, "src", 8, true);
             let monitor_props = build_stream_props(&monitor_args);
             let capture_props = build_stream_props(&capture_args);
             assert_eq!(monitor_props.get("media.class"), Some("Stream/Input/Audio"));
             assert_eq!(capture_props.get("media.class"), Some("Stream/Input/Audio"));
-        }
-
-        #[test]
-        fn props_both_modes_always_process() {
-            ensure_pw_init();
-            // Non-managed modes: no node.always-process (F-083: prevents
-            // PW scheduling issues in standalone mode).
-            let monitor_args = make_args(Mode::Monitor, "sink", None, 3);
-            let capture_args = make_args(Mode::Capture, "sink", Some("src"), 8);
-            let monitor_props = build_stream_props(&monitor_args);
-            let capture_props = build_stream_props(&capture_args);
-            assert_eq!(monitor_props.get("node.always-process"), None);
-            assert_eq!(capture_props.get("node.always-process"), None);
-            // Managed mode: has node.always-process to keep the node
-            // scheduled when the group driver is running.
-            let managed_args = make_managed_args(Mode::Monitor, "sink", 3);
-            let managed_props = build_stream_props(&managed_args);
-            assert_eq!(managed_props.get("node.always-process"), Some("true"));
         }
 
         #[test]
@@ -718,68 +683,27 @@ mod tests {
         }
 
         #[test]
+        fn props_managed_monitor_has_always_process() {
+            ensure_pw_init();
+            let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
+            let props = build_stream_props(&args);
+            assert_eq!(props.get("node.always-process"), Some("true"));
+        }
+
+        #[test]
         fn props_managed_monitor_has_node_name() {
             ensure_pw_init();
             let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
             let props = build_stream_props(&args);
-            assert_eq!(props.get("node.name"), Some("pi4audio-pcm-bridge"));
+            assert_eq!(props.get("node.name"), Some("pi4audio-level-bridge"));
         }
 
         #[test]
-        fn props_managed_monitor_has_media_class() {
+        fn props_non_managed_no_always_process() {
             ensure_pw_init();
-            let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
+            let args = make_args(Mode::Monitor, "sink", 4, true);
             let props = build_stream_props(&args);
-            assert_eq!(props.get("media.class"), Some("Stream/Input/Audio"));
-        }
-
-        #[test]
-        fn props_managed_monitor_has_channels() {
-            ensure_pw_init();
-            let args = make_managed_args(Mode::Monitor, "pi4audio-convolver", 4);
-            let props = build_stream_props(&args);
-            assert_eq!(props.get("audio.channels"), Some("4"));
-        }
-    }
-
-    // --- SPA pod tests ---
-
-    mod spa_tests {
-        use audio_common::audio_format::build_audio_format;
-
-        #[test]
-        fn build_audio_format_size_and_alignment() {
-            let pod = build_audio_format(8, 48000, &[]);
-            assert_eq!(pod.len() % 8, 0, "SPA pod must be 8-byte aligned");
-            assert_eq!(pod.len(), 136);
-        }
-
-        #[test]
-        fn build_audio_format_header_type() {
-            let pod = build_audio_format(2, 44100, &[]);
-            let pod_type = u32::from_le_bytes(pod[4..8].try_into().unwrap());
-            assert_eq!(pod_type, 15, "pod header type must be SPA_TYPE_Object");
-        }
-
-        #[test]
-        fn build_audio_format_body_size() {
-            let pod = build_audio_format(3, 48000, &[]);
-            let body_size = u32::from_le_bytes(pod[0..4].try_into().unwrap());
-            assert_eq!(body_size as usize, pod.len() - 8);
-        }
-
-        #[test]
-        fn build_audio_format_channels_embedded() {
-            let pod = build_audio_format(8, 48000, &[]);
-            let ch_val = u32::from_le_bytes(pod[128..132].try_into().unwrap());
-            assert_eq!(ch_val, 8);
-        }
-
-        #[test]
-        fn build_audio_format_rate_embedded() {
-            let pod = build_audio_format(2, 96000, &[]);
-            let rate_val = i32::from_le_bytes(pod[104..108].try_into().unwrap());
-            assert_eq!(rate_val, 96000);
+            assert_eq!(props.get("node.always-process"), None);
         }
     }
 }
