@@ -541,7 +541,10 @@ async def ws_siggen(ws: WebSocket):
             """Forward signal generator messages to browser."""
             recv_buf = b""
             while True:
-                chunk = await asyncio.to_thread(tcp_sock.recv, 65536)
+                try:
+                    chunk = await asyncio.to_thread(tcp_sock.recv, 65536)
+                except socket.timeout:
+                    continue
                 if not chunk:
                     break
                 recv_buf += chunk
