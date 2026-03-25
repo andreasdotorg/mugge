@@ -1,4 +1,4 @@
-# Lessons Learned — Pi4 Audio Workstation
+# Lessons Learned — mugge
 
 Project-specific process lessons. For global lessons, see
 `~/mobile/gabriela-bogk/team-protocol/lessons-learned.md`.
@@ -103,7 +103,7 @@ the access lock to the worker and tracks it, but does not execute.
 ## L-005: Orchestrator destroyed live team after compaction (sixth global occurrence)
 
 **Date:** 2026-03-10
-**Context:** Context compaction in pi4-audio session — team had 14 live agents
+**Context:** Context compaction in mugge session — team had 14 live agents
 
 After context compaction, the orchestrator assumed all 14 team agents were dead.
 Sent shutdown requests, force-cleaned the config file, deleted the team, and
@@ -113,7 +113,7 @@ created a new empty one. All agents were in fact alive with full session context
 This is global L-031 and the sixth time this pattern has occurred across projects.
 See global lessons-learned.md for the full analysis and prevention protocol.
 
-**Key takeaway for this project:** The pi4-audio team has expensive-to-rebuild
+**Key takeaway for this project:** The mugge team has expensive-to-rebuild
 context: hardware state knowledge, approval chains, F-020/TK-039 analysis.
 Destroying the team is far more costly here than in a pure code project.
 

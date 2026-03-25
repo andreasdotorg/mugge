@@ -1,7 +1,7 @@
 # HOWTO: Common Development Tasks
 
 This guide covers the most common tasks that workers and developers perform on
-the pi4-audio-workstation project. It assumes you have already cloned the
+the mugge project. It assumes you have already cloned the
 repository and have Nix installed.
 
 ## 1. Nix Environment

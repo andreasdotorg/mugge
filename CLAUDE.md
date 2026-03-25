@@ -1,4 +1,4 @@
-# Pi 4B Portable Audio Workstation — Project Context
+# mugge — Project Context
 
 ## CRITICAL: Orchestrator Rules After Context Compaction
 
@@ -62,7 +62,7 @@ you this. Seven times.**
    by the CM. Workers execute Pi commands themselves — the CM grants/revokes
    sessions and commits results, it does NOT execute on the Pi. Do not run Pi
    commands yourself (orchestrator).
-8. **Team name:** `pi4-audio`. 10 core members (see Team section below).
+8. **Team name:** `mugge`. 10 core members (see Team section below).
 9. See `~/mobile/gabriela-bogk/team-protocol/lessons-learned.md` — L-001, L-007,
    L-008, L-021, L-023, L-031, **L-037** are ALL about the orchestrator destroying
    the team. This has happened **SEVEN TIMES**. Documentation alone does not
@@ -70,7 +70,7 @@ you this. Seven times.**
 
 ### *** STOP — DO NOT ACCESS THE DEPLOYMENT TARGET ***
 
-**This has happened in EVERY project with a deployment target (L-034, pi4-audio L-006, L-008).**
+**This has happened in EVERY project with a deployment target (L-034, mugge L-006, L-008).**
 The orchestrator has violated Rule 2 by running commands on the deployment
 target directly — SSH, kubectl, API calls — six times across projects.
 Documentation alone does not prevent this.

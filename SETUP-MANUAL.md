@@ -1,4 +1,4 @@
-# Raspberry Pi 4B Portable Audio Workstation — Setup Manual
+# mugge — Setup Manual
 
 > **Note:** For additional reference material, see the structured documentation
 > in `docs/`. In particular:

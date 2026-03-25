@@ -50,7 +50,7 @@ The dashboard uses a fixed three-row layout with a collapsible sidebar.
 ```
 +==============================================================================+
 | HEADER BAR (32px)                                                            |
-| Pi4 Audio Workstation                     62.3C | CPU 38% | MEM 1.0/3.7G | |
+| Mugge                                     62.3C | CPU 38% | MEM 1.0/3.7G | |
 +==============================================================================+
 |        |                                                                     |
 | PIPE-  |  INPUT METERS (8ch)              OUTPUT METERS (8ch)                |

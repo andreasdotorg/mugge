@@ -1,6 +1,6 @@
-# User Journeys — Pi4 Audio Workstation
+# User Journeys — mugge
 
-Operational workflows for the Pi 4B portable audio workstation. Each journey documents a
+Operational workflows for mugge. Each journey documents a
 complete procedure from start to verification, written for audio professionals operating
 under venue time pressure.
 

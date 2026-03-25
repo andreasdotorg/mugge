@@ -1,4 +1,4 @@
-# Consultation Matrix — Pi4 Audio Workstation
+# Consultation Matrix — mugge
 
 Universal consultation rules from the orchestration protocol always apply.
 The rules below are project-specific additions.

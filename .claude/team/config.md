@@ -1,4 +1,4 @@
-# Pi4 Audio Workstation — Team Configuration
+# mugge — Team Configuration
 
 ## Work Management
 

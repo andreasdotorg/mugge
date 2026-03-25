@@ -1,4 +1,4 @@
-# Architect — Pi4 Audio Workstation
+# Architect — mugge
 
 Extends the base architect role (see `architect-base.md` for the standard prompt).
 

@@ -1,4 +1,4 @@
-# Product Owner — Pi4 Audio Workstation
+# Product Owner — mugge
 
 You translate the project owner's vision and inputs into structured,
 actionable stories. You bridge the gap between "what Gabriela wants" and

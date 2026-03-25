@@ -1,4 +1,4 @@
-# Team Protocol — Pi4 Audio Workstation
+# Team Protocol — mugge
 
 This directory contains the orchestration protocol and supporting documents
 for team-based development of this project. These are copies of the shared

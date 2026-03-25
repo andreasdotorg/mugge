@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="src/web-ui/static/logo.svg" width="128" alt="pi4-audio-workstation logo">
+  <img src="src/web-ui/static/logo.svg" width="128" alt="mugge logo">
 </p>
 
-# Pi 4B Portable Audio Workstation
+# mugge — portable audio workstation
 
 A [Raspberry Pi 4B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/) that runs an entire live sound system -- crossover filtering,
 room correction, multi-channel routing, and time alignment -- replacing a

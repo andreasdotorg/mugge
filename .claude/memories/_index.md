@@ -1,4 +1,4 @@
-# Project Memory Index — Pi4 Audio Workstation
+# Project Memory Index — mugge
 
 | File | Description |
 |------|-------------|

@@ -1,4 +1,4 @@
-# Pi4 Audio Workstation -- Visual Design Specification
+# mugge -- Visual Design Specification
 
 > **Status:** APPROVED (2026-03-24, revised 2026-03-24). All design questions resolved by owner.
 > **Author:** UX Specialist. **Reviewed by:** Owner, Architect.
