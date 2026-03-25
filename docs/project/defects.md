@@ -3565,3 +3565,434 @@ kill orphan processes (`pkill -f signal-gen; pkill -f pcm-bridge; pkill -f
 'uvicorn.*8080'`).
 
 **Related:** US-075 (local demo environment)
+
+---
+
+## F-101: Dashboard spectrum rendering not consolidated with test tab — repeated bug duplication
+
+**Filed:** 2026-03-25
+**Severity:** High (systemic architecture issue causing repeated bug duplication)
+**Status:** OPEN
+**Affects:** Web UI (`spectrum.js` dashboard, `test.js` test tab, `fft-pipeline.js`)
+**Found by:** Owner (validation of US-080, tested against `8b84518`)
+**Blocks:** US-080 validation
+
+### Description
+
+The -60 dB floor-skip fix (`8b84518`) was applied to the test tab's spectrum
+rendering but NOT to the dashboard's. The dashboard spectrum shows a flat
+-60 dB line; the test tab does not.
+
+**Root cause:** Spectrum rendering code is STILL duplicated between
+`spectrum.js` (dashboard) and `test.js` (test tab). F-099 only deduplicated
+the FFT processing pipeline (`fft-pipeline.js`), but the rendering code
+(canvas drawing, bin iteration, floor skipping, auto-ranging) remains
+duplicated. Every rendering fix must be applied twice — and this keeps being
+missed.
+
+Owner quote: "Having two copies of the same code is sloppy engineering,
+leading to constant bug duplication."
+
+### Fix
+
+Complete the F-099 deduplication: extract the shared spectrum **rendering**
+code (not just FFT processing) into a shared module. Both dashboard and test
+tab must import the same rendering path. This eliminates the entire class of
+"fix applied to one tab but not the other" bugs.
+
+### Scope
+
+- Extract spectrum rendering (canvas draw loop, bin iteration, floor skip,
+  auto-range, dB scale) into shared module
+- `spectrum.js` and `test.js` both import shared renderer
+- Verify both tabs produce identical visual output
+- Update E2E tests if canvas selectors change
+
+**QE root cause pattern (2026-03-25):** E2E tests run against the mock
+server, which serves synthetic/static data. This bypasses the real data
+pipeline (PipeWire → pcm-bridge → TCP → Python relay → WebSocket → JS
+rendering) where ALL recent bugs live. The mock server returns well-formed,
+consistent data — it cannot reproduce TCP framing issues (F-098), rendering
+code duplication bugs (F-101), startup timing issues (F-102), meter data
+flow problems (F-103), or FFT pipeline regressions (F-105). This is the
+same root cause pattern behind F-098 root cause 3 (test.js duplicate not
+caught by E2E). US-083 filed for integration tests against the real
+local-demo stack.
+
+**Related:** F-099 (partial dedup — FFT only), F-098 (original duplication
+caused root cause 3), US-080 (blocked by this), US-083 (integration tests)
+
+---
+
+## F-102: Dashboard spectrum 30-second delay on page load
+
+**Filed:** 2026-03-25
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI dashboard spectrum analyzer
+**Found by:** Owner (validation of US-080, tested against `8b84518`)
+**Blocks:** US-080 validation
+
+### Description
+
+The dashboard spectrum takes approximately 30 seconds to display audio after
+page load. The test tab works immediately. This suggests the dashboard's PCM
+WebSocket connection path has a different timeout/reconnect cycle from the
+test tab's.
+
+The `socket.timeout` fix in `8b84518` may only apply to one of two relay
+paths (the test tab relay in `ws_monitoring.py` vs the dashboard relay).
+
+### Fix
+
+Investigate the dashboard PCM WebSocket connection path. Compare with the
+test tab path that works immediately. Likely needs the same timeout fix
+applied to whichever relay or proxy serves the dashboard spectrum.
+
+**Related:** US-080, `8b84518` (socket timeout fix)
+
+---
+
+## F-103: Dashboard meters still flashing despite 4 fix attempts
+
+**Filed:** 2026-03-25
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI dashboard level meters (US-081)
+**Found by:** Owner (validation of US-081, tested against `c4fc54b` + `8b84518`)
+**Blocks:** US-081 validation
+
+### Description
+
+The US-081 meter rendering still has visible flashing despite 4 fixes already
+applied in `c4fc54b`:
+1. `clearRect` removal (prevent full-canvas clear between frames)
+2. Peak hold `>=` comparison (prevent premature peak drop)
+3. `audioClockMs` fallback for missing timestamps
+4. Redundant resize handler removal
+
+Something deeper in the meter rendering loop is causing intermittent visual
+artifacts. The root cause has not been identified.
+
+### Fix
+
+Deep investigation of the meter rendering loop:
+- Check rAF timing (is the callback firing irregularly?)
+- Check data flow (are WebSocket messages arriving with gaps?)
+- Check canvas state (is something else triggering redraws?)
+- Check interpolation logic between 30 Hz snapshots and 60 fps render
+- Consider: is the 30 Hz snapshot rate interacting poorly with 60 fps
+  interpolation? (2 frames per snapshot = aliasing possible)
+
+**Related:** US-081, D-047 (PPM ballistics spec)
+
+---
+
+## F-104: Test tab Play button requires manual channel selection
+
+**Filed:** 2026-03-25
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI test tab (`test.js`)
+**Found by:** Owner (validation of US-082, tested against `8b84518`)
+
+### Description
+
+`local-demo.sh` starts signal-gen playing 440 Hz on channels [1,2,3,4] at
+launch. However, the test tab UI does not reflect this playing state:
+- Channel buttons are not pre-selected
+- Play button is greyed out until the user manually clicks channel buttons
+- No visual indication that signal-gen is already playing
+
+The test tab should query signal-gen's current status on WebSocket connect
+and pre-populate the UI accordingly (active channels highlighted, Play
+button showing "Playing" state, frequency and level displaying current
+values).
+
+### Fix
+
+On test tab WebSocket connect (or page load):
+1. Send a `status` RPC query to signal-gen
+2. Parse the response for active channels, frequency, level, signal type
+3. Pre-select the active channel buttons
+4. Show Play button in "Playing" state if signal-gen is active
+5. Pre-fill frequency/level fields with current values
+
+**Related:** US-082, US-053 (test tab functionality)
+
+---
+
+## F-105: Test tab spectrum hiccups returned after F-099 refactoring
+
+**Filed:** 2026-03-25
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI test tab spectrum analyzer
+**Found by:** Owner (validation of US-080, tested against `8b84518`)
+
+### Description
+
+Occasional spectrum hiccups (brief visual glitches) are back on the test tab
+after the F-099 FFT pipeline refactoring into `fft-pipeline.js`. This may be
+a regression introduced during the deduplication, or a new issue exposed by
+the shared module architecture.
+
+### Fix
+
+Investigate whether the shared `fft-pipeline.js` module introduced a timing
+or state issue:
+- Compare FFT accumulator behavior before and after refactoring
+- Check if the shared module's `onmessage` handler has a race condition
+  similar to the original F-098 root cause 2 (reading accumulator while
+  being written)
+- Check if the module initialization path differs between dashboard and
+  test tab (e.g., WebSocket connect timing)
+
+**Related:** F-098 (original spectrum hiccup fix), F-099 (FFT dedup that
+may have introduced this)
+
+---
+
+## F-106: Test tab has no visual indication of selected signal mode
+
+**Filed:** 2026-03-25
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI test tab (`test.js`)
+**Found by:** Owner (validation of US-082, tested against `8b84518`)
+
+### Description
+
+The test tab provides signal mode options (sine, sweep, noise, file) but
+there is no visual indication of which mode is currently selected. The user
+cannot tell at a glance what signal type is active or queued for playback.
+
+### Fix
+
+Highlight the active signal mode button/selector. Show current mode in the
+Play button or status area. If signal-gen is already playing, query its
+status and reflect the active mode visually.
+
+**Related:** US-082 (file playback), US-053 (test tab functionality)
+
+---
+
+## F-107: Sweep controls — single unlabeled control, no high frequency setting
+
+**Filed:** 2026-03-25
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI test tab sweep controls (`test.js`)
+**Found by:** Owner (validation of US-082, tested against `8b84518`)
+
+### Description
+
+The sweep signal mode on the test tab shows a single unlabeled control
+(presumably the low/start frequency). There is no way to set the high/end
+frequency for the sweep range. For measurement use, the operator needs to
+specify both the start and end frequencies of the sweep (e.g., 20 Hz to
+20 kHz).
+
+### Fix
+
+- Add a labeled start frequency control (e.g., "Start: 20 Hz")
+- Add a labeled end frequency control (e.g., "End: 20000 Hz")
+- Wire both to the signal-gen `play` RPC command's sweep parameters
+- Add sensible defaults (20 Hz - 20 kHz)
+
+**Related:** US-053 (test tab functionality), US-082
+
+---
+
+## F-108: Sweep never ends — Play button stays animated past duration limit
+
+**Filed:** 2026-03-25
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** signal-gen sweep mode / test tab UI
+**Found by:** Owner (validation of US-082, tested against `8b84518`)
+
+### Description
+
+When playing a sweep with a 5-second duration limit, the sweep never
+completes. The Play button stays in its animated "playing" state
+indefinitely. Either:
+1. signal-gen does not implement sweep duration/auto-stop, or
+2. The duration parameter is not being sent via RPC, or
+3. The test tab UI does not receive/handle the sweep completion event
+
+### Fix
+
+Investigate signal-gen sweep implementation:
+- Does `play` RPC accept a `duration` parameter for sweeps?
+- Does signal-gen emit a completion event when the sweep finishes?
+- Does the test tab listen for and handle sweep completion?
+If signal-gen lacks duration support, this is a feature gap in US-082/US-052.
+
+**Related:** US-082, US-052 (signal-gen)
+
+---
+
+## F-109: Test tab level control does not affect signal-gen output level
+
+**Filed:** 2026-03-25
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI test tab level control / signal-gen RPC
+**Found by:** Owner (validation of US-082, tested against `8b84518`)
+
+### Description
+
+The level (dBFS) control on the test tab does not change the actual output
+level of signal-gen. Either:
+1. The level parameter is not being sent in the `play` RPC command
+2. signal-gen's `play` RPC does not accept a runtime level change
+3. The level change requires a stop+replay cycle and the UI doesn't do this
+
+For measurement and testing, the operator needs real-time control over the
+signal level to avoid clipping and to test at calibrated levels.
+
+### Fix
+
+Investigate the RPC path from test tab level slider → signal-gen. Verify
+that `level_dbfs` is included in the `play` command and that signal-gen
+applies it. If signal-gen requires stop+replay for level changes, either
+fix signal-gen to support runtime level adjustment or have the UI
+automatically stop and replay at the new level.
+
+**Related:** US-082, US-052, D-009 (safety: `--max-level-dbfs` hard cap)
+
+---
+
+## F-110: Higher frequencies show lower volume in spectrum display
+
+**Filed:** 2026-03-25
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI spectrum analyzer
+**Found by:** Owner (validation of US-080, tested against `8b84518`)
+
+### Description
+
+When playing test signals at different frequencies, higher frequencies
+appear at lower volume in the spectrum display. This could be:
+1. **Incorrect frequency-axis scaling** — the FFT bin mapping or dB
+   calculation may not correctly handle the frequency-dependent energy
+   distribution
+2. **signal-gen amplitude drops at high frequencies** — unlikely for a
+   digital sine generator, but worth checking
+3. **Windowing artifact** — Hann window has different energy distribution
+   at different frequencies relative to bin centers (scalloping loss)
+4. **Pink noise reference issue** — if the comparison is against pink
+   noise, the -3 dB/octave rolloff is expected behavior
+
+### Fix
+
+Test with pure sine tones at multiple frequencies (100 Hz, 1 kHz, 10 kHz)
+at the same level_dbfs. All should show the same peak height in the
+spectrum (within ~1 dB for windowing scalloping). If they don't, the FFT
+normalization or bin-to-pixel mapping is incorrect.
+
+**Related:** US-080, D-046 (FFT presets)
+
+---
+
+## F-111: Test tab spectrum does not auto-scale (auto-range only on dashboard)
+
+**Filed:** 2026-03-25
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI test tab spectrum (`test.js`)
+**Found by:** Owner (validation of US-080, tested against `8b84518`)
+**Blocks:** US-080 validation
+
+### Description
+
+The auto-ranging Y axis (D-048: slow attack 200ms, release 2s) was only
+implemented on the dashboard spectrum, not on the test tab spectrum. This
+is the same code duplication pattern as F-101 — the rendering code is not
+fully shared between dashboard and test tab.
+
+US-080 acceptance criteria require auto-ranging on all spectrum displays.
+
+### Fix
+
+Part of the F-101 rendering deduplication. When the shared rendering module
+is created, auto-ranging must be included in the shared code so both tabs
+get it automatically.
+
+**Related:** F-101 (rendering dedup), US-080 (auto-range AC), D-048
+
+---
+
+## F-112: Peak hold drops to bottom instead of decaying to new peak level
+
+**Filed:** 2026-03-25
+**Severity:** High
+**Status:** OPEN (continuation of F-103)
+**Affects:** Web UI dashboard level meters
+**Found by:** Owner (validation of US-081, tested against `8b84518`)
+**Blocks:** US-081 validation
+
+### Description
+
+The peak hold marker on the level meters drops all the way to the bottom
+of the meter instead of decaying gradually to the current signal level.
+Per D-047 (IEC 60268-18 PPM ballistics), the peak marker should:
+1. Hold at the peak value for 2 seconds
+2. Then decay at 20 dB/s toward the current RMS level
+3. Never drop below the current signal level
+
+Instead, the marker drops to -infinity (bottom of meter), which indicates
+the decay logic is not tracking the current signal level as a floor.
+
+This is a continuation of F-103 (meter flashing). The F-103 fix attempts
+addressed some symptoms but the core PPM ballistics implementation is
+incorrect.
+
+### Fix
+
+Review the peak hold/decay logic in the meter rendering code:
+- After 2s hold, decay rate should be 20 dB/s (not instant drop)
+- Decay target should be `max(current_peak, decaying_value - 20*dt)`
+- The decaying marker must never go below the current instantaneous peak
+
+**Related:** F-103 (meter flashing — same root cause area), US-081, D-047
+
+---
+
+## F-113: Levels appear at wrong meters — routing mismatch after US-079
+
+**Filed:** 2026-03-25
+**Severity:** High
+**Status:** OPEN
+**Affects:** GraphManager routing / pcm-bridge tap point / web UI meters
+**Found by:** Owner (validation of US-079/US-080, tested against `8b84518`)
+**Blocks:** US-079 validation, US-080 validation
+
+### Description
+
+After the US-079 pre-convolver tap point change, levels appear at the wrong
+meters. Convolver output signal is visible where signal-gen output should
+be displayed, and the actual simulated physical outputs (USBStreamer) show
+no signal.
+
+This suggests the GM routing table change in US-079 (task #55: tap
+pre-convolver signal for pcm-bridge) has a link mapping error. pcm-bridge
+may be receiving data from the wrong PipeWire ports, or the web UI is
+mapping the channel indices to the wrong meter labels.
+
+### Fix
+
+Investigate the GM routing table for measurement mode after US-079:
+1. Which PW ports does pcm-bridge actually receive from? (`pw-link -l`)
+2. Are these the pre-convolver ports (signal-gen output / convolver input)
+   as intended by US-079?
+3. Does the web UI correctly map pcm-bridge channel indices to meter labels?
+4. Are the convolver-out → USBStreamer links still present for audio output?
+
+The pre-convolver tap should show the signal-gen's full-range output. The
+USBStreamer outputs should show the post-convolver crossover-filtered signal
+(if any — with dirac passthrough they should be identical to input).
+
+**Related:** US-079 (pre-convolver tap), US-080, task #55 (GM routing change)

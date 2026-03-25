@@ -75,6 +75,38 @@ deployed without the UX specialist ever seeing the rendered result.
 (HTML, CSS, JS that affect rendering). Does not apply to backend-only changes,
 test-only changes, or documentation.
 
+### Local-Demo Verification Gate (QE recommendation 2026-03-25)
+
+**All stories and defect fixes touching web UI, pcm-bridge, signal-gen, or
+WebSocket code** must include a local-demo verification step before the worker
+reports "done."
+
+**Background:** E2E tests run against a mock server that returns synthetic
+data. This bypasses the real data pipeline (PipeWire → pcm-bridge → TCP →
+Python relay → WebSocket → JS rendering) where all recent bugs (F-098,
+F-101, F-102, F-103, F-105) were found. The mock server masks timing,
+framing, and data-flow issues that only manifest with real audio data.
+
+**Requirements:**
+
+- The worker MUST run `nix run .#local-demo` and verify the affected
+  feature visually (spectrum displays audio, meters show levels, test tab
+  controls work) before reporting "done"
+- If the local-demo stack cannot start (PipeWire unavailable, port
+  conflicts), the worker must report this as a blocker — NOT skip the
+  verification
+- Screenshot or brief description of what was verified should be included
+  in the completion report
+- This gate supplements (does not replace) `nix run .#test-*` automated
+  tests
+
+**Applies to:** Any story or defect fix that modifies files in:
+- `src/web-ui/` (Python backend or static JS/CSS/HTML)
+- `src/pcm-bridge/` (level data or PCM streaming)
+- `src/signal-gen/` (signal generation or RPC)
+- `src/graph-manager/` (link routing that affects data flow to web UI)
+- `scripts/local-demo.sh` or `configs/local-demo/`
+
 ---
 
 ## Tier 0 — Core Software Installation
@@ -5681,8 +5713,7 @@ outputs,
 **so that** the spectrum analyzer and level meters show the full-range audio
 signal, which is what I need for room correction testing and verification.
 
-**Status:** in-progress (IMPLEMENT complete 2026-03-25. GM routing table updated to tap pre-convolver signal for pcm-bridge. Originally: PM-filed 2026-03-25 per owner feedback. Next priority after
-F-098 lands. Foundation for US-080.)
+**Status:** in-progress (IMPLEMENT phase — owner validation FAILED 2026-03-25. GM routing table updated but F-113 blocks: levels appear at wrong meters, routing mismatch after pre-convolver tap change. Tested against `8b84518`. Originally: PM-filed 2026-03-25. Foundation for US-080.)
 **Depends on:** F-098 (spectrum fix must land first — same relay code path),
 US-075 (local demo environment for testing)
 **Blocks:** US-080 (multi-tap extends this foundation)
@@ -5757,7 +5788,7 @@ with a UI selector and optionally overlay L-R difference,
 **so that** I can inspect the signal at every processing stage (source, pre-
 convolver, post-convolver per channel, post-gain) and analyze stereo image.
 
-**Status:** in-progress (IMPLEMENT complete 2026-03-25. FFT size selector + auto-ranging Y axis implemented. Under validation — flat -60 dB line issue reported. Originally: PM-filed 2026-03-25 per owner feedback. Extends US-079 foundation.)
+**Status:** in-progress (IMPLEMENT phase — owner validation FAILED 2026-03-25. FFT selector + auto-range implemented but 6 defects block acceptance: F-101 (dashboard rendering not deduplicated), F-102 (dashboard 30s delay), F-105 (test tab hiccups), F-110 (higher freq shows lower volume), F-111 (test tab spectrum not auto-scaling), F-113 (routing mismatch — wrong meters). Tested against `8b84518`. Originally: PM-filed 2026-03-25. Extends US-079 foundation.)
 **Depends on:** US-079 (pre-convolver capture point establishes the pattern),
 US-075 (local demo environment for testing)
 **Blocks:** none (but enables full signal chain debugging and stereo analysis)
@@ -5872,7 +5903,7 @@ latching clip indicator,
 **so that** I can monitor gain staging, detect clipping instantly, and
 maintain safe operating levels throughout a performance.
 
-**Status:** in-progress (IMPLEMENT complete 2026-03-25. Segmented meters with PPM ballistics, peak hold, clip latch, 30 Hz snapshot rate. Under validation — meter irregularity reported. Originally: PM-filed 2026-03-25 per owner approval of AE metering recommendation.)
+**Status:** in-progress (IMPLEMENT phase — owner validation FAILED 2026-03-25. Segmented meters implemented but 2 defects block acceptance: F-103 (meters still flashing, 4 fix attempts, root cause unidentified), F-112 (peak hold drops to bottom instead of decaying to new peak — PPM ballistics incorrect). Tested against `c4fc54b` + `8b84518`. Originally: PM-filed 2026-03-25 per owner approval of AE metering recommendation.)
 **Depends on:** US-077 (single-clock timestamps for consistent meter updates)
 **Blocks:** none
 
@@ -5971,7 +6002,7 @@ PipeWire graph in addition to synthesized signals (sine, pink noise, sweep),
 meaningful screenshots with live content, and verify room correction with
 known reference tracks.
 
-**Status:** in-progress (IMPLEMENT complete 2026-03-25. symphonia decoder added, play_file RPC command, test tab UI control. Originally: PM-filed 2026-03-25 per owner request. Owner has MP3 file in home directory for testing.)
+**Status:** in-progress (IMPLEMENT phase — owner validation found 5 test tab defects 2026-03-25: F-104 (Play button state), F-106 (no signal mode indicator), F-107 (sweep controls incomplete), F-108 (sweep never ends), F-109 (level control broken). symphonia decoder works. Tested against `8b84518`. Originally: PM-filed 2026-03-25 per owner request.)
 **Depends on:** US-052 (signal-gen must be operational)
 **Blocks:** none (enhances US-053 test tab and US-080 spectrum tap testing)
 
@@ -6003,6 +6034,85 @@ content. This requires:
 - [ ] AE review (level safety, resampling quality)
 - [ ] Architect review (decoder dependency, RT safety)
 - [ ] Test tab UI updated to expose file playback control (connects to US-053)
+
+---
+
+## US-083: Integration Smoke Tests Against Local-Demo Stack
+
+**As** the development team,
+**I want** an automated integration test suite (`nix run .#test-integration`)
+that runs against the real local-demo stack (PipeWire + GM + signal-gen +
+pcm-bridge + web-ui),
+**so that** the data pipeline bugs that E2E tests miss (because they run
+against a mock server) are caught before owner validation.
+
+**Status:** draft (PM-filed 2026-03-25 per QE test gap analysis. Priority
+HIGH.)
+**Depends on:** US-075 (local-demo environment must be operational)
+**Blocks:** none (but would have caught F-098, F-101, F-102, F-103, F-105)
+
+### Background — QE Test Gap Analysis (2026-03-25)
+
+QE identified a critical gap in the test architecture: **E2E tests
+(Playwright) run against the mock server**, which serves synthetic/static
+data. This bypasses the entire real data pipeline where all recent bugs
+live:
+
+| Pipeline stage | Covered by E2E? | Real bugs found here |
+|----------------|-----------------|---------------------|
+| pcm-bridge → TCP → Python relay → WebSocket | NO (mocked) | F-098 (TCP framing), F-102 (30s delay) |
+| WebSocket → JS FFT → canvas render | PARTIAL (static data) | F-101 (rendering dedup), F-105 (hiccups) |
+| pcm-bridge → levels JSON → meter render | NO (mocked) | F-103 (meter flashing) |
+| signal-gen → RPC → test tab UI state | NO (mocked) | F-104 (Play button state) |
+
+The mock server returns well-formed, consistent data. Real PipeWire data
+has timing jitter, TCP coalescing, variable frame sizes, and asynchronous
+startup. Every defect from this session (F-101 through F-105) would have
+been caught by integration tests against the real stack.
+
+### QE Recommendations (4 items)
+
+1. **New `nix run .#test-integration` target** that starts `local-demo`,
+   waits for stack readiness, then runs integration assertions:
+   - Spectrum canvas has non-zero pixel data within 5 seconds (catches
+     F-101, F-102)
+   - Level meters show non-zero values within 5 seconds (catches F-103)
+   - WebSocket messages arrive at expected rate (30 Hz levels, quantum-rate
+     PCM) (catches F-098 class)
+   - No JavaScript console errors during 30-second observation window
+   - signal-gen status query returns expected playing state (catches F-104)
+
+2. **Process gate: local-demo visual verification** before reporting "done"
+   on any story touching web UI, pcm-bridge, or WebSocket code. (Added to
+   DoD process — see "Local-Demo Verification Gate" in this file.)
+
+3. **Spectrum rendering deduplication** as a prerequisite — without shared
+   rendering code, integration tests would need to assert identical behavior
+   on both tabs separately. With shared code, one assertion covers both.
+
+4. **Test data pipeline, not just UI structure.** Current E2E tests verify
+   DOM structure, element visibility, and navigation. Integration tests
+   must verify data flow: real audio in → real processing → real display.
+
+### Acceptance criteria
+
+- [ ] `nix run .#test-integration` starts local-demo stack automatically
+- [ ] Stack readiness detection (wait for PW socket, GM links, web-ui port)
+- [ ] Spectrum data assertion: non-zero canvas pixels within 5s on both tabs
+- [ ] Meter data assertion: non-zero level values within 5s
+- [ ] WebSocket message rate assertion: levels arriving at 25-30 Hz
+- [ ] No JS console errors during 30s observation window
+- [ ] signal-gen status query returns playing state
+- [ ] Clean shutdown of local-demo stack after test completion
+- [ ] Tests run in CI (GitHub Actions) — may need PipeWire in CI environment
+
+### Definition of Done
+
+- [ ] `nix run .#test-integration` target in flake.nix
+- [ ] All integration assertions pass against local-demo
+- [ ] CI integration (or documented reason for exclusion)
+- [ ] QE review (test coverage vs gap analysis)
+- [ ] Architect review (test infrastructure, local-demo lifecycle management)
 
 ---
 
@@ -6143,4 +6253,5 @@ US-079 + US-075 ──> US-080 (Multi-Point Spectrum Analyzer — selectable sig
 US-077 ──> US-081 (Peak + RMS Level Meters with Latching Clip Indicator — UI work, LevelTracker already computes both)
 US-052 ──> US-082 (Audio File Playback in signal-gen — MP3/WAV/FLAC, play_file RPC, D-009 level cap)
 US-082 ──> US-053 (test tab file playback controls depend on signal-gen file support)
+US-075 ──> US-083 (Integration Smoke Tests Against Local-Demo Stack — real data pipeline testing, catches F-098/F-101/F-102/F-103/F-105 class)
 ```
