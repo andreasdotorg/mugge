@@ -5314,7 +5314,7 @@ node names, no WirePlumber, GM integration, managed-mode services.
 **so that** visual elements have clear semantic meaning, mode identification
 is instant, and the interface looks professional and cohesive.
 
-**Status:** in-progress (TEST phase 2026-03-24. Merged to main `7388170`. All 4 phases complete, 20 files, 447+/227-. 194 E2E pass. Rule 13: Architect APPROVED. Awaiting owner visual acceptance.)
+**Status:** done (owner-accepted 2026-03-25. Merged to main `7388170`. All 4 phases complete, 20 files, 447+/227-. 194 E2E pass. Rule 13: Architect APPROVED. Owner visual acceptance: APPROVED.)
 **Depends on:** none (CSS/JS only, no backend changes)
 **Blocks:** none (visual polish, can land independently)
 
@@ -5345,7 +5345,7 @@ managed-node highlight).
 - [x] All JS hardcoded colors migrated to CSS variables (`7388170`)
 - [x] E2E tests pass (no visual regressions) — 194 pass
 - [x] UX specialist sign-off on final palette implementation — architect Rule 13 approval with measure.js fixup
-- [ ] Owner acceptance (visual review)
+- [x] Owner acceptance (visual review) — approved 2026-03-25
 
 ---
 
@@ -5506,16 +5506,27 @@ hostname) rather than a generic hardware description, and so that PipeWire
 node names, systemd services, and config paths are consistent with the
 project name.
 
-**Status:** draft (PO-drafted 2026-03-24 per owner directive. Owner chose
-"mugge" with full context — AD noted the software outlives any individual Pi,
-TW countered that personal names for personal projects are a strong tradition.
-Owner decided.)
-**Depends on:** US-077 Phase 4 must be COMPLETE before starting (both stories
-touch pcm-bridge server.rs and wire formats — concurrent work would create
-merge conflicts). US-075 should also be complete (local demo configs use
-pi4audio- prefixes).
+**Status:** in-progress (IMPLEMENT phase, docs-only pass. Owner directive
+2026-03-25: start with documentation-only rename NOW. All code changes —
+Rust crate names, Nix packages, binary names, PW node names, systemd
+services, config paths — postponed until after current sprint.)
+**Depends on:** Phase A (docs) has no dependencies. Phase B (code) depends
+on US-077 complete + current sprint (US-079/080/081/082) complete.
 **Blocks:** none
 **Decisions:** D-045 (project identity: mugge)
+
+### Phasing (owner directive 2026-03-25)
+
+**Phase A — Documentation rename (NOW):**
+Rename references in markdown docs, CLAUDE.md, comments, README, project
+docs, architecture docs, safety docs, lab note headers, user stories, and
+defects. Leave all code identifiers, package names, binary names, PW node
+names, systemd service names, Nix flake references, and config paths
+UNCHANGED.
+
+**Phase B — Code rename (AFTER current sprint):**
+Original Phases 1-3 (PW node prefix, systemd services, repo/project identity).
+Postponed to avoid disrupting concurrent US-079/080/081/082 work.
 
 **The problem:** The project currently uses three naming variants across the
 codebase:
@@ -5953,6 +5964,51 @@ The work is:
 
 ---
 
+## US-082: Audio File Playback in signal-gen
+
+**As** the system operator and tester,
+**I want** signal-gen to play back audio files (MP3, WAV, FLAC) through the
+PipeWire graph in addition to synthesized signals (sine, pink noise, sweep),
+**so that** I can test the audio pipeline with real program material, capture
+meaningful screenshots with live content, and verify room correction with
+known reference tracks.
+
+**Status:** draft (PM-filed 2026-03-25 per owner request. Owner has MP3 file
+in home directory for testing.)
+**Depends on:** US-052 (signal-gen must be operational)
+**Blocks:** none (enhances US-053 test tab and US-080 spectrum tap testing)
+
+**Background:** signal-gen currently supports only synthesized signals (sine,
+pink noise, sweep) via RPC. The owner wants to play back audio files through
+the same signal path for testing and screenshot capture with real audio
+content. This requires:
+1. A new `play_file` RPC command in signal-gen
+2. Audio file decoding (MP3 at minimum, WAV/FLAC desirable)
+3. File path specified via RPC (file must exist on the machine running
+   signal-gen)
+4. Looping option for continuous playback during testing
+5. Respect existing `--max-level-dbfs` safety cap (D-009 compliance)
+
+**Acceptance criteria:**
+- [ ] signal-gen accepts `play_file` RPC command with file path and optional
+  loop flag
+- [ ] MP3 decoding supported (minimum). WAV and FLAC desirable.
+- [ ] Playback respects `--max-level-dbfs` hard cap (peak limiter, D-009)
+- [ ] Audio resampled to stream sample rate if file rate differs
+- [ ] Playback stops cleanly on `stop` RPC command
+- [ ] File path validated — clear error if file not found or unsupported format
+- [ ] Works with local demo (`nix run .#local-demo`) and production Pi
+
+### Definition of Done
+- [ ] Implementation committed and tests pass (`nix run .#test-signal-gen`)
+- [ ] Integration test: play MP3 file through local demo, verify pcm-bridge
+  receives audio levels
+- [ ] AE review (level safety, resampling quality)
+- [ ] Architect review (decoder dependency, RT safety)
+- [ ] Test tab UI updated to expose file playback control (connects to US-053)
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -6088,4 +6144,6 @@ US-072 ──> US-020 (redundancy — NixOS makes SD card cloning trivial)
 F-098 + US-075 ──> US-079 (Pre-Convolver Capture Point — pcm-bridge taps full-range input for room correction)
 US-079 + US-075 ──> US-080 (Multi-Point Spectrum Analyzer — selectable signal chain tap points, L-R overlay)
 US-077 ──> US-081 (Peak + RMS Level Meters with Latching Clip Indicator — UI work, LevelTracker already computes both)
+US-052 ──> US-082 (Audio File Playback in signal-gen — MP3/WAV/FLAC, play_file RPC, D-009 level cap)
+US-082 ──> US-053 (test tab file playback controls depend on signal-gen file support)
 ```
