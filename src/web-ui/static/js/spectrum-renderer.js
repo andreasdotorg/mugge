@@ -421,7 +421,10 @@
             if (lutLen <= 0) return;
 
             var baseline = plotY + plotH;
-            var floorDb = currentDbMin() + 1;
+            // Use the configured (absolute) dbMin for floor-skip, not the
+            // auto-ranged display minimum. The FFT noise floor sits at dbMin;
+            // using currentDbMin() would draw noise when auto-range zooms in.
+            var floorDb = dbMin + 1;
 
             // Per-column fill
             for (var x = 0; x < lutLen; x++) {

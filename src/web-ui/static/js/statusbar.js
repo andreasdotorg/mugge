@@ -66,8 +66,9 @@
 
     var prevGraphPos = 0;
     var prevGraphNsec = 0;
-    // Monotonic audio clock (ms) — incremented by PW nsec deltas.
-    var audioClockMs = 0;
+    // Monotonic audio clock (ms) — seeded from wall clock, then advanced
+    // exclusively by PW nsec deltas once the graph clock arrives (D-044).
+    var audioClockMs = performance.now();
 
     // -- Measurement state tracking --
 
@@ -167,8 +168,12 @@
 
     function onMonitoring(data) {
         // US-077: staleness detection — skip if graph clock pos unchanged
+        // F-103: pos=0 means no level-bridge data — skip to avoid flash.
         var pos = data.pos || 0;
         var nsec = data.nsec || 0;
+        if (pos === 0 && prevGraphPos > 0) {
+            return; // no graph clock data, keep previous meter state
+        }
         if (pos > 0 && pos === prevGraphPos) {
             return; // same snapshot, skip meter update
         }

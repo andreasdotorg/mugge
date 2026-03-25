@@ -94,9 +94,11 @@
     var prevGraphPos = 0;
     // Graph clock nsec: use PW clock deltas for peak hold/decay timing
     var prevGraphNsec = 0;
-    // Monotonic audio clock (ms) — incremented by PW nsec deltas on each
-    // new data message (D-044: PW graph clock is sole timing source).
-    var audioClockMs = 0;
+    // Monotonic audio clock (ms) — seeded from wall clock, then advanced
+    // exclusively by PW nsec deltas once the graph clock arrives (D-044).
+    // Seeding avoids a dead zone where audioClockMs=0 breaks peak hold
+    // and PPM ballistics until the first two valid nsec messages arrive.
+    var audioClockMs = performance.now();
 
     // Per-channel last-signal-time tracking for dim logic
     // Indexed by group key + local index
@@ -459,8 +461,13 @@
     function onMonitoringData(data) {
         // US-077: staleness detection — skip meter update if graph clock
         // position hasn't changed (server re-sent the same snapshot).
+        // F-103: pos=0 means no level-bridge data (collector has no snapshot
+        // yet, or level-bridge is disconnected). Skip to avoid -120dB flash.
         var pos = data.pos || 0;
         var nsec = data.nsec || 0;
+        if (pos === 0 && prevGraphPos > 0) {
+            return; // no graph clock data, keep previous meter state
+        }
         if (pos > 0 && pos === prevGraphPos) {
             return; // data hasn't changed, skip
         }

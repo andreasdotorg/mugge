@@ -346,13 +346,31 @@ async def _pcm_tcp_relay(ws: WebSocket, host: str, port: int,
     frame boundaries.  Wire format v2:
         [version:1][pad:3][frame_count:4][graph_pos:8][graph_nsec:8][PCM...]
     where PCM is frame_count * channels * 4 bytes of float32.
+
+    F-102: Retries TCP connection with 1s backoff (up to 15 attempts)
+    instead of failing immediately. This eliminates the 15-20s spectrum
+    delay caused by WS close → 3s browser reconnect → 5s TCP timeout
+    cycles when pcm-bridge starts after the web UI.
     """
     _V2_HEADER = 24
     _NUM_CHANNELS = 4
     tcp_sock = None
     try:
-        tcp_sock = await asyncio.to_thread(
-            socket.create_connection, (host, port), 5.0)
+        # F-102: retry TCP connection to pcm-bridge with short backoff.
+        # pcm-bridge may not be listening yet (GM still creating links,
+        # service starting up). Retry here keeps the WS open so the
+        # browser doesn't cycle through 3s reconnect delays.
+        for attempt in range(15):
+            try:
+                tcp_sock = await asyncio.to_thread(
+                    socket.create_connection, (host, port), 2.0)
+                break
+            except (ConnectionRefusedError, OSError) as exc:
+                if attempt == 14:
+                    log.warning("PCM relay: giving up after 15 attempts "
+                                "(source=%s): %s", source, exc)
+                    return
+                await asyncio.sleep(1.0)
         await asyncio.to_thread(tcp_sock.settimeout, 2.0)
         log.info("PCM relay connected to %s:%d (source=%s)", host, port, source)
 

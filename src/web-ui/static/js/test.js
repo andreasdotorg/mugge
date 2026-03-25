@@ -93,7 +93,10 @@
     }
 
     function sendCmd(cmd) {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            console.warn("[test] sendCmd dropped (WS not open):", cmd.cmd);
+            return;
+        }
         ws.send(JSON.stringify(cmd));
     }
 
@@ -683,7 +686,7 @@
             if (specActive && specCurrentSource) {
                 specConnectPcm(specCurrentSource);
             }
-        }, 3000);
+        }, 1000);
     }
 
     function updateMicStatus(status, source) {

@@ -81,7 +81,7 @@
         pcmReconnectTimer = setTimeout(function () {
             pcmReconnectTimer = null;
             connectPcmWebSocket();
-        }, 3000);
+        }, 1000);
     }
 
     // ---- Render loop ----
