@@ -67,7 +67,6 @@
     var prevGraphPos = 0;
     var prevGraphNsec = 0;
     // Monotonic audio clock (ms) — incremented by PW nsec deltas.
-    // Used for peak hold / clip latch instead of performance.now().
     var audioClockMs = 0;
 
     // -- Measurement state tracking --
@@ -116,7 +115,9 @@
         var h = cvs.height;
         var totalW = cvs.width;
 
-        ctx.clearRect(0, 0, totalW, h);
+        // Fill background (avoids flash from clearRect on some compositors)
+        ctx.fillStyle = "#131221";
+        ctx.fillRect(0, 0, totalW, h);
 
         var x = 0;
         for (var j = 0; j < g.channels.length; j++) {
@@ -171,7 +172,7 @@
         if (pos > 0 && pos === prevGraphPos) {
             return; // same snapshot, skip meter update
         }
-        // Advance audio clock by PW nsec delta
+        // Advance audio clock by PW nsec delta (D-044: PW clock only).
         if (nsec > 0 && prevGraphNsec > 0 && nsec > prevGraphNsec) {
             audioClockMs += (nsec - prevGraphNsec) / 1e6;
         }

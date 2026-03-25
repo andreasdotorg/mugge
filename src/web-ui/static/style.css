@@ -1790,9 +1790,10 @@ html, body {
 }
 
 .tt-signal-btn.active {
-    background: rgba(0, 188, 212, 0.15);
+    background: rgba(179, 157, 219, 0.20);
     color: var(--primary);
     border-color: var(--primary);
+    font-weight: 600;
 }
 
 /* Frequency slider */

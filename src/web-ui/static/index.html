@@ -607,11 +607,20 @@
 
             <!-- Frequency (visible for sine/sweep only) -->
             <div class="tt-section" id="tt-freq-section">
-                <div class="tt-section-title">FREQUENCY</div>
+                <div class="tt-section-title" id="tt-freq-title">FREQUENCY</div>
                 <div class="tt-slider-row">
                     <input type="range" class="tt-slider" id="tt-freq-slider"
                            min="1.301" max="4.301" step="0.001" value="3.0">
                     <span class="tt-slider-value" id="tt-freq-value">1000 Hz</span>
+                </div>
+            </div>
+            <!-- Sweep end frequency (visible for sweep only) -->
+            <div class="tt-section hidden" id="tt-sweep-end-section">
+                <div class="tt-section-title">SWEEP END</div>
+                <div class="tt-slider-row">
+                    <input type="range" class="tt-slider" id="tt-sweep-end-slider"
+                           min="1.301" max="4.301" step="0.001" value="4.301">
+                    <span class="tt-slider-value" id="tt-sweep-end-value">20000 Hz</span>
                 </div>
             </div>
 
@@ -737,6 +746,7 @@
 <script src="/static/js/app.js"></script>
 <script src="/static/js/statusbar.js"></script>
 <script src="/static/js/fft-pipeline.js"></script>
+<script src="/static/js/spectrum-renderer.js"></script>
 <script src="/static/js/spectrum.js"></script>
 <script src="/static/js/dashboard.js"></script>
 <script src="/static/js/system.js"></script>

@@ -95,10 +95,8 @@
     // Graph clock nsec: use PW clock deltas for peak hold/decay timing
     var prevGraphNsec = 0;
     // Monotonic audio clock (ms) — incremented by PW nsec deltas on each
-    // new data message. Falls back to wall clock deltas when PW clock is
-    // unavailable (old binary, initial state, or clock gaps).
+    // new data message (D-044: PW graph clock is sole timing source).
     var audioClockMs = 0;
-    var prevWallMs = 0;
 
     // Per-channel last-signal-time tracking for dim logic
     // Indexed by group key + local index
@@ -466,16 +464,10 @@
         if (pos > 0 && pos === prevGraphPos) {
             return; // data hasn't changed, skip
         }
-        // Advance audio clock by PW nsec delta for deterministic decay.
-        // Fall back to wall clock when PW clock unavailable (old binary,
-        // initial state, or clock data missing).
-        var wallMs = performance.now();
+        // Advance audio clock by PW nsec delta (D-044: PW clock only).
         if (nsec > 0 && prevGraphNsec > 0 && nsec > prevGraphNsec) {
             audioClockMs += (nsec - prevGraphNsec) / 1e6;
-        } else if (prevWallMs > 0) {
-            audioClockMs += wallMs - prevWallMs;
         }
-        prevWallMs = wallMs;
         prevGraphPos = pos;
         prevGraphNsec = nsec;
 

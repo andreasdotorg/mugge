@@ -35,12 +35,14 @@
     var selectedChannels = [];   // array of 1-indexed channel numbers
     var selectedSignal = "sine";
     var currentFreq = 1000;
+    var currentSweepEnd = 20000;
     var currentLevel = -40.0;
     var isPlaying = false;
     var hasConfirmedThisSession = false;
 
     var levelDebounce = null;
     var freqDebounce = null;
+    var sweepEndDebounce = null;
 
     // -- DOM helpers --
 
@@ -101,6 +103,11 @@
         var type = msg.type;
 
         if (type === "ack") {
+            // Status response: type "ack", cmd "status" — apply full state.
+            if (msg.cmd === "status" && msg.ok !== undefined) {
+                applyStatusResponse(msg);
+                return;
+            }
             // Command acknowledged.  Update state from ack if present.
             if (msg.state) applyState(msg.state);
             return;
@@ -117,15 +124,35 @@
             }
             return;
         }
+    }
 
-        // Initial status response (from "status" command).
-        if (msg.cmd === "status" && msg.ok !== undefined) {
-            if (msg.playing) {
-                setPlaying(true);
-            } else {
-                setPlaying(false);
-            }
-            return;
+    function applyStatusResponse(msg) {
+        setPlaying(!!msg.playing);
+
+        // Pre-select channels reported by signal-gen.
+        if (msg.channels && msg.channels.length > 0) {
+            selectedChannels = msg.channels.slice();
+            updateChannelHighlights();
+            updatePlayEnabled();
+        }
+
+        if (msg.signal) {
+            selectSignal(msg.signal);
+        }
+        if (msg.freq !== undefined) {
+            currentFreq = msg.freq;
+            var freqSlider = $("tt-freq-slider");
+            var freqDisplay = $("tt-freq-value");
+            if (freqSlider) freqSlider.value = msg.freq;
+            if (freqDisplay) freqDisplay.textContent = msg.freq + " Hz";
+        }
+        if (msg.level_dbfs !== undefined) {
+            currentLevel = msg.level_dbfs;
+            var levelSlider = $("tt-level-slider");
+            var levelDisplay = $("tt-level-value");
+            if (levelSlider) levelSlider.value = msg.level_dbfs;
+            if (levelDisplay) levelDisplay.textContent = msg.level_dbfs.toFixed(1) + " dBFS";
+            updateLevelColor(msg.level_dbfs);
         }
     }
 
@@ -212,6 +239,20 @@
         if (freqSection) {
             freqSection.style.display =
                 (signal === "sine" || signal === "sweep") ? "" : "none";
+        }
+        // Update freq title label for sweep vs sine.
+        var freqTitle = $("tt-freq-title");
+        if (freqTitle) {
+            freqTitle.textContent = signal === "sweep" ? "SWEEP START" : "FREQUENCY";
+        }
+        // Show/hide sweep end frequency section.
+        var sweepEndSection = $("tt-sweep-end-section");
+        if (sweepEndSection) {
+            if (signal === "sweep") {
+                sweepEndSection.classList.remove("hidden");
+            } else {
+                sweepEndSection.classList.add("hidden");
+            }
         }
         // Show/hide file path section.
         var fileSection = $("tt-file-section");
@@ -353,6 +394,19 @@
         });
     }
 
+    function initSweepEndSlider() {
+        var slider = $("tt-sweep-end-slider");
+        var display = $("tt-sweep-end-value");
+        if (!slider) return;
+
+        slider.addEventListener("input", function () {
+            var logVal = snapFreq(parseFloat(this.value));
+            this.value = logVal;
+            currentSweepEnd = Math.round(Math.pow(10, logVal));
+            if (display) display.textContent = formatFreq(currentSweepEnd);
+        });
+    }
+
     function formatFreq(hz) {
         if (hz >= 1000) {
             return (hz / 1000).toFixed(hz >= 10000 ? 0 : 1) + " kHz";
@@ -462,7 +516,7 @@
                     duration: getDuration()
                 };
                 if (selectedSignal === "sweep") {
-                    cmd.sweep_end = 20000;
+                    cmd.sweep_end = currentSweepEnd;
                 }
                 if (selectedSignal === "file") {
                     var pathInput = $("tt-file-path");
@@ -520,14 +574,8 @@
     var SPEC_FFT_SIZE = 4096;  // US-080: default "Balanced"
     var SPEC_DB_MIN = -80;
     var SPEC_DB_MAX = 0;
-    var SPEC_FREQ_LO = 20;
-    var SPEC_FREQ_HI = 20000;
-    var SPEC_LOG_LO = Math.log10(SPEC_FREQ_LO);
-    var SPEC_LOG_HI = Math.log10(SPEC_FREQ_HI);
 
     // State
-    var specCanvas = null;
-    var specCtx = null;
     var specAnimFrame = null;
     var specPcmWs = null;
     var specPcmConnected = false;
@@ -539,243 +587,35 @@
     var specPipeline = null;
     var specFreqData = null;
 
-    // Layout
-    var specFreqLUT = null;
-    var specCachedW = 0;
-    var specCachedH = 0;
-    var specPlotX = 30;
-    var specPlotY = 0;
-    var specPlotW = 0;
-    var specPlotH = 0;
-
-    // Color LUT (shared with PiAudioSpectrum if available, else built locally)
-    var specColorLUT = null;
-
-    function specFreqToNorm(freq) {
-        return (Math.log10(freq) - SPEC_LOG_LO) / (SPEC_LOG_HI - SPEC_LOG_LO);
-    }
-
-    function specFreqToBin(freq) {
-        return freq * SPEC_FFT_SIZE / SPEC_SAMPLE_RATE;
-    }
+    // Shared renderer (F-101)
+    var specRenderer = null;
 
     /** (Re)create the test tab FFT pipeline with current SPEC_FFT_SIZE. */
     function specRecreatePipeline() {
         if (specPipeline) specPipeline.reset();
         specPipeline = PiAudioFFT.create({
             fftSize: SPEC_FFT_SIZE,
-            sampleRate: 48000,
+            sampleRate: SPEC_SAMPLE_RATE,
             numChannels: 4,
             dbMin: SPEC_DB_MIN,
             dbMax: SPEC_DB_MAX,
             smoothing: 0.3
         });
         specFreqData = null;
-        // Rebuild freq LUT for new bin count
-        if (specPlotW > 0) {
-            specBuildFreqLUT(Math.floor(specPlotW));
-        }
-    }
-
-    function specBuildFreqLUT(width) {
-        specFreqLUT = new Float32Array(width);
-        var binCount = SPEC_FFT_SIZE / 2;
-        for (var x = 0; x < width; x++) {
-            var norm = x / (width - 1);
-            var freq = Math.pow(10, SPEC_LOG_LO + norm * (SPEC_LOG_HI - SPEC_LOG_LO));
-            var bin = specFreqToBin(freq);
-            specFreqLUT[x] = Math.min(Math.max(bin, 0), binCount - 1);
-        }
-    }
-
-    function specBuildColorLUT() {
-        var stops = [
-            { pos: 0.00, r: 30,  g: 20,  b: 60,  a: 0.80 },
-            { pos: 0.15, r: 80,  g: 40,  b: 120, a: 0.80 },
-            { pos: 0.30, r: 140, g: 50,  b: 160, a: 0.80 },
-            { pos: 0.50, r: 220, g: 80,  b: 40,  a: 0.80 },
-            { pos: 0.65, r: 226, g: 166, b: 57,  a: 0.80 },
-            { pos: 0.80, r: 230, g: 210, b: 60,  a: 0.80 },
-            { pos: 0.92, r: 255, g: 240, b: 180, a: 0.90 },
-            { pos: 1.00, r: 255, g: 255, b: 255, a: 0.95 }
-        ];
-        specColorLUT = new Array(256);
-        for (var i = 0; i < 256; i++) {
-            var t = i / 255;
-            var lo = 0;
-            for (var s = 1; s < stops.length; s++) {
-                if (stops[s].pos >= t) { lo = s - 1; break; }
-            }
-            var hi = lo + 1;
-            if (hi >= stops.length) { hi = stops.length - 1; lo = hi - 1; }
-            var range = stops[hi].pos - stops[lo].pos;
-            var frac = range > 0 ? (t - stops[lo].pos) / range : 0;
-            var r = Math.round(stops[lo].r + frac * (stops[hi].r - stops[lo].r));
-            var g = Math.round(stops[lo].g + frac * (stops[hi].g - stops[lo].g));
-            var b = Math.round(stops[lo].b + frac * (stops[hi].b - stops[lo].b));
-            var a = stops[lo].a + frac * (stops[hi].a - stops[lo].a);
-            specColorLUT[i] = "rgba(" + r + "," + g + "," + b + "," + a.toFixed(2) + ")";
-        }
-    }
-
-    function specDbToColor(db) {
-        var clamped = Math.max(SPEC_DB_MIN, Math.min(SPEC_DB_MAX, db));
-        var idx = Math.floor((clamped - SPEC_DB_MIN) / (SPEC_DB_MAX - SPEC_DB_MIN) * 255);
-        if (idx > 255) idx = 255;
-        return specColorLUT[idx];
-    }
-
-    function specDbToY(db) {
-        var clamped = Math.max(SPEC_DB_MIN, Math.min(SPEC_DB_MAX, db));
-        var frac = (clamped - SPEC_DB_MIN) / (SPEC_DB_MAX - SPEC_DB_MIN);
-        return specPlotY + specPlotH - frac * specPlotH;
-    }
-
-    function specInterpolateDB(data, fracBin) {
-        var lo = Math.floor(fracBin);
-        var hi = Math.min(lo + 1, data.length - 1);
-        var t = fracBin - lo;
-        return data[lo] * (1 - t) + data[hi] * t;
-    }
-
-    function specResizeCanvas() {
-        if (!specCanvas) return;
-        var rect = specCanvas.getBoundingClientRect();
-        var dpr = window.devicePixelRatio || 1;
-        var w = Math.floor(rect.width * dpr);
-        var h = Math.floor(rect.height * dpr);
-        if (w === specCachedW && h === specCachedH) return;
-        specCanvas.width = w;
-        specCanvas.height = h;
-        specCtx = specCanvas.getContext("2d");
-        specCtx.scale(dpr, dpr);
-        specCachedW = w;
-        specCachedH = h;
-        var cssW = rect.width;
-        var cssH = rect.height;
-        specPlotX = 30;
-        specPlotY = 0;
-        specPlotW = cssW - 30;
-        specPlotH = cssH - 14;
-        if (specPlotW > 0) {
-            specBuildFreqLUT(Math.floor(specPlotW));
-            if (!specColorLUT) specBuildColorLUT();
-        }
-    }
-
-    function specDrawBackground() {
-        var cssW = specCachedW / (window.devicePixelRatio || 1);
-        var cssH = specCachedH / (window.devicePixelRatio || 1);
-        specCtx.fillStyle = "#0c0e12";
-        specCtx.fillRect(0, 0, cssW, cssH);
-
-        // dB grid lines
-        specCtx.strokeStyle = "rgba(200, 205, 214, 0.08)";
-        specCtx.lineWidth = 1;
-        var gridDB = [-12, -24, -36, -48, -60, -72];
-        for (var i = 0; i < gridDB.length; i++) {
-            var y = specDbToY(gridDB[i]);
-            specCtx.beginPath();
-            specCtx.moveTo(specPlotX, y);
-            specCtx.lineTo(specPlotX + specPlotW, y);
-            specCtx.stroke();
-        }
-
-        // dB labels
-        specCtx.fillStyle = "#6a7280";
-        specCtx.font = "8px monospace";
-        specCtx.textAlign = "right";
-        specCtx.textBaseline = "middle";
-        for (var m = 0; m < gridDB.length; m++) {
-            specCtx.fillText(gridDB[m] + " dB", specPlotX - 3, specDbToY(gridDB[m]));
-        }
-        specCtx.fillText("0 dB", specPlotX - 3, specDbToY(0));
-
-        // Frequency grid
-        var freqMajor = [100, 1000, 10000];
-        specCtx.strokeStyle = "rgba(200, 205, 214, 0.08)";
-        for (var k = 0; k < freqMajor.length; k++) {
-            var norm = specFreqToNorm(freqMajor[k]);
-            if (norm < 0 || norm > 1) continue;
-            var x = specPlotX + norm * specPlotW;
-            specCtx.beginPath();
-            specCtx.moveTo(x, specPlotY);
-            specCtx.lineTo(x, specPlotY + specPlotH);
-            specCtx.stroke();
-        }
-
-        // Frequency labels
-        var fLabels = [
-            { freq: 20, text: "20" }, { freq: 100, text: "100" },
-            { freq: 1000, text: "1k" }, { freq: 10000, text: "10k" },
-            { freq: 20000, text: "20k" }
-        ];
-        specCtx.textAlign = "center";
-        specCtx.textBaseline = "top";
-        for (var j = 0; j < fLabels.length; j++) {
-            var fNorm = specFreqToNorm(fLabels[j].freq);
-            if (fNorm < 0 || fNorm > 1) continue;
-            specCtx.fillText(fLabels[j].text, specPlotX + fNorm * specPlotW,
-                             specPlotY + specPlotH + 2);
-        }
-    }
-
-    function specDrawMountainRange() {
-        if (!specFreqData || !specFreqLUT || !specColorLUT) return;
-        var lutLen = specFreqLUT.length;
-        if (lutLen <= 0) return;
-        var baseline = specPlotY + specPlotH;
-
-        for (var x = 0; x < lutLen; x++) {
-            var db = specInterpolateDB(specFreqData, specFreqLUT[x]);
-            var y = specDbToY(db);
-            var colH = baseline - y;
-            if (colH > 0) {
-                specCtx.fillStyle = specDbToColor(db);
-                specCtx.fillRect(specPlotX + x, y, 1, colH);
-            }
-        }
-
-        // Outline
-        specCtx.beginPath();
-        for (var x2 = 0; x2 < lutLen; x2++) {
-            var db2 = specInterpolateDB(specFreqData, specFreqLUT[x2]);
-            var y2 = specDbToY(db2);
-            if (x2 === 0) specCtx.moveTo(specPlotX + x2, y2);
-            else specCtx.lineTo(specPlotX + x2, y2);
-        }
-        specCtx.strokeStyle = "rgba(220, 220, 240, 0.7)";
-        specCtx.lineWidth = 1.5;
-        specCtx.stroke();
+        if (specRenderer) specRenderer.setFFTSize(SPEC_FFT_SIZE);
     }
 
     function specRender() {
         if (!specActive) { specAnimFrame = null; return; }
-        if (!specCtx || !specCanvas) {
+        if (!specRenderer) {
             specAnimFrame = requestAnimationFrame(specRender);
             return;
         }
-        specResizeCanvas();
-        if (specCachedW === 0 || specCachedH === 0) {
-            specAnimFrame = requestAnimationFrame(specRender);
-            return;
-        }
-        specDrawBackground();
         if (specPipeline && specPipeline.dirty) {
             specPipeline.processFFT();
         }
         specFreqData = specPipeline ? specPipeline.freqData : null;
-        if (specFreqData && specPcmConnected) {
-            specDrawMountainRange();
-        } else {
-            var cssW = specCachedW / (window.devicePixelRatio || 1);
-            var cssH = specCachedH / (window.devicePixelRatio || 1);
-            specCtx.fillStyle = "rgba(255, 255, 255, 0.3)";
-            specCtx.font = "16px monospace";
-            specCtx.textAlign = "center";
-            specCtx.textBaseline = "middle";
-            specCtx.fillText("No capture signal", cssW / 2, cssH / 2);
-        }
+        specRenderer.render(specFreqData, specPcmConnected);
         specAnimFrame = requestAnimationFrame(specRender);
     }
 
@@ -803,7 +643,7 @@
 
         specPcmWs.onmessage = function (ev) {
             if (specPipeline) {
-                specPipeline.feedPcmMessage(ev.data);
+                specPipeline.feedPcmMessage(ev.data, { detectGaps: true });
             }
         };
 
@@ -927,16 +767,25 @@
     // -- Spectrum init/destroy --
 
     function initSpectrum() {
-        specCanvas = $("tt-spectrum-canvas");
-        if (!specCanvas) return;
-        specCtx = specCanvas.getContext("2d");
-        specRecreatePipeline();
-        specBuildColorLUT();
+        specRenderer = PiAudioSpectrumRenderer.create({
+            dbMin: SPEC_DB_MIN,
+            dbMax: SPEC_DB_MAX,
+            freqLo: 20,
+            freqHi: 20000,
+            fftSize: SPEC_FFT_SIZE,
+            sampleRate: SPEC_SAMPLE_RATE,
+            peakHold: false,
+            autoRange: true,
+            gridDetail: "simple",
+            noSignalText: "No capture signal"
+        });
+        specRenderer.init("tt-spectrum-canvas");
 
         window.addEventListener("resize", function () {
-            specCachedW = 0;
-            specCachedH = 0;
+            if (specRenderer) specRenderer.invalidate();
         });
+
+        specRecreatePipeline();
 
         // US-080: Wire up FFT size selector
         var fftSelect = $("tt-fft-size");
@@ -976,6 +825,7 @@
             initChannelButtons();
             initLevelSlider();
             initFreqSlider();
+            initSweepEndSlider();
             initDuration();
             initPlayStop();
             initEmergencyStop();
