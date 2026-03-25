@@ -88,6 +88,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-080 | **IMPLEMENT** | **TBD** | **Owner validation FAILED** (2026-03-25, tested `8b84518`). Blocked by 6 defects: F-101, F-102, F-105, F-110 (freq vs volume), F-111 (test tab no auto-scale), F-113 (routing). |
 | US-081 | **IMPLEMENT** | **TBD** | **Owner validation FAILED** (2026-03-25, tested `c4fc54b`+`8b84518`). Blocked by F-103 (flashing) + F-112 (peak hold drops to bottom, PPM ballistics incorrect). |
 | US-082 | **IMPLEMENT** | **TBD** | **Owner validation FAILED** (2026-03-25, tested `8b84518`). symphonia decoder works. 5 test tab defects: F-104, F-106 (no mode indicator), F-107 (sweep controls), F-108 (sweep never ends), F-109 (level control broken). |
+| US-084 | **IMPLEMENT** | **3/13** | Phase 1 DONE: level-bridge crate extracted, 45/45 tests. Phase 2 DONE: pcm-bridge stripped, 42/42 tests. Phase 3 DONE: local-demo.sh + flake.nix updated. Remaining: systemd templates (Pi), web UI wiring, signal-gen mono, self-linking verification. |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -205,6 +206,31 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 **D-049 recorded:** Level-bridge / pcm-bridge separation for 24-channel metering (AE + Architect confirmed). level-bridge = always-on systemd (3 instances x 8ch, self-linking, ports 9100-9102). pcm-bridge = PCM-only, on-demand, GM-managed. signal-gen mono (F-097).
 
 **US-084 filed:** Level-Bridge Extraction and 24-Channel Metering. Implements D-049. Depends on TK-097, US-051, D-047. 13 acceptance criteria, 6 DoD items.
+
+**Owner validation of `6f8f173` (2026-03-25):**
+- **Confirmed fixed:** F-105 (hiccups), F-106 (mode highlighting) — RESOLVED at `151bf48`
+- **Still broken:** F-103 (meter flashing), F-101 (-60dB line on dashboard), F-102 (20s delay)
+- **New regressions filed:** F-114 (Stop button broken after test.js refactor, HIGH, blocks all testing), F-115 (test tab spectrum now shows dashboard bugs via shared renderer, HIGH, blocks US-080)
+
+**Active workers (2 of 3 budget):**
+- **worker-fix2**: DONE — F-101, F-102, F-103 RESOLVED. F-114 cannot-reproduce (code correct, L-054 cache suspected). F-115 RESOLVED (fixed by F-101+F-102). Awaiting CM commit.
+- **worker-arch**: US-084 Phase 1+2+3 DONE. Now IDLE — awaiting next assignment.
+- **Conflict zones: NONE.**
+
+**US-084 Phases 1-3 complete:** level-bridge crate extracted (45/45), pcm-bridge stripped (42/42), local-demo.sh + flake.nix updated. Adjacent suites unaffected.
+
+**F-116 filed:** audio-common ring_buffer crash (Medium, pre-existing).
+
+**Defect fix round (worker-fix2):**
+- F-101: RESOLVED (-60dB floor-skip in shared renderer, verified CDP)
+- F-102: RESOLVED (TCP retry 5s+3s → server-side retry + 1s browser reconnect)
+- F-103: RESOLVED (pos=0 messages with -120dB placeholders → skip guard)
+- F-114: CANNOT-REPRODUCE (code path correct, downgraded Low, monitoring)
+- F-115: RESOLVED (fixed by F-101+F-102 in shared renderer)
+
+**CM commit requested** for full batch (US-084 + web UI fixes).
+
+**Session defect tally:** 18 filed (F-099-F-116), 8 resolved (F-099, F-101, F-102, F-103, F-105, F-106, F-115), 1 cannot-reproduce (F-114), 9 OPEN (F-100, F-104, F-107-F-113, F-116). Of those, F-107/F-108/F-111/F-112 may already be fixed — need verification after commit.
 
 ### Session Progress (2026-03-23 / 2026-03-24)
 

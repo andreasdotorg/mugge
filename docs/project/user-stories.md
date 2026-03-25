@@ -6124,7 +6124,7 @@ dedicated level-bridge instances,
 **so that** I have continuous metering of the entire signal chain regardless
 of which GraphManager mode is active or whether spectrum analysis is running.
 
-**Status:** draft (PM-filed 2026-03-25 per D-049 AE+Architect decision)
+**Status:** IMPLEMENT (Phase 1 DONE: crate extracted, 45/45 tests. Phase 2 DONE: pcm-bridge stripped, 42/42 tests. Phase 3 DONE: local-demo.sh + flake.nix. Remaining: systemd templates (Pi), web UI wiring, signal-gen mono, self-linking verification.)
 **Depends on:** D-049 (level-bridge/pcm-bridge separation), TK-097 (24-channel
 layout), US-051 (persistent status bar meters), D-047 (PPM ballistics)
 **Blocks:** none (but enables full 24-channel metering that TK-097/US-051

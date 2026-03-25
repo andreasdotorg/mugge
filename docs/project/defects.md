@@ -3572,7 +3572,7 @@ kill orphan processes (`pkill -f signal-gen; pkill -f pcm-bridge; pkill -f
 
 **Filed:** 2026-03-25
 **Severity:** High (systemic architecture issue causing repeated bug duplication)
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-25, verified via CDP screenshots. Root cause: -60dB floor-skip not in shared renderer.)
 **Affects:** Web UI (`spectrum.js` dashboard, `test.js` test tab, `fft-pipeline.js`)
 **Found by:** Owner (validation of US-080, tested against `8b84518`)
 **Blocks:** US-080 validation
@@ -3628,7 +3628,7 @@ caused root cause 3), US-080 (blocked by this), US-083 (integration tests)
 
 **Filed:** 2026-03-25
 **Severity:** High
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-25. Root cause: TCP retry cycles — 5s timeout + 3s reconnect. Fix: server-side retry + 1s browser reconnect.)
 **Affects:** Web UI dashboard spectrum analyzer
 **Found by:** Owner (validation of US-080, tested against `8b84518`)
 **Blocks:** US-080 validation
@@ -3657,7 +3657,7 @@ applied to whichever relay or proxy serves the dashboard spectrum.
 
 **Filed:** 2026-03-25
 **Severity:** High
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-25. Root cause: pos=0 messages with -120dB placeholder levels. Fix: skip guard on pos=0.)
 **Affects:** Web UI dashboard level meters (US-081)
 **Found by:** Owner (validation of US-081, tested against `c4fc54b` + `8b84518`)
 **Blocks:** US-081 validation
@@ -3726,7 +3726,7 @@ On test tab WebSocket connect (or page load):
 
 **Filed:** 2026-03-25
 **Severity:** Medium
-**Status:** OPEN
+**Status:** RESOLVED (`151bf48`, 2026-03-25)
 **Affects:** Web UI test tab spectrum analyzer
 **Found by:** Owner (validation of US-080, tested against `8b84518`)
 
@@ -3757,7 +3757,7 @@ may have introduced this)
 
 **Filed:** 2026-03-25
 **Severity:** Medium
-**Status:** OPEN
+**Status:** RESOLVED (`151bf48`, 2026-03-25)
 **Affects:** Web UI test tab (`test.js`)
 **Found by:** Owner (validation of US-082, tested against `8b84518`)
 
@@ -3996,3 +3996,117 @@ USBStreamer outputs should show the post-convolver crossover-filtered signal
 (if any — with dirac passthrough they should be identical to input).
 
 **Related:** US-079 (pre-convolver tap), US-080, task #55 (GM routing change)
+
+---
+
+## F-114: Stop button broken after test.js refactor
+
+**Filed:** 2026-03-25
+**Severity:** Low (downgraded — code path verified correct, likely browser cache per L-054)
+**Status:** CANNOT-REPRODUCE (2026-03-25. Code path correct end-to-end per worker investigation. console.warn added for debugging. Monitoring.)
+**Affects:** Web UI test tab (`test.js`)
+**Found by:** Owner (validation of `6f8f173`)
+**Blocks:** ~~All test tab testing~~ Unblocked — code correct, cache suspected
+
+### Description
+
+The Stop button on the test tab no longer works after the test.js refactor.
+Pressing Stop has no effect — signal-gen continues playing. This is a
+regression introduced during the shared spectrum renderer refactoring.
+
+The Stop button is critical for all test tab operations — without it, the
+operator cannot stop signal-gen playback from the web UI and must kill the
+process or use the TCP RPC directly.
+
+### Fix
+
+Investigate the test.js refactor for broken event handler wiring:
+- Check if the Stop button's click handler was disconnected during refactoring
+- Check if the signal-gen RPC `stop` command is still being sent
+- Verify the WebSocket/TCP message path from UI button to signal-gen
+
+**Related:** F-105 (test tab hiccups, same refactor cycle), US-080 (shared
+renderer refactoring)
+
+---
+
+## F-115: Test tab spectrum now shows dashboard bugs (-60dB line, 20s delay)
+
+**Filed:** 2026-03-25
+**Severity:** High
+**Status:** RESOLVED (2026-03-25. Root causes F-101 and F-102 fixed in shared renderer — both tabs now correct.)
+**Affects:** Web UI test tab spectrum (via `spectrum-renderer.js`)
+**Found by:** Owner (validation of `6f8f173`)
+**Blocks:** ~~US-080~~ Unblocked by F-101/F-102 fixes
+
+### Description
+
+The shared spectrum renderer refactoring (task #65, `spectrum-renderer.js`)
+consolidated the dashboard and test tab rendering code. However, this
+propagated two dashboard-specific bugs to the test tab, which was previously
+working correctly:
+
+1. **-60 dB floor line visible** (same as F-101 on dashboard): A horizontal
+   artifact at the -60 dB level is now visible on the test tab spectrum.
+   Before the shared renderer, the test tab had its own rendering that did
+   not have this bug.
+
+2. **~20s startup delay** (same as F-102 on dashboard): The test tab
+   spectrum now takes ~20 seconds to start displaying data after page load.
+   Before the shared renderer, the test tab spectrum started immediately.
+
+This is the exact pattern warned about in F-101's QE root cause note:
+shared code propagates bugs in both directions. The shared renderer was
+supposed to consolidate fixes, but instead it consolidated bugs.
+
+### Fix
+
+The root causes are F-101 (-60dB line) and F-102 (startup delay) — fixing
+those in the shared renderer will fix both tabs simultaneously. This defect
+tracks the regression impact: the test tab was previously working and is now
+broken.
+
+Priority: Fix F-101 and F-102 in `spectrum-renderer.js`. Verify both tabs
+after fix. This validates the shared renderer approach — if fixes propagate
+correctly to both tabs, the consolidation was worthwhile despite the
+temporary regression.
+
+**Related:** F-101 (dashboard -60dB line, root cause), F-102 (dashboard
+delay, root cause), task #65 (shared renderer refactor that introduced this)
+
+---
+
+## F-116: audio-common ring_buffer tests crash with malloc corruption (SIGABRT)
+
+**Filed:** 2026-03-25
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** `src/audio-common/` ring_buffer module (unit tests)
+**Found by:** worker-arch (during US-084 level-bridge extraction)
+**Pre-existing:** Yes — unrelated to level-bridge changes
+
+### Description
+
+The `ring_buffer` unit tests in `audio-common` crash with
+`malloc(): corrupted top size` (SIGABRT). This is a heap corruption
+detected by glibc's malloc implementation, indicating a buffer overflow
+or use-after-free in the ring buffer code.
+
+This is a pre-existing issue — it was not introduced by the US-084
+level-bridge extraction. The crash was discovered during test runs as
+part of the extraction work.
+
+### Fix
+
+Investigate the ring_buffer implementation for memory safety issues:
+- Check for off-by-one errors in read/write pointer arithmetic
+- Check for buffer overflows when writing at capacity boundaries
+- Run under `valgrind` or with `ASAN` to pinpoint the corruption source
+- The ring buffer is lock-free SPSC — verify producer/consumer ordering
+  with atomic fence correctness
+
+Note: level-bridge does NOT use `RingBuffer` (it uses `LevelTracker`
+only). pcm-bridge uses `RingBuffer` for PCM streaming. This crash
+affects pcm-bridge reliability but not level-bridge.
+
+**Related:** audio-common shared crate, pcm-bridge (consumer of RingBuffer)
