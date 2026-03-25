@@ -5661,6 +5661,171 @@ the node prefix extensively).
 
 ---
 
+## US-079: Pre-Convolver Capture Point for pcm-bridge
+
+**As** the system operator performing room correction measurements,
+**I want** pcm-bridge to tap the **pre-convolver** signal (full-range L+R
+going into the filter-chain) rather than the post-convolver crossover-filtered
+outputs,
+**so that** the spectrum analyzer and level meters show the full-range audio
+signal, which is what I need for room correction testing and verification.
+
+**Status:** draft (PM-filed 2026-03-25 per owner feedback. Next priority after
+F-098 lands. Foundation for US-080.)
+**Depends on:** F-098 (spectrum fix must land first — same relay code path),
+US-075 (local demo environment for testing)
+**Blocks:** US-080 (multi-tap extends this foundation)
+
+### Problem
+
+pcm-bridge currently captures convolver-out (post-crossover). The 4 output
+channels contain crossover-filtered signals: ch 1-2 are highpass-filtered
+mains, ch 3-4 are lowpass-filtered subs. This is useless for room correction
+testing — you need to see the full-range signal to verify sweeps, assess room
+response, and validate correction effectiveness.
+
+The pre-convolver signal is the full-range L+R mix going into the filter-chain
+(convolver input ports). This is what should be captured for measurement and
+visualization purposes.
+
+### AE Tap Point Analysis (2026-03-25)
+
+AE provided a comprehensive 6-tap-point analysis for the full signal chain.
+US-079 delivers Tap 1 (pre-convolver, the default). US-080 delivers the
+remaining taps. This table is the reference for both stories.
+
+| # | Tap point | PW ports | Use case | Story |
+|---|-----------|----------|----------|-------|
+| 1 | **Pre-convolver (full-range L+R)** | `convolver:playback_AUX0..3` | Room correction testing, sweep verification, source material QC. **Default view.** | **US-079** |
+| 2 | Post-FIR pre-gain | *Derived from Tap 3 via display-side gain compensation* | Verify crossover shape, inspect per-driver signal. **Owner rejected unity-gain workaround (safety risk).** AE Option A: spectrum adds `20*log10(1/Mult)` dB offset to Tap 3 — mathematically exact for linear gain, no signal path changes. | US-080 |
+| 3 | **Post-gain / final output** | `USBStreamer:playback_AUX0..7` | Verify final signal to amplifiers, confirm gain staging, safety check. | US-080 |
+| 4 | **Source output** | `Mixxx:output_*` / `Reaper:output_*` / `signal-gen:output_*` | Verify source material before any processing. Mode-dependent source node. | US-080 |
+| 5 | **UMIK-1 capture** | `ADA8200:capture_AUX0` (UMIK-1 on ch 1) | Room measurement mic — core of correction workflow. View room response in real-time during sweeps. | US-080 |
+| 6 | **ADA8200 capture** | `ADA8200:capture_AUX0..7` | Feedback detection in Live mode — early warning for feedback frequency buildup. Safety-relevant. | US-080 |
+
+**AE implementation concept:** GM dynamically rewires pcm-bridge to the
+selected tap point on user request. Single pcm-bridge instance, GM manages
+link topology changes. Could integrate with graph UI — click a node/link
+to tap it.
+
+### Architecture impact
+
+This changes the GM routing table for pcm-bridge links. Currently:
+- `convolver-out:output_AUX0..3` -> `pcm-bridge:input_1..4`
+
+Needs to become (for measurement/monitoring default):
+- `convolver:playback_AUX0..3` -> `pcm-bridge:input_1..4`
+  (tapping convolver INPUT ports = pre-crossover full-range signal)
+
+The immediate stopgap (F-098 ch0+ch1 average) stays until this story delivers.
+
+### Acceptance criteria
+
+- [ ] pcm-bridge captures pre-convolver full-range signal in measurement mode
+- [ ] Spectrum analyzer shows full-range frequency content (not crossover-filtered)
+- [ ] Level meters reflect pre-convolver signal levels
+- [ ] GM routing table updated for the new capture point (Tap 1)
+- [ ] Local demo (`nix run .#local-demo`) demonstrates full-range capture
+- [ ] Existing tests updated or new tests added for the changed routing
+
+### Definition of Done
+
+- [ ] Implementation committed and tests pass (`nix run .#test-all`)
+- [ ] Local demo verified with full-range spectrum visible
+- [ ] Architect review (routing table change, no orphaned links)
+- [ ] AE review (capture point correct for measurement workflow)
+- [ ] QE review (test coverage)
+
+---
+
+## US-080: Multi-Point Spectrum Analyzer — Selectable Signal Chain Tap Points
+
+**As** the system operator performing audio verification and room correction,
+**I want** the spectrum analyzer to tap **any point along the signal chain**
+with a UI selector and optionally overlay L-R difference,
+**so that** I can inspect the signal at every processing stage (source, pre-
+convolver, post-convolver per channel, post-gain) and analyze stereo image.
+
+**Status:** draft (PM-filed 2026-03-25 per owner feedback. Extends US-079
+foundation.)
+**Depends on:** US-079 (pre-convolver capture point establishes the pattern),
+US-075 (local demo environment for testing)
+**Blocks:** none (but enables full signal chain debugging and stereo analysis)
+
+### Requirements (owner directive + AE analysis, 2026-03-25)
+
+See **US-079 AE Tap Point Analysis table** for the full 6-tap-point reference.
+US-080 delivers taps 2-6 (US-079 delivers tap 1).
+
+1. **Selectable tap points** (AE-defined, see US-079 table):
+   - Tap 1: Pre-convolver (full-range L+R) — delivered by US-079, default
+   - Tap 2: Post-FIR pre-gain — **solved via display-side gain compensation
+     (Option A).** AE initially suggested setting gains to unity during tuning,
+     but **owner REJECTED as safety risk** (forgetting to restore attenuation
+     → full-power output to speakers). AE revised recommendation: spectrum
+     display adds `20*log10(1/Mult)` dB offset to the Y-axis when viewing
+     Tap 3 (post-gain), showing the effective pre-gain spectrum without
+     touching the actual signal path. Mathematically exact for linear gain.
+     No monitor ports needed — Tap 2 is derived from Tap 3 in software.
+   - Tap 3: Post-gain / final output to USBStreamer
+   - Tap 4: Source output (Mixxx/Reaper/signal-gen — mode-dependent)
+   - Tap 5: UMIK-1 capture (room measurement mic, core of correction workflow)
+   - Tap 6: ADA8200 capture (feedback detection in Live mode — safety-relevant)
+2. **Default view:** L+R pre-filter-chain (from US-079)
+3. **Optional overlay:** L-R difference (stereo image analysis — shows
+   content unique to each channel, useful for verifying mono summing and
+   stereo width)
+4. **UI control:** Tap point selector in the spectrum analyzer panel.
+   **AE UX concept:** integrate with graph UI — click a node/link to tap
+   its spectrum. This connects US-080 with F-085 (graph rendering
+   improvements) and US-064 (graph visualization tab). The graph becomes
+   an interactive signal chain inspector, not just a topology display.
+
+### Architecture (AE recommendation)
+
+**GM dynamically rewires pcm-bridge** to the selected tap point on user
+request. Single pcm-bridge instance, GM manages link topology changes via
+RPC. No multiple instances needed.
+
+Architect consultation required before PLAN phase to confirm:
+- GM RPC design for tap point switching
+- Whether `node.passive=true` is needed on monitor taps
+- **Tap 2 approach (RESOLVED):** Display-side gain compensation — spectrum
+  adds `20*log10(1/Mult)` dB offset when viewing Tap 3. No signal path
+  changes, no monitor ports. Owner rejected unity-gain workaround as
+  safety risk. AE revised to Option A (display compensation). Architect
+  to confirm Mult values are accessible via GM RPC for the offset calc.
+- Graph UI integration feasibility (click-to-tap, connects with F-085/US-064)
+- Channel count handling (taps have different channel counts: 4ch convolver
+  vs 8ch USBStreamer vs 1ch UMIK-1)
+
+### Acceptance criteria
+
+- [ ] UI control to select spectrum tap point (dropdown, segmented, or graph click)
+- [ ] Tap 3 (post-gain): final signal levels per channel visible
+- [ ] Tap 4 (source): application output before convolver visible
+- [ ] Tap 5 (UMIK-1): room measurement mic signal visible
+- [ ] Tap 6 (ADA8200): feedback detection capture visible
+- [ ] L+R sum display (default for stereo taps)
+- [ ] L-R difference overlay (optional, togglable)
+- [ ] Tap point change is near-instant (< 500ms GM rewire)
+- [ ] Channel count adapts to selected tap point
+- [ ] Local demo demonstrates at least taps 1, 3, 4
+- [ ] Tests cover tap switching and multi-channel-count handling
+
+### Definition of Done
+
+- [ ] Implementation committed and tests pass (`nix run .#test-all`)
+- [ ] Local demo verified with available tap points producing correct spectra
+- [ ] Architect review (GM rewire RPC, routing table changes, no orphaned
+  links, channel count handling)
+- [ ] AE review (tap points correct for measurement and feedback detection
+  workflows, L-R overlay useful for stereo analysis)
+- [ ] UX review (tap selector ergonomics, graph click-to-tap if implemented)
+- [ ] QE review (test coverage for all tap points and transitions)
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -5793,4 +5958,6 @@ US-070 (GitHub Actions CI — self-hosted aarch64 runner, branch protection on m
 D-040 + US-070 + US-065 ──> US-071 (Documentation Overhaul — audit and update all docs for D-040 architecture)
 US-019 + US-059 ──> US-072 (NixOS Standalone Build — SD image + nixos-anywhere, full RT audio stack)
 US-072 ──> US-020 (redundancy — NixOS makes SD card cloning trivial)
+F-098 + US-075 ──> US-079 (Pre-Convolver Capture Point — pcm-bridge taps full-range input for room correction)
+US-079 + US-075 ──> US-080 (Multi-Point Spectrum Analyzer — selectable signal chain tap points, L-R overlay)
 ```

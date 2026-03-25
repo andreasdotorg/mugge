@@ -3424,3 +3424,49 @@ signal to whichever convolver input(s) the current measurement targets.
 
 **Related:** F-085 #10 (originally filed as graph rendering issue, reclassified),
 US-052 (signal-gen story — amend), D-040 (PW filter-chain architecture)
+
+---
+
+## F-098: Spectrum white flash — TCP framing violation + channel count mismatch
+
+**Filed:** 2026-03-25
+**Severity:** High
+**Status:** RESOLVED (fix ready, awaiting CM commit)
+**Affects:** Web UI spectrum analyzer, level meters
+**Found by:** Owner (local demo testing)
+
+### Description
+
+Spectrum flashes white/blank and level meters show no data on local demo.
+Two independent root causes:
+
+### Root Cause 1: TCP-to-WebSocket framing violation
+
+`_pcm_tcp_relay()` in `app/main.py` forwarded raw TCP `recv()` chunks as
+WebSocket messages. TCP is a stream protocol — it coalesces and splits
+pcm-bridge frames across `recv()` boundaries. The browser received
+multi-frame or partial-frame WebSocket messages, misinterpreted header bytes
+as PCM data, producing garbage FFT output (all-white spectrum flash).
+
+**Fix:** Relay rewritten to buffer incoming TCP data and forward only complete
+v2 frames (24-byte header + payload) as individual WebSocket messages.
+
+### Root Cause 2: Channel count mismatch
+
+`NUM_CHANNELS = 3` was hardcoded throughout the web-ui (JavaScript, mock
+server, tests, collector) while pcm-bridge sends 4 channels. This caused
+misaligned channel reads — every frame after the first had its channel data
+shifted by one sample per channel.
+
+**Fix:** Channel count corrected to 4 everywhere. Sample range validation
+added as defense-in-depth.
+
+### Resolution
+
+8 files changed, 164 insertions, 97 deletions. 317/317 unit tests pass.
+Fix ready in working tree, awaiting CM commit. No code regression — the TCP
+framing issue was a pre-existing latent bug exposed by US-077 Phase 4's
+switch to event-driven emission (higher-frequency, smaller frames increased
+the probability of TCP coalescing).
+
+**Related:** US-077 (single-clock architecture), L-042 (broken tests must be fixed)
