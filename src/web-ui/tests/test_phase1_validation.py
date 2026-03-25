@@ -69,10 +69,10 @@ class TestTK128ProcessingLoadPercentage:
 # ---------------------------------------------------------------------------
 
 FRAMES_PER_CHUNK = 256
-NUM_CHANNELS = 3
+NUM_CHANNELS = 4
 HEADER_SIZE = 24  # v2: version(1) + pad(3) + frame_count(4) + pos(8) + nsec(8)
 EXPECTED_PAYLOAD_SIZE = FRAMES_PER_CHUNK * NUM_CHANNELS * 4  # float32 = 4 bytes
-EXPECTED_TOTAL_SIZE = HEADER_SIZE + EXPECTED_PAYLOAD_SIZE  # 24 + 3072 = 3096
+EXPECTED_TOTAL_SIZE = HEADER_SIZE + EXPECTED_PAYLOAD_SIZE  # 24 + 4096 = 4120
 
 
 class TestTK132MockPCMStream:
@@ -172,7 +172,7 @@ class TestTK132MockPCMStream:
         asyncio.run(_test())
 
     def test_pcm_first_message_total_size(self, pcm_server):
-        """Total message: 24 + (256 * 3 * 4) = 3096 bytes."""
+        """Total message: 24 + (256 * 4 * 4) = 4120 bytes."""
         port = pcm_server
 
         async def _test():

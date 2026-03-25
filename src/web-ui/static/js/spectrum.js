@@ -7,7 +7,7 @@
  * area with amplitude-based vertical heat palette on a log-frequency x-axis.
  *
  * Data flow:
- *   Pi audio -> binary WebSocket /ws/pcm (raw PCM, 3ch float32)
+ *   Pi audio -> binary WebSocket /ws/pcm (raw PCM, 4ch float32)
  *     -> JS accumulator (L+R mono sum at -6dB)
  *     -> Blackman-Harris window + radix-2 FFT (2048-point, 50% overlap)
  *     -> magnitude (dB) + exponential smoothing
@@ -37,7 +37,7 @@
 
     var SAMPLE_RATE = 48000;
     var FFT_SIZE = 2048;
-    var NUM_CHANNELS = 3;
+    var NUM_CHANNELS = 4;
 
     // Frequency range for log x-axis
     var FREQ_LO = 30;
@@ -394,57 +394,82 @@
 
         pcmWs.onmessage = function (ev) {
             var data = ev.data;
-            if (data.byteLength < 4) return;
-            // v2 header: [version:1][pad:3][frame_count:4][pos:8][nsec:8] = 24 bytes
-            // v1 header: [frame_count:4] = 4 bytes
-            var isV2 = (new Uint8Array(data, 0, 1))[0] === 2;
-            var headerSize = isV2 ? 24 : 4;
+            // The TCP relay may coalesce multiple pcm-bridge frames into
+            // one WebSocket message. Process each frame individually by
+            // walking the buffer with the v2 wire format structure:
+            //   [version:1][pad:3][frame_count:4][pos:8][nsec:8][pcm...]
+            var V2_HEADER = 24;
+            var offset = 0;
+            while (offset < data.byteLength) {
+                var remaining = data.byteLength - offset;
+                if (remaining < 4) break;
 
-            // US-077: parse graph_pos from v2 header for gap/discontinuity detection
-            if (isV2) {
-                var dv = new DataView(data);
-                // graph_pos at bytes 8..16 (little-endian u64). Read low 32 bits —
-                // sufficient for gap detection (wraps after ~24h at 48kHz).
-                var graphPos = dv.getUint32(8, true);
-                var frameCount = dv.getUint32(4, true);
+                var version = (new Uint8Array(data, offset, 1))[0];
+                var isV2 = version === 2;
+                var headerSize = isV2 ? V2_HEADER : 4;
+                if (remaining < headerSize) break;
 
-                if (prevGraphPos > 0) {
-                    if (graphPos < prevGraphPos) {
-                        // Backward jump (PW restart) — reset all spectrum state
-                        accumPos = 0;
-                        smoothedDB = null;
-                        freqData = null;
-                        dirty = false;
-                        prevGraphPos = graphPos;
-                        return;
+                var dv = new DataView(data, offset);
+                var frameCount = dv.getUint32(isV2 ? 4 : 0, true);
+                var pcmBytes = frameCount * NUM_CHANNELS * 4;
+                var msgSize = headerSize + pcmBytes;
+
+                // Sanity: if frame_count yields a message larger than
+                // remaining bytes, treat the rest as one partial frame.
+                if (msgSize > remaining) {
+                    pcmBytes = remaining - headerSize;
+                    msgSize = remaining;
+                }
+
+                // US-077: gap/discontinuity detection from v2 graph clock
+                if (isV2) {
+                    var graphPos = dv.getUint32(8, true);
+
+                    if (prevGraphPos > 0) {
+                        if (graphPos < prevGraphPos) {
+                            accumPos = 0;
+                            smoothedDB = null;
+                            freqData = null;
+                            dirty = false;
+                            prevGraphPos = graphPos;
+                            offset += msgSize;
+                            continue;
+                        }
+                        var advance = graphPos - prevGraphPos;
+                        if (frameCount > 0 && advance > frameCount * 2) {
+                            accumPos = 0;
+                            dirty = false;
+                        }
                     }
-                    // Gap detection: frame counter advanced more than 2x expected
-                    var advance = graphPos - prevGraphPos;
-                    if (advance > frameCount * 2) {
-                        // Data gap — discard FFT accumulator to avoid cross-gap FFT
-                        accumPos = 0;
-                        dirty = false;
+                    prevGraphPos = graphPos;
+                }
+
+                // Process PCM samples from this frame only
+                var pcm = new Float32Array(data, offset + headerSize,
+                    Math.floor(pcmBytes / 4));
+                var frames = Math.floor(pcm.length / NUM_CHANNELS);
+
+                for (var i = 0; i < frames; i++) {
+                    var L = pcm[i * NUM_CHANNELS];
+                    var R = pcm[i * NUM_CHANNELS + 1];
+                    // Defense-in-depth: skip corrupted samples (e.g. header
+                    // bytes misinterpreted as float32 produce huge values).
+                    // Any real audio is well within [-2, 2] (0 dBFS = 1.0).
+                    if (L !== L || R !== R || L > 2 || L < -2 || R > 2 || R < -2) {
+                        continue;
+                    }
+                    var mono = 0.5 * L + 0.5 * R;
+                    accumBuf[accumPos] = mono;
+                    accumPos++;
+
+                    if (accumPos >= FFT_SIZE) {
+                        dirty = true;
+                        accumBuf.copyWithin(0, FFT_SIZE / 2);
+                        accumPos = FFT_SIZE / 2;
                     }
                 }
-                prevGraphPos = graphPos;
-            }
 
-            var pcm = new Float32Array(data, headerSize);
-            // Floor to whole frames to avoid misaligned channel reads
-            var frames = Math.floor(pcm.length / NUM_CHANNELS);
-
-            for (var i = 0; i < frames; i++) {
-                // Sum L (ch0) + R (ch1) at -6dB each for mono
-                var mono = 0.5 * pcm[i * NUM_CHANNELS] + 0.5 * pcm[i * NUM_CHANNELS + 1];
-                accumBuf[accumPos] = mono;
-                accumPos++;
-
-                if (accumPos >= FFT_SIZE) {
-                    dirty = true;
-                    // 50% overlap: keep last half
-                    accumBuf.copyWithin(0, FFT_SIZE / 2);
-                    accumPos = FFT_SIZE / 2;
-                }
+                offset += msgSize;
             }
         };
 

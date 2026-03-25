@@ -177,14 +177,18 @@ def _start_fake_pcm_bridge(host: str, port: int, frames: list[bytes],
 
 def _build_pcm_frame(frame_count: int, num_channels: int,
                      fill_value: float = 0.123) -> bytes:
-    """Build a binary PCM frame matching pcm-bridge wire format.
+    """Build a binary PCM frame matching pcm-bridge v2 wire format.
 
-    4-byte LE uint32 header (frame_count) + interleaved float32 payload.
+    v2: [version:1][pad:3][frame_count:4][graph_pos:8][graph_nsec:8][PCM...]
+    24-byte header + interleaved float32 payload.
     """
-    header = struct.pack("<I", frame_count)
+    header = bytearray(24)
+    header[0] = 2  # version
+    struct.pack_into("<I", header, 4, frame_count)
+    # graph_pos and graph_nsec left as 0
     num_samples = frame_count * num_channels
     payload = struct.pack(f"<{num_samples}f", *([fill_value] * num_samples))
-    return header + payload
+    return bytes(header) + payload
 
 
 def _free_port() -> int:
@@ -203,7 +207,7 @@ class TestWsPcmTcpRouting:
     def test_monitor_routes_to_correct_port(self):
         """Monitor source connects to its configured TCP port."""
         port = _free_port()
-        frame = _build_pcm_frame(256, 3, fill_value=0.42)
+        frame = _build_pcm_frame(256, 4, fill_value=0.42)
         ready = threading.Event()
         _start_fake_pcm_bridge("127.0.0.1", port, [frame], ready)
         ready.wait(timeout=5)
@@ -220,7 +224,7 @@ class TestWsPcmTcpRouting:
     def test_umik1_source_routes_to_its_port(self):
         """A second source (umik1) connects to its own TCP port."""
         port = _free_port()
-        frame = _build_pcm_frame(256, 3, fill_value=0.99)
+        frame = _build_pcm_frame(256, 4, fill_value=0.99)
         ready = threading.Event()
         _start_fake_pcm_bridge("127.0.0.1", port, [frame], ready)
         ready.wait(timeout=5)
@@ -235,7 +239,7 @@ class TestWsPcmTcpRouting:
             client = TestClient(app)
             with client.websocket_connect("/ws/pcm/umik1") as ws:
                 msg = ws.receive_bytes()
-                payload_val = struct.unpack("<f", msg[4:8])[0]
+                payload_val = struct.unpack("<f", msg[24:28])[0]
                 assert abs(payload_val - 0.99) < 0.001, (
                     f"Umik1 source got fill {payload_val}, expected ~0.99"
                 )
@@ -245,8 +249,8 @@ class TestWsPcmTcpRouting:
         port_a = _free_port()
         port_b = _free_port()
 
-        frame_a = _build_pcm_frame(256, 3, fill_value=0.11)
-        frame_b = _build_pcm_frame(256, 3, fill_value=0.99)
+        frame_a = _build_pcm_frame(256, 4, fill_value=0.11)
+        frame_b = _build_pcm_frame(256, 4, fill_value=0.99)
 
         ready_a = threading.Event()
         _start_fake_pcm_bridge("127.0.0.1", port_a, [frame_a], ready_a)
@@ -277,8 +281,8 @@ class TestWsPcmTcpRouting:
                 msg_b = ws.receive_bytes()
 
         # Verify different fill values arrived from different ports.
-        val_a = struct.unpack("<f", msg_a[4:8])[0]
-        val_b = struct.unpack("<f", msg_b[4:8])[0]
+        val_a = struct.unpack("<f", msg_a[24:28])[0]
+        val_b = struct.unpack("<f", msg_b[24:28])[0]
         assert abs(val_a - 0.11) < 0.001, (
             f"Monitor got fill {val_a}, expected ~0.11"
         )
@@ -297,7 +301,7 @@ class TestBinaryFrameProxy:
     def test_single_frame_arrives_unmodified(self):
         """A single frame must arrive byte-for-byte identical."""
         port = _free_port()
-        frame = _build_pcm_frame(256, 3, fill_value=0.777)
+        frame = _build_pcm_frame(256, 4, fill_value=0.777)
         ready = threading.Event()
         _start_fake_pcm_bridge("127.0.0.1", port, [frame], ready)
         ready.wait(timeout=5)
@@ -315,12 +319,12 @@ class TestBinaryFrameProxy:
                 )
 
     def test_multiple_frames_arrive_in_order(self):
-        """Multiple frames sent sequentially must arrive in order."""
+        """Multiple frames sent sequentially arrive as individual messages."""
         port = _free_port()
         frames = [
-            _build_pcm_frame(256, 3, fill_value=0.1),
-            _build_pcm_frame(256, 3, fill_value=0.2),
-            _build_pcm_frame(256, 3, fill_value=0.3),
+            _build_pcm_frame(256, 4, fill_value=0.1),
+            _build_pcm_frame(256, 4, fill_value=0.2),
+            _build_pcm_frame(256, 4, fill_value=0.3),
         ]
         ready = threading.Event()
         _start_fake_pcm_bridge("127.0.0.1", port, frames, ready)
@@ -332,29 +336,31 @@ class TestBinaryFrameProxy:
              patch("app.main.PCM_SOURCES", sources):
             client = TestClient(app)
             with client.websocket_connect("/ws/pcm/monitor") as ws:
-                # The relay uses recv(65536), so all 3 frames may arrive
-                # as one chunk or individually.  Collect all bytes.
-                total = b""
-                expected_total = b"".join(frames)
+                # The relay now sends one complete v2 frame per WS message.
+                received = []
                 deadline = time.monotonic() + 3.0
-                while len(total) < len(expected_total):
+                while len(received) < len(frames):
                     if time.monotonic() > deadline:
                         break
                     try:
-                        chunk = ws.receive_bytes()
-                        total += chunk
+                        msg = ws.receive_bytes()
+                        received.append(msg)
                     except Exception:
                         break
-                assert total == expected_total, (
-                    f"Expected {len(expected_total)} bytes total, "
-                    f"got {len(total)} bytes"
+                assert len(received) == len(frames), (
+                    f"Expected {len(frames)} messages, got {len(received)}"
                 )
+                for i, (sent, got) in enumerate(zip(frames, received)):
+                    assert sent == got, (
+                        f"Frame {i} mismatch: sent {len(sent)} bytes, "
+                        f"got {len(got)} bytes"
+                    )
 
     def test_header_preserved_exactly(self):
-        """The 4-byte LE uint32 header must be preserved exactly."""
+        """The v2 header must be preserved exactly."""
         port = _free_port()
         # Use a distinctive frame count (512 instead of 256).
-        frame = _build_pcm_frame(512, 2, fill_value=0.5)
+        frame = _build_pcm_frame(512, 4, fill_value=0.5)
         ready = threading.Event()
         _start_fake_pcm_bridge("127.0.0.1", port, [frame], ready)
         ready.wait(timeout=5)
@@ -366,7 +372,8 @@ class TestBinaryFrameProxy:
             client = TestClient(app)
             with client.websocket_connect("/ws/pcm/test-src") as ws:
                 msg = ws.receive_bytes()
-                header_val = struct.unpack("<I", msg[:4])[0]
+                assert msg[0] == 2, f"Version should be 2, got {msg[0]}"
+                header_val = struct.unpack("<I", msg[4:8])[0]
                 assert header_val == 512, (
                     f"Header frame count should be 512, got {header_val}"
                 )
@@ -395,7 +402,7 @@ class TestUnknownSourceRejection:
     def test_known_source_accepted(self):
         """A known source should be accepted (not rejected with 4004)."""
         port = _free_port()
-        frame = _build_pcm_frame(256, 3)
+        frame = _build_pcm_frame(256, 4)
         ready = threading.Event()
         _start_fake_pcm_bridge("127.0.0.1", port, [frame], ready)
         ready.wait(timeout=5)
@@ -444,10 +451,10 @@ class TestPcmSourcesREST:
 # ---------------------------------------------------------------------------
 
 FRAMES_PER_CHUNK = 256
-NUM_CHANNELS = 3
+NUM_CHANNELS = 4
 HEADER_SIZE = 24  # v2: version(1) + pad(3) + frame_count(4) + pos(8) + nsec(8)
 EXPECTED_PAYLOAD_SIZE = FRAMES_PER_CHUNK * NUM_CHANNELS * 4  # float32
-EXPECTED_TOTAL_SIZE = HEADER_SIZE + EXPECTED_PAYLOAD_SIZE  # 3096 bytes
+EXPECTED_TOTAL_SIZE = HEADER_SIZE + EXPECTED_PAYLOAD_SIZE  # 4120 bytes
 
 
 class TestWsPcmSourceMock:

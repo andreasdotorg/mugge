@@ -337,10 +337,18 @@ async def _pcm_tcp_relay(ws: WebSocket, host: str, port: int,
     """Relay binary PCM frames from a pcm-bridge TCP server to a WebSocket.
 
     Opens a blocking TCP connection (via asyncio.to_thread), then reads
-    binary data in a loop and forwards it as WebSocket binary messages.
-    The pcm-bridge sends its own framing (4-byte header + float32 payload),
-    so we just relay raw bytes.
+    binary data in a loop and forwards complete v2 frames as individual
+    WebSocket binary messages.
+
+    TCP is a byte stream — recv() returns arbitrary chunks that may split
+    pcm-bridge frames mid-way.  This relay buffers incoming bytes and
+    only forwards complete frames so the JS parser always sees clean
+    frame boundaries.  Wire format v2:
+        [version:1][pad:3][frame_count:4][graph_pos:8][graph_nsec:8][PCM...]
+    where PCM is frame_count * channels * 4 bytes of float32.
     """
+    _V2_HEADER = 24
+    _NUM_CHANNELS = 4
     tcp_sock = None
     try:
         tcp_sock = await asyncio.to_thread(
@@ -348,11 +356,35 @@ async def _pcm_tcp_relay(ws: WebSocket, host: str, port: int,
         await asyncio.to_thread(tcp_sock.settimeout, 2.0)
         log.info("PCM relay connected to %s:%d (source=%s)", host, port, source)
 
+        buf = bytearray()
         while True:
             data = await asyncio.to_thread(tcp_sock.recv, 65536)
             if not data:
                 break
-            await ws.send_bytes(data)
+            buf.extend(data)
+
+            # Extract and forward all complete v2 frames from the buffer.
+            while len(buf) >= _V2_HEADER:
+                version = buf[0]
+                if version != 2:
+                    # Lost sync — discard one byte and try to re-sync.
+                    log.warning("PCM relay: unexpected version byte %d, re-syncing",
+                                version)
+                    del buf[:1]
+                    continue
+                # Parse frame_count from the v2 header (LE uint32 at offset 4).
+                frame_count = int.from_bytes(buf[4:8], "little")
+                # Sanity: pcm-bridge sends at most 8192 frames per quantum.
+                if frame_count > 8192:
+                    log.warning("PCM relay: implausible frame_count %d, re-syncing",
+                                frame_count)
+                    del buf[:1]
+                    continue
+                msg_size = _V2_HEADER + frame_count * _NUM_CHANNELS * 4
+                if len(buf) < msg_size:
+                    break  # incomplete frame — wait for more data
+                await ws.send_bytes(bytes(buf[:msg_size]))
+                del buf[:msg_size]
 
     except WebSocketDisconnect:
         log.info("PCM client disconnected (source=%s)", source)

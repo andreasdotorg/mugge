@@ -1,13 +1,13 @@
 """Mock PCM stream generator for spectrum display in development mode.
 
-Generates synthetic 3-channel interleaved float32 audio data that produces
+Generates synthetic 4-channel interleaved float32 audio data that produces
 a visible spectrum when processed by spectrum.js. Uses only stdlib modules
 (no numpy dependency).
 
 Wire format v2 (matches real pcm-bridge, US-077):
     - Binary WebSocket messages (arraybuffer)
     - 24-byte header: [version:1][pad:3][frame_count:4][graph_pos:8][graph_nsec:8]
-    - Remainder: interleaved float32 for 3 channels (L, R, Sub)
+    - Remainder: interleaved float32 for 4 channels (L, R, Sub1, Sub2)
 
 The synthetic signal mixes several sine tones at different frequencies
 with low-level pink-ish noise for a realistic broadband floor. Active
@@ -25,7 +25,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 log = logging.getLogger(__name__)
 
 SAMPLE_RATE = 48000
-NUM_CHANNELS = 3
+NUM_CHANNELS = 4
 FRAMES_PER_CHUNK = 256  # ~5.3ms at 48kHz
 SEND_INTERVAL = 0.016   # ~16ms between sends (~62 chunks/sec)
 
@@ -80,14 +80,16 @@ async def mock_pcm_stream(ws: WebSocket, scenario_key: str) -> None:
     # Scale amplitude based on scenario peak level
     amplitude = _db_to_linear(peak_db)
 
-    # Determine which of the 3 PCM channels (L=0, R=1, Sub=2) are active
+    # Determine which of the 4 PCM channels (L=0, R=1, Sub1=2, Sub2=3) are active
     ch_active = [False] * NUM_CHANNELS
     if 0 in active_channels:
         ch_active[0] = True  # L
     if 1 in active_channels:
         ch_active[1] = True  # R
-    if 2 in active_channels or 3 in active_channels:
-        ch_active[2] = True  # Sub (any sub active)
+    if 2 in active_channels:
+        ch_active[2] = True  # Sub1
+    if 3 in active_channels:
+        ch_active[3] = True  # Sub2
 
     log.info(
         "Mock PCM stream started (scenario=%s, amplitude=%.3f, channels=%s)",
@@ -141,7 +143,7 @@ async def mock_pcm_stream(ws: WebSocket, scenario_key: str) -> None:
                         noise = _pink_noise_sample(rng, pink_states[ch])
                         noise_level = 0.02 * amplitude  # -34dB below signal
                         # Slight per-channel variation
-                        ch_offset = 1.0 if ch < 2 else 0.7  # sub slightly lower
+                        ch_offset = 1.0 if ch < 2 else 0.7  # subs slightly lower
                         samples.append(signal * ch_offset + noise * noise_level)
                     else:
                         samples.append(0.0)

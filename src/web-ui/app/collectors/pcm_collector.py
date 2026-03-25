@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 
 SAMPLE_RATE = 48000
 QUANTUM = 256
-NUM_CHANNELS = 3
+NUM_CHANNELS = 4
 RING_FRAMES = 8192  # power-of-2 for simple wraparound
 PCM_SEND_INTERVAL = QUANTUM / SAMPLE_RATE  # ~5.33 ms
 

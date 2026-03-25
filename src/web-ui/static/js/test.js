@@ -500,7 +500,7 @@
     // Reuse constants and utilities from PiAudioSpectrum (spectrum.js).
     var SPEC_SAMPLE_RATE = 48000;
     var SPEC_FFT_SIZE = 2048;
-    var SPEC_NUM_CHANNELS = 3;
+    var SPEC_NUM_CHANNELS = 4;
     var SPEC_DB_MIN = -80;
     var SPEC_DB_MAX = 0;
     var SPEC_FREQ_LO = 20;
