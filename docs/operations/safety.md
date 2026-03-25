@@ -389,12 +389,41 @@ Mult values to 0.0. Pre-mute values are stored in memory by
 does NOT drop the PipeWire stream — this is critical for USBStreamer transient
 safety (Section 1). The audio path remains connected; only the gain is zeroed.
 
+### PROHIBITED: Setting Gains to Unity for Spectrum Viewing (owner directive 2026-03-25)
+
+**Never set gain nodes to Mult = 1.0 (unity) to get a "full-scale" spectrum
+display.** This was proposed as a workaround to see the true signal level at
+post-gain tap points in the spectrum analyzer (US-080 Tap 2). The owner
+explicitly rejected it as a safety risk.
+
+**Why it is dangerous:**
+
+Production gain values attenuate the signal by 54-64 dB (Mult 0.001 = -60 dB
+mains, Mult 0.000631 = -64 dB subs). Setting these to unity while speakers
+are connected would send full-scale audio through the 4x450W amplifier chain.
+Even momentarily, this can damage drivers and ears.
+
+**The safe alternative:** Display-side compensation. The spectrum analyzer
+uses an auto-ranging Y axis (D-048) that adapts to the signal level at any
+tap point. No gain changes are needed to see meaningful spectrum data at any
+point in the signal chain. If absolute level reference is needed, the display
+can add a computed offset (`20*log10(1/Mult)` dB) without touching the actual
+gain. This was originally proposed as Option A (AE recommendation) and is
+superseded by auto-ranging, but remains available as a future enhancement.
+
+**Rule:** Gain values are set for speaker protection and system calibration.
+They are NEVER adjusted for diagnostic or display convenience. If the
+spectrum display is hard to read at a given tap point, fix the display — not
+the gain.
+
 ### Cross-References
 
 - D-009: Cut-only correction, -0.5 dB safety margin (hard cap basis)
+- D-048: Auto-ranging Y axis supersedes gain compensation
 - S-012: No gain increase without owner confirmation
 - F-040: Panic MUTE/UNMUTE endpoint implementation
 - US-065: Configuration Tab story
+- US-080: Multi-Point Spectrum Analyzer (tap point selection)
 - `src/web-ui/app/config_routes.py`: Server-side gain cap enforcement
 - `src/web-ui/app/audio_mute.py`: MUTE/UNMUTE logic
 - `src/web-ui/app/pw_helpers.py`: Shared PipeWire subprocess helpers
