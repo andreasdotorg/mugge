@@ -228,6 +228,7 @@ export PI4AUDIO_GM_PORT=4002
 export PI4AUDIO_LEVELS_HOST=127.0.0.1
 export PI4AUDIO_LEVELS_PORT=9100
 export PI4AUDIO_SKIP_GM_RECOVERY=1
+export PI4AUDIO_SIGGEN=1
 
 cd "$REPO_DIR/src/web-ui"
 "$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload &

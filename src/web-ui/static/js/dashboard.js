@@ -95,9 +95,10 @@
     // Graph clock nsec: use PW clock deltas for peak hold/decay timing
     var prevGraphNsec = 0;
     // Monotonic audio clock (ms) — incremented by PW nsec deltas on each
-    // new data message. Used instead of performance.now() for peak hold
-    // and clip latch timing so behavior is deterministic w.r.t. audio time.
+    // new data message. Falls back to wall clock deltas when PW clock is
+    // unavailable (old binary, initial state, or clock gaps).
     var audioClockMs = 0;
+    var prevWallMs = 0;
 
     // Per-channel last-signal-time tracking for dim logic
     // Indexed by group key + local index
@@ -262,8 +263,8 @@
         var w = mc.w;
         var h = mc.h;
 
-        ctx.clearRect(0, 0, w, h);
-
+        // Fill background directly (no clearRect — avoids potential flash
+        // between clear and fill on some compositors).
         ctx.fillStyle = "#181b20";
         ctx.fillRect(0, 0, w, h);
 
@@ -436,8 +437,8 @@
             state.ppmPeak = state.ppmPeak + (peak - state.ppmPeak) * PPM_FALL_COEFF;
         }
 
-        // Peak hold: update when new peak exceeds hold, or after hold+decay period
-        if (peak > state.peakHold) {
+        // Peak hold: update when new peak meets or exceeds hold, or after hold+decay period
+        if (peak >= state.peakHold) {
             state.peakHold = peak;
             state.peakHoldTime = now;
         }
@@ -465,10 +466,16 @@
         if (pos > 0 && pos === prevGraphPos) {
             return; // data hasn't changed, skip
         }
-        // Advance audio clock by PW nsec delta for deterministic decay
+        // Advance audio clock by PW nsec delta for deterministic decay.
+        // Fall back to wall clock when PW clock unavailable (old binary,
+        // initial state, or clock data missing).
+        var wallMs = performance.now();
         if (nsec > 0 && prevGraphNsec > 0 && nsec > prevGraphNsec) {
             audioClockMs += (nsec - prevGraphNsec) / 1e6;
+        } else if (prevWallMs > 0) {
+            audioClockMs += wallMs - prevWallMs;
         }
+        prevWallMs = wallMs;
         prevGraphPos = pos;
         prevGraphNsec = nsec;
 
@@ -565,11 +572,6 @@
         markGroupInactive("group-physin", "physin-inactive-label", "(no source)");
 
         window.addEventListener("resize", function () {
-            resizeAll();
-            updateDbScaleLabels();
-        });
-
-        requestAnimationFrame(function () {
             resizeAll();
             updateDbScaleLabels();
         });
