@@ -67,8 +67,8 @@ struct Args {
     #[arg(long, default_value = "UMIK-1")]
     capture_target: String,
 
-    /// Number of output channels.
-    #[arg(long, default_value_t = 8)]
+    /// Number of output channels (F-097: default 1 for mono measurement).
+    #[arg(long, default_value_t = 1)]
     channels: u32,
 
     /// Sample rate in Hz.
@@ -623,6 +623,11 @@ fn run_pipewire(
 
     let rate_str = args.rate.to_string();
     let latency_str = format!("{}/{}", args.rate / 10, args.rate); // 100ms default latency
+    // Build audio.position string from channel count (AUX0, AUX1, ...).
+    let position_str: String = (0..args.channels)
+        .map(|i| format!("AUX{}", i))
+        .collect::<Vec<_>>()
+        .join(",");
     let mut playback_props = pipewire::properties::properties! {
         "media.type" => "Audio",
         "media.category" => "Playback",
@@ -631,7 +636,7 @@ fn run_pipewire(
         "node.name" => "pi4audio-signal-gen",
         "node.description" => "RT Signal Generator",
         "audio.channels" => &*channels_str,
-        "audio.position" => "AUX0,AUX1,AUX2,AUX3,AUX4,AUX5,AUX6,AUX7",
+        "audio.position" => &*position_str,
         "node.rate" => &*format!("1/{rate_str}"),
         "node.latency" => &*latency_str,
     };
@@ -651,10 +656,13 @@ fn run_pipewire(
             .expect("Failed to create PipeWire playback stream");
 
     // SPA format params: F32LE at configured rate, channel count, and
-    // positions (AUX0-AUX7). Drives PipeWire per-channel port creation
-    // matching the loopback sink topology (BUG-SG12-5 / TK-236).
+    // positions (AUX0..AUX{N-1}). Drives PipeWire per-channel port creation
+    // matching the node topology (BUG-SG12-5 / TK-236).
+    let playback_positions: Vec<u32> = (0..args.channels)
+        .map(|i| spa_channel::AUX0 + i)
+        .collect();
     let playback_fmt_bytes = build_audio_format(
-        args.channels, args.rate, &spa_channel::PLAYBACK_8CH,
+        args.channels, args.rate, &playback_positions,
     );
     let playback_fmt_pod = unsafe {
         &*(playback_fmt_bytes.as_ptr() as *const libspa::pod::Pod)

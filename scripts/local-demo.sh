@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local demo stack — launches the full pi4-audio workstation locally.
 #
-# Starts:  PipeWire + WirePlumber → GraphManager → signal-gen → level-bridge → pcm-bridge → web-ui
+# Starts:  PipeWire + WirePlumber → GraphManager → signal-gen → level-bridge (x3) → pcm-bridge → web-ui
 # Cleanup: Ctrl+C kills all child processes
 #
 # The PipeWire test environment mirrors the Pi's production topology with
@@ -149,13 +149,13 @@ echo "[local-demo] GraphManager running (PID ${PIDS[-1]})"
 
 # ---- 5. Start signal-gen (managed mode) ----
 # Managed mode: no AUTOCONNECT, no --target. GraphManager creates links.
-# 4 channels to match convolver input (AUX0-AUX3).
+# F-097: 1 mono output channel. GM routes to all 4 convolver inputs.
 echo ""
-echo "[local-demo] Starting signal-gen (port 4001, managed mode)..."
+echo "[local-demo] Starting signal-gen (port 4001, managed mode, mono)..."
 "$SG_BIN" \
     --managed \
     --capture-target "" \
-    --channels 4 \
+    --channels 1 \
     --rate 48000 \
     --listen tcp:127.0.0.1:4001 \
     --max-level-dbfs -20 &
@@ -168,26 +168,67 @@ if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
 fi
 echo "[local-demo] signal-gen running (PID ${PIDS[-1]})"
 
-# ---- 6. Start level-bridge (self-linking, always-on levels) ----
+# ---- 6. Start level-bridge instances (self-linking, always-on levels) ----
+# D-049: 3 level-bridge instances for 24-channel metering.
 # Self-link mode: uses stream.capture.sink + target.object for WirePlumber
-# auto-linking. Taps convolver output monitor ports for level metering.
+# auto-linking. No GraphManager management needed.
+
+# 6a. level-bridge-sw: taps convolver output (software/processed signal).
 echo ""
-echo "[local-demo] Starting level-bridge (levels on port 9100, self-link mode)..."
+echo "[local-demo] Starting level-bridge-sw (levels on port 9100, self-link mode)..."
 "$LB_BIN" \
     --self-link \
     --mode monitor \
     --target pi4audio-convolver \
     --levels-listen tcp:0.0.0.0:9100 \
-    --channels 4 \
+    --channels 8 \
     --rate 48000 &
 PIDS+=($!)
 sleep 1
 
 if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
-    echo "[local-demo] ERROR: level-bridge failed to start" >&2
+    echo "[local-demo] ERROR: level-bridge-sw failed to start" >&2
     exit 1
 fi
-echo "[local-demo] level-bridge running (PID ${PIDS[-1]})"
+echo "[local-demo] level-bridge-sw running (PID ${PIDS[-1]})"
+
+# 6b. level-bridge-hw-out: taps USBStreamer sink monitor ports (DAC output).
+echo ""
+echo "[local-demo] Starting level-bridge-hw-out (levels on port 9101, self-link mode)..."
+"$LB_BIN" \
+    --self-link \
+    --mode monitor \
+    --target alsa_output.usb-MiniDSP_USBStreamer \
+    --levels-listen tcp:0.0.0.0:9101 \
+    --channels 8 \
+    --rate 48000 &
+PIDS+=($!)
+sleep 1
+
+if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
+    echo "[local-demo] ERROR: level-bridge-hw-out failed to start" >&2
+    exit 1
+fi
+echo "[local-demo] level-bridge-hw-out running (PID ${PIDS[-1]})"
+
+# 6c. level-bridge-hw-in: captures USBStreamer source (ADC input).
+echo ""
+echo "[local-demo] Starting level-bridge-hw-in (levels on port 9102, self-link mode)..."
+"$LB_BIN" \
+    --self-link \
+    --mode capture \
+    --target alsa_input.usb-MiniDSP_USBStreamer \
+    --levels-listen tcp:0.0.0.0:9102 \
+    --channels 8 \
+    --rate 48000 &
+PIDS+=($!)
+sleep 1
+
+if ! kill -0 "${PIDS[-1]}" 2>/dev/null; then
+    echo "[local-demo] ERROR: level-bridge-hw-in failed to start" >&2
+    exit 1
+fi
+echo "[local-demo] level-bridge-hw-in running (PID ${PIDS[-1]})"
 
 # ---- 7. Start pcm-bridge (managed mode, PCM-only) ----
 # Managed mode: no stream.capture.sink, no --target. GM creates links
@@ -217,13 +258,13 @@ sleep 0.5
 # signal-gen RPC: newline-delimited JSON on TCP port 4001.
 # Use bash /dev/tcp to avoid nc dependency (nc may not be in Nix PATH).
 if exec 3<>/dev/tcp/127.0.0.1/4001 2>/dev/null; then
-    echo '{"cmd":"play","signal":"sine","freq":440.0,"level_dbfs":-20.0,"channels":[1,2,3,4]}' >&3
+    echo '{"cmd":"play","signal":"sine","freq":440.0,"level_dbfs":-20.0,"channels":[1]}' >&3
     timeout 2 head -n1 <&3 2>/dev/null && echo "[local-demo] signal-gen playing." || true
     exec 3>&- 2>/dev/null
 else
     echo "[local-demo] WARNING: Could not connect to signal-gen RPC (port 4001)" >&2
     echo "  Start playback manually:"
-    echo "  echo '{\"cmd\":\"play\",\"signal\":\"sine\",\"freq\":440,\"level_dbfs\":-20,\"channels\":[1,2,3,4]}' > /dev/tcp/127.0.0.1/4001"
+    echo "  echo '{\"cmd\":\"play\",\"signal\":\"sine\",\"freq\":440,\"level_dbfs\":-20,\"channels\":[1]}' > /dev/tcp/127.0.0.1/4001"
 fi
 
 # ---- 9. Start web-ui ----
@@ -250,7 +291,9 @@ export PI_AUDIO_MOCK=0
 export PI4AUDIO_GM_HOST=127.0.0.1
 export PI4AUDIO_GM_PORT=4002
 export PI4AUDIO_LEVELS_HOST=127.0.0.1
-export PI4AUDIO_LEVELS_PORT=9100
+export PI4AUDIO_LEVELS_SW_PORT=9100
+export PI4AUDIO_LEVELS_HW_OUT_PORT=9101
+export PI4AUDIO_LEVELS_HW_IN_PORT=9102
 export PI4AUDIO_SKIP_GM_RECOVERY=1
 export PI4AUDIO_SIGGEN=1
 
@@ -268,13 +311,16 @@ echo ""
 echo "============================================================"
 echo "  Local demo stack is running!"
 echo ""
-echo "  Web UI:       http://localhost:8080"
-echo "  GraphManager: tcp://127.0.0.1:4002 (RPC, measurement mode)"
-echo "  signal-gen:   tcp://127.0.0.1:4001 (RPC, managed mode)"
-echo "  level-bridge:  tcp://127.0.0.1:9100 (levels, self-link mode)"
-echo "  pcm-bridge:   tcp://127.0.0.1:9090 (PCM, managed mode)"
+echo "  Web UI:          http://localhost:8080"
+echo "  GraphManager:    tcp://127.0.0.1:4002 (RPC, measurement mode)"
+echo "  signal-gen:      tcp://127.0.0.1:4001 (RPC, managed mode)"
+echo "  level-bridge-sw: tcp://127.0.0.1:9100 (levels, convolver tap)"
+echo "  level-bridge-hw-out: tcp://127.0.0.1:9101 (levels, USBStreamer out)"
+echo "  level-bridge-hw-in:  tcp://127.0.0.1:9102 (levels, USBStreamer in)"
+echo "  pcm-bridge:      tcp://127.0.0.1:9090 (PCM, managed mode)"
 echo ""
 echo "  PW nodes:     alsa_output.usb-MiniDSP_USBStreamer (null sink)"
+echo "                alsa_input.usb-MiniDSP_USBStreamer (null source)"
 echo "                pi4audio-convolver (filter-chain, dirac passthrough)"
 echo "                pi4audio-convolver-out (filter-chain output)"
 echo ""

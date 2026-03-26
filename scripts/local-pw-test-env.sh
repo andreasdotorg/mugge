@@ -81,8 +81,8 @@ create_configs() {
     mkdir -p "$XDG_CONFIG_DIR/pipewire/pipewire.conf.d"
     mkdir -p "$XDG_CONFIG_DIR/pipewire/client.conf.d"
 
-    # PipeWire: disable dbus, create production-matching USBStreamer node.
-    # Node name and port layout match the Pi's production topology so
+    # PipeWire: disable dbus, create production-matching USBStreamer nodes.
+    # Node names and port layouts match the Pi's production topology so
     # GraphManager's routing table resolves all endpoints correctly.
     # WirePlumber activates nodes/ports; GM manages all links (D-039).
     cat > "$XDG_CONFIG_DIR/pipewire/pipewire.conf.d/00-headless-test.conf" << 'EOF'
@@ -94,7 +94,7 @@ context.properties = {
 }
 
 context.objects = [
-    # USBStreamer replacement: 8ch null Audio/Sink, graph clock driver.
+    # USBStreamer output replacement: 8ch null Audio/Sink, graph clock driver.
     # Production: alsa_output.usb-MiniDSP_USBStreamer-00.pro-output-0
     # GM uses Prefix("alsa_output.usb-MiniDSP_USBStreamer") match.
     # Ports: playback_AUX0..AUX7 (ch 1-4 speakers, 5-6 HP, 7-8 IEM).
@@ -105,6 +105,26 @@ context.objects = [
             media.class      = Audio/Sink
             object.linger    = true
             node.driver      = true
+            audio.channels   = 8
+            audio.rate       = 48000
+            audio.position   = [ AUX0 AUX1 AUX2 AUX3 AUX4 AUX5 AUX6 AUX7 ]
+            node.autoconnect = false
+            node.always-process = true
+            session.suspend-timeout-seconds = 0
+            node.pause-on-idle = false
+        }
+    }
+    # USBStreamer capture replacement: 8ch null Audio/Source.
+    # Production: alsa_input.usb-MiniDSP_USBStreamer-00.pro-input-0
+    # GM uses Prefix("alsa_input.usb-MiniDSP_USBStreamer") match.
+    # Ports: capture_AUX0..AUX7 (ch 1 vocal mic, ch 2 spare, etc.).
+    # level-bridge-hw-in taps this node in capture mode.
+    { factory = adapter
+        args = {
+            factory.name     = support.null-audio-sink
+            node.name        = "alsa_input.usb-MiniDSP_USBStreamer"
+            media.class      = Audio/Source
+            object.linger    = true
             audio.channels   = 8
             audio.rate       = 48000
             audio.position   = [ AUX0 AUX1 AUX2 AUX3 AUX4 AUX5 AUX6 AUX7 ]
