@@ -89,8 +89,8 @@
     }
 
     function barColor(peakDb) {
-        if (peakDb >= -3) return PiAudio.cssVar("--danger");
-        if (peakDb >= -6) return PiAudio.cssVar("--warning");
+        if (peakDb >= -6) return PiAudio.cssVar("--danger");
+        if (peakDb >= -18) return PiAudio.cssVar("--warning");
         return PiAudio.cssVar("--safe");
     }
 

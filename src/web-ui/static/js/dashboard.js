@@ -50,8 +50,9 @@
     var PPM_RISE_COEFF = 1.0 - Math.exp(-1.0 / (0.01 * 30));  // ~30Hz data rate
     var PPM_FALL_COEFF = 1.0 - Math.exp(-1.0 / (1.5 * 30));
 
-    var FRAC_6 = (-6 - DB_MIN) / (DB_MAX - DB_MIN);
-    var FRAC_3 = (-3 - DB_MIN) / (DB_MAX - DB_MIN);
+    // Broadcast meter color zone boundaries (fractions of meter height)
+    var FRAC_18 = (-18 - DB_MIN) / (DB_MAX - DB_MIN);  // green → yellow
+    var FRAC_6  = (-6  - DB_MIN) / (DB_MAX - DB_MIN);  // yellow → red
 
     var DB_SCALE_MARKS = [0, -6, -12, -24, -48];
 
@@ -109,8 +110,8 @@
     }
 
     function dbReadoutColor(db) {
-        if (db >= -3) return PiAudio.cssVar("--danger");
-        if (db >= -6) return PiAudio.cssVar("--warning");
+        if (db >= -6) return PiAudio.cssVar("--danger");
+        if (db >= -18) return PiAudio.cssVar("--warning");
         return PiAudio.cssVar("--safe");
     }
 
@@ -261,17 +262,18 @@
         ctx.fillStyle = "#181b20";
         ctx.fillRect(0, 0, w, h);
 
-        // RMS fill — main filled region (shows sustained energy)
-        // PPM color coding: green base, yellow from -6 dBFS, red from -3 dBFS.
-        // Gradient spans full meter height so color zones are always visible.
+        // RMS fill — broadcast meter color zones (green/yellow/red).
+        // Gradient spans full meter height; bar fill reveals the zone.
+        // Green: -60 to -18 dBFS, Yellow: -18 to -6 dBFS, Red: -6 to 0 dBFS.
         var rmsFrac = dbToFraction(state.rms);
         var rmsFillH = rmsFrac * h;
         if (rmsFillH > 0.5) {
             var grad = ctx.createLinearGradient(0, h, 0, 0);
             grad.addColorStop(0, PiAudio.cssVar("--safe"));
-            grad.addColorStop(0.5, PiAudio.cssVar("--safe"));
+            grad.addColorStop(FRAC_18, PiAudio.cssVar("--safe"));
+            grad.addColorStop(FRAC_18, PiAudio.cssVar("--warning"));
             grad.addColorStop(FRAC_6, PiAudio.cssVar("--warning"));
-            grad.addColorStop(FRAC_3, PiAudio.cssVar("--danger"));
+            grad.addColorStop(FRAC_6, PiAudio.cssVar("--danger"));
             grad.addColorStop(1, PiAudio.cssVar("--danger"));
             ctx.fillStyle = grad;
             ctx.fillRect(0, h - rmsFillH, w, rmsFillH);
