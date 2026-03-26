@@ -8,6 +8,12 @@ A [Raspberry Pi 4B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/
 room correction, multi-channel routing, and time alignment -- replacing a
 Windows PC in a portable flight case.
 
+<p align="center">
+  <img src="docs/mugge-dashboard.png" alt="mugge dashboard — 24-channel meters, spectrum analyzer, and system monitoring running on a Raspberry Pi 4B">
+  <br>
+  <em>The mugge monitoring dashboard: 24-channel level meters with peak hold, real-time spectrum analyzer, and system health — all served from a Raspberry Pi 4B.</em>
+</p>
+
 ## The Problem
 
 Every venue sounds different. The room's shape, its walls, the ceiling height,
