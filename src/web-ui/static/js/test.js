@@ -130,14 +130,15 @@
     }
 
     function applyStatusResponse(msg) {
-        setPlaying(!!msg.playing);
-
-        // Pre-select channels reported by signal-gen.
+        // F-104: Sync channels BEFORE playing state so that
+        // updatePlayEnabled() inside setPlaying() sees the correct
+        // channel selection.
         if (msg.channels && msg.channels.length > 0) {
             selectedChannels = msg.channels.slice();
             updateChannelHighlights();
-            updatePlayEnabled();
         }
+
+        setPlaying(!!msg.playing);
 
         if (msg.signal) {
             selectSignal(msg.signal);
@@ -216,7 +217,11 @@
     function updatePlayEnabled() {
         var playBtn = $("tt-play-btn");
         if (!playBtn) return;
-        playBtn.disabled = !wsConnected || selectedChannels.length === 0;
+        // F-104: When signal-gen is already playing, the button shows
+        // "PLAYING" state and must not be disabled.  Only disable when
+        // stopped AND no channels are selected.
+        playBtn.disabled = !wsConnected ||
+            (!isPlaying && selectedChannels.length === 0);
     }
 
     // -- Signal type buttons --
