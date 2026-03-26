@@ -262,14 +262,16 @@
         ctx.fillRect(0, 0, w, h);
 
         // RMS fill — main filled region (shows sustained energy)
-        // PPM color coding: green (normal) -> yellow (-6 dB) -> red (-3 dB)
+        // PPM color coding: green base, yellow from -6 dBFS, red from -3 dBFS.
+        // Gradient spans full meter height so color zones are always visible.
         var rmsFrac = dbToFraction(state.rms);
         var rmsFillH = rmsFrac * h;
         if (rmsFillH > 0.5) {
             var grad = ctx.createLinearGradient(0, h, 0, 0);
             grad.addColorStop(0, PiAudio.cssVar("--safe"));
-            grad.addColorStop(Math.min(FRAC_6, 1), PiAudio.cssVar("--safe"));
-            grad.addColorStop(Math.min(FRAC_3, 1), PiAudio.cssVar("--warning"));
+            grad.addColorStop(0.5, PiAudio.cssVar("--safe"));
+            grad.addColorStop(FRAC_6, PiAudio.cssVar("--warning"));
+            grad.addColorStop(FRAC_3, PiAudio.cssVar("--danger"));
             grad.addColorStop(1, PiAudio.cssVar("--danger"));
             ctx.fillStyle = grad;
             ctx.fillRect(0, h - rmsFillH, w, rmsFillH);
