@@ -50,9 +50,22 @@
     var PPM_RISE_COEFF = 1.0 - Math.exp(-1.0 / (0.01 * 30));  // ~30Hz data rate
     var PPM_FALL_COEFF = 1.0 - Math.exp(-1.0 / (1.5 * 30));
 
-    // Broadcast meter color zone boundaries (fractions of meter height)
-    var FRAC_18 = (-18 - DB_MIN) / (DB_MAX - DB_MIN);  // green → yellow
+    // Gradient transition fractions (fraction of meter height)
+    var FRAC_18 = (-18 - DB_MIN) / (DB_MAX - DB_MIN);  // group → yellow
     var FRAC_6  = (-6  - DB_MIN) / (DB_MAX - DB_MIN);  // yellow → red
+
+    // Group base colors — resolved from CSS variables at init time
+    var GROUP_COLORS = null;
+
+    function initGroupColors() {
+        var cv = PiAudio.cssVar;
+        GROUP_COLORS = {
+            main:   { base: cv("--group-main"),  bright: "#b0b8c8" },
+            app:    { base: cv("--primary-dim"), bright: cv("--group-app") },
+            dspout: { base: cv("--group-gain"),  bright: cv("--group-dsp") },
+            physin: { base: cv("--group-hw"),    bright: "#e8b84a" }
+        };
+    }
 
     var DB_SCALE_MARKS = [0, -6, -12, -24, -48];
 
@@ -251,7 +264,7 @@
 
     // -- Canvas drawing --
 
-    function drawMeter(mc, state, now) {
+    function drawMeter(mc, state, now, group) {
         var ctx = mc.ctx;
         if (!ctx) return;
         var w = mc.w;
@@ -262,18 +275,17 @@
         ctx.fillStyle = "#181b20";
         ctx.fillRect(0, 0, w, h);
 
-        // RMS fill — broadcast meter color zones (green/yellow/red).
-        // Gradient spans full meter height; bar fill reveals the zone.
-        // Green: -60 to -18 dBFS, Yellow: -18 to -6 dBFS, Red: -6 to 0 dBFS.
+        var gc = GROUP_COLORS[group] || GROUP_COLORS.main;
+
+        // RMS fill — group-colored gradient with yellow/red at high levels.
+        // Group base → bright at -18 dBFS, yellow at -6 dBFS, red at top.
         var rmsFrac = dbToFraction(state.rms);
         var rmsFillH = rmsFrac * h;
         if (rmsFillH > 0.5) {
             var grad = ctx.createLinearGradient(0, h, 0, 0);
-            grad.addColorStop(0, PiAudio.cssVar("--safe"));
-            grad.addColorStop(FRAC_18, PiAudio.cssVar("--safe"));
-            grad.addColorStop(FRAC_18, PiAudio.cssVar("--warning"));
+            grad.addColorStop(0, gc.base);
+            grad.addColorStop(FRAC_18, gc.bright);
             grad.addColorStop(FRAC_6, PiAudio.cssVar("--warning"));
-            grad.addColorStop(FRAC_6, PiAudio.cssVar("--danger"));
             grad.addColorStop(1, PiAudio.cssVar("--danger"));
             ctx.fillStyle = grad;
             ctx.fillRect(0, h - rmsFillH, w, rmsFillH);
@@ -399,7 +411,7 @@
             ch = MAIN_CHANNELS[idx];
             state = captureState[ch];
             updateChannelDim("meters-main", idx, mainColumns, state, wallNow);
-            drawMeter(mainCanvases[idx], state, now);
+            drawMeter(mainCanvases[idx], state, now, "main");
             updateClipIndicator("meters-main", idx, state);
             updateDbReadout("meters-main-db-" + idx, state.peak, state.rms);
         }
@@ -409,7 +421,7 @@
             ch = APP_CHANNELS[idx];
             state = captureState[ch];
             updateChannelDim("meters-app", idx, appColumns, state, wallNow);
-            drawMeter(appCanvases[idx], state, now);
+            drawMeter(appCanvases[idx], state, now, "app");
             updateClipIndicator("meters-app", idx, state);
             updateDbReadout("meters-app-db-" + idx, state.peak, state.rms);
         }
@@ -419,7 +431,7 @@
             ch = DSPOUT_CHANNELS[idx];
             state = playbackState[ch];
             updateChannelDim("meters-dspout", idx, dspoutColumns, state, wallNow);
-            drawMeter(dspoutCanvases[idx], state, now);
+            drawMeter(dspoutCanvases[idx], state, now, "dspout");
             updateClipIndicator("meters-dspout", idx, state);
             updateDbReadout("meters-dspout-db-" + idx, state.peak, state.rms);
         }
@@ -429,7 +441,7 @@
             ch = PHYSIN_CHANNELS[idx];
             state = physinState[ch];
             updateChannelDim("meters-physin", idx, physinColumns, state, wallNow);
-            drawMeter(physinCanvases[idx], state, now);
+            drawMeter(physinCanvases[idx], state, now, "physin");
             updateClipIndicator("meters-physin", idx, state);
             updateDbReadout("meters-physin-db-" + idx, state.peak, state.rms);
         }
@@ -574,6 +586,7 @@
     // -- View lifecycle --
 
     function init() {
+        initGroupColors();
         buildMeterGroup("meters-main", MAIN_LABELS, MAIN_CHANNELS,
             mainCanvases, mainColumns, "capture", "main");
         buildMeterGroup("meters-app", APP_LABELS, APP_CHANNELS,

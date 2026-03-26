@@ -88,10 +88,10 @@
         return (db - DB_MIN) / (DB_MAX - DB_MIN);
     }
 
-    function barColor(peakDb) {
+    function barColor(peakDb, groupColor) {
         if (peakDb >= -6) return PiAudio.cssVar("--danger");
         if (peakDb >= -18) return PiAudio.cssVar("--warning");
-        return PiAudio.cssVar("--safe");
+        return groupColor || PiAudio.cssVar("--safe");
     }
 
     function updateChannel(state, peak, now) {
@@ -141,7 +141,7 @@
             var fillH = Math.round(frac * h);
 
             if (fillH > 0) {
-                ctx.fillStyle = barColor(peak);
+                ctx.fillStyle = barColor(peak, g.color);
                 ctx.fillRect(x, h - fillH, g.barW, fillH);
             }
 
