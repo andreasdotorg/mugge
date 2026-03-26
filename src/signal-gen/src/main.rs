@@ -499,11 +499,19 @@ impl ProcessState {
         }
 
         // 2. Generate samples into the buffer.
+        // F-140: In mono mode (1 output channel), any non-zero bitmask means
+        // "play on the single channel". The UI sends channel numbers 1-8 which
+        // map to bitmask bits 0-7, but only bit 0 drives ch=0 in the generator.
+        let effective_channels = if self.channels == 1 && self.active_channels != 0 {
+            0x01
+        } else {
+            self.active_channels
+        };
         self.generator.generate(
             output,
             n_frames,
             self.channels,
-            self.active_channels,
+            effective_channels,
             self.current_level_linear,
         );
 

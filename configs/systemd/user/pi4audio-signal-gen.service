@@ -13,7 +13,7 @@ Type=simple
 ExecStart=%h/bin/pi4audio-signal-gen \
     --managed \
     --capture-target UMIK-1 \
-    --channels 8 \
+    --channels 1 \
     --listen tcp:127.0.0.1:4001 \
     --max-level-dbfs=-20.0
 
