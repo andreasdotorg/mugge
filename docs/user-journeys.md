@@ -195,7 +195,7 @@ a properly calibrated gain structure. Incorrect staging produces either clipping
 
 5. **Observe pre-DSP levels on the web UI.**
    The MAIN meters (ML/MR) on the engineer dashboard show the signal entering
-   CamillaDSP from the Loopback. Target: -20dBFS to -14dBFS for reference material.
+   the convolver. Target: -20dBFS to -14dBFS for reference material.
 
 6. **Observe post-DSP levels on the web UI.**
    The PA SENDS meters (SatL/SatR/S1/S2) show the signal after FIR processing and
@@ -1029,16 +1029,15 @@ but differ in application, CamillaDSP configuration, and interaction model.
 5. **Engineer monitors during performance.**
    Same as DJ mode, plus:
    - IEM meters (IL/IR) -- confirm singer is receiving audio
-   - Vocal mic input (MAIN meters if routed through the Loopback)
+   - Vocal mic input (MAIN meters if routed through the convolver)
 
 ### Emergency Procedures
 
 **Audio cuts out completely:**
-1. Check web UI -- is CamillaDSP still running?
-2. If CamillaDSP crashed: **warn operator to turn off amps**, then restart:
-   `sudo systemctl restart camilladsp`
-3. If PipeWire crashed: restart PipeWire (CamillaDSP will auto-reconnect)
-4. If USB device disconnected: check physical cables, reconnect
+1. Check web UI -- is PipeWire still running? Is the convolver loaded?
+2. If PipeWire crashed: **warn operator to turn off amps**, then restart:
+   `systemctl --user restart pipewire`
+3. If USB device disconnected: check physical cables, reconnect
 
 **Uncontrolled feedback or oscillation:**
 1. **MIDI panic button** (APCmini mk2 -- designated button, requires definition)
@@ -1121,14 +1120,13 @@ are in Journey 9.
    ```
    The USBStreamer must appear. If missing: check USB cable, try a different USB port.
 
-4. **Check the Loopback device:**
+4. **Check the filter-chain convolver:**
    ```bash
-   aplay -l | grep Loopback
+   pw-cli ls Node | grep pi4audio-convolver
    ```
-   CamillaDSP captures from `hw:Loopback,1,0`. If the Loopback module is not loaded:
-   ```bash
-   sudo modprobe snd-aloop
-   ```
+   Two nodes should appear: `pi4audio-convolver` (capture) and
+   `pi4audio-convolver-out` (playback). If missing: check PipeWire config at
+   `~/.config/pipewire/pipewire.conf.d/30-filter-chain-convolver.conf`.
 
 #### Xruns / Audio Glitches
 
@@ -1136,7 +1134,7 @@ are in Journey 9.
 
 **Diagnostic procedure:**
 1. **Check DSP processing load** on web UI. If > 90%: the Pi is CPU-starved.
-   - For DJ mode: verify chunksize is 2048 (not 512)
+   - For DJ mode: verify quantum is 1024 (not 256)
    - Check for runaway processes: `top` or web UI per-process CPU
 
 2. **Check scheduling priorities:**
@@ -1297,21 +1295,20 @@ For any undiagnosed issue, work through this checklist:
 Source Material (-14 LUFS nominal, -0.5 LUFS worst case for psytrance)
     |
     v
-Mixxx / Reaper (application)
+Mixxx / Reaper (application, via pw-jack JACK bridge)
     |
     v
-PipeWire (unity gain, SCHED_FIFO 88)
+PipeWire — single audio graph (SCHED_FIFO 88)
     |
-    v
-ALSA Loopback (hw:Loopback,1,0 -> hw:Loopback,0,0)
+    +-- filter-chain convolver (FFTW3 + ARM NEON, within same graph cycle)
+    |   |-- FIR convolution: combined crossover + room correction (<= -0.5dB, D-009)
+    |   |-- Per-channel gain: linear builtin Mult params (C-009)
+    |   |-- Per-channel delay: time alignment
+    |   |-- 4 speaker channels (mains HP + subs LP, 16,384 taps each)
     |
-    v
-CamillaDSP (SCHED_FIFO 80)
-    |-- Mixer: channel routing, sub mono sum (-6dB per ch), per-channel trim (+/-3dB)
-    |-- FIR convolution: combined crossover + room correction + subsonic HPF (<= -0.5dB, D-009)
-    |-- Per-channel delay: time alignment
-    |-- Speaker trim: global attenuation
-    |-- (Future) Limiter: -3dBFS threshold, 1ms attack, 100ms release
+    +-- Direct PipeWire links (bypass convolver)
+    |   |-- Engineer headphones (ch 5-6)
+    |   |-- Singer IEM (ch 7-8, live mode only)
     |
     v
 USBStreamer (hw:USBStreamer,0) -- 8ch ADAT output

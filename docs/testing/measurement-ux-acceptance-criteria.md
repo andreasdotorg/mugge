@@ -84,8 +84,8 @@ and recovery scenario.
 | 3.7 | Calibration file check | Check for "Calibration file found" with file path |
 | 3.8 | Web UI streams check | Check for "Web UI audio streams stopped" |
 | 3.9 | Mixxx check | Check for "Mixxx not running" |
-| 3.10 | Config check | Check for CamillaDSP config identity |
-| 3.11 | Loopback check | Check for "ALSA Loopback configured" |
+| 3.10 | Convolver check | Check for "Filter-chain convolver loaded" with node name |
+| 3.11 | GraphManager check | Check for "GraphManager running (measurement mode)" |
 | 3.12 | Capture adapter check | Check for "ada8200-in capture adapter stopped" |
 | 3.13 | Temperature check | Check for "CPU temperature" with value and threshold |
 | 3.14 | Xrun baseline check | Check for "PipeWire xrun baseline" with counter reset |

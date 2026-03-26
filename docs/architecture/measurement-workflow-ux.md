@@ -186,14 +186,13 @@ restoration running (e.g., OOM kill, power loss).
 |   The system is checking measurement prerequisites.               |
 |   All checks must pass before measurement can begin.              |
 |                                                                   |
-|   [OK]  CamillaDSP running (FIFO/80)                             |
 |   [OK]  PipeWire running (FIFO/88, quantum 256)                  |
+|   [OK]  Filter-chain convolver loaded (pi4audio-convolver)       |
+|   [OK]  GraphManager running (measurement mode)                  |
 |   [OK]  UMIK-1 connected (hw:UMIK,0)                             |
 |   [OK]  Calibration file found (/home/ela/7161942.txt)           |
 |   [OK]  Web UI audio streams stopped                             |
 |   [OK]  Mixxx not running                                        |
-|   [OK]  CamillaDSP config: /etc/camilladsp/bose-home.yml         |
-|   [OK]  ALSA Loopback configured                                 |
 |   [OK]  ada8200-in capture adapter stopped                        |
 |   [OK]  CPU temperature: 58C (< 70C)                             |
 |   [OK]  PipeWire xrun baseline: 0 (reset counter)               |

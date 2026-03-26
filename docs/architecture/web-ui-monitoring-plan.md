@@ -470,11 +470,8 @@ alive and connected?"
 | [Reaper] |  <-- source application
 |    |G|   |     G = green dot if capture levels > -90 dB
 |    v     |
-| [Loopbk] |  <-- ALSA Loopback
-|    |G|   |
-|    v     |
-| [CaDSP]  |  <-- CamillaDSP
-|   19.2%  |     processing load, colored
+| [Conv]   |  <-- PW filter-chain convolver
+|   1.7%   |     processing load, colored
 |    |G|   |
 |    v     |
 | [USBStr] |  <-- USBStreamer (ALSA output)
@@ -503,8 +500,7 @@ Each stage gets a colored dot:
 | Stage | Green Condition | Red Condition |
 |-------|----------------|---------------|
 | Source app | Capture levels > -90 dB (signal present) | All capture levels < -96 dB for > 10s |
-| ALSA Loopback | Implicit: if CamillaDSP captures, Loopback works | CamillaDSP state != Running |
-| CamillaDSP | state == Running AND load < 80% | state != Running |
+| Convolver | Convolver node exists AND B/Q ratio < 80% | Convolver node missing or not processing |
 | USBStreamer | ALSA USB status == Active | ALSA USB Inactive |
 | ADA8200 | Implied by USBStreamer status | Implied by USBStreamer status |
 | Speakers | Playback levels > -90 dB | All playback < -96 dB for > 10s |

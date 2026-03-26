@@ -6,6 +6,7 @@ audio-recorder lifecycle and measurement orchestration design.
 **Date:** 2026-03-22
 **Decisions:** F-064 root cause analysis, Q1-Q8 design discussion
 **Relates to:** [rt-audio-stack.md](rt-audio-stack.md) (PW config),
+[graph-manager.md](graph-manager.md) (GM link orchestration, routing tables),
 [rt-signal-generator.md](rt-signal-generator.md) (signal-gen design),
 [measurement-daemon.md](measurement-daemon.md) (measurement workflow),
 [web-ui.md](web-ui.md) (web architecture),

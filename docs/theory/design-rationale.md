@@ -1,14 +1,14 @@
 # Design Rationale
 
-> **D-040 (2026-03-16): Architecture pivot — CamillaDSP abandoned in favor of
-> PipeWire filter-chain convolver.** This document describes the reasoning behind
-> the *original* CamillaDSP-based design. The rationale for FIR filters,
-> minimum-phase design, dual-quantum strategy, and driver protection remains
-> valid — only the *execution engine* changed. BM-2 benchmarks showed PipeWire's
-> built-in convolver is 3-5.6x more CPU-efficient than CamillaDSP on Pi 4B ARM.
-> For the current architecture, see
-> [`rt-audio-stack.md`](../architecture/rt-audio-stack.md). The signal flow
-> diagram and CamillaDSP-specific sections below are historical.
+The DSP engine is PipeWire's built-in filter-chain convolver, running all FIR
+processing natively within the PipeWire audio graph using FFTW3 with ARM NEON
+SIMD optimization. The system previously used CamillaDSP as an external DSP
+engine via an ALSA Loopback bridge, but
+[BM-2 benchmarks](../lab-notes/LN-BM2-pw-filter-chain-benchmark.md) showed
+PipeWire's convolver is 3-5.6x more CPU-efficient on Pi 4B ARM, and the
+architectural simplification eliminates ~88ms of signal path latency in DJ mode
+(D-040, 2026-03-16). For full configuration details, see
+[`rt-audio-stack.md`](../architecture/rt-audio-stack.md).
 
 This document tells the story of the technical decisions behind the Pi 4B audio
 workstation -- why things are the way they are, what alternatives were considered,
@@ -25,8 +25,8 @@ connects the dots between decisions.
 ## Signal Flow
 
 The following diagram shows the audio signal path from application to speakers.
-Both modes share the same pipeline; only the source application, buffer sizes,
-and active channels differ.
+Both modes share the same pipeline; only the source application, PipeWire
+quantum, and active channels differ.
 
 ```mermaid
 flowchart LR
@@ -35,32 +35,17 @@ flowchart LR
         RE["Reaper<br/>(Live mode)"]
     end
 
-    subgraph PipeWire["PipeWire Audio Server"]
-        PW["8ch Routing<br/>quantum 1024 (DJ)<br/>quantum 256 (Live)"]
-    end
-
-    subgraph Loopback["ALSA Loopback"]
-        LB["8ch virtual<br/>device"]
-    end
-
-    subgraph CamillaDSP["CamillaDSP (ALSA-native)"]
-        direction TB
-        MIX["8→8 Mixer"]
-        FIR["FIR Convolution<br/>16,384 taps<br/>(ch 0-3: crossover +<br/>room correction)"]
-        PT["Passthrough<br/>(ch 4-5: headphones<br/>ch 6-7: IEM)"]
-        DLY["Per-channel<br/>delay + gain"]
-        MIX --> FIR
-        MIX --> PT
-        FIR --> DLY
-        PT --> DLY
+    subgraph PW["PipeWire — Single Audio Graph<br/>SCHED_FIFO 88"]
+        PWR["JACK Bridge<br/>quantum 1024 (DJ)<br/>quantum 256 (Live)"]
+        FIR["filter-chain Convolver<br/>(FFTW3 + ARM NEON)<br/>16,384-tap FIR<br/>4 speaker channels"]
     end
 
     subgraph Output["USBStreamer → ADA8200"]
         direction TB
-        CH01["ch 0-1: Main L/R<br/>(HP + correction)"]
-        CH23["ch 2-3: Sub 1 / Sub 2<br/>(LP + correction)"]
-        CH45["ch 4-5: Engineer HP"]
-        CH67["ch 6-7: Singer IEM"]
+        CH01["ch 0-1: Main L/R<br/>(via HP FIR)"]
+        CH23["ch 2-3: Sub 1 / Sub 2<br/>(via LP FIR, mono sum)"]
+        CH45["ch 4-5: Engineer HP<br/>(direct bypass)"]
+        CH67["ch 6-7: Singer IEM<br/>(Reaper only)"]
     end
 
     subgraph Speakers
@@ -70,31 +55,35 @@ flowchart LR
         IEM["In-ear monitors"]
     end
 
-    MX --> PW
-    RE --> PW
-    PW --> LB
-    LB --> MIX
-    DLY --> CH01
-    DLY --> CH23
-    DLY --> CH45
-    DLY --> CH67
+    MX -->|"pw-jack"| PWR
+    RE --> PWR
+    PWR --> FIR
+    FIR --> CH01
+    FIR --> CH23
+    PWR -->|"direct link"| CH45
+    RE -->|"direct link<br/>(live mode)"| CH67
     CH01 --> SP
     CH23 --> SB
     CH45 --> HP
     CH67 --> IEM
 ```
 
-**DJ mode** routes Mixxx main (ch 0-1) and headphone cue (ch 2-3) through the
-pipeline. Channels 4-5 carry the engineer's headphones; channels 6-7 (IEM) are
-muted. Chunksize 2048, PipeWire quantum 1024.
+The entire audio pipeline runs within a single PipeWire graph. No ALSA
+Loopback, no external DSP process. The filter-chain convolver uses FFTW3 with
+ARM NEON SIMD for non-uniform partitioned convolution.
 
-**Live mode** routes Reaper PA (ch 0-1), engineer headphones (ch 4-5), and
-singer IEM (ch 6-7) through the pipeline. Channels 2-3 are unused. Chunksize
-256, PipeWire quantum 256.
+**DJ mode** routes Mixxx stereo output through the convolver to the four speaker
+channels (mains + subs). PipeWire natively sums the L+R inputs connected to
+each sub channel for mono sum. Headphone channels bypass the convolver via
+direct PipeWire links. PipeWire quantum 1024.
 
-In both modes, CamillaDSP holds exclusive ALSA access to all eight USBStreamer
-channels. The four speaker channels (0-3) receive FIR processing; the four
-monitor channels (4-7) pass through untouched.
+**Live mode** routes Reaper output through the convolver for the speaker
+channels. Headphone and singer IEM channels bypass the convolver via direct
+PipeWire links. PipeWire quantum 256.
+
+The four speaker channels (0-3) receive FIR processing; the monitor channels
+(4-7) bypass the convolver entirely via direct PipeWire links to the
+USBStreamer.
 
 ---
 
@@ -180,8 +169,7 @@ digital crossovers is IIR (Infinite Impulse Response) filters -- typically
 [Linkwitz-Riley](https://en.wikipedia.org/wiki/Linkwitz%E2%80%93Riley_filter) designs that use a compact mathematical formula to split
 frequencies with precision. PA processors like dbx DriveRack, Behringer DCX,
 and the DSP built into systems from [d&b audiotechnik](https://www.dbaudio.com/) and [L-Acoustics](https://www.l-acoustics.com/) all use
-IIR crossovers effectively, including at psytrance events. [CamillaDSP](https://github.com/HEnquist/camilladsp) supports
-them natively.
+IIR crossovers effectively, including at psytrance events.
 
 IIR crossovers would have been the natural choice here, except that this
 system also needs per-venue room correction -- and that changes the calculus.
@@ -202,11 +190,11 @@ taps per channel). High-end touring processors support longer filters, but
 at significantly higher cost and with proprietary toolchains.
 
 This system achieves 16,384-tap FIR convolution on a Raspberry Pi 4B --
-enabled by [CamillaDSP](https://github.com/HEnquist/camilladsp)'s efficient
-FFT-based algorithm running on a general-purpose ARM processor rather than a
-dedicated DSP chip. The longer filter length makes something practical that
-shorter filters cannot achieve: combining the crossover slope and room
-correction into a single convolution per output channel.
+enabled by PipeWire's built-in filter-chain convolver using FFTW3 with
+hand-optimized ARM NEON codelets, running on a general-purpose ARM processor
+rather than a dedicated DSP chip. The longer filter length makes something
+practical that shorter filters cannot achieve: combining the crossover slope
+and room correction into a single convolution per output channel.
 
 **The combined minimum-phase FIR approach** integrates both functions into one
 filter. The crossover shape and the room correction are co-optimized: the
@@ -234,11 +222,10 @@ Human hearing is surprisingly sensitive to sounds that arrive before the event
 that caused them. Minimum-phase FIR avoids this entirely.
 
 The tradeoff of the combined minimum-phase FIR approach is that the crossover
-frequency cannot be adjusted in the CamillaDSP configuration file; changing
-the crossover point requires regenerating the FIR filter coefficients. For
-systems that do not need room correction, or where crossover flexibility
-matters more than combined-filter efficiency, IIR remains the practical
-choice.
+frequency cannot be adjusted at runtime; changing the crossover point requires
+regenerating the FIR filter coefficients. For systems that do not need room
+correction, or where crossover flexibility matters more than combined-filter
+efficiency, IIR remains the practical choice.
 
 The combined-filter approach is the project's most consequential decision
 (D-001). It was made before any hardware testing, but was explicitly marked as
@@ -267,9 +254,11 @@ cycles at 20Hz. That is marginal. It would work in venues where 20Hz correction
 is not critical (most live venues do not reproduce much useful content below
 25Hz), but it would struggle in rooms with strong sub-bass room modes.
 
-The benchmarks settled the question. At 16,384 taps and chunksize 2048 (DJ
-mode), CamillaDSP uses 5.2% of one CPU core. Even at chunksize 256 (live mode),
-it reaches only about 19%. There was no CPU pressure to compromise on filter length.
+The benchmarks settled the question decisively. PipeWire's filter-chain
+convolver processes 16,384-tap FIR on four channels at 1.70% CPU in DJ mode
+(quantum 1024) and 3.47% in live mode (quantum 256)
+([BM-2](../lab-notes/LN-BM2-pw-filter-chain-benchmark.md)). There is no CPU
+pressure to compromise on filter length.
 
 The 16,384-tap filter length (D-003), like the combined-filter approach, was
 validated by the US-001 CPU benchmarks and made conditional on hardware
@@ -308,17 +297,16 @@ correction filters.
 ## Latency: A Singer's Perspective
 
 Latency -- the delay between a sound entering the system and leaving the
-speakers -- is irrelevant to the audience at a DJ set. A 43-millisecond delay
-is equivalent to standing 15 meters from the speaker stack. Nobody notices.
+speakers -- is irrelevant to the audience at a DJ set. A 21-millisecond delay
+is equivalent to standing about 7 meters from the speaker stack. Nobody notices.
 
 For a live vocalist, the situation is entirely different. The singer hears
 her own voice through three paths simultaneously. The first is bone
 conduction: vibrations from her vocal cords travel through her skull to her
 inner ear in effectively zero time. The second is her in-ear monitors: the
-microphone signal travels through the digital audio chain (about 22
-milliseconds). The third is the PA speakers: the signal travels through the
-same chain with additional FIR processing, then through the room air to her
-ears (about 31 milliseconds).
+microphone signal travels through the digital audio chain. The third is the
+PA speakers: the signal travels through the DSP pipeline and then through the
+room air to her ears.
 
 If the electronic paths lag too far behind bone conduction, the singer
 perceives a distinct echo of her own voice. This is not a subtle effect. It
@@ -327,49 +315,30 @@ beat late, making it nearly impossible to maintain rhythm and pitch. For Cole
 Porter material, where the vocalist needs precise phrasing against backing
 tracks, this is performance-destroying.
 
-The original design called for a live mode chunksize of 512 (D-002), which
-was expected to keep the PA path under 25 milliseconds. When US-002 latency
-measurements were conducted, two things became clear.
+The architecture change to PipeWire's filter-chain convolver (D-040)
+transformed the latency picture. In the previous architecture, CamillaDSP
+held exclusive ALSA access to all eight USBStreamer channels -- both the
+speaker channels (with FIR processing) and the monitor channels (passthrough).
+This meant the singer's IEM path had to transit CamillaDSP regardless,
+adding two chunks of buffering latency even for passthrough channels.
 
-First, CamillaDSP adds exactly two chunks of latency: one for the capture
-buffer to fill, one for the playback buffer to drain. The FIR convolution
-itself completes within the same processing cycle -- it does not add an
-extra chunk. This is better than the three-chunk model that was initially
-assumed.
+With the current PipeWire-native architecture, the IEM channels bypass the
+convolver entirely via direct PipeWire links to the USBStreamer. The singer's
+IEM path is just one PipeWire quantum: about 5ms at quantum 256. The PA path
+through the convolver is also about 5.3ms -- the filter-chain convolver
+processes synchronously within the same PipeWire graph cycle, adding no
+additional buffering latency.
 
-Second, and more significantly, the architect discovered that CamillaDSP holds
-exclusive ALSA access to all eight channels of the USBStreamer. The original
-latency model assumed the singer's in-ear monitors could bypass CamillaDSP
-entirely -- audio from Reaper going directly to the IEM output channels
-through PipeWire. This turns out to be physically impossible. All eight
-channels, including the IEM channels, must transit through CamillaDSP.
+The result is dramatic. At quantum 256 (live mode), the PA path delay is
+approximately 5.3ms -- far below the ~25ms slapback threshold. The previous
+architecture required aggressive buffer tuning to achieve ~22ms; the new
+architecture achieves ~5.3ms at the same quantum. This was the primary
+motivation for the architecture change.
 
-This discovery changed the latency model. Both the IEM and PA paths transit
-CamillaDSP, so the slapback question becomes: how much later does the PA
-sound arrive compared to the IEM monitors? The IEM channels are passthrough
-(no FIR processing), while the PA channels carry the full convolution load
-plus acoustic propagation through the room. At chunksize 256, the PA-to-IEM
-delta is approximately 9 milliseconds -- close enough that the brain fuses
-the two into a single perception.
-
-The bone-to-electronic delay (bone conduction vs IEM monitors) is the more
-perceptible gap: projected at approximately 21 milliseconds at chunksize 256
-with PipeWire quantum 256 (the revised live mode target parameters (D-011),
-not yet measured at these exact settings). This is in the "noticeable separation" range but safe
-for musical performance. At the original chunksize 512 with PipeWire quantum 1024, the
-bone-to-electronic delay was approximately 31 milliseconds -- crossing into
-"distinct delayed return" territory that would impair the vocalist's timing.
-The CPU benchmarks had already shown that chunksize 256 with 16,384-tap FIR
-filters consumed only 19.25% of a CPU core -- well within budget.
-
-The IEM channels (7 and 8) are configured as passthrough in CamillaDSP: the
-signal passes through without any FIR processing, adding zero computational
-cost. In DJ mode, those channels are muted (there is no singer). In live mode,
-they carry the monitor mix from Reaper.
-
-Live mode now uses chunksize 256 + PipeWire quantum 256 (D-011), superseding
-the original chunksize 512 target (D-002). DJ mode remains at chunksize 2048
-with PipeWire quantum 1024.
+In DJ mode, PipeWire quantum 1024 gives approximately 21ms of PA path
+latency -- down from ~109ms in the previous architecture, which added ~88ms
+of ALSA Loopback bridge and CamillaDSP buffering. Live mode uses quantum 256
+(D-011) for the lowest latency.
 
 
 ## Cut-Only Correction: Why the Filters Never Boost
@@ -585,8 +554,8 @@ For example, if the main speakers arrive at 8.2ms and the subwoofers at
 - Subwoofers: delay = 0ms (reference, furthest)
 - Main speakers: delay = 14.0 - 8.2 = 5.8ms
 
-CamillaDSP applies these delays as sample-accurate offsets in its
-pipeline configuration.
+PipeWire's filter-chain convolver applies these delays as sample-accurate
+offsets configured in the convolver config file.
 
 ### Why Per-Speaker Delays
 
@@ -661,8 +630,9 @@ full-bandwidth signal including bass. Production configs using dirac
 placeholders MUST include IIR protection filters as a safety net until real
 FIR filters are measured and deployed. The config generator pipeline MUST
 enforce this: any speaker identity with `mandatory_hpf_hz` triggers an IIR
-Butterworth HPF in the CamillaDSP pipeline regardless of enclosure type.
-See D-031 for the formal decision and D-029 for the gain staging framework.
+Butterworth HPF in the PipeWire filter-chain pipeline regardless of enclosure
+type. See D-031 for the formal decision and D-029 for the gain staging
+framework.
 
 Three-way speaker support (separate drivers for bass, midrange, and treble)
 is deferred to Phase 2. A three-way configuration requires six speaker output
@@ -703,10 +673,11 @@ measurements look dramatically different from last time, something has changed
 and the operator should investigate -- but the archived data never drives the
 live system.
 
-The per-venue fresh measurement policy (D-008) means the filter WAV files in `/etc/camilladsp/coeffs/`
-are runtime-generated artifacts, never version-controlled. The measurement
-pipeline scripts and their parameters (calibration files, target curves,
-crossover settings) are the version-controlled source of truth.
+The per-venue fresh measurement policy (D-008) means the filter WAV files in
+`/etc/pi4audio/coeffs/` are runtime-generated artifacts, never
+version-controlled. The measurement pipeline scripts and their parameters
+(calibration files, target curves, crossover settings) are the
+version-controlled source of truth.
 
 
 ## Hardware Validation: Decisions Made Conditionally
@@ -723,17 +694,18 @@ as conditional on hardware validation (D-007). The test stories (US-001 for
 CPU benchmarks, US-002 for latency measurement, US-003 for stability) were
 prioritized before any room correction pipeline work began.
 
-The CPU and latency results validated the design with margin to spare:
+The CPU and latency results validated the design with margin to spare. The
+initial CamillaDSP benchmarks (US-001) showed 5.23% CPU at chunksize 2048 and
+19.25% at chunksize 256 -- already within budget. The subsequent architecture
+pivot to PipeWire's filter-chain convolver (D-040) improved these numbers
+dramatically:
 
-- 16,384-tap FIR at chunksize 2048: 5.23% CPU (target: under 30%) — benchmark config
-- 16,384-tap FIR at chunksize 256: 19.25% CPU (target: under 45%) — benchmark config
-- Production live config (8ch capture, 8-to-8 mixer): approximately 34% CPU
-- CamillaDSP latency: exactly 2 chunks (not 3 as initially feared)
+- PW convolver at quantum 1024 (DJ mode): 1.70% CPU (BM-2)
+- PW convolver at quantum 256 (live mode): 3.47% CPU (BM-2)
+- Full DJ session (GM-12): 58.5% system idle with Mixxx + convolver
+- PA path latency: ~21ms DJ, ~5.3ms live (vs ~109ms / ~22ms previously)
 
-Stability testing under sustained load (US-003) is in progress at the time of
-writing.
-
-The fallback paths (8,192 taps, chunksize 512) were never needed. But having
+The fallback paths (8,192 taps, higher quantum) were never needed. But having
 them defined in advance meant the project was never at risk of a dead end --
 there was always a viable next step if the primary configuration had failed.
 
@@ -786,21 +758,45 @@ means lower latency but higher CPU overhead from more frequent processing
 cycles. The system uses quantum 256 for live mode and quantum 1024 for DJ
 mode, switched by loading different PipeWire configuration files.
 
-A critical architectural detail: PipeWire is not in the DSP processing path.
-CamillaDSP talks directly to the USBStreamer's ALSA device, bypassing
-PipeWire for the actual audio output. PipeWire's role is routing audio from
-applications (Mixxx, Reaper) into CamillaDSP's capture device. This means
-PipeWire's latency contribution is limited to the input side of the chain;
-the output path is CamillaDSP-to-ALSA with no intermediary.
+A critical architectural detail: PipeWire is both the audio server AND the DSP
+engine. Its built-in filter-chain convolver handles all FIR processing (crossover
++ room correction) within the same audio graph, using FFTW3 with hand-optimized
+ARM NEON codelets for non-uniform partitioned convolution. The convolver processes
+synchronously within the graph cycle, adding no additional buffering latency.
+This single-graph architecture means PipeWire controls the entire signal path
+from application input through DSP processing to hardware output.
 
 
-### Why CamillaDSP
+### Why PipeWire's Filter-Chain Convolver (D-040)
 
-CamillaDSP is the real-time DSP engine -- the software that applies the FIR
-convolution, mixing, delay, and gain adjustments to every audio sample before
-it reaches the speakers.
+The system originally used [CamillaDSP](https://github.com/HEnquist/camilladsp)
+as an external DSP engine, connected to PipeWire via an ALSA Loopback bridge.
+CamillaDSP is an excellent tool -- it provides partitioned FFT convolution,
+multi-channel pipeline management, and a websocket API for runtime control.
+However, the ALSA Loopback bridge architecture imposed significant constraints:
 
-Several alternatives were considered:
+- **Latency overhead:** CamillaDSP's ALSA-native design requires two chunks of
+  internal buffering (capture fill + playback drain). In DJ mode at chunksize
+  2048, this added ~85ms of latency on top of the PipeWire quantum.
+- **Exclusive ALSA access:** CamillaDSP held exclusive access to all eight
+  USBStreamer channels. Monitor channels (headphones, IEM) had to transit
+  CamillaDSP as passthrough even though they needed no processing.
+- **Dual-graph complexity:** Two separate audio engines (PipeWire + CamillaDSP)
+  running at different priorities with an ALSA Loopback bridge between them,
+  requiring careful buffer coordination.
+- **FFT implementation gap:** CamillaDSP uses
+  [RustFFT](https://crates.io/crates/rustfft), which relies on LLVM
+  auto-vectorization for ARM NEON. PipeWire's convolver uses
+  [FFTW3](https://www.fftw.org/), which has hand-optimized ARM NEON codelets.
+
+[BM-2 benchmarks](../lab-notes/LN-BM2-pw-filter-chain-benchmark.md) quantified
+the difference: PipeWire's convolver is 3-5.6x more CPU-efficient than
+CamillaDSP at comparable buffer sizes (1.70% vs 5.23% at quantum/chunksize
+1024). The first successful PW-native DJ session
+([GM-12](../lab-notes/GM-12-dj-stability-pw-filter-chain.md)) ran 40+ minutes
+with zero xruns, 58% idle CPU, and 71C temperature.
+
+**Alternatives considered but not chosen:**
 
 **BruteFIR** is an older Linux FIR convolution engine with a solid reputation.
 It handles convolution well but lacks an integrated processing pipeline --
@@ -813,53 +809,27 @@ fewer) and no automation API. They cannot run the 16,384-tap combined filters
 this project requires, and integrating them into an automated measurement
 pipeline would require external control software that does not exist.
 
-**PipeWire filter chains** can apply FIR convolution within PipeWire itself,
-but their processing is quantum-aligned -- the convolution operates on
-PipeWire's buffer schedule, not its own. They also lack partitioned
-convolution (explained below), making long FIR filters impractical.
+### How Partitioned Convolution Works
 
-CamillaDSP was chosen because it combines several properties that no single
-alternative offers:
-
-**ALSA-native operation.** CamillaDSP opens the audio hardware directly via
-ALSA, with exclusive access to all eight USBStreamer channels. This eliminates
-one layer of buffering and gives CamillaDSP direct control over the hardware
-buffer timing.
-
-**Partitioned overlap-save FFT convolution.** This is the algorithm that makes
+Partitioned overlap-save FFT convolution is the algorithm that makes
 16,384-tap FIR filters feasible on a Raspberry Pi. Instead of multiplying
 each output sample by all 16,384 coefficients (which would require over 3
 billion multiply-accumulate operations per second for four channels at 48kHz),
-CamillaDSP converts the filter to the frequency domain using FFT (Fast
+the convolver converts the filter to the frequency domain using FFT (Fast
 Fourier Transform) and performs the convolution as element-wise multiplication.
-The "partitioned" part means it splits the long filter into segments that
-match the processing chunk size and overlaps them correctly -- this keeps
-latency low while still convolving against the full filter length. The
-O(N log N) scaling of FFT versus O(N x M) scaling of direct convolution gives
-roughly a 100x reduction in operations for a 16,384-tap filter. The measured
-19% CPU at chunksize 256 in the benchmark configuration (34% with full
-production 8-channel routing) represents approximately 750 million
-floating-point operations per second -- well within the Pi 4B's capability, though the
-Pi's ARM Cortex-A72 NEON vector unit is not fully exploited. CamillaDSP uses
-[RustFFT](https://crates.io/crates/rustfft), which relies on LLVM auto-vectorization to generate NEON instructions
-where the compiler finds opportunities, rather than hand-tuned NEON intrinsics.
-This means there is untapped performance headroom -- future FFT library
-improvements could reduce CPU consumption further without any changes to
-CamillaDSP itself.
+The "partitioned" part means it splits the long filter into segments and
+overlaps them correctly -- this keeps latency low while still convolving
+against the full filter length. The O(N log N) scaling of FFT versus O(N x M)
+scaling of direct convolution gives roughly a 100x reduction in operations
+for a 16,384-tap filter.
 
-**Multi-channel pipeline in one process.** All eight channels -- four speaker
-channels with FIR processing, two engineer headphone channels as passthrough,
-two singer IEM channels as passthrough -- are processed in a single CamillaDSP
-instance. The mixer, per-channel delay, gain trim, and convolution are all
-defined in one YAML configuration file. No external routing or glue scripts.
-
-**Websocket API.** CamillaDSP exposes a websocket interface for runtime
-monitoring and configuration changes. The Python library [`pycamilladsp`](https://github.com/HEnquist/pycamilladsp)
-provides programmatic access to load new configurations, query processing
-statistics (including the CPU usage figures cited throughout this document),
-and hot-swap filter coefficients. This is essential for the automated
-measurement pipeline, which needs to deploy new filters and verify they loaded
-correctly without manual intervention.
+PipeWire's filter-chain convolver uses FFTW3's single-precision library
+(`libfftw3f`) with hand-tuned ARM NEON SIMD codelets. At quantum 1024 (DJ
+mode), the convolver uses 1.70% of one CPU core for four channels of 16,384-tap
+FIR. At quantum 256 (live mode), it uses 3.47%. These numbers represent the
+convolver process in isolation; the full PipeWire daemon under real DJ workload
+uses about 42% of one core including graph scheduling, JACK bridge, and device
+I/O ([GM-12](../lab-notes/GM-12-dj-stability-pw-filter-chain.md)).
 
 
 ### Real-Time Configuration: What We Do and What We Skip
@@ -878,17 +848,17 @@ this is unacceptable -- a 5ms pause while the kernel runs a background task
 means a missed audio deadline. FIFO (First In, First Out) scheduling at high
 priority tells the kernel: this process runs until it voluntarily yields, and
 it preempts anything with lower priority. RTKit (the Real-Time Kit daemon)
-grants PipeWire and CamillaDSP these elevated priorities without requiring
-them to run as root. The priority range 83-88 is high enough to preempt all
-normal processes but below the kernel's own real-time threads (priority 99),
-which must not be starved.
+grants PipeWire these elevated priorities without requiring it to run as root.
+The priority range 83-88 is high enough to preempt all normal processes but
+below the kernel's own real-time threads (priority 99), which must not be
+starved.
 
-**Per-mode quantum and chunksize.** DJ mode runs PipeWire at quantum 1024 and
-CamillaDSP at chunksize 2048 -- large buffers that give the system ample time
-to process each chunk. Live mode drops to quantum 256 and chunksize 256 for
-lower latency, accepting higher CPU overhead from more frequent processing
-cycles. Switching between modes loads a different PipeWire configuration and
-a different CamillaDSP YAML file.
+**Per-mode quantum.** DJ mode runs PipeWire at quantum 1024 -- large buffers
+that give the system ample time to process each cycle. Live mode drops to
+quantum 256 for lower latency, accepting higher CPU overhead from more frequent
+processing cycles. The quantum is the single latency-controlling parameter;
+the filter-chain convolver processes within the same graph cycle. Switching
+between modes is done at runtime via `pw-metadata`.
 
 **Memory locking (memlock).** Audio buffers must stay in physical RAM, never
 swapped to the SD card. Swapping introduces milliseconds of latency that
@@ -958,10 +928,10 @@ This is a **hard real-time** system with **human safety implications**.
 
 The system drives amplifiers capable of producing SPL levels that can cause
 permanent hearing damage. While a single buffer underrun produces only a brief
-discontinuity (CamillaDSP outputs silence during underruns), the broader
-failure analysis encompasses software crashes, malformed filters, gain
-structure errors, and driver bugs -- any of which can produce sustained
-dangerous acoustic output. The system addresses this through a PREEMPT_RT
+discontinuity (PipeWire outputs silence during underruns), the broader failure
+analysis encompasses software crashes, malformed filters, gain structure
+errors, and driver bugs -- any of which can produce sustained dangerous
+acoustic output. The system addresses this through a PREEMPT_RT
 kernel (D-013) that guarantees scheduling determinism, combined with a
 calibrated gain structure procedure that limits the maximum acoustic output
 to safe levels. A hardware limiter between the audio output and the amplifiers
@@ -972,17 +942,14 @@ Professional digital mixing consoles (Yamaha CL/QL, Allen & Heath dLive,
 DiGiCo SD) all operate under the same hard real-time model -- zero missed
 deadlines is the operational target, not a stretch goal.
 
-The processing budget at chunksize 256 and 48kHz is 5.33 milliseconds per
-chunk. CamillaDSP must finish processing all eight channels -- four FIR
-convolutions, four passthrough copies, mixing, delay, and gain -- within that
-window. At production load (8-channel capture, 8-to-8 mixer), CamillaDSP uses
-approximately 34% of the budget, leaving approximately 66% as headroom --
-validated stable with zero xruns in 30-minute sustained testing (US-003 T3b).
-
-(Note: the T3b stability test used the benchmark configuration with 2-channel
-capture, where the median was 18.38% and the P99 was 59.95%. The production
-8-channel configuration raises the median to approximately 34%. A
-production-configuration stability retest is planned.)
+The processing budget at quantum 256 and 48kHz is 5.33 milliseconds per graph
+cycle. PipeWire must finish the entire graph -- convolver FIR processing on
+four speaker channels, link routing, and device I/O -- within that window. The
+PW filter-chain convolver uses 3.47% of one CPU core at quantum 256
+([BM-2](../lab-notes/LN-BM2-pw-filter-chain-benchmark.md)). The first DJ
+session on the new architecture
+([GM-12](../lab-notes/GM-12-dj-stability-pw-filter-chain.md)) showed 58.5%
+system idle at quantum 1024 with Mixxx running -- substantial headroom.
 
 The threats to real-time performance, ranked by likelihood:
 
@@ -1018,8 +985,8 @@ The threats to real-time performance, ranked by likelihood:
 
 None of these threats are unique to this project. Every Linux audio system
 faces them. The difference is headroom: a system running at 90% CPU has no
-margin for any of these events, while a system at 34% can absorb all of them
-simultaneously without missing a deadline.
+margin for any of these events, while a system with 58% idle (GM-12) can
+absorb all of them simultaneously without missing a deadline.
 
 
 ---

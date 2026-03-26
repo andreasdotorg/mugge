@@ -569,7 +569,7 @@ pipewire.service
 |-------|---------|---------|----------------|
 | 1 | `pipewire.service` | Audio server, graph clock, filter-chain convolver | Port appears |
 | 2 | `wireplumber.service` | Device management: ALSA enumeration, format negotiation, port activation (D-043) | Adapter nodes have ports |
-| 3 | `pi4audio-graph-manager.service` | Sole link manager: reconciler creates/destroys links per mode | RPC listening on port 4002 |
+| 3 | `pi4audio-graph-manager.service` | Sole link manager: reconciler creates/destroys links per mode ([architecture](graph-manager.md)) | RPC listening on port 4002 |
 | 4 | `mixxx.service` / `pi4audio-signal-gen.service` | Audio application (mode-dependent) | JACK ports registered |
 
 **Key dependencies:**
