@@ -114,7 +114,7 @@ impl RingBuffer {
     /// `samples` contains `n_frames * channels` interleaved floats.
     /// `clock` carries the PipeWire graph clock for this chunk.
     pub fn write_interleaved(&self, samples: &[f32], channels: usize, clock: GraphClock) {
-        debug_assert_eq!(channels, self.channels);
+        assert_eq!(channels, self.channels);
         let n_frames = samples.len() / channels;
         if n_frames == 0 {
             return;

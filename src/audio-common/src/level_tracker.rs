@@ -174,7 +174,7 @@ impl LevelTracker {
     /// `clock` carries the PipeWire graph clock for this quantum. Pass
     /// `GraphClock::default()` if clock data is unavailable (sentinel 0,0).
     pub fn process(&self, samples: &[f32], channels: usize, clock: GraphClock) {
-        debug_assert_eq!(channels, self.channels);
+        assert_eq!(channels, self.channels);
         let n_frames = samples.len() / channels;
         if n_frames == 0 {
             return;
