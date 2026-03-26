@@ -119,7 +119,7 @@ impl RingBuffer {
         if n_frames == 0 {
             return;
         }
-        debug_assert!(
+        assert!(
             n_frames <= self.capacity,
             "write_interleaved: n_frames ({}) exceeds capacity ({})",
             n_frames, self.capacity,
