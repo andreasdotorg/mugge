@@ -66,8 +66,8 @@
 
     var prevGraphPos = 0;
     var prevGraphNsec = 0;
-    // Monotonic audio clock (ms) — seeded from wall clock, then advanced
-    // exclusively by PW nsec deltas once the graph clock arrives (D-044).
+    // Monotonic audio clock (ms) — seeded once from performance.now(),
+    // then advanced exclusively by PW graph clock nsec deltas (D-044).
     var audioClockMs = performance.now();
 
     // -- Measurement state tracking --

@@ -94,10 +94,9 @@
     var prevGraphPos = 0;
     // Graph clock nsec: use PW clock deltas for peak hold/decay timing
     var prevGraphNsec = 0;
-    // Monotonic audio clock (ms) — seeded from wall clock, then advanced
-    // exclusively by PW nsec deltas once the graph clock arrives (D-044).
-    // Seeding avoids a dead zone where audioClockMs=0 breaks peak hold
-    // and PPM ballistics until the first two valid nsec messages arrive.
+    // Monotonic audio clock (ms) — seeded once from performance.now(),
+    // then advanced exclusively by PW graph clock nsec deltas (D-044).
+    // The seed is a single value (not a clock), owner-approved 2026-03-25.
     var audioClockMs = performance.now();
 
     // Per-channel last-signal-time tracking for dim logic
