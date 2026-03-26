@@ -37,7 +37,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | Team configuration | current | 10 core members, consultation matrix with 14 project-specific rules |
 | Orchestration protocol | current | Self-contained copy in `.claude/team/protocol/` |
 | Role prompts | current | All role files in `.claude/team/roles/` |
-| User stories | active | 68 stories (US-000 through US-065 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039-043): driver database. US-044: bypass protection. US-045-049: measurement safety + Path A + visualization (owner planning brief 2026-03-13). US-050: measurement mock backend / E2E test harness (owner directive 2026-03-14, scope expanded 2026-03-15). **Tier 9 (US-051-053): observable tooling (owner strategic pivot 2026-03-15).** US-051: persistent status bar. US-052: RT signal generator (Rust). US-053: manual test tool page. **Tier 10 (US-054-055): ADA8200 mic input for measurements (AE calibration transfer assessment 2026-03-15).** US-054: ADA8200 mic channel selection. US-055: calibration transfer from UMIK-1 to ADA8200 mic. **Tier 11 (US-056-061): architecture evolution (owner directive 2026-03-16, D-040 pivot).** US-056: CANCELLED (D-040). US-057: CANCELLED (D-040). US-058: DONE (BM-2 PASS: 1.70% CPU, triggered D-040 abandon CamillaDSP). US-059: GraphManager Core + Production Filter-Chain, Phase A (D-039+D-040, selected). US-060: PipeWire Monitoring Replacement, Phase B (draft, depends US-059). US-061: Measurement Pipeline Adaptation, Phase C (draft, depends US-059). US-011b and US-012 amended with power budget validation and automated gain calibration. US-047/048/049 implementation gated on UX design validation (TK-160 -> TK-161 -> TK-162). **US-063: PW Metadata Collector (pw-top replacement, satisfies US-060 AC #2/#3/#7, selected 2026-03-21).** **US-064: PW Graph Visualization Tab (supersedes US-038, draft 2026-03-21).** **US-065: Configuration Tab — Gain, Quantum, Filter Info (selected 2026-03-21, worker-1 assigned).** **US-075: Local PipeWire Integration Test Environment — Production Replica (selected 2026-03-23, amended for production-fidelity node names + managed mode + swappable coefficients, depends US-059 DONE, blocks US-050 Tier 2 + US-067).** **US-077: Single-Clock Timestamp Architecture — PW graph clock propagation through pcm-bridge/web-ui data paths (draft 2026-03-24, depends US-075, 4 phases independently deployable).** **US-078: Project Rename — pi4-audio-workstation to mugge (draft 2026-03-24, depends US-077 complete, ~574 occurrences across ~116 files, D-045).** **US-079: Pre-Convolver Capture Point — pcm-bridge taps full-range input for room correction (draft 2026-03-25, depends F-098 + US-075, blocks US-080).** **US-080: Multi-Point Spectrum Analyzer — selectable signal chain tap points with L-R overlay (draft 2026-03-25, depends US-079).** **US-081: Peak + RMS Level Meters with Latching Clip Indicator — UI work, LevelTracker already computes both (draft 2026-03-25, owner approved AE recommendation, depends US-077).** **US-082: Audio File Playback in signal-gen — MP3/WAV/FLAC, play_file RPC, D-009 level cap (draft 2026-03-25, owner request, depends US-052).** **US-083: Integration Smoke Tests Against Local-Demo Stack — real data pipeline testing (draft 2026-03-25, QE recommendation, HIGH priority, depends US-075).** |
+| User stories | active | 68 stories (US-000 through US-065 incl. US-000a, US-000b, US-011b, US-027a, US-027b) in `docs/project/user-stories.md`. Tier 5 (US-039-043): driver database. US-044: bypass protection. US-045-049: measurement safety + Path A + visualization (owner planning brief 2026-03-13). US-050: measurement mock backend / E2E test harness (owner directive 2026-03-14, scope expanded 2026-03-15). **Tier 9 (US-051-053): observable tooling (owner strategic pivot 2026-03-15).** US-051: persistent status bar. US-052: RT signal generator (Rust). US-053: manual test tool page. **Tier 10 (US-054-055): ADA8200 mic input for measurements (AE calibration transfer assessment 2026-03-15).** US-054: ADA8200 mic channel selection. US-055: calibration transfer from UMIK-1 to ADA8200 mic. **Tier 11 (US-056-061): architecture evolution (owner directive 2026-03-16, D-040 pivot).** US-056: CANCELLED (D-040). US-057: CANCELLED (D-040). US-058: DONE (BM-2 PASS: 1.70% CPU, triggered D-040 abandon CamillaDSP). US-059: GraphManager Core + Production Filter-Chain, Phase A (D-039+D-040, selected). US-060: PipeWire Monitoring Replacement, Phase B (draft, depends US-059). US-061: Measurement Pipeline Adaptation, Phase C (draft, depends US-059). US-011b and US-012 amended with power budget validation and automated gain calibration. US-047/048/049 implementation gated on UX design validation (TK-160 -> TK-161 -> TK-162). **US-063: PW Metadata Collector (pw-top replacement, satisfies US-060 AC #2/#3/#7, selected 2026-03-21).** **US-064: PW Graph Visualization Tab (supersedes US-038, draft 2026-03-21).** **US-065: Configuration Tab — Gain, Quantum, Filter Info (selected 2026-03-21, worker-1 assigned).** **US-075: Local PipeWire Integration Test Environment — Production Replica (selected 2026-03-23, amended for production-fidelity node names + managed mode + swappable coefficients, depends US-059 DONE, blocks US-050 Tier 2 + US-067).** **US-077: Single-Clock Timestamp Architecture — PW graph clock propagation through pcm-bridge/web-ui data paths (draft 2026-03-24, depends US-075, 4 phases independently deployable).** **US-078: Project Rename — mugge (draft 2026-03-24, depends US-077 complete, ~574 occurrences across ~116 files, D-045).** **US-079: Pre-Convolver Capture Point — pcm-bridge taps full-range input for room correction (draft 2026-03-25, depends F-098 + US-075, blocks US-080).** **US-080: Multi-Point Spectrum Analyzer — selectable signal chain tap points with L-R overlay (draft 2026-03-25, depends US-079).** **US-081: Peak + RMS Level Meters with Latching Clip Indicator — UI work, LevelTracker already computes both (draft 2026-03-25, owner approved AE recommendation, depends US-077).** **US-082: Audio File Playback in signal-gen — MP3/WAV/FLAC, play_file RPC, D-009 level cap (draft 2026-03-25, owner request, depends US-052).** **US-083: Integration Smoke Tests Against Local-Demo Stack — real data pipeline testing (draft 2026-03-25, QE recommendation, HIGH priority, depends US-075).** |
 | PW filter-chain config | deployed | `30-filter-chain-convolver.conf` on Pi. 4ch FIR convolver + gain nodes. CamillaDSP configs are historical (service stopped, D-040). |
 | US-002 latency measurement | done | Pass 1 + Pass 2 complete. CamillaDSP = 2 chunks latency. PipeWire ~21ms/traversal @ quantum 1024. ALSA-direct T2b=30.3ms. D-011 approved. |
 | Room correction pipeline | done (TK-071) | `src/room-correction/` — 13 modules (sweep, deconvolution, correction, crossover, combine, export, verify), mock room simulator, CLI runner, spatial averaging. Bose FIR generator (`generate_bose_filters.py`). All verification tests pass (D-009 compliant). |
@@ -179,6 +179,60 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 **US-084 progress:** AC advanced to ~7/13. Web UI wiring done, local-demo 3 instances done, signal-gen mono done, local-demo verification PASSED. Remaining: Pi deployment (T-084-9), Pi self-link verification (T-084-11). Systemd template (T-084-8) awaiting worker-3 diff confirmation.
 
 **Memory safety audit (worker-3):** F-117, F-118, F-119 filed from audit findings. F-117 mitigated, F-118 resolved. F-119 (LOW, RingBuffer UnsafeCell) remains open. Positive: zero transmute/mem::forget/get_unchecked across codebase, all FFI null-checked, safety-critical code is pure safe Rust.
+
+**Owner live testing (2026-03-26) — 10 defects filed (F-122 through F-131):**
+- **F-122** (Medium): Dashboard meter colors — **RESOLVED** (`5de1e2c`)
+- **F-123** (HIGH): Peak hold decay — **RESOLVED** (`239860b`)
+- **F-124** (HIGH): Phantom levels A3/A4 — **RESOLVED** (`b032dd2`)
+- **F-125** (HIGH): HP ch5/6 invisible — **RESOLVED** (`b032dd2`, same fix as F-124)
+- **F-126** (Medium): Numeric dB flicker — **RESOLVED** (`239860b`)
+- **F-127** (Medium): CPU 75% — **OPEN** (investigation needed)
+- **F-128** (HIGH): Spectrum gone — **RESOLVED** (`915ba9b`, gap detection threshold)
+- **F-129** (Medium): Clip ack propagation — **RESOLVED** (`239860b`)
+- **F-130** (Medium): HP port mapping — **RESOLVED** (`68947e0`)
+- **F-131** (HIGH): Spectrum post-gain tap — **OPEN** (pcm-bridge taps convolver output at -100 dBFS, needs routing to app output ports)
+
+**Commits:** `5de1e2c` (F-122), `239860b` (F-123+F-126+F-129), `b032dd2` (F-124+F-125), `68947e0` (F-130), `915ba9b` (F-128).
+
+**Remaining open from live testing round 1:** F-127 (CPU, Medium) and F-131 (spectrum tap, HIGH).
+
+**Owner live testing round 2 — 9 items filed (F-132 through F-139 + ENH-004):**
+- **F-132** (Medium): Spectrum floor DB_MIN -90 clips — owner wants -120 dB
+- **F-133** (Medium): Spectrum auto-scaling too hectic — should snap to grid lines (D-048 refinement)
+- **F-134** (HIGH): Spectrum and meters freeze intermittently — likely CPU congestion (related F-127)
+- **F-135** (Medium): Status bar mini meters show peak instead of RMS (D-047 violation)
+- **F-136** (HIGH): DSP status bar shows wrong data — 4 sub-issues (idle/0 links, Deg after quantum change, grey clip, xrun always 0)
+- **F-137** (Medium): Config tab doesn't pre-select current quantum
+- **ENH-004** (Low): Channel gain text input fields
+- **F-138** (Medium): Mini meter default colors ambiguous with warning yellow
+- **F-139** (Low): Mode label orange doesn't match L2 Soft Lilac palette
+
+- **F-140** (HIGH): Test tone generation broken — signal-gen not producing output (blocks measurement workflow)
+
+- **F-141** (HIGH): Quantum 2048 doesn't work — possible ALSA buffer mismatch with USBStreamer
+
+**US-085 filed (draft):** GM-Managed Lifecycle for Signal-Chain Services (D-050). 4-phase plan: (1) level-bridge link management, (2) signal-gen + pcm-bridge lifecycle, (3) quantum management, (4) application lifecycle. Resolves architectural root cause of F-140 and D-049 self-linking conflict. Current systemd service files are band-aid.
+
+**Open defect summary after round 2:** HIGH: ~~F-131~~ RESOLVED, F-134, F-136, F-140, **F-141**. Medium: F-127, F-132, F-133, F-135, F-137, F-138. Low: F-139, ENH-004, F-119, F-068, ENH-002, ENH-003. Owner wants to review priorities together.
+
+**Owner verification round 3 (post-burn-down):**
+- CONFIRMED GOOD: F-132 (DB_MIN floor), F-135 (mini meter RMS), F-127 (pw-dump storm mitigated), F-139 (mode label color)
+- REGRESSED: **F-133** escalated to HIGH — auto-scaling completely broken (flat line, no range adaptation)
+- NOT FIXED: **F-138** — group colors still not applied (bars remain green/yellow, not per-group)
+- STILL BROKEN: **F-140** — test tone non-functional despite fix attempt
+- NEW: **F-143** (HIGH) — Spectrum frequency skew: higher frequencies show progressively lower energy even with single-frequency test tones. Possible missing log-frequency bin width compensation or 1/N FFT normalization issue.
+
+**Updated open defect summary (post verification round 4):** HIGH: F-134, F-136, F-141, **F-145** (spectrum spikes). Medium: F-137, F-138 (color rework needed), F-144. Low: F-139, ENH-004, F-119, F-068, ENH-002, ENH-003. Resolved this session: F-122-F-126, F-128-F-133, F-135, F-127, F-139, F-140, **F-143**.
+
+**Owner verification round 4:**
+- CONFIRMED: F-133 (auto-scaling good), F-143 (frequency skew fixed), F-138 (colors applied)
+- F-138 STILL OPEN: owner wants green/amber group colors replaced -- too confusing with warning thresholds. UX to propose alternatives.
+- NEW: **F-145** (HIGH) -- spectrum shows regular spikes, possible quantization/aliasing artifact in log-frequency bin mapping.
+
+**F-140 RESOLVED (2026-03-26):** Root cause: systemd service `--channels 8` instead of `--channels 1` (F-097 mono). Secondary: mono bitmask normalization in `main.rs`.
+**F-144 filed (Medium):** Test tool page doesn't auto-switch to measurement mode -- signal-gen has no links outside measurement mode. UX/workflow issue.
+
+**US-078 Phase C queued (repo rename):** Owner will rename GitHub repo to `mugge`. Touches: GitHub repo name (owner action or API), local remote URLs (dev machine + Pi), hardcoded repo paths in docs/configs. Scheduled AFTER current deploy batch lands. Tracked under US-078 (already covers code rename in Phase B; repo rename is a new Phase C or folded into Phase B execution).
 
 ### Session Progress (2026-03-25)
 

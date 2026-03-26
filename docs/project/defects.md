@@ -2817,13 +2817,13 @@ broadcast.
 
 **Description:** The web-UI systemd service on Pi serves from a separate deployment
 directory (`/home/ela/web-ui/`), but `git pull` only updates the git repo at
-`/home/ela/pi4-audio-workstation/src/web-ui/`. This means `git pull` alone does
+`/home/ela/mugge/src/web-ui/`. This means `git pull` alone does
 NOT update the running web UI. Every past web-UI deploy that only did
 `git pull + service restart` may have served stale code.
 
 **Evidence (S-020):**
 - Deployment `~/web-ui/static/js/config.js`: 300 lines, no `currentSampleRate` (F-074 missing)
-- Git repo `~/pi4-audio-workstation/src/web-ui/static/js/config.js`: 305 lines, has `currentSampleRate`
+- Git repo `~/mugge/src/web-ui/static/js/config.js`: 305 lines, has `currentSampleRate`
 - Deployment `~/web-ui/static/js/test.js`: 9 `Math.min` occurrences (F-076 missing)
 - Git repo: 11 `Math.min` occurrences
 - Some Python files in `~/web-ui/app/` were partially updated (timestamps 18:05-18:09)
@@ -2838,7 +2838,7 @@ Requires CM CHANGE session.
 **Long-term fix options:**
 1. Change systemd service unit to serve directly from the git repo path
 2. Add an explicit deploy script that copies from repo to deployment dir
-3. Use a symlink from `~/web-ui/` to `~/pi4-audio-workstation/src/web-ui/`
+3. Use a symlink from `~/web-ui/` to `~/mugge/src/web-ui/`
 
 **Related:** All Rust binaries have the same pattern — `~/bin/pcm-bridge`,
 `~/bin/graph-manager`, `~/bin/signal-gen` are separate from the git repo and
@@ -4289,3 +4289,843 @@ preflight cleanup to `local-demo.sh`.
 **Status:** RESOLVED (2026-03-26). Chromium headless_shell crashes on `<select>` element interaction on aarch64. Fix applied, 202/203 E2E tests pass.
 **Affects:** E2E test suite (Playwright + Chromium headless)
 **Found by:** worker-1 (T-084-13 E2E investigation)
+
+---
+
+## F-122: Dashboard meters lack color threshold indicators
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** RESOLVED (2026-03-26, commit `5de1e2c`). PPM color thresholds added to dashboard meters.
+**Affects:** Web UI dashboard level meters (`dashboard.js`, `statusbar.js`)
+**Found by:** Owner (live testing 2026-03-26)
+
+### Description
+
+The mini meters in the status bar turn yellow at high levels, but the main
+dashboard meters are white-only with no visual threshold indication. The
+large meters should match the status bar behavior or follow the D-047 PPM
+spec (clip indicator at 0 dBFS, warning color at -6 dBFS or similar
+threshold).
+
+This reduces at-a-glance readability of the dashboard — the operator cannot
+quickly identify channels approaching clip without reading numeric values.
+
+### Recommended Fix
+
+Add color thresholds to the dashboard meter bars matching the status bar
+implementation: green (normal), yellow (warning, e.g., -12 to -6 dBFS),
+red (clip, 0 dBFS). Align with D-047 PPM IEC 60268-18 spec.
+
+---
+
+## F-123: Peak hold line decays to bottom while audio is playing
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** RESOLVED (2026-03-26, commit `239860b`). Peak hold decay logic corrected.
+**Affects:** Web UI dashboard level meters (peak hold logic)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** F-112 (previous peak hold fix, `9a8bae2`)
+
+### Description
+
+The thin peak hold line on main dashboard meters decays all the way back to
+the bottom while audio is actively playing. This defeats the purpose of
+peak hold — it should hold at the recent peak and decay slowly toward the
+current level, not drop to silence while there is signal.
+
+This may be a regression or incomplete fix from F-112. Possible causes:
+- Peak hold reset logic too aggressive (resetting on every frame instead of
+  holding for a minimum duration)
+- Peak hold timer or decay rate miscalculated
+- Peak hold floor not clamped to current RMS/peak level
+
+### Recommended Fix
+
+Review the peak hold implementation against D-047 PPM spec. Peak hold
+should: (1) capture the highest recent peak, (2) hold at that level for a
+configurable duration (e.g., 1-2 seconds), (3) decay slowly (20 dB/s per
+F-112) toward the current signal level — NOT toward silence. The floor of
+the peak hold line should be the current instantaneous peak, not -infinity.
+
+---
+
+## F-124: Phantom levels on A3/A4 (app-to-conv) channels
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** RESOLVED (2026-03-26, commit `b032dd2`). level-bridge-sw routing changed to tap app output ports.
+**Affects:** level-bridge-sw channel mapping / GM routing table / Web UI meter labels
+**Found by:** Owner (live testing 2026-03-26)
+
+### Description
+
+Owner sees levels on the first two app→conv channels (A3, A4) that they
+are NOT sending. Owner is sending headphone output to channels 5/6 only.
+This suggests either:
+
+1. Wrong channel mapping in level-bridge-sw — the 8 capture channels are
+   mapped to incorrect meter labels
+2. GM routing table mismatch — level-bridge-sw is tapping ports that carry
+   signal the owner didn't intend
+3. Mixxx is sending signal to unexpected ports (auto-linking by WirePlumber
+   or leftover links)
+
+### Recommended Fix
+
+Investigate with `pw-link -l` to determine what ports level-bridge-sw is
+actually capturing from, and verify the channel-to-meter-label mapping in
+the web UI. Cross-reference with the GM routing table for the current mode.
+
+---
+
+## F-125: Headphone channels 5/6 not visible in any meter group
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** RESOLVED (2026-03-26, commit `b032dd2`). Same fix as F-124 — app output tap exposes all routed channels.
+**Affects:** level-bridge-hw-out / Web UI meter mapping
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** F-124 (phantom levels on wrong channels)
+
+### Description
+
+Owner is sending headphone output to channels 5/6 but sees no
+corresponding levels in either the app→conv or conv→out meter groups.
+
+The headphone path (Mixxx → USBStreamer ch5/6) is a direct link that
+bypasses the convolver entirely, so it would NOT appear in level-bridge-sw
+(which taps convolver monitor ports). However, it SHOULD appear in
+level-bridge-hw-out (which taps USBStreamer sink monitor ports AUX0-AUX7).
+
+Possible causes:
+- level-bridge-hw-out not running or not connected on Pi
+- Web UI not displaying hw-out data for channels 5/6
+- USBStreamer monitor ports not exposing the headphone signal
+
+### Recommended Fix
+
+Verify level-bridge-hw-out is running on Pi (`systemctl --user status
+level-bridge-hw-out`). Check that it captures USBStreamer monitor ports
+including AUX4/AUX5 (ch5/6). Verify web UI maps hw-out channels to the
+correct conv→out meter labels (EL, ER for engineer headphone L/R).
+
+---
+
+## F-126: Numeric dB values below meters update too fast — unreadable
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** RESOLVED (2026-03-26, commit `239860b`). Numeric readout rate-limited.
+**Affects:** Web UI dashboard level meters (numeric display)
+**Found by:** Owner (live testing 2026-03-26)
+
+### Description
+
+The numeric dB values displayed below each meter bar update at the full
+30 Hz sample rate. Numbers changing 30 times per second are unreadable to
+the human eye. The values flicker constantly, making it impossible to read
+the actual level.
+
+### Recommended Fix
+
+Rate-limit the numeric display update to ~4-5 Hz (every ~200-250ms), or
+implement a hold-and-update strategy: display the peak value from the last
+update interval, hold for a readable duration, then update. This is
+standard practice in professional metering — the bar moves in real time but
+the numeric readout updates at a human-readable rate.
+
+---
+
+## F-127: CPU load 75% — significantly higher than previous sessions
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** OPEN — root cause identified (2026-03-26, worker-1 diagnostics)
+**Affects:** Overall system performance on Pi
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** GM-12 session (58% idle), US-084 (3 level-bridge instances), F-134 (freezes)
+
+### Description
+
+Owner reports 75% CPU load during live testing. The previous GM-12 DJ
+session achieved 58% idle (~42% load).
+
+### Root Cause (worker-1 diagnostics, 2026-03-26)
+
+**pw-dump subprocess storm.** Three compounding issues:
+
+1. **GM graph info timer** spawns `pw-dump` + `pw-metadata` subprocesses
+   every 1 second
+2. **Web UI graph topology endpoint** spawns `pw-dump` on every request,
+   polled by `graph.js` at 2 Hz (every 500ms)
+3. **3 level-bridge instances** add ~15% CPU (expected, additive with
+   8ch × quantum-rate processing)
+
+Result: 128+ PipeWire client connect/disconnect events per minute,
+journald flooded with registry messages, uvicorn at 39% CPU. The
+subprocess storm is the dominant cost — not the level-bridge instances
+themselves.
+
+This also explains F-134 (intermittent freezes): the subprocess storm
+creates CPU pressure spikes that cause WebSocket frame drops.
+
+### Recommended Fix
+
+**Quick mitigations (immediate):**
+- Reduce GM graph info timer: 1s → 5s
+- Reduce `graph.js` poll interval: 2s (500ms) → 5s
+- Cache `pw-dump` output in uvicorn with TTL (serve cached result for
+  repeated requests within the TTL window)
+
+**Architectural fix (medium-term):**
+- Extend GM RPC to serve topology data directly (graph nodes, links,
+  properties) — eliminate `pw-dump` subprocess from web UI entirely.
+  GM already has the PW registry in memory. This is partially covered
+  by US-064 Phase 2 (backend topology API) but needs to replace the
+  `pw-dump` path completely.
+
+---
+
+## F-128: Spectrum display completely gone
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** RESOLVED (2026-03-26). Root cause: gap detection threshold too aggressive. Fix deployed to Pi. Spectrum now connects and receives data. Residual issue: spectrum shows empty grid due to post-gain tap point — see F-131.
+**Affects:** Web UI dashboard spectrum analyzer / pcm-bridge
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** D-049 (level-bridge/pcm-bridge split), US-084
+
+### Description
+
+No spectrum is visible at all on the dashboard. This may be related to the
+D-049 pcm-bridge changes (stripped of level data, now PCM-only and
+on-demand) or a web UI connection issue.
+
+Possible causes:
+1. pcm-bridge is not running on Pi (it's now on-demand, GM-managed — may
+   not have been started)
+2. Web UI is trying to connect to pcm-bridge on the old port or with the
+   old protocol
+3. The pcm-bridge PCM wire format changed (v2 header from US-077) and the
+   web UI FFT pipeline expects the old format
+4. pcm-bridge was stripped of its auto-start behavior during US-084 and
+   needs explicit activation
+
+### Recommended Fix
+
+Check if pcm-bridge is running on Pi. Verify the web UI spectrum code
+connects to the correct port and handles the current wire format. If
+pcm-bridge is not running, determine whether it needs manual start or
+whether the web UI should handle "no spectrum source" gracefully (show
+"no data" instead of blank).
+
+---
+
+## F-129: Status bar mini meter clip indicator doesn't clear on acknowledge
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** RESOLVED (2026-03-26, commit `239860b`). Clip acknowledge event propagated to status bar.
+**Affects:** Web UI status bar mini meters (`statusbar.js`)
+**Found by:** Owner (live testing 2026-03-26), reported via worker-3
+**Related:** D-047 (PPM spec, latching clip at 0 dBFS)
+
+### Description
+
+The dashboard clip indicator works correctly — it is sticky (latching) and
+clears when the user acknowledges it. However, the corresponding mini meter
+in the status bar retains its clip state after the dashboard acknowledge
+action. The clip-clear event does not propagate from the dashboard to the
+status bar meters.
+
+This is a UX inconsistency: the operator clears the clip warning on the
+dashboard but the status bar continues to show a clip condition, creating
+confusion about whether the clip was actually acknowledged.
+
+### Recommended Fix
+
+Propagate the clip acknowledge event to the status bar mini meters. Either:
+(a) share a common clip state between dashboard meters and status bar meters
+so a single acknowledge clears both, or (b) dispatch a custom event from the
+dashboard acknowledge handler that the status bar listens for.
+
+---
+
+## F-130: Headphone port mapping incorrect in level-bridge-hw-out
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** RESOLVED (2026-03-26, commit `68947e0`). HP port mapping corrected.
+**Affects:** level-bridge-hw-out / Web UI meter channel labels
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** F-125 (HP channels invisible)
+
+### Description
+
+Headphone port mapping in level-bridge-hw-out did not match the physical
+USBStreamer channel assignment. Engineer headphone L/R (channels 5/6) were
+mapped to incorrect meter labels or not mapped at all.
+
+### Fix
+
+Corrected the port mapping in level-bridge-hw-out to match the channel
+assignment table (USBStreamer ch5=Engineer HP L, ch6=Engineer HP R).
+
+---
+
+## F-131: Dashboard spectrum taps post-gain convolver output — signal below display floor
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** RESOLVED (2026-03-26, commits `1f2d9ec` + `f842740`, deployed S-013). Spectrum now taps app output ports. Display floor at -90 dB (F-132 tracks extension to -120 dB).
+**Affects:** GraphManager routing table / pcm-bridge tap point / Web UI spectrum
+**Found by:** worker-2 (Playwright diagnostics on Pi, 2026-03-26)
+**Related:** F-128 (spectrum gone — connection issue, RESOLVED), D-049, US-084
+
+### Description
+
+Dashboard spectrum shows empty grid (no visible bars) even when audio is
+playing and level meters confirm signal on APP→CONV and CONV→OUT channels.
+
+**Root cause:** pcm-bridge (port 9090) is linked by GM to convolver output
+ports (`output_AUX0..3`). These are post-gain — the convolver's `linear`
+Mult gain nodes attenuate mains to -60 dB (Mult=0.001). A -40 dBFS input
+signal becomes ~-100 dBFS at the tap point. When the FFT spreads this
+across 2049 bins, each bin is at approximately -73 dBFS (= -40 - 33 dB bin
+spreading), which is below the -60 dB display floor (`DB_MIN`).
+
+**Evidence (Playwright diagnostics on Pi):**
+- PCM data reaches browser: 800+ messages in 6s, 4ch v2 format, 0 gap resets
+- FFT pipeline processes normally: 62 dirty cycles
+- maxL = -40.4 dBFS, maxR = -40.3 dBFS (system noise floor after gain)
+- Per-bin energy below DB_MIN — spectrum correctly renders "nothing"
+
+This is a routing architecture issue, not a rendering bug. The spectrum
+is faithfully displaying what it receives — the signal is just too quiet
+at the current tap point.
+
+### Recommended Fix
+
+Change pcm-bridge GM routing to tap app output ports (Mixxx/Reaper/
+signal-gen) instead of convolver output ports. This is the same pattern
+as the F-124/F-125 fix for level-bridge-sw — mode-dependent links to the
+active app's output ports. Requires routing table change in GM
+(`routing.rs`).
+
+**Not urgent** — F-128 (connection issue) is resolved and spectrum
+infrastructure works. This is a separate routing architecture decision
+about where to tap for FFT display.
+
+---
+
+## F-132: Spectrum display floor DB_MIN -90 dB still clips signal — owner wants -120 dB
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI spectrum renderer (`spectrum-renderer.js`)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** F-131 (post-gain tap point), D-046 (FFT presets)
+
+### Description
+
+Even after F-131 routing is fixed, the spectrum display floor at -90 dB
+clips low-level signals. Owner wants -120 dB floor to see the full dynamic
+range, especially for sub-bass room correction verification where signal
+levels may be very low.
+
+### Recommended Fix
+
+Change `DB_MIN` constant from -90 to -120 dB. May also need to adjust the
+D-046 FFT presets (Performance/Balanced/Analysis/Measurement) to use
+appropriate floor values per use case. Verify that the Y-axis auto-ranging
+(D-048) still works sensibly with the wider range.
+
+---
+
+## F-133: Spectrum auto-scaling too hectic — should snap to grid lines
+
+**Filed:** 2026-03-26
+**Severity:** Medium → **HIGH** (REGRESSED 2026-03-26: grid snap fix broke auto-scaling entirely — nothing scales at all)
+**Status:** RESOLVED (2026-03-26). Owner confirmed auto-scaling looks good after fix.
+**Affects:** Web UI spectrum renderer (auto-range logic)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** D-048 (auto-ranging Y axis)
+
+### Description
+
+The spectrum Y-axis auto-scaling moves continuously, creating a distracting
+jittery appearance. The range should snap to the nearest grid line (e.g.,
+10 dB increments) instead of continuously tracking the signal peak.
+
+### Recommended Fix
+
+Quantize the auto-range bounds to the nearest grid line interval (e.g.,
+round max to next 10 dB ceiling, min to next 10 dB floor). Apply the
+D-048 attack/release timing (200ms attack, 2s release) to the quantized
+values, not raw peaks. This gives smooth, predictable range changes that
+align with the visual grid.
+
+---
+
+## F-134: Spectrum and meters freeze intermittently
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI dashboard (spectrum + meters)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** F-127 (CPU 75%)
+
+### Description
+
+Spectrum and level meters intermittently freeze during playback. The decay
+animation still runs (bars/peaks decay toward silence), indicating the
+freeze is in data delivery, not rendering. The browser is still animating
+but not receiving new samples.
+
+Likely cause: CPU congestion (F-127) causing the Python web UI backend to
+drop WebSocket frames, or level-bridge/pcm-bridge TCP connections
+stalling under load. The 3 level-bridge instances + pcm-bridge + 24-meter
+rendering at 30 Hz may exceed the Pi's capacity under DJ workload.
+
+### Recommended Fix
+
+Investigate with `htop` and `pw-top` during a freeze event. Check:
+1. Are level-bridge TCP connections still alive during freezes?
+2. Is the Python backend dropping frames (check WS send queue depth)?
+3. Is PipeWire xrunning (which would pause all stream callbacks)?
+Profile and reduce the highest CPU consumer. Consider reducing meter
+snapshot rate from 30 Hz to 10-15 Hz as a quick mitigation.
+
+### Update (2026-03-26)
+
+Root cause identified as part of F-127 investigation: **pw-dump subprocess
+storm** (128+ PW client connect/disconnects per minute) creates CPU
+pressure spikes that cause WebSocket frame drops. Fixing F-127 (reduce
+poll rates + cache pw-dump + eliminate subprocess) should resolve F-134.
+
+---
+
+## F-135: Status bar mini meters show peak instead of RMS
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI status bar mini meters (`statusbar.js`)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** D-047 (peak+RMS meters, PPM IEC 60268-18)
+
+### Description
+
+The mini meters in the status bar display peak levels. Per D-047, the
+status bar mini meters should show RMS (the bar) with peak as a thin
+overlay line — matching the dashboard meter behavior. Currently the mini
+meters appear to use peak for the bar fill, making them read higher than
+expected and inconsistent with the dashboard.
+
+### Recommended Fix
+
+Change the status bar mini meter bar fill to use the RMS value from the
+level data. Add a thin peak line overlay if space permits. The level-bridge
+data already provides both peak and RMS — this is a rendering-side fix.
+
+---
+
+## F-136: DSP status bar shows wrong data (multiple sub-issues)
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI status bar DSP indicators (`statusbar.js`, backend collectors)
+**Found by:** Owner (live testing 2026-03-26)
+
+### Description
+
+Multiple issues in the DSP section of the status bar:
+
+1. **"idle" with "Links 0/0" after restart:** After a PipeWire or GM
+   restart, the status bar shows "idle" mode and "Links 0/0" instead of
+   detecting the current mode and link count. Likely the GM RPC collector
+   returns stale/default data until the next successful poll.
+
+2. **"Deg" and "36/38" after quantum change:** After changing quantum via
+   the config tab, the status bar shows "Deg" (degraded?) and a link count
+   mismatch (36/38). This suggests the quantum change triggers a transient
+   state that the status bar doesn't handle gracefully.
+
+3. **Clip indicator is grey dash:** The clip indicator never activates —
+   shows a grey dash even when meters show signal near 0 dBFS. The clip
+   detection may not be wired to the status bar, or the threshold is wrong.
+
+4. **Xrun counter always 0:** The xrun counter shows 0 even when Mixxx
+   indicates xruns at quantum 512. The xrun data source may not be
+   connected (known gap: `pw-dump` doesn't expose xrun counts, needs
+   `pw-top` or PW profiler — see F-056).
+
+### Recommended Fix
+
+Each sub-issue needs separate investigation:
+1. Add a startup/reconnect poll to GM RPC collector
+2. Handle quantum-change transient states gracefully (brief "reconfiguring" state)
+3. Wire clip detection from level data to status bar clip indicator
+4. Investigate xrun data source (F-056 follow-up — may need `pw-top` parsing or PW profiler)
+
+---
+
+## F-137: Config tab does not pre-select current quantum value
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI config tab (`config.js`)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** US-065 (Configuration Tab)
+
+### Description
+
+When switching to the config tab, the quantum selector does not show the
+currently active quantum value. The user cannot tell what quantum is
+currently in effect without checking externally. The tab should query the
+current quantum from PipeWire metadata on load and pre-select it.
+
+### Recommended Fix
+
+On tab activation, query the current `clock.force-quantum` value from the
+GM RPC or PW metadata collector and set the quantum selector to that value.
+If no forced quantum is set, show the default from the PipeWire config.
+
+---
+
+## ENH-004: Channel gain controls need editable text input
+
+**Filed:** 2026-03-26
+**Severity:** Low (enhancement)
+**Status:** OPEN
+**Affects:** Web UI config tab (gain controls)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** US-065 (Configuration Tab)
+
+### Description
+
+The current gain controls only have meter/slider UI. Owner wants editable
+text input fields for precise gain entry (e.g., typing "-60" or "0.001"
+directly). This is important for gain staging where exact values matter
+(e.g., D-009 safety limits, channel-specific attenuation).
+
+### Recommended Fix
+
+Add a text input field next to each gain slider. Accept values in dB
+(converted to linear Mult internally) or linear Mult directly. Validate
+against D-009 safety limits before applying. Update slider position when
+text is entered and vice versa.
+
+---
+
+## F-138: Status bar mini meter colors ambiguous — warning yellow vs amber default
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** OPEN — colors now applied but owner wants green and amber group colors replaced. Too confusing with warning thresholds. UX to propose new colors.
+**Affects:** Web UI status bar mini meters (`statusbar.js`, CSS)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** US-076 (L2 Soft Lilac color palette), D-047 (PPM spec)
+
+### Description
+
+The status bar mini meters use amber as the default bar color for CONV→OUT
+and PHYS IN meter groups. When a channel hits the yellow warning threshold,
+the color change is nearly invisible because amber and yellow are too
+similar. The operator cannot distinguish "normal amber" from "warning
+yellow" at a glance.
+
+The meter group default colors should NOT reuse signal-level colors. Each
+group needs a distinct default color that contrasts clearly with the
+yellow/red warning thresholds.
+
+### Recommended Fix
+
+Consult UX guidelines (US-076 palette). Assign distinct default colors per
+meter group that contrast with warning yellow and clip red:
+- MAIN: white (current, good contrast)
+- APP→CONV: cyan (current, good contrast)
+- CONV→OUT: needs a color distinct from yellow — suggest green or lilac
+- PHYS IN: needs a color distinct from yellow — suggest blue or teal
+
+The key constraint: default color must be visually distinct from warning
+yellow (#ffeb3b or similar) at small mini-meter size.
+
+---
+
+## F-139: Status bar mode label uses unmotivated orange — should use palette color
+
+**Filed:** 2026-03-26
+**Severity:** Low
+**Status:** OPEN
+**Affects:** Web UI status bar (`statusbar.js`, CSS)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** US-076 (L2 Soft Lilac color palette, D-045 project identity)
+
+### Description
+
+The mode label in the status bar uses an orange color that doesn't belong
+to the L2 Soft Lilac palette (US-076). It looks out of place against the
+purple-navy background scheme.
+
+### Recommended Fix
+
+Replace the orange mode label color with a color from the approved L2 Soft
+Lilac palette. Options: primary lilac (`#b39ddb`), or the mode-specific
+badge colors already defined (amber `#ffb74d` for DJ, cyan `#4dd0e1` for
+Live — per US-076 commit `7388170`). If the current orange IS the DJ amber
+badge, it may need brightness/saturation adjustment to look intentional
+rather than arbitrary against the purple-navy background.
+
+---
+
+## F-140: Test tone generation broken — signal-gen not producing output
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** RESOLVED (2026-03-26). Root cause: systemd service had `--channels 8` instead of `--channels 1` (F-097 mono change not reflected in service file). Secondary fix: mono bitmask normalization in `main.rs`.
+**Affects:** signal-gen / Web UI test tab / measurement workflow
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** US-052 (signal-gen), US-082 (file playback), F-097 (mono change)
+
+### Description
+
+Owner reports signal-gen / test tone is not working on the Pi. This blocks
+the measurement workflow which depends on signal-gen for sweep and tone
+generation.
+
+Possible causes:
+1. F-097 mono change (`468533e`) altered signal-gen output port count from
+   4 to 1 — GM routing table may not have been updated on Pi to match
+2. signal-gen service not running or crashed after recent changes
+3. Web UI test tab RPC calls not reaching signal-gen (port 4001)
+4. GM routing table for measurement mode not updated for mono signal-gen
+
+### Recommended Fix
+
+Check signal-gen status on Pi (`systemctl --user status pi4audio-signal-gen`).
+Verify the GM routing table has been updated for 1-channel signal-gen output
+(F-097 change). Check `pw-link -l` to confirm signal-gen output port is
+linked to convolver input. Test RPC directly: `curl http://localhost:4001/status`.
+
+---
+
+## F-141: Quantum 2048 doesn't work — possible ALSA buffer mismatch
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** OPEN
+**Affects:** PipeWire quantum configuration / USBStreamer ALSA backend
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** US-065 (config tab quantum control), D-042 (quantum management)
+
+### Description
+
+Setting quantum to 2048 via the config tab or `pw-metadata` does not work
+correctly. Owner suspects an ALSA buffer mismatch with the USBStreamer.
+
+Possible causes:
+1. USBStreamer ALSA driver may have a maximum period/buffer size that
+   doesn't accommodate quantum 2048 (USB audio class constraints)
+2. PipeWire ALSA adapter may fail to negotiate the larger buffer size,
+   causing xruns or audio dropout
+3. The filter-chain convolver may not handle quantum changes above 1024
+   gracefully (untested territory — production uses 256 and 1024 only)
+4. `clock.force-quantum 2048` may conflict with the ALSA adapter's
+   `api.alsa.period-size` setting
+
+### Recommended Fix
+
+Investigate on Pi:
+1. Check `pw-top` output after setting quantum 2048 — does it actually
+   change? Are there xruns?
+2. Check `journalctl --user -u pipewire` for ALSA negotiation errors
+3. Verify USBStreamer ALSA capabilities: `cat /proc/asound/USBStreamer/stream0`
+   for supported period sizes
+4. If ALSA can't support 2048, the config tab should limit the quantum
+   selector to validated values (256, 512, 1024) and grey out unsupported
+   options
+
+---
+
+## F-142: Spectrum doesn't render below 30 Hz — sub-bass invisible
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI spectrum renderer (frequency axis layout)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** Design Principle #4 (20 Hz correction headroom), D-046 (FFT presets)
+
+### Description
+
+The spectrum display does not render any content below ~30 Hz. The
+frequency axis labels and layout reserve space for "20" and "30" Hz text
+labels, pushing the actual rendering start to ~30 Hz. Everything below
+that is blank.
+
+This is a critical gap for psytrance sub-bass monitoring. The entire
+project design targets 20 Hz correction (16,384-tap FIR filters chosen
+specifically for 6.8 cycles at 20 Hz — Design Principle #4). The spectrum
+display must show this range to verify sub-bass correction effectiveness.
+
+### Recommended Fix
+
+Options:
+1. **Floating labels:** Move frequency labels above or below the spectrum
+   bars so they don't consume horizontal space at the left edge. The
+   rendering area starts at 0 Hz (DC bin) or the first meaningful bin.
+2. **Shift rendering start:** Place the "30 Hz" label where the current
+   left edge is, but render spectrum data starting from ~20 Hz to the
+   left of it (label overlaps are acceptable at the extreme low end).
+3. **Log scale adjustment:** Adjust the log frequency scale so that 20 Hz
+   maps to the left edge of the rendering area, with the "20" label
+   tucked against the axis.
+
+The key requirement: sub-bass content at 20-30 Hz must be visible in the
+spectrum display. This is non-negotiable for the project's use case.
+
+---
+
+## F-143: Spectrum frequency skew — higher frequencies show progressively lower energy
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** RESOLVED (2026-03-26). Owner confirmed skew appears fixed (full validation pending test tone sweep).
+**Affects:** Web UI spectrum renderer (FFT normalization / log-frequency binning)
+**Found by:** Owner (live testing 2026-03-26, observed with signal-gen test tones)
+**Related:** F-110 (BY-DESIGN for broadband signals — but this is different: observed with tones too)
+
+### Description
+
+Higher frequencies show progressively lower signal strength in the
+spectrum display, even with test signal generator tones. Owner noticed the
+skew is consistent and progressive — not just the expected pink-spectrum
+rolloff for broadband signals (which was BY-DESIGN per F-110).
+
+F-110 was closed as BY-DESIGN because broadband noise naturally has less
+energy per linear-frequency bin at higher frequencies. However, F-143 is
+different: the skew is visible even with **single-frequency test tones**,
+where the energy should appear at a constant level regardless of frequency.
+
+**Possible causes:**
+
+1. **Missing log-frequency bin width compensation:** When mapping linear
+   FFT bins to a logarithmic frequency axis, each rendered bar covers a
+   different number of FFT bins. Low-frequency bars cover few bins
+   (narrow bandwidth), high-frequency bars cover many bins (wide
+   bandwidth). If the renderer sums bin magnitudes without normalizing
+   by the number of bins per bar, high-frequency bars accumulate more
+   noise but tone peaks get diluted. Conversely, if it takes the max
+   instead of sum, single tones should appear at constant height.
+
+2. **Missing 1/N FFT normalization:** The raw FFT output needs to be
+   divided by N (FFT size) to get correct magnitude. If this is missing
+   or applied inconsistently, it could cause frequency-dependent errors.
+
+3. **Window function energy correction:** Different window functions
+   (Hann, Blackman, etc.) have different energy correction factors. If
+   the correction is wrong, it affects all bins equally — which would NOT
+   cause a frequency-dependent skew. So this is less likely.
+
+4. **Log-frequency rendering artifact:** The bar width in pixels varies
+   across the display. If bar height represents total energy (not
+   energy density), wider bars at high frequencies appear shorter because
+   the same energy is spread across more pixels.
+
+### Recommended Fix
+
+Investigate the FFT pipeline (`fft-pipeline.js`, `spectrum-renderer.js`):
+1. Generate a constant-amplitude sine sweep and verify that the peak
+   magnitude is constant across frequencies in the raw FFT output
+2. Check the log-frequency bin mapping: is it using max-per-bar or
+   sum-per-bar? For spectrum display, max-per-bar is correct for tones
+3. Verify 1/N normalization is applied correctly
+4. Compare with a known-good spectrum analyzer (e.g., REW) on the same
+   signal to confirm whether the issue is in the FFT math or the rendering
+
+---
+
+## F-144: Test tool page does not auto-switch to measurement mode before playing
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Web UI test tab / signal-gen / measurement workflow
+**Found by:** Worker investigation during F-140 fix (2026-03-26)
+**Related:** F-140 (resolved), US-052, US-082, US-085 (D-050)
+
+### Description
+
+The test tool page allows the user to play test tones and audio files via
+signal-gen, but signal-gen has no PipeWire links outside measurement mode.
+If the system is in DJ or Monitoring mode, pressing "Play" on the test page
+produces no audible output because GM has not created the signal-gen links.
+
+The user must manually switch to measurement mode first, which is unintuitive
+and undiscoverable.
+
+### Recommended Fix
+
+1. Add a new REST endpoint (e.g., `/api/ensure-measurement-mode`) that calls
+   the existing `GraphManagerClient.enter_measurement_mode()`.
+2. Before playing, the test page should check the current mode. If not in
+   measurement mode, show a confirmation dialog: "Switching to measurement
+   mode will stop current audio playback. Continue?"
+3. On confirmation, call the endpoint, wait for mode transition, then play.
+4. UX refinement note: consult UX specialist on dialog wording and whether
+   the mode badge in the status bar provides sufficient feedback.
+
+This is a UX/workflow issue, not a signal-gen bug. Signal-gen correctly
+produces output when GM has created the appropriate links.
+
+---
+
+## F-145: Spectrum shows weird spikes at regular intervals
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI spectrum renderer / FFT pipeline
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** F-143 (frequency skew, resolved), F-142 (sub-30Hz rendering)
+
+### Description
+
+Spectrum display shows visible spikes at regular frequency intervals. The
+pattern looks like quantization errors or aliasing artifacts. The spikes
+appear consistently at evenly-spaced positions across the frequency axis,
+not at musically meaningful frequencies.
+
+Possible causes:
+1. **FFT bin boundary aliasing:** Log-frequency bin mapping creates
+   artifacts where bin boundaries align with specific frequencies. If the
+   mapping uses floor/ceil without interpolation, bin edges can produce
+   spikes.
+2. **Overlap-add discontinuities:** If the FFT pipeline uses overlapping
+   windows, incorrect overlap or hop size could create periodic artifacts
+   in the magnitude spectrum.
+3. **Integer quantization in bin mapping:** The log-frequency-to-bin index
+   mapping may round to the same bin for adjacent display bars at certain
+   frequencies, creating gaps and peaks.
+4. **PCM frame boundary artifacts:** If the PCM buffer from level-bridge
+   doesn't align to exact FFT frame boundaries, the window function could
+   produce periodic spectral leakage.
+
+### Recommended Fix
+
+Investigate the FFT pipeline (`fft-pipeline.js`, `spectrum-renderer.js`):
+1. Check the log-frequency bin mapping for rounding artifacts — are
+   multiple display bars mapping to the same FFT bin?
+2. Verify the window function is applied correctly (Hann/Blackman) and
+   that the overlap is consistent
+3. Test with a known-flat signal (white noise) and check if the spikes
+   appear at mathematically regular intervals
+4. Compare raw FFT output (before log mapping) vs rendered display to
+   isolate whether the issue is in the FFT math or the rendering

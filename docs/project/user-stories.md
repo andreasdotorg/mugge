@@ -5527,7 +5527,7 @@ and can be verified/rolled back independently.
 
 ---
 
-## US-078: Project Rename — pi4-audio-workstation to mugge
+## US-078: Project Rename — to mugge
 
 **As** the system owner,
 **I want** the project renamed from "pi4-audio-workstation" / "pi4audio" to
@@ -5559,6 +5559,13 @@ UNCHANGED.
 **Phase B — Code rename (AFTER current sprint):**
 Original Phases 1-3 (PW node prefix, systemd services, repo/project identity).
 Postponed to avoid disrupting concurrent US-079/080/081/082 work.
+
+**Phase C — GitHub repo rename + remote updates (AFTER current deploy batch):**
+Owner wants the GitHub repo renamed from `pi4-audio-workstation` to `mugge`.
+Touches: GitHub repo name (owner action or API), local remote URLs on all
+clones (dev machine + Pi: `git remote set-url origin ...`), any CI or
+hardcoded repo paths. GitHub auto-redirects temporarily but remotes must be
+updated promptly. Schedule after Phase B or combine into Phase B execution.
 
 **The problem:** The project currently uses three naming variants across the
 codebase:
@@ -5617,7 +5624,7 @@ is already `mugge` — no hardware changes needed.
 - [ ] Service references in SETUP-MANUAL.md, development.md, safety.md
 
 **Phase 3 — Repository and project identity:**
-- [ ] GitHub repo renamed: `pi4-audio-workstation` -> `mugge`
+- [ ] GitHub repo renamed to `mugge`
 - [ ] `flake.nix` description updated
 - [ ] `Cargo.toml` package names updated (graph-manager, signal-gen remain
   as crate names — only the project-level identity changes)
@@ -5627,7 +5634,7 @@ is already `mugge` — no hardware changes needed.
 - [ ] `.claude/team/config.md`: team name
 - [ ] Web UI branding: page title, header text, favicon title
 - [ ] CI workflow (`.github/workflows/ci.yml`): repo references
-- [ ] Pi deployment paths: `~/pi4-audio-workstation` -> `~/mugge`
+- [ ] Pi deployment paths updated to `~/mugge`
 
 **Phase 4 — Documentation sweep:**
 - [ ] SETUP-MANUAL.md: all `pi4audio` / `pi4-audio` references
@@ -5645,7 +5652,7 @@ is already `mugge` — no hardware changes needed.
 
 - [ ] Zero occurrences of `pi4audio-` as a live (non-historical) node name
   in `src/`, `configs/`, `nix/`
-- [ ] Zero occurrences of `pi4-audio-workstation` as a live path in `src/`,
+- [ ] Zero occurrences of old repo name as a live path in `src/`,
   `configs/`, `scripts/`, `nix/`
 - [ ] All tests pass: `nix run .#test-all`, `nix run .#test-e2e`,
   `nix run .#test-integration`
@@ -5669,7 +5676,7 @@ the node prefix extensively).
 
 ### Risks
 
-1. **Pi deployment path change:** `~/pi4-audio-workstation` -> `~/mugge`
+1. **Pi deployment path change:** old path -> `~/mugge`
    requires updating the git clone path on the Pi, all systemd service
    `WorkingDirectory` and `ExecStart` paths, and any scripts that reference
    the old path. The Pi's nix remote builder config may also reference the
@@ -6182,6 +6189,228 @@ Spawned via GM `start_tap`/`stop_tap` RPC when spectrum view is active.
 - [ ] AE review (meter accuracy, signal chain tap points correct)
 - [ ] QE review (test coverage)
 - [ ] Owner visual acceptance (24 meters in TK-097 layout)
+
+---
+
+## US-085: GM-Managed Lifecycle for Signal-Chain Services (D-050)
+
+**As** the system operator,
+**I want** GraphManager to own the lifecycle of signal-gen, level-bridge,
+pcm-bridge, and eventually Mixxx/Reaper,
+**so that** mode transitions are atomic (launch the right apps, create the
+right links, set the right quantum in a single operation), eliminating
+split-brain state between systemd services and GM routing.
+
+**Status:** draft
+**Depends on:** US-059 (GM core), US-084 (level-bridge extraction), D-050
+(GM as session state manager)
+**Blocks:** none directly, but resolves the architectural root cause of
+F-140 (signal-gen not started) and the D-049 self-linking disaster
+**Decisions:** D-050
+
+### Background
+
+D-050 identifies fragmented runtime state as a systemic problem: signal-gen
+is systemd-spawned (may not match GM's expected port count after F-097),
+level-bridge instances self-link via WirePlumber (contradicts D-039), and
+mode transitions don't launch/stop the relevant applications. The current
+systemd service files are a band-aid — F-140 (signal-gen broken after mono
+change) is a direct consequence of this fragmentation.
+
+D-050 specifies that GM should own:
+- **Process lifecycle:** start/stop signal-gen, pcm-bridge, audio-recorder,
+  and eventually Mixxx/Reaper as part of mode transitions
+- **Link topology:** already implemented (US-059)
+- **PW quantum:** set quantum as part of mode entry (1024 for DJ, 256 for Live)
+- **Level-bridge links:** GM creates links for level-bridge instances
+  (replaces self-linking, which conflicts with D-039)
+
+### Phasing
+
+**Phase 1 — Level-bridge link management (short-term):**
+GM creates/destroys links for the 3 level-bridge instances as part of mode
+transitions. Level-bridge processes remain systemd-managed (always-on) but
+GM owns their links. Eliminates D-049 self-linking conflict with D-039.
+
+**Phase 2 — Signal-gen + pcm-bridge lifecycle (medium-term):**
+GM spawns signal-gen on measurement mode entry, kills it on mode exit.
+GM spawns pcm-bridge on spectrum view activation. Eliminates F-140 class
+of bugs (stale service state after config changes).
+
+**Phase 3 — Quantum management (medium-term):**
+GM sets `clock.force-quantum` as part of mode entry. DJ → 1024, Live → 256,
+Measurement → configurable. Eliminates manual quantum management.
+
+**Phase 4 — Application lifecycle (long-term):**
+GM launches Mixxx on DJ mode entry, Reaper on Live mode entry. Full
+atomic mode transitions: one RPC call → right app + right links + right
+quantum.
+
+### Acceptance criteria
+
+- [ ] Level-bridge links managed by GM, not self-linking (Phase 1)
+- [ ] D-039 compliance: no WirePlumber auto-linking dependency
+- [ ] signal-gen spawned/stopped by GM as part of measurement mode (Phase 2)
+- [ ] pcm-bridge spawned/stopped by GM on spectrum view activation (Phase 2)
+- [ ] Quantum set automatically on mode transition (Phase 3)
+- [ ] Mode transition is atomic: single `set_mode` RPC handles links + quantum + process lifecycle
+- [ ] Graceful handling of process crashes (GM detects, restarts or reports)
+- [ ] No regression in existing GM link management (US-059)
+
+### Definition of Done
+
+- [ ] All acceptance criteria met for implemented phases
+- [ ] Architect review (D-050 compliance, process management design)
+- [ ] AE review (mode transitions preserve audio safety)
+- [ ] Security review (process spawning permissions, no escalation)
+- [ ] QE review (test coverage for lifecycle transitions)
+- [ ] Owner acceptance (mode transitions work end-to-end)
+
+---
+
+## US-087: Direct WebSocket from Rust Services — Eliminate Python PCM/Level Relay
+
+**As** the system operator,
+**I want** pcm-bridge and level-bridge to serve WebSocket connections
+directly to the browser, bypassing the Python uvicorn relay,
+**so that** the ~31% CPU consumed by Python PCM relay is eliminated,
+freeing headroom for audio workloads on the Pi.
+
+**Status:** draft
+**Depends on:** US-084 (level-bridge extraction), D-050 (GM lifecycle),
+US-085 (GM-managed lifecycle for pcm-bridge)
+**Blocks:** none (but directly addresses F-127 CPU budget)
+**Priority:** High — 31% uvicorn CPU on Pi is significant headroom loss
+**Decisions:** Architect recommends Option 1 (direct WS from Rust)
+
+### Background
+
+The current data path for spectrum and level data is:
+
+```
+Rust service (TCP) → Python uvicorn (relay) → WebSocket → Browser
+```
+
+uvicorn consumes ~31% CPU on the Pi relaying PCM data from pcm-bridge and
+level data from 3 level-bridge instances. The Python relay adds latency,
+CPU cost, and a single point of failure. The Rust services already have the
+data — they should serve it directly to the browser.
+
+Target architecture:
+
+```
+Rust service (WebSocket/WSS) → Browser
+```
+
+### TLS Concern
+
+The web UI serves HTTPS/WSS via a self-signed certificate (D-032). If
+pcm-bridge and level-bridge serve WebSocket directly, they need to
+terminate TLS with the same certificate to avoid mixed-content browser
+errors. Options:
+1. Rust services serve WSS directly (load the same cert/key)
+2. Caddy reverse proxy terminates TLS and proxies WS to Rust services
+   on localhost (cleaner cert management, single TLS termination point)
+3. Browser connects to Rust services via plain WS on localhost ports,
+   web page served over HTTPS with appropriate CSP headers (may not work
+   in all browsers due to mixed-content restrictions)
+
+Option 2 (Caddy) was already identified in F-064 as the long-term
+architecture. It solves TLS, auth (F-037), and routing in one component.
+
+### Phasing
+
+**Phase 1 — pcm-bridge direct WebSocket (HIGH priority):**
+Add tungstenite (or tokio-tungstenite) WebSocket server to pcm-bridge.
+Browser connects directly for PCM spectrum data. Eliminates the largest
+CPU consumer (~25% of the 31% is PCM relay due to high data rate).
+
+**Phase 2 — level-bridge direct WebSocket:**
+Same pattern for level-bridge instances. Browser connects to ports
+9100/9101/9102 directly for JSON level data. Lower data rate than PCM
+but still saves CPU from 3 relay connections.
+
+**Phase 3 — Remove Python relay code:**
+Strip PCM and level relay from uvicorn. Python backend retains: static
+file serving, GM RPC proxy, config API, measurement session orchestration.
+Web UI JavaScript updated to connect to Rust service ports directly.
+
+**Phase 4 — Caddy reverse proxy (optional, recommended):**
+Single TLS termination point. Routes `/ws/spectrum` → pcm-bridge,
+`/ws/levels/*` → level-bridge instances, `/*` → uvicorn. Solves TLS
+cert management and F-037 auth gap.
+
+### D-050 Alignment
+
+GM manages pcm-bridge lifecycle (US-085 Phase 2). When GM starts
+pcm-bridge for spectrum view, the browser connects directly to the
+pcm-bridge WebSocket port. When GM stops pcm-bridge, the browser handles
+the disconnection gracefully (show "no data").
+
+### Acceptance criteria
+
+- [ ] pcm-bridge serves WebSocket (binary PCM frames) directly to browser
+- [ ] level-bridge serves WebSocket (JSON level frames) directly to browser
+- [ ] TLS/WSS handled (either direct cert loading or Caddy proxy)
+- [ ] Browser JS connects to Rust service ports (no Python relay in data path)
+- [ ] Python relay code removed from uvicorn
+- [ ] No regression in spectrum or meter functionality
+- [ ] CPU reduction verified on Pi (target: recover majority of 31% uvicorn cost)
+- [ ] Graceful handling of service start/stop (browser reconnects)
+
+### Definition of Done
+
+- [ ] All acceptance criteria met for implemented phases
+- [ ] Architect review (WebSocket protocol, TLS approach)
+- [ ] Security review (direct browser-to-service connections, TLS, auth)
+- [ ] AE review (no audio data quality regression)
+- [ ] QE review (test coverage)
+- [ ] Owner acceptance (performance improvement verified)
+
+---
+
+## US-086: User Journeys D-040 Rewrite — Remove Stale CamillaDSP References
+
+**As** the system builder,
+**I want** the user-journeys document updated to reflect the current D-040
+PipeWire filter-chain architecture,
+**so that** operational journeys describe the actual system, not the
+abandoned CamillaDSP pipeline.
+
+**Status:** draft
+**Depends on:** D-040 (architecture pivot), US-071 (main doc overhaul —
+SETUP-MANUAL done, user-journeys not in scope)
+**Blocks:** none
+**Priority:** Low — not urgent, documentation quality
+
+### Background
+
+TW audit flagged ~80 stale CamillaDSP-as-current references in the body
+of `docs/user-journeys.md`, specifically in journeys 2, 4, 5, 6, and 7.
+These journeys describe operational workflows (DJ setup, live setup,
+measurement, troubleshooting) using CamillaDSP commands, YAML config
+references, and ALSA Loopback paths that no longer exist in the system.
+
+US-071 covered the SETUP-MANUAL, architecture docs, safety docs, dev
+workflow, and project management docs, but user-journeys.md was not in
+its scope.
+
+### Acceptance criteria
+
+- [ ] Journeys 2, 4, 5, 6, 7 rewritten for PipeWire filter-chain +
+  GraphManager architecture
+- [ ] CamillaDSP references removed or clearly marked as historical
+- [ ] ALSA Loopback references removed
+- [ ] Gain commands updated to `pw-cli` Mult params (not CamillaDSP YAML)
+- [ ] GraphManager RPC commands replace CamillaDSP websocket API calls
+- [ ] signal-gen, pcm-bridge, level-bridge referenced where applicable
+- [ ] TW review (prose quality, consistency with SETUP-MANUAL)
+
+### Definition of Done
+
+- [ ] All acceptance criteria met
+- [ ] TW sign-off
+- [ ] Owner review (journeys match actual operational experience)
 
 ---
 
