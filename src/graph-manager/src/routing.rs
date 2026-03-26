@@ -356,13 +356,14 @@ impl RoutingTable {
     /// its input buffers (silence if nothing is linked to it).
     ///
     /// Links: convolver-out ch 0-3 → USBStreamer playback ch 0-3.
-    /// pcm-bridge uses post-convolver tap (no source app to tap pre-convolver).
+    /// F-131: No pcm-bridge links — no app to tap (spectrum would show
+    /// post-gain signal at -100 dBFS, which is below display floor).
     fn monitoring_links() -> Vec<DesiredLink> {
         // TODO: AE-F6 USBStreamer volume lock — when USBStreamer is first
         // detected, set volume to unity to prevent post-DSP clipping.
         let mut links = Self::convolver_to_usbstreamer_links();
-        links.extend(Self::pcm_bridge_post_convolver_links());
         // F-124: No level-bridge-sw in monitoring — no app to tap.
+        // F-131: No pcm-bridge in monitoring — no app to tap.
         links.extend(Self::level_bridge_hw_links());
         links
     }
@@ -419,10 +420,11 @@ impl RoutingTable {
         // Convolver → USBStreamer (ch 1-4: processed speakers).
         links.extend(Self::convolver_to_usbstreamer_links());
 
-        // US-079: pcm-bridge taps Mixxx outputs (pre-convolver full-range).
-        links.extend(Self::pcm_bridge_pre_convolver_links(
+        // F-131: pcm-bridge taps Mixxx master L/R for spectrum display.
+        links.extend(Self::pcm_bridge_app_tap_links(
             NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
             AppPortNaming::MixxxOutput,
+            2,
         ));
 
         // Mixxx headphones → USBStreamer direct (bypass convolver).
@@ -509,10 +511,11 @@ impl RoutingTable {
         // Convolver → USBStreamer (ch 1-4: processed speakers).
         links.extend(Self::convolver_to_usbstreamer_links());
 
-        // US-079: pcm-bridge taps Reaper outputs (pre-convolver full-range).
-        links.extend(Self::pcm_bridge_pre_convolver_links(
+        // F-131: pcm-bridge taps Reaper master L/R for spectrum display.
+        links.extend(Self::pcm_bridge_app_tap_links(
             NodeMatch::Prefix(REAPER_PREFIX.to_string()),
             AppPortNaming::ReaperOutput,
+            2,
         ));
 
         // Reaper headphones → USBStreamer direct (bypass convolver).
@@ -633,72 +636,29 @@ impl RoutingTable {
     // Shared link sets
     // -------------------------------------------------------------------
 
-    /// Post-convolver output → pcm-bridge input (ch 1-4).
-    /// D-043: GraphManager manages pcm-bridge's links instead of
-    /// pcm-bridge self-linking via stream.capture.sink + AUTOCONNECT.
+    /// App output → pcm-bridge input (F-131).
     ///
-    /// pcm-bridge taps the convolver's output ports (output_AUX0..3) —
-    /// the same processed audio that feeds the USBStreamer. PipeWire
-    /// natively fans out: multiple sinks on the same output port each
-    /// receive a copy. pcm-bridge creates generic input_1..4 ports
-    /// (no SPA position array — PW uses 1-based naming).
+    /// Taps the app's output ports at full level (pre-convolver, pre-gain)
+    /// for spectrum display. The web UI deinterleaves L+R and averages to
+    /// mono for FFT, so only the stereo master is needed (2 channels for
+    /// DJ/Live, 1 for measurement).
     ///
-    /// Used only in Monitoring mode (no source app to tap pre-convolver).
-    fn pcm_bridge_post_convolver_links() -> Vec<DesiredLink> {
-        let cv_out = AppPortNaming::ConvolverOutput;
-        let pcm = AppPortNaming::PcmBridgeInput;
-        (1..=4)
-            .map(|ch| DesiredLink {
-                output_node: NodeMatch::Exact(CONVOLVER_OUT.to_string()),
-                output_port: cv_out.port_name(ch),
-                input_node: NodeMatch::Exact(PCM_BRIDGE.to_string()),
-                input_port: pcm.port_name(ch),
-                optional: true, // pcm-bridge may not be running
-            })
-            .collect()
-    }
-
-    /// Pre-convolver source → pcm-bridge input (US-079).
-    /// Taps the same source outputs that feed the convolver, giving
-    /// pcm-bridge the full-range signal before crossover/correction.
-    ///
-    /// The link pattern mirrors the app→convolver links: ch 1-2 get
-    /// L/R 1:1, ch 3-4 get L+R mono sum (PW additive mixing). This
-    /// matches what the convolver sees and preserves the 4-channel
-    /// structure expected by the web UI.
-    fn pcm_bridge_pre_convolver_links(
+    /// All links are optional because pcm-bridge may not be running.
+    fn pcm_bridge_app_tap_links(
         source_node: NodeMatch,
         source_naming: AppPortNaming,
+        num_channels: u32,
     ) -> Vec<DesiredLink> {
         let pcm = AppPortNaming::PcmBridgeInput;
-        let mut links = Vec::new();
-
-        // Source L → pcm-bridge ch 1, Source R → pcm-bridge ch 2 (1:1).
-        for ch in 1..=2 {
-            links.push(DesiredLink {
+        (1..=num_channels)
+            .map(|ch| DesiredLink {
                 output_node: source_node.clone(),
                 output_port: source_naming.port_name(ch),
                 input_node: NodeMatch::Exact(PCM_BRIDGE.to_string()),
                 input_port: pcm.port_name(ch),
                 optional: true,
-            });
-        }
-
-        // Source L+R → pcm-bridge ch 3-4 (mono sum, same pattern as
-        // app→convolver sub links). PW sums the two links at each port.
-        for pcm_ch in [3, 4] {
-            for source_ch in [1, 2] {
-                links.push(DesiredLink {
-                    output_node: source_node.clone(),
-                    output_port: source_naming.port_name(source_ch),
-                    input_node: NodeMatch::Exact(PCM_BRIDGE.to_string()),
-                    input_port: pcm.port_name(pcm_ch),
-                    optional: true,
-                });
-            }
-        }
-
-        links
+            })
+            .collect()
     }
 
     /// Convolver output → USBStreamer playback (ch 1-4).
@@ -918,35 +878,36 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn monitoring_has_24_links() {
-        // convolver-out → USBStreamer ch 0-3 (4) + convolver-out → pcm-bridge (4)
-        // + level-bridge-hw-out (8) + level-bridge-hw-in (8) = 24.
+    fn monitoring_has_20_links() {
+        // convolver-out → USBStreamer ch 0-3 (4)
+        // + level-bridge-hw-out (8) + level-bridge-hw-in (8) = 20.
         // F-124: No level-bridge-sw in monitoring (no app to tap).
+        // F-131: No pcm-bridge in monitoring (no app to tap).
         let table = RoutingTable::production();
-        assert_eq!(table.links_for(Mode::Monitoring).len(), 24);
+        assert_eq!(table.links_for(Mode::Monitoring).len(), 20);
     }
 
     #[test]
-    fn dj_has_42_links() {
+    fn dj_has_38_links() {
         // Mixxx → convolver mains (2) + Mixxx → convolver subs fan-out (4)
-        // + convolver → USBStreamer (4) + Mixxx → pcm-bridge pre-conv (6)
+        // + convolver → USBStreamer (4) + F-131: Mixxx → pcm-bridge stereo (2)
         // + Mixxx → USBStreamer HP (2)
         // + level-bridge-hw-out (8) + level-bridge-hw-in (8)
-        // + F-124: Mixxx → level-bridge-sw (8: consistent 8-ch metering) = 42.
+        // + F-124: Mixxx → level-bridge-sw (8: consistent 8-ch metering) = 38.
         let table = RoutingTable::production();
-        assert_eq!(table.links_for(Mode::Dj).len(), 42);
+        assert_eq!(table.links_for(Mode::Dj).len(), 38);
     }
 
     #[test]
-    fn live_has_52_links() {
+    fn live_has_48_links() {
         // REAPER → convolver mains (2) + REAPER → convolver subs fan-out (4)
-        // + convolver → USBStreamer (4) + REAPER → pcm-bridge pre-conv (6)
+        // + convolver → USBStreamer (4) + F-131: REAPER → pcm-bridge stereo (2)
         // + REAPER → USBStreamer HP (2) + REAPER → USBStreamer IEM (2)
         // + ADA8200 → REAPER capture (8)
         // + level-bridge-hw-out (8) + level-bridge-hw-in (8)
-        // + F-124: REAPER → level-bridge-sw (8) = 52.
+        // + F-124: REAPER → level-bridge-sw (8) = 48.
         let table = RoutingTable::production();
-        assert_eq!(table.links_for(Mode::Live).len(), 52);
+        assert_eq!(table.links_for(Mode::Live).len(), 48);
     }
 
     #[test]
@@ -989,11 +950,9 @@ mod tests {
     }
 
     #[test]
-    fn all_modes_have_pcm_bridge_links() {
-        // D-043: pcm-bridge links in all modes (level metering always active).
-        // US-079: Monitoring uses post-convolver (4 links), DJ/Live use
-        // pre-convolver (6 links: 2 direct L+R + 4 mono-sum for ch 3-4).
-        // F-097: Measurement uses 1 link (mono signal-gen → pcm-bridge ch 1).
+    fn pcm_bridge_links_per_mode() {
+        // F-131: pcm-bridge taps app output (stereo master) for spectrum.
+        // Monitoring: 0 (no app). DJ/Live: 2 (stereo L/R). Measurement: 1 (mono).
         let table = RoutingTable::production();
         for mode in Mode::ALL {
             let links = table.links_for(mode);
@@ -1004,9 +963,9 @@ mod tests {
                 })
                 .collect();
             let expected = match mode {
-                Mode::Monitoring => 4,
-                Mode::Measurement => 1, // F-097: mono signal-gen
-                _ => 6,
+                Mode::Monitoring => 0,   // F-131: no app to tap
+                Mode::Measurement => 1,  // F-097: mono signal-gen
+                _ => 2,                  // F-131: stereo master L/R
             };
             assert_eq!(
                 pcm_links.len(),
@@ -1025,9 +984,8 @@ mod tests {
     }
 
     #[test]
-    fn pcm_bridge_monitoring_uses_post_convolver() {
-        // Monitoring mode: pcm-bridge taps convolver output (post-crossover).
-        // No source app to tap pre-convolver — convolver processes silence.
+    fn pcm_bridge_monitoring_has_no_links() {
+        // F-131: Monitoring mode has no pcm-bridge links — no app to tap.
         let table = RoutingTable::production();
         let links = table.links_for(Mode::Monitoring);
         let pcm_links: Vec<_> = links
@@ -1036,18 +994,12 @@ mod tests {
                 matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-pcm-bridge")
             })
             .collect();
-        assert_eq!(pcm_links.len(), 4);
-        for (i, link) in pcm_links.iter().enumerate() {
-            assert_eq!(link.output_port, format!("output_AUX{}", i));
-            assert_eq!(link.input_port, format!("input_{}", i + 1));
-            assert!(matches!(&link.output_node, NodeMatch::Exact(n) if n == "pi4audio-convolver-out"));
-        }
+        assert_eq!(pcm_links.len(), 0);
     }
 
     #[test]
-    fn pcm_bridge_dj_uses_pre_convolver() {
-        // US-079: DJ mode taps Mixxx outputs (pre-convolver full-range).
-        // 6 links: 2 direct (L→ch1, R→ch2) + 4 mono-sum (L+R→ch3, L+R→ch4).
+    fn pcm_bridge_dj_taps_mixxx_stereo() {
+        // F-131: DJ mode taps Mixxx master L/R for spectrum display.
         let table = RoutingTable::production();
         let links = table.links_for(Mode::Dj);
         let pcm_links: Vec<_> = links
@@ -1056,25 +1008,14 @@ mod tests {
                 matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-pcm-bridge")
             })
             .collect();
-        assert_eq!(pcm_links.len(), 6);
-        // All pcm-bridge links come from Mixxx, not convolver-out.
-        for link in &pcm_links {
-            assert!(
-                matches!(&link.output_node, NodeMatch::Prefix(p) if p == "Mixxx"),
-                "DJ pcm-bridge links should come from Mixxx, got: {}",
-                link.output_node,
-            );
-        }
-        // Ch 1-2: direct L/R from Mixxx out_0/out_1.
-        let direct: Vec<_> = pcm_links.iter().filter(|l| l.input_port == "input_1" || l.input_port == "input_2").collect();
-        assert_eq!(direct.len(), 2);
-        assert_eq!(direct[0].output_port, "out_0");
-        assert_eq!(direct[1].output_port, "out_1");
-        // Ch 3-4: each has 2 links (L+R mono sum).
-        for ch in ["input_3", "input_4"] {
-            let sum: Vec<_> = pcm_links.iter().filter(|l| l.input_port == ch).collect();
-            assert_eq!(sum.len(), 2, "pcm-bridge {} should have 2 mono-sum links", ch);
-        }
+        assert_eq!(pcm_links.len(), 2);
+        // Both links come from Mixxx master L/R.
+        assert!(matches!(&pcm_links[0].output_node, NodeMatch::Prefix(p) if p == "Mixxx"));
+        assert_eq!(pcm_links[0].output_port, "out_0");
+        assert_eq!(pcm_links[0].input_port, "input_1");
+        assert!(matches!(&pcm_links[1].output_node, NodeMatch::Prefix(p) if p == "Mixxx"));
+        assert_eq!(pcm_links[1].output_port, "out_1");
+        assert_eq!(pcm_links[1].input_port, "input_2");
     }
 
     #[test]
@@ -1363,9 +1304,9 @@ mod tests {
             .iter()
             .filter(|l| matches!(&l.output_node, NodeMatch::Prefix(p) if p == "Mixxx"))
             .collect();
-        // 2 mains + 4 sub fan-out + 2 HP + 6 pcm-bridge pre-conv
-        // + F-124: 8 level-bridge-sw = 22
-        assert_eq!(mixxx_links.len(), 22);
+        // 2 mains + 4 sub fan-out + 2 HP + F-131: 2 pcm-bridge stereo
+        // + F-124: 8 level-bridge-sw = 18
+        assert_eq!(mixxx_links.len(), 18);
     }
 
     #[test]
@@ -1422,9 +1363,9 @@ mod tests {
             .iter()
             .filter(|l| matches!(&l.output_node, NodeMatch::Prefix(p) if p == "REAPER"))
             .collect();
-        // 2 mains + 4 sub fan-out + 2 HP + 2 IEM + 6 pcm-bridge pre-conv
-        // + F-124: 8 level-bridge-sw = 24
-        assert_eq!(reaper_links.len(), 24);
+        // 2 mains + 4 sub fan-out + 2 HP + 2 IEM + F-131: 2 pcm-bridge stereo
+        // + F-124: 8 level-bridge-sw = 20
+        assert_eq!(reaper_links.len(), 20);
     }
 
     #[test]
