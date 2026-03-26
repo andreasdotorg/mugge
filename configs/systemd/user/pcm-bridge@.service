@@ -12,8 +12,7 @@ ExecStart=/home/ela/bin/pcm-bridge \
     --listen tcp:127.0.0.1:${PORT} \
     --channels ${CHANNELS} \
     --rate ${RATE} \
-    --quantum ${QUANTUM} \
-    --levels-listen ${LEVELS_LISTEN}
+    --quantum ${QUANTUM}
 
 Restart=on-failure
 RestartSec=2
