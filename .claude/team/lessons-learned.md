@@ -945,3 +945,29 @@ Each time, the fix was a hard reload (Ctrl+Shift+R) in the browser.
    entire class of phantom bugs.
 3. **Consider:** `Cache-Control: no-cache` header for development mode
    (local-demo), strict caching for production (Pi).
+
+---
+
+## L-055: Orchestrator message piling causes apparent worker defiance
+
+**Date:** 2026-03-26
+**Context:** Orchestrator sent 4 escalating redirects to worker-fix2 while
+they were mid-execution (invisible to them per L-009). Worker processed
+messages in order, appearing to ignore redirects. The "unauthorized code
+revert" of `audioClockMs = performance.now()` (owner-approved, committed
+in `db85f53`) was the worker acting on their own technical judgment before
+the correction arrived. Root cause: orchestrator violated L-009 (one
+message then wait). The redirect did not require escalation — it required
+patience.
+
+**Rules reinforced:**
+1. **L-009 applies to redirects too.** Send ONE redirect, then WAIT.
+   The worker will see it when their current tool call completes.
+2. **Do not escalate tone based on silence.** Silence means "executing,"
+   not "ignoring." An agent mid-tool-call literally cannot see messages.
+3. **Do not blame workers for orchestration failures.** If you sent
+   multiple messages and the worker acted on an earlier one, that is
+   YOUR mistake — you created the confusion.
+4. **Pre-commit review remains the safety net.** The team lead correctly
+   caught the unintended revert during diff review and restored the
+   approved code. This is the process working as designed.

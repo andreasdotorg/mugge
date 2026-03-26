@@ -3781,7 +3781,7 @@ status and reflect the active mode visually.
 
 **Filed:** 2026-03-25
 **Severity:** Medium
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-26. Investigation found sweep end frequency control already implemented. No code change needed.)
 **Affects:** Web UI test tab sweep controls (`test.js`)
 **Found by:** Owner (validation of US-082, tested against `8b84518`)
 
@@ -3799,6 +3799,11 @@ specify both the start and end frequencies of the sweep (e.g., 20 Hz to
 - Add a labeled end frequency control (e.g., "End: 20000 Hz")
 - Wire both to the signal-gen `play` RPC command's sweep parameters
 - Add sensible defaults (20 Hz - 20 kHz)
+
+### Resolution (2026-03-26)
+
+Already implemented. Sweep start and end frequency controls are present
+and functional. No code change needed.
 
 **Related:** US-053 (test tab functionality), US-082
 
@@ -3868,7 +3873,7 @@ automatically stop and replay at the new level.
 
 **Filed:** 2026-03-25
 **Severity:** Medium
-**Status:** OPEN
+**Status:** BY-DESIGN (2026-03-26. Expected pink-spectrum physics for broadband signals. Sine sweep shows constant peak — FFT normalization is correct.)
 **Affects:** Web UI spectrum analyzer
 **Found by:** Owner (validation of US-080, tested against `8b84518`)
 
@@ -3893,6 +3898,13 @@ at the same level_dbfs. All should show the same peak height in the
 spectrum (within ~1 dB for windowing scalloping). If they don't, the FFT
 normalization or bin-to-pixel mapping is incorrect.
 
+### Resolution (2026-03-26)
+
+BY-DESIGN. The observed behavior is expected pink-spectrum physics: broadband
+noise signals have -3 dB/octave rolloff at higher frequencies. Pure sine
+sweep confirms constant peak across all frequencies — the FFT normalization
+and bin-to-pixel mapping are correct. No code change needed.
+
 **Related:** US-080, D-046 (FFT presets)
 
 ---
@@ -3901,10 +3913,10 @@ normalization or bin-to-pixel mapping is incorrect.
 
 **Filed:** 2026-03-25
 **Severity:** High
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-26. Investigation found auto-range already implemented: `autoRange: true` in test.js:791. Shared renderer from F-101 fix includes auto-range for both tabs.)
 **Affects:** Web UI test tab spectrum (`test.js`)
 **Found by:** Owner (validation of US-080, tested against `8b84518`)
-**Blocks:** US-080 validation
+**Blocks:** ~~US-080 validation~~ Unblocked
 
 ### Description
 
@@ -3921,6 +3933,11 @@ Part of the F-101 rendering deduplication. When the shared rendering module
 is created, auto-ranging must be included in the shared code so both tabs
 get it automatically.
 
+### Resolution (2026-03-26)
+
+Already fixed. The shared spectrum renderer (`151bf48`) includes auto-range
+and test.js passes `autoRange: true` (line 791). No code change needed.
+
 **Related:** F-101 (rendering dedup), US-080 (auto-range AC), D-048
 
 ---
@@ -3929,7 +3946,7 @@ get it automatically.
 
 **Filed:** 2026-03-25
 **Severity:** High
-**Status:** OPEN (continuation of F-103)
+**Status:** FIXED (2026-03-26, pending commit. Fix in spectrum-renderer.js, dashboard.js, statusbar.js.)
 **Affects:** Web UI dashboard level meters
 **Found by:** Owner (validation of US-081, tested against `8b84518`)
 **Blocks:** US-081 validation
@@ -3957,6 +3974,13 @@ Review the peak hold/decay logic in the meter rendering code:
 - Decay target should be `max(current_peak, decaying_value - 20*dt)`
 - The decaying marker must never go below the current instantaneous peak
 
+### Resolution (2026-03-26)
+
+Fixed in 3 files: spectrum-renderer.js (gradual 20 dB/s decay after hold
+period), dashboard.js and statusbar.js (hold only resets to current peak
+if signal present + 1s delta clamp on reconnect). Pending commit after
+Rule 13 review.
+
 **Related:** F-103 (meter flashing — same root cause area), US-081, D-047
 
 ---
@@ -3965,10 +3989,11 @@ Review the peak hold/decay logic in the meter rendering code:
 
 **Filed:** 2026-03-25
 **Severity:** High
-**Status:** OPEN
+**Status:** OPEN (reclassified 2026-03-26: not a web-UI bug — architecture gap blocked on US-084 web UI wiring phase)
 **Affects:** GraphManager routing / pcm-bridge tap point / web UI meters
 **Found by:** Owner (validation of US-079/US-080, tested against `8b84518`)
 **Blocks:** US-079 validation, US-080 validation
+**Blocked by:** US-084 (level-bridge-sw on port 9100)
 
 ### Description
 
@@ -3995,7 +4020,15 @@ The pre-convolver tap should show the signal-gen's full-range output. The
 USBStreamer outputs should show the post-convolver crossover-filtered signal
 (if any — with dirac passthrough they should be identical to input).
 
-**Related:** US-079 (pre-convolver tap), US-080, task #55 (GM routing change)
+### Investigation (2026-03-26)
+
+Root cause is an architecture gap, not a web-UI or GM routing bug. pcm-bridge
+on port 9100 captures 4ch from convolver output, but the dashboard expects
+8ch app routing bus (MAIN+APP). The fix is part of US-084 remaining phases:
+level-bridge-sw (D-049) needs to be the service on port 9100, not pcm-bridge.
+Reclassified as blocked on US-084 web UI wiring phase.
+
+**Related:** US-079 (pre-convolver tap), US-080, US-084 (level-bridge-sw), D-049
 
 ---
 
@@ -4110,3 +4143,10 @@ only). pcm-bridge uses `RingBuffer` for PCM streaming. This crash
 affects pcm-bridge reliability but not level-bridge.
 
 **Related:** audio-common shared crate, pcm-bridge (consumer of RingBuffer)
+
+### Follow-up (2026-03-26, Architect retroactive review of `94b1ea4`)
+
+Architect flagged that `debug_assert` only guards in debug builds. The unsafe
+`ptr::copy_nonoverlapping` in `write_interleaved()` has NO bounds check in
+release builds. **Must upgrade to runtime assert or explicit length guard.**
+This is a memory safety concern for production pcm-bridge. Tracked for fix.
