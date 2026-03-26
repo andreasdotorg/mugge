@@ -149,9 +149,21 @@ async def lifespan(app: FastAPI):
             SystemCollector,
         )
         levels_host = os.environ.get("PI4AUDIO_LEVELS_HOST", "127.0.0.1")
-        levels_port = int(os.environ.get("PI4AUDIO_LEVELS_PORT", "9100"))
-        app.state.levels = LevelsCollector(host=levels_host, port=levels_port)
-        await app.state.levels.start()
+        # 3 level-bridge instances (US-084 / D-049):
+        #   sw (port 9100): app/signal-gen outputs
+        #   hw_out (port 9101): USBStreamer sink monitor
+        #   hw_in (port 9102): USBStreamer capture
+        levels_sw_port = int(os.environ.get("PI4AUDIO_LEVELS_SW_PORT",
+                             os.environ.get("PI4AUDIO_LEVELS_PORT", "9100")))
+        levels_hw_out_port = int(os.environ.get("PI4AUDIO_LEVELS_HW_OUT_PORT", "9101"))
+        levels_hw_in_port = int(os.environ.get("PI4AUDIO_LEVELS_HW_IN_PORT", "9102"))
+        app.state.levels_sw = LevelsCollector(host=levels_host, port=levels_sw_port)
+        app.state.levels_hw_out = LevelsCollector(host=levels_host, port=levels_hw_out_port)
+        app.state.levels_hw_in = LevelsCollector(host=levels_host, port=levels_hw_in_port)
+        app.state.levels = app.state.levels_sw  # backward compat alias
+        await app.state.levels_sw.start()
+        await app.state.levels_hw_out.start()
+        await app.state.levels_hw_in.start()
         app.state.cdsp = FilterChainCollector()
         await app.state.cdsp.start()
         if PCM_JACK_MODE:
@@ -184,7 +196,8 @@ async def lifespan(app: FastAPI):
         _sd_notify("STOPPING=1")
     if not MOCK_MODE:
         log.info("Stopping collectors...")
-        for name in ("levels", "cdsp", "pcm", "system_collector", "pw"):
+        for name in ("levels_sw", "levels_hw_out", "levels_hw_in",
+                      "cdsp", "pcm", "system_collector", "pw"):
             collector = getattr(app.state, name, None)
             if collector is not None:
                 await collector.stop()

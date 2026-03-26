@@ -27,9 +27,10 @@ import pytest
 
 from app.collectors.pipewire_collector import PipeWireCollector
 from app.collectors.filterchain_collector import FilterChainCollector
+from app.collectors.levels_collector import LevelsCollector
 from app.collectors.system_collector import SystemCollector
 from app.collectors.pcm_collector import PcmStreamCollector
-from app.mock.mock_data import MockDataGenerator
+from app.mock.mock_data import MockDataGenerator, SCENARIOS
 from app.ws_system import _build_system_snapshot
 
 
@@ -1217,4 +1218,126 @@ class TestBuildSystemSnapshotSafety:
             assert key in real_data["safety_alerts"], (
                 f"Key 'safety_alerts.{key}' in mock but missing "
                 f"from _build_system_snapshot"
+            )
+
+
+# ── 10. 3-Collector Backend (US-084 / D-049) ──────────────────
+
+class TestThreeCollectorSetup:
+    """US-084: 3 LevelsCollector instances wired into the monitoring payload."""
+
+    def test_levels_collector_default_ports(self):
+        """LevelsCollector accepts host/port parameters."""
+        lc1 = LevelsCollector(host="127.0.0.1", port=9100)
+        lc2 = LevelsCollector(host="127.0.0.1", port=9101)
+        lc3 = LevelsCollector(host="127.0.0.1", port=9102)
+        assert lc1._port == 9100
+        assert lc2._port == 9101
+        assert lc3._port == 9102
+
+    def test_levels_collector_independent_snapshots(self):
+        """3 collectors maintain independent snapshot state."""
+        lc1 = LevelsCollector(port=9100)
+        lc2 = LevelsCollector(port=9101)
+        lc3 = LevelsCollector(port=9102)
+
+        lc1._snapshot = {"peak": [-3.0] * 8, "rms": [-12.0] * 8, "pos": 1, "nsec": 100}
+        lc2._snapshot = {"peak": [-6.0] * 8, "rms": [-18.0] * 8, "pos": 2, "nsec": 200}
+        lc3._snapshot = {"peak": [-30.0] * 2 + [-120.0] * 6,
+                         "rms": [-35.0] * 2 + [-120.0] * 6, "pos": 3, "nsec": 300}
+
+        assert lc1.peak()[0] == -3.0
+        assert lc2.peak()[0] == -6.0
+        assert lc3.peak()[0] == -30.0
+        assert lc1.rms()[0] == -12.0
+        assert lc2.rms()[0] == -18.0
+        assert lc3.rms()[0] == -35.0
+
+    def test_levels_collector_graceful_none_snapshot(self):
+        """When a collector has no snapshot, peak/rms return silent values."""
+        lc = LevelsCollector(port=9101)
+        assert lc.peak() == [-120.0] * 8
+        assert lc.rms() == [-120.0] * 8
+        assert lc.graph_clock() == (0, 0)
+
+    def test_start_stop_multiple_collectors(self):
+        """3 collectors can be started and stopped without error."""
+        async def _test():
+            lc1 = LevelsCollector(port=9100)
+            lc2 = LevelsCollector(port=9101)
+            lc3 = LevelsCollector(port=9102)
+            await lc1.start()
+            await lc2.start()
+            await lc3.start()
+            # Let them attempt connection (will fail on no server — that's ok)
+            await asyncio.sleep(0.3)
+            await lc1.stop()
+            await lc2.stop()
+            await lc3.stop()
+            assert lc1._task is None
+            assert lc2._task is None
+            assert lc3._task is None
+
+        _run_async(_test())
+
+
+class TestMonitoringPayloadMerge:
+    """US-084: ws_monitoring merges 3 level sources into the payload."""
+
+    def test_mock_monitoring_has_usbstreamer_keys(self):
+        """Mock monitoring data must include usbstreamer_peak/rms arrays."""
+        gen = MockDataGenerator(scenario="A", freeze_time=True)
+        m = gen.monitoring()
+        assert "usbstreamer_peak" in m
+        assert "usbstreamer_rms" in m
+        assert len(m["usbstreamer_peak"]) == 8
+        assert len(m["usbstreamer_rms"]) == 8
+
+    def test_mock_monitoring_usbstreamer_values_in_range(self):
+        """usbstreamer level values must be in [-120.0, 0.0] dBFS."""
+        for sid in SCENARIOS:
+            gen = MockDataGenerator(scenario=sid)
+            m = gen.monitoring()
+            for key in ("usbstreamer_peak", "usbstreamer_rms"):
+                for ch, val in enumerate(m[key]):
+                    assert -120.0 <= val <= 0.0, (
+                        f"Scenario {sid} {key}[{ch}]={val} out of range"
+                    )
+
+    def test_mock_live_scenario_has_active_physin(self):
+        """Live scenario (B) should have active PHYS IN ch 0-1 (mic/spare)."""
+        gen = MockDataGenerator(scenario="B", freeze_time=True)
+        m = gen.monitoring()
+        # Live mode: channels 0-1 should be active (not -120)
+        assert m["usbstreamer_rms"][0] > -120.0
+        assert m["usbstreamer_rms"][1] > -120.0
+        # Channels 2-7 should be silent
+        for ch in range(2, 8):
+            assert m["usbstreamer_rms"][ch] == -120.0
+
+    def test_mock_dj_scenario_physin_silent(self):
+        """DJ scenario (A) should have all PHYS IN channels silent."""
+        gen = MockDataGenerator(scenario="A", freeze_time=True)
+        m = gen.monitoring()
+        for ch in range(8):
+            assert m["usbstreamer_rms"][ch] == -120.0
+            assert m["usbstreamer_peak"][ch] == -120.0
+
+    def test_filterchain_monitoring_has_usbstreamer_keys(self, fc_collector):
+        """FilterChainCollector monitoring_snapshot includes usbstreamer keys."""
+        snap = fc_collector.monitoring_snapshot()
+        assert "usbstreamer_peak" in snap
+        assert "usbstreamer_rms" in snap
+        assert len(snap["usbstreamer_peak"]) == 8
+        assert len(snap["usbstreamer_rms"]) == 8
+
+    def test_monitoring_keys_match_mock_with_usbstreamer(self, fc_collector, mock_gen_a):
+        """FilterChainCollector monitoring_snapshot must have all mock keys,
+        including the new usbstreamer_peak/rms."""
+        mock_snap = mock_gen_a.monitoring()
+        fc_snap = fc_collector.monitoring_snapshot()
+        for key in mock_snap:
+            assert key in fc_snap, (
+                f"Key '{key}' in mock monitoring but missing "
+                f"from FilterChainCollector"
             )

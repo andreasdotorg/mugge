@@ -343,12 +343,33 @@ class MockDataGenerator:
         )))
         rate_adjust = s["rate_adjust"] + 0.00002 * math.sin(t * 0.1)
 
+        # -- PHYS IN (USBStreamer capture) mock data (US-084) --
+        # Generate 8 channels of PHYS IN levels. In live mode channels 0-1
+        # are active (mic/spare); otherwise silent.
+        usbstreamer_rms = []
+        usbstreamer_peak = []
+        live_phys_active = {0, 1} if s["mode"] == "live" else set()
+        for ch in range(8):
+            if ch not in live_phys_active:
+                usbstreamer_rms.append(-120.0)
+                usbstreamer_peak.append(-120.0)
+            else:
+                # Gentle mic-level oscillation
+                mic_base = -30.0 + 3.0 * math.sin(t * 0.7 + ch * 1.1)
+                mic_noise = random.uniform(-2.0, 2.0)
+                mic_rms = max(-120.0, min(0.0, mic_base + mic_noise))
+                mic_peak = max(-120.0, min(0.0, mic_rms + random.uniform(2.0, 6.0)))
+                usbstreamer_rms.append(round(mic_rms, 1))
+                usbstreamer_peak.append(round(mic_peak, 1))
+
         return {
             "timestamp": self._frozen_timestamp if self.freeze_time else time.time(),
             "capture_rms": capture_rms,
             "capture_peak": capture_peak,
             "playback_rms": playback_rms,
             "playback_peak": playback_peak,
+            "usbstreamer_rms": usbstreamer_rms,
+            "usbstreamer_peak": usbstreamer_peak,
             "spectrum": {
                 "bands": self._spectrum(t, active),
             },

@@ -91,6 +91,8 @@ class FilterChainCollector:
             "capture_peak": [-120.0] * 8,
             "playback_rms": [-120.0] * 8,
             "playback_peak": [-120.0] * 8,
+            "usbstreamer_rms": [-120.0] * 8,
+            "usbstreamer_peak": [-120.0] * 8,
             "spectrum": {
                 "bands": [-60.0] * 31,
             },

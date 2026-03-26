@@ -44,30 +44,44 @@ async def ws_monitoring(
             log.exception("Monitoring WS error")
         return
 
-    # Real mode — read from FilterChainCollector (D-040) + LevelsCollector
+    # Real mode — read from FilterChainCollector (D-040) + 3 LevelsCollectors (US-084)
     cdsp = getattr(ws.app.state, "cdsp", None)
-    levels = getattr(ws.app.state, "levels", None)
+    levels_sw = getattr(ws.app.state, "levels_sw", None)
+    levels_hw_out = getattr(ws.app.state, "levels_hw_out", None)
+    levels_hw_in = getattr(ws.app.state, "levels_hw_in", None)
+    # Backward compat: fall back to single levels collector if 3-instance setup not present
+    if levels_sw is None:
+        levels_sw = getattr(ws.app.state, "levels", None)
     log.info("Monitoring WS connected (real)")
     try:
         while True:
-            # US-077 Phase 4: wait for new data from pcm-bridge instead of
-            # sleeping. Falls back to 200ms timeout when pcm-bridge is
+            # US-077 Phase 4: wait for new data from sw level-bridge as primary
+            # clock. Falls back to 200ms timeout when level-bridge is
             # disconnected, so the WS still pushes updates for DSP health.
-            if levels is not None:
-                await levels.wait_new_data(timeout=0.2)
+            if levels_sw is not None:
+                await levels_sw.wait_new_data(timeout=0.2)
             else:
                 await asyncio.sleep(0.1)
             if cdsp is not None:
                 data = cdsp.monitoring_snapshot()
             else:
                 data = _empty_monitoring()
-            # Overlay real peak/RMS and graph clock from pcm-bridge LevelsCollector
-            if levels is not None:
-                data["capture_peak"] = levels.peak()
-                data["capture_rms"] = levels.rms()
-                pos, nsec = levels.graph_clock()
+            # Overlay real peak/RMS from 3 level-bridge instances (US-084 / D-049):
+            #   capture_peak/rms   <- levels_sw  (MAIN[0-1] + APP>DSP[2-7])
+            #   playback_peak/rms  <- levels_hw_out (CONV>OUT[0-7])
+            #   usbstreamer_peak/rms <- levels_hw_in (PHYS IN[0-7])
+            if levels_sw is not None:
+                data["capture_peak"] = levels_sw.peak()
+                data["capture_rms"] = levels_sw.rms()
+                pos, nsec = levels_sw.graph_clock()
                 data["pos"] = pos
                 data["nsec"] = nsec
+            if levels_hw_out is not None:
+                data["playback_peak"] = levels_hw_out.peak()
+                data["playback_rms"] = levels_hw_out.rms()
+            if levels_hw_in is not None:
+                data["usbstreamer_peak"] = levels_hw_in.peak()
+                data["usbstreamer_rms"] = levels_hw_in.rms()
             await ws.send_text(json.dumps(data))
     except WebSocketDisconnect:
         log.info("Monitoring WS disconnected")
@@ -84,6 +98,8 @@ def _empty_monitoring() -> dict:
         "capture_peak": [-120.0] * 8,
         "playback_rms": [-120.0] * 8,
         "playback_peak": [-120.0] * 8,
+        "usbstreamer_rms": [-120.0] * 8,
+        "usbstreamer_peak": [-120.0] * 8,
         "spectrum": {"bands": [-60.0] * 31},
         "camilladsp": {
             "state": "Disconnected",
