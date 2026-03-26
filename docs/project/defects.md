@@ -3808,7 +3808,7 @@ specify both the start and end frequencies of the sweep (e.g., 20 Hz to
 
 **Filed:** 2026-03-25
 **Severity:** Medium
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-26)
 **Affects:** signal-gen sweep mode / test tab UI
 **Found by:** Owner (validation of US-082, tested against `8b84518`)
 
@@ -3837,7 +3837,7 @@ If signal-gen lacks duration support, this is a feature gap in US-082/US-052.
 
 **Filed:** 2026-03-25
 **Severity:** High
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-26)
 **Affects:** Web UI test tab level control / signal-gen RPC
 **Found by:** Owner (validation of US-082, tested against `8b84518`)
 
@@ -4080,7 +4080,7 @@ delay, root cause), task #65 (shared renderer refactor that introduced this)
 
 **Filed:** 2026-03-25
 **Severity:** Medium
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-25. Root cause: test created RingBuffer capacity 8 but wrote 256 samples — heap overflow via unsafe `ptr::copy_nonoverlapping`. Fix: correct test capacity + debug_assert in write_interleaved. 72/72 audio-common tests pass.)
 **Affects:** `src/audio-common/` ring_buffer module (unit tests)
 **Found by:** worker-arch (during US-084 level-bridge extraction)
 **Pre-existing:** Yes — unrelated to level-bridge changes

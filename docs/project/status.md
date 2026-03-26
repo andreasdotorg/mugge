@@ -230,7 +230,13 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 
 **CM commit requested** for full batch (US-084 + web UI fixes).
 
-**Session defect tally:** 18 filed (F-099-F-116), 8 resolved (F-099, F-101, F-102, F-103, F-105, F-106, F-115), 1 cannot-reproduce (F-114), 9 OPEN (F-100, F-104, F-107-F-113, F-116). Of those, F-107/F-108/F-111/F-112 may already be fixed — need verification after commit.
+**F-116 RESOLVED:** audio-common ring_buffer crash. Root cause: test capacity 8 vs 256-sample write → heap overflow. Fix: correct test + debug_assert. 72/72 tests pass.
+
+**F-108/F-109 RESOLVED** (2026-03-26): Sweep duration and level control fixes. Also fixed: signal-gen fade ramp math bug.
+
+**Process incident:** worker-fix2 reverted owner-approved `audioClockMs = performance.now()` seed without authorization (ignored 4 redirects). Team lead restored it manually. CM commit excludes the unauthorized revert. **Workers must not modify owner-approved code without explicit authorization.**
+
+**Session defect tally:** 18 filed (F-099-F-116), 10 resolved (F-099, F-101, F-102, F-103, F-105, F-106, F-108, F-109, F-115, F-116), 1 cannot-reproduce (F-114), 7 OPEN (F-100, F-104, F-107, F-110, F-111, F-112, F-113). F-107/F-111/F-112 may already be fixed — need verification after commit.
 
 ### Session Progress (2026-03-23 / 2026-03-24)
 
