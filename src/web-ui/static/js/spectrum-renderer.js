@@ -94,6 +94,20 @@
         return data[lo] * (1 - t) + data[hi] * t;
     }
 
+    // Spectrum skew fix: take the max dB across all bins that a display
+    // pixel spans. At high frequencies, one pixel covers many bins —
+    // using a single interpolated value misses energy and causes rolloff.
+    function maxBinRange(data, binLo, binHi) {
+        var lo = Math.floor(binLo);
+        var hi = Math.ceil(binHi);
+        if (hi <= lo + 1) return interpolateDB(data, (binLo + binHi) * 0.5);
+        var peak = -Infinity;
+        for (var i = lo; i <= hi && i < data.length; i++) {
+            if (data[i] > peak) peak = data[i];
+        }
+        return peak;
+    }
+
     /**
      * Create a new spectrum renderer instance.
      */
@@ -187,12 +201,18 @@
             }
         }
 
+        // F-133: Snap display bounds to nearest 6 dB grid line.
+        // Tracking vars (autoDbMin/Max) stay smooth; only display snaps.
         function currentDbMin() {
-            return autoRangeEnabled ? autoDbMin : dbMin;
+            if (!autoRangeEnabled) return dbMin;
+            var snapped = Math.floor(autoDbMin / 6) * 6;
+            return Math.max(snapped, AUTO_FLOOR_DB);
         }
 
         function currentDbMax() {
-            return autoRangeEnabled ? autoDbMax : dbMax;
+            if (!autoRangeEnabled) return dbMax;
+            var snapped = Math.ceil(autoDbMax / 6) * 6;
+            return Math.min(snapped, 0);
         }
 
         function dbToY(db) {
@@ -427,9 +447,11 @@
             // using currentDbMin() would draw noise when auto-range zooms in.
             var floorDb = dbMin + 1;
 
-            // Per-column fill
+            // Per-column fill (spectrum skew fix: max across bin range)
             for (var x = 0; x < lutLen; x++) {
-                var db = interpolateDB(freqData, freqLUT[x]);
+                var binThis = freqLUT[x];
+                var binNext = x + 1 < lutLen ? freqLUT[x + 1] : binThis + 1;
+                var db = maxBinRange(freqData, binThis, binNext);
 
                 if (db > floorDb) {
                     var y = dbToY(db);
@@ -464,11 +486,13 @@
                 }
             }
 
-            // Outline stroke — break at floor
+            // Outline stroke — break at floor (spectrum skew fix)
             var inStroke = false;
             ctx.beginPath();
             for (var x2 = 0; x2 < lutLen; x2++) {
-                var db2 = interpolateDB(freqData, freqLUT[x2]);
+                var binThis2 = freqLUT[x2];
+                var binNext2 = x2 + 1 < lutLen ? freqLUT[x2 + 1] : binThis2 + 1;
+                var db2 = maxBinRange(freqData, binThis2, binNext2);
                 if (db2 <= floorDb) {
                     inStroke = false;
                     continue;
@@ -558,12 +582,6 @@
             if (autoDbMax - autoDbMin < AUTO_MIN_RANGE_DB) {
                 autoDbMin = autoDbMax - AUTO_MIN_RANGE_DB;
             }
-
-            // F-133: Snap display bounds to nearest 6 dB grid line
-            autoDbMax = Math.ceil(autoDbMax / 6) * 6;
-            autoDbMin = Math.floor(autoDbMin / 6) * 6;
-            if (autoDbMax > 0) autoDbMax = 0;
-            if (autoDbMin < AUTO_FLOOR_DB) autoDbMin = AUTO_FLOOR_DB;
         }
 
         // ---- Public API ----

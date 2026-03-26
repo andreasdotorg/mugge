@@ -89,9 +89,10 @@
         return (db - DB_MIN) / (DB_MAX - DB_MIN);
     }
 
+    // F-138: Group color is primary fill; warning/danger only near clip.
     function barColor(peakDb, groupColor) {
-        if (peakDb >= -6) return PiAudio.cssVar("--danger");
-        if (peakDb >= -18) return PiAudio.cssVar("--warning");
+        if (peakDb >= CLIP_THRESHOLD_DB) return PiAudio.cssVar("--danger");
+        if (peakDb >= -6) return PiAudio.cssVar("--warning");
         return groupColor || PiAudio.cssVar("--safe");
     }
 
