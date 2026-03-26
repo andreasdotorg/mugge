@@ -35,15 +35,26 @@ cleanup() {
     echo "[local-demo] Shutting down..."
 
     # Kill child processes in reverse order.
-    # pkill -P kills children first (e.g., uvicorn's --reload multiprocessing
-    # child) to prevent orphaned processes holding ports after cleanup.
+    # First pass: SIGTERM with children (pkill -P).
     for (( i=${#PIDS[@]}-1 ; i>=0 ; i-- )) ; do
         local pid="${PIDS[$i]}"
         if kill -0 "$pid" 2>/dev/null; then
             pkill -P "$pid" 2>/dev/null || true
             kill "$pid" 2>/dev/null || true
-            wait "$pid" 2>/dev/null || true
         fi
+    done
+
+    # Brief grace period for processes to exit cleanly.
+    sleep 0.5
+
+    # Second pass: SIGKILL any survivors.
+    for (( i=${#PIDS[@]}-1 ; i>=0 ; i-- )) ; do
+        local pid="${PIDS[$i]}"
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "[local-demo] Force-killing PID $pid..."
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+        wait "$pid" 2>/dev/null || true
     done
 
     # Stop PipeWire test environment
@@ -55,6 +66,98 @@ cleanup() {
 }
 
 trap cleanup EXIT INT TERM
+
+# ---- 0. Pre-flight cleanup (F-100) ----
+# Kill orphaned processes from previous local-demo runs that may hold ports.
+# This handles the case where a previous run was force-killed (Ctrl+C during
+# startup, kill -9, terminal close) and the trap handler didn't run.
+
+DEMO_PROCESS_PATTERNS=(
+    "pi4audio-graph-manager"
+    "pi4audio-signal-gen"
+    "level-bridge"
+    "pcm-bridge"
+    "uvicorn app.main:app.*8080"
+)
+
+# Ports that must be free before we can start.
+REQUIRED_PORTS=(4001 4002 9090 9100 9101 9102 8080)
+
+preflight_cleanup() {
+    echo "[local-demo] Pre-flight cleanup: checking for stale processes..."
+    local found_stale=false
+
+    for pattern in "${DEMO_PROCESS_PATTERNS[@]}"; do
+        # Filter out zombie/defunct processes — they hold no resources.
+        local live_pids
+        live_pids=$(pgrep -f "$pattern" 2>/dev/null | while read -r p; do
+            if [ -d "/proc/$p" ] && ! grep -q '(Z)' "/proc/$p/status" 2>/dev/null; then
+                echo "$p"
+            fi
+        done || true)
+        if [ -n "$live_pids" ]; then
+            found_stale=true
+            echo "[local-demo]   Killing stale: $pattern (PIDs: $live_pids)"
+            for p in $live_pids; do
+                kill "$p" 2>/dev/null || true
+            done
+        fi
+    done
+
+    # Also stop any lingering PipeWire test environment.
+    "$PW_TEST_ENV" stop 2>/dev/null || true
+
+    if $found_stale; then
+        # Give processes time to release ports after SIGTERM.
+        sleep 1
+
+        # SIGKILL any survivors (skip zombies).
+        for pattern in "${DEMO_PROCESS_PATTERNS[@]}"; do
+            local survivors
+            survivors=$(pgrep -f "$pattern" 2>/dev/null | while read -r p; do
+                if [ -d "/proc/$p" ] && ! grep -q '(Z)' "/proc/$p/status" 2>/dev/null; then
+                    echo "$p"
+                fi
+            done || true)
+            if [ -n "$survivors" ]; then
+                echo "[local-demo]   Force-killing: $pattern"
+                for p in $survivors; do
+                    kill -9 "$p" 2>/dev/null || true
+                done
+            fi
+        done
+        sleep 0.5
+    fi
+
+    # Verify all required ports are free.
+    # Use /proc/net/tcp instead of ss — ss may not be available in Nix env.
+    local blocked=false
+    for port in "${REQUIRED_PORTS[@]}"; do
+        local hex_port
+        hex_port=$(printf '%04X' "$port")
+        # Check for LISTEN state (0A) on this port in local address column ($2)
+        local listening
+        listening=$(awk -v hp=":${hex_port}" '$2 ~ hp && $4 == "0A" {print $2}' /proc/net/tcp 2>/dev/null | head -1 || true)
+        if [ -n "$listening" ]; then
+            echo "[local-demo] ERROR: Port $port still has a listener" >&2
+            blocked=true
+        fi
+    done
+
+    if $blocked; then
+        echo "[local-demo] ERROR: Cannot start — ports still in use after cleanup." >&2
+        echo "[local-demo] Kill the above processes manually and retry." >&2
+        exit 1
+    fi
+
+    if $found_stale; then
+        echo "[local-demo] Pre-flight cleanup complete — stale processes removed."
+    else
+        echo "[local-demo] Pre-flight cleanup complete — no stale processes found."
+    fi
+}
+
+preflight_cleanup
 
 # ---- 1. Resolve binaries ----
 # nix run .#local-demo injects LOCAL_DEMO_* env vars with nix store paths.
@@ -269,23 +372,6 @@ fi
 
 # ---- 9. Start web-ui ----
 echo ""
-# Kill stale uvicorn processes that may hold port 8080 from a previous run.
-# --reload spawns a multiprocessing child that can survive parent cleanup.
-if "$PYTHON" -c "
-import socket, sys
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    s.bind(('0.0.0.0', 8080))
-    s.close()
-except OSError:
-    sys.exit(1)
-" 2>/dev/null; then
-    :
-else
-    echo "[local-demo] Port 8080 in use — killing stale processes..."
-    pkill -f 'uvicorn app.main:app.*8080' 2>/dev/null || true
-    sleep 1
-fi
 echo "[local-demo] Starting web-ui (port 8080, real collectors)..."
 export PI_AUDIO_MOCK=0
 export PI4AUDIO_GM_HOST=127.0.0.1
