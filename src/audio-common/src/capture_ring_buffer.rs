@@ -57,7 +57,9 @@ unsafe impl Sync for CaptureRingBuffer {}
 
 impl CaptureRingBuffer {
     pub fn new(duration_secs: u32, sample_rate: u32) -> Self {
-        let capacity = (duration_secs as usize) * (sample_rate as usize);
+        let capacity = (duration_secs as usize)
+            .checked_mul(sample_rate as usize)
+            .expect("CaptureRingBuffer::new: duration_secs * sample_rate overflow");
         Self {
             buffer: UnsafeCell::new(vec![0.0f32; capacity]),
             capacity,

@@ -130,8 +130,10 @@ impl RingBuffer {
 
         // Copy samples into the ring buffer, wrapping around if needed.
         let start_idx = (wp & mask) * channels;
-        let total_samples = n_frames * channels;
-        let ring_len = self.capacity * channels;
+        let total_samples = n_frames.checked_mul(channels)
+            .expect("write_interleaved: n_frames * channels overflow");
+        let ring_len = self.capacity.checked_mul(channels)
+            .expect("write_interleaved: capacity * channels overflow");
 
         // Safety: we are the single writer. No other thread writes to `data`.
         // Readers only access positions behind our write_pos (after the
@@ -207,8 +209,10 @@ impl RingBuffer {
 
         let mask = self.capacity - 1;
         let channels = self.channels;
-        let total_samples = n_frames * channels;
-        let ring_len = self.capacity * channels;
+        let total_samples = n_frames.checked_mul(channels)
+            .expect("read_interleaved: n_frames * channels overflow");
+        let ring_len = self.capacity.checked_mul(channels)
+            .expect("read_interleaved: capacity * channels overflow");
         let start_idx = (read_pos & mask) * channels;
 
         let mut out = vec![0.0f32; total_samples];

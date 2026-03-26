@@ -43,6 +43,14 @@ use crate::routing::{Mode, RoutingTable};
 use crate::rpc::GraphEvent;
 use crate::watchdog::{Watchdog, WatchdogAction};
 
+// Compile-time canary: Registry must be layout-compatible with NonNull<pw_registry>.
+// If pipewire-rs changes its internal representation, this assertion fails at compile
+// time rather than causing UB in from_registry().
+const _: () = assert!(
+    std::mem::size_of::<pipewire::registry::Registry>()
+        == std::mem::size_of::<std::ptr::NonNull<pipewire_sys::pw_registry>>()
+);
+
 /// Lightweight handle to call `destroy_global()` on the PW registry.
 ///
 /// The PipeWire `Registry` type is not `Clone`, so we cannot share it
