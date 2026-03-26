@@ -317,9 +317,13 @@ impl ProcessState {
             }
             CommandKind::SetLevel { level_dbfs } => {
                 let new_linear = dbfs_to_linear(level_dbfs);
+                // Fade from old_level to new_level.  Since the generator
+                // will use new_linear for amplitude, the fade multiplier
+                // must start at old/new (so total = new * old/new = old)
+                // and end at 1.0 (so total = new * 1.0 = new).
                 self.fade = FadeRamp::new(
-                    self.current_level_linear / self.current_level_linear.max(1e-10),
-                    new_linear / self.current_level_linear.max(1e-10),
+                    self.current_level_linear / new_linear.max(1e-10),
+                    1.0,
                     self.ramp_samples,
                 );
                 self.current_level_dbfs = level_dbfs;

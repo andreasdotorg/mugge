@@ -167,9 +167,11 @@
             // Update signal type buttons to reflect confirmed state.
             highlightSignalBtn(state.signal);
         }
-        if (state.level_dbfs !== undefined) {
-            currentLevel = state.level_dbfs;
-        }
+        // F-109: Do NOT overwrite currentLevel from state broadcasts.
+        // The slider is the UI source of truth for level.  State broadcasts
+        // arrive every quantum (~5 ms) and would undo slider adjustments
+        // before the debounced set_level command fires.  Level is synced
+        // once on connect via applyStatusResponse().
     }
 
     // -- Signal generator status display --
@@ -510,13 +512,21 @@
                     hasConfirmedThisSession = true;
                 }
 
+                var duration = getDuration();
+                // F-108: Sweeps must have a finite duration.  If the user
+                // left "Continuous" selected, fall back to the burst input
+                // value (default 5 s) so the sweep actually ends.
+                if (selectedSignal === "sweep" && duration == null) {
+                    var burstInput = $("tt-burst-sec");
+                    duration = burstInput ? parseFloat(burstInput.value) || 5 : 5;
+                }
                 var cmd = {
                     cmd: "play",
                     signal: selectedSignal,
                     channels: selectedChannels,
                     level_dbfs: Math.min(currentLevel, HARD_CAP_DBFS),
                     freq: currentFreq,
-                    duration: getDuration()
+                    duration: duration
                 };
                 if (selectedSignal === "sweep") {
                     cmd.sweep_end = currentSweepEnd;
