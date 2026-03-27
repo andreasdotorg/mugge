@@ -1,0 +1,27 @@
+# HOQS C3D mid section — 2x HOQS N123 Neo 12" midrange drivers
+# Used in HOQS C3D 3-way active system (Paraflex horn-loaded design).
+# CVR DSP 3004 bypassed — mugge handles active crossover as combined FIR.
+#
+# Data source: hoqs.com.au (Wayback Machine 2025-02-18)
+# T/S parameters measured after preconditioning, VC at room temperature.
+# NOTE: N123 is a 12" driver, horn-loaded in the C3D cabinet.
+# Very low Qts (0.16) — designed for horn loading. Do NOT use in sealed box.
+
+name: "HOQS C3D Mid (2x N123)"
+manufacturer: "HOQS"
+model: "C3D Mid Section (2x N123 Neo 12)"
+type: horn
+
+impedance_ohm: 8  # Per driver. 2x in parallel = 4 ohm, 2x in series = 16 ohm. TODO(owner): Verify wiring.
+sensitivity_db_spl: 99  # Single driver 98.65 dB. 2x adds ~3 dB mutual coupling but horn loading varies. Conservative 99 dB.
+
+# D-029 gain staging
+max_boost_db: 0
+mandatory_hpf_hz: 100  # Set at sub/mid crossover point for excursion protection below passband.
+
+# Power handling
+max_power_watts: 500  # Per driver 500W nominal (1000W program). 2x drivers in C3D cabinet.
+power_limit_note: "500W nominal per driver (1000W program). 2x N123 in C3D cabinet. Verify parallel/series wiring for impedance."
+
+# Compensation EQ (none — correction via FIR)
+compensation_eq: []

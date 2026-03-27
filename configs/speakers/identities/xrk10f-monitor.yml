@@ -1,0 +1,30 @@
+# XRK-10F 2-way monitor — diyaudio design
+# Scan-Speak 10F/8414G10 (HF) + Scan-Speak 22W/8534G00 "RS225" (woofer)
+# Passive crossover bypassed — mugge handles active crossover as combined FIR.
+#
+# NOTE: The 10F is rated at only 10W (pe_max). On a 450W amp channel,
+# thermal protection (US-092) is CRITICAL. Do not disable gain limiting.
+#
+# Driver T/S data: configs/drivers/scan-speak-10f-8414g10/driver.yml
+#                  configs/drivers/scan-speak-22w-8534g00/driver.yml
+
+name: "XRK-10F Monitor"
+manufacturer: "DIY (diyaudio XRK design)"
+model: "XRK-10F"
+type: sealed
+
+# Composite specs — the 2-way box behaves as a sealed alignment
+# from the woofer's perspective. HF response from the 10F.
+impedance_ohm: 8  # TODO(owner): Confirm — 4 or 8 ohm variant?
+sensitivity_db_spl: 87  # Estimate: blend of 86 dB (10F) and 89 dB (22W), level-matched at crossover
+
+# D-029 gain staging
+max_boost_db: 0
+mandatory_hpf_hz: 40  # Sealed box with 22W (fs=30Hz, Qts=0.39) — F3 ~50 Hz in ~15L sealed. HPF at 40 Hz for excursion protection.
+
+# Power handling — LIMITED BY THE 10F DRIVER
+max_power_watts: 10  # 10F pe_max = 10W. This is the weakest link.
+power_limit_note: "CRITICAL: 10F rated 10W only. 22W handles 70W. Amp channel must be gain-limited to protect 10F. Thermal protection (US-092) mandatory."
+
+# Compensation EQ (none — correction via FIR)
+compensation_eq: []

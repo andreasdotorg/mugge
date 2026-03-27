@@ -1,0 +1,103 @@
+# Workshop venue — HOQS C3D + ELF 3-way active system
+# All crossover + room correction in mugge as combined minimum-phase FIR.
+# CVR DSP 3004 set to flat/bypass — amps only.
+#
+# Topology: stereo 3-way = 6 speaker channels + 2 monitoring = 8 total.
+# AMP CONSTRAINT: Stereo 3-way requires 6 amp channels. The owner's
+# 4-channel Class D amp (4x450W) CANNOT drive this profile.
+# Options:
+#   1. Use venue CVR DSP 3004 amps in bypass mode (3 stereo channels)
+#   2. Mono 3-way on own amp (3 channels used, 1 spare)
+#   3. Hybrid: own amp for subs, venue amps for mid+HF
+#
+# Channel mapping (USBStreamer AUX0-AUX7):
+#   AUX0 = Sub L    (lowpass < 100 Hz)
+#   AUX1 = Sub R    (lowpass < 100 Hz)
+#   AUX2 = Mid L    (bandpass 100-1000 Hz)
+#   AUX3 = Mid R    (bandpass 100-1000 Hz)
+#   AUX4 = HF L     (highpass > 1000 Hz)
+#   AUX5 = HF R     (highpass > 1000 Hz)
+#   AUX6 = HP Left   (monitoring)
+#   AUX7 = HP Right  (monitoring)
+#
+# NOTE: No IEM channels available — live vocal mode blocked.
+#
+# Driver data sources:
+#   Sub: loudspeakerdatabase.com (LaVoce SAF185.00)
+#   Mid: hoqs.com.au (N123 Neo 12", Wayback 2025-02-18)
+#   HF:  hoqs.com.au (HF143N Neo 1.4", Wayback 2024-11-12)
+
+name: "Workshop C3D+ELF 3-Way"
+description: "HOQS C3D + ELF 3-way active system for workshop venue (~70 sqm). CVR DSP bypassed. All crossover + correction via mugge FIR."
+topology: 3way
+
+crossover:
+  frequency_hz: [100, 1000]  # HF143N manufacturer recommends 800Hz min (BW24). 1000Hz with 48dB/oct gives margin.
+  slope_db_per_oct: 48
+  type: linkwitz-riley
+
+speakers:
+  sub_left:
+    identity: hoqs-elf-saf185-sub
+    role: subwoofer
+    channel: 0
+    filter_type: lowpass
+    polarity: normal
+  sub_right:
+    identity: hoqs-elf-saf185-sub
+    role: subwoofer
+    channel: 1
+    filter_type: lowpass
+    polarity: normal
+  mid_left:
+    identity: hoqs-c3d-mid
+    role: midrange
+    channel: 2
+    filter_type: bandpass
+    polarity: normal
+  mid_right:
+    identity: hoqs-c3d-mid
+    role: midrange
+    channel: 3
+    filter_type: bandpass
+    polarity: normal
+  hf_left:
+    identity: hoqs-c3d-hf
+    role: tweeter
+    channel: 4
+    filter_type: highpass
+    polarity: normal
+  hf_right:
+    identity: hoqs-c3d-hf
+    role: tweeter
+    channel: 5
+    filter_type: highpass
+    polarity: normal
+
+monitoring:
+  hp_left: 6
+  hp_right: 7
+
+gain_staging:
+  subwoofer:
+    headroom_db: -7.0
+    power_limit_db: -24.0
+  midrange:
+    headroom_db: -7.0
+    power_limit_db: -20.0
+  tweeter:
+    headroom_db: -14.0  # HF sensitivity ~14 dB above sub — needs significant attenuation
+    power_limit_db: -24.0  # 80W drivers on potentially powerful amp channels — very conservative
+
+# D-054 mode constraints: 6 speaker channels + 2 monitoring = no IEM.
+mode_constraints:
+  - dj
+  - monitoring
+
+target_curve: flat
+filter_taps: 16384
+
+amp_notes: |
+  REQUIRES 6 AMP CHANNELS. Owner's 4ch Class D amp insufficient.
+  Use venue CVR DSP 3004 amps in bypass/flat mode, or hybrid setup
+  (own amp for subs, venue amps for mid+HF).

@@ -1,0 +1,74 @@
+# Workshop venue — XRK-10F monitors as 2-way PA (mains + subs)
+# Active crossover at 2000 Hz between 22W woofer and 10F tweeter
+# is handled INTERNALLY by each XRK-10F cabinet's passive crossover.
+#
+# From mugge's perspective, this is a FULL-RANGE satellite + sub topology:
+# mugge does the sub/main crossover at 80 Hz as combined FIR.
+# The internal 2kHz crossover within each XRK-10F cabinet is passive.
+#
+# AMP CONSTRAINT: Fits perfectly on owner's 4-channel Class D amp (4x450W).
+# Channel mapping (USBStreamer AUX0-AUX7):
+#   AUX0 = Left XRK-10F  (highpass > 80 Hz, full-range to cabinet)
+#   AUX1 = Right XRK-10F (highpass > 80 Hz, full-range to cabinet)
+#   AUX2 = Sub 1          (lowpass < 80 Hz)
+#   AUX3 = Sub 2          (lowpass < 80 Hz)
+#   AUX4 = HP Left         (monitoring)
+#   AUX5 = HP Right        (monitoring)
+#   AUX6 = IEM Left        (singer IEM — available in this topology)
+#   AUX7 = IEM Right       (singer IEM — available in this topology)
+#
+# SAFETY: 10F driver rated 10W only! Thermal protection (US-092) mandatory.
+# The 450W amp channel MUST be gain-limited. power_limit_db is set
+# conservatively to keep amp output below 10W into 8 ohms.
+
+name: "Workshop XRK-10F 2-Way"
+description: "XRK-10F monitors + subs for workshop venue (~70 sqm). 2-way active at 80 Hz via mugge FIR. Internal passive XO at 2 kHz within each cabinet."
+topology: 2way
+
+crossover:
+  frequency_hz: 80
+  slope_db_per_oct: 48
+  type: linkwitz-riley
+
+speakers:
+  sat_left:
+    identity: xrk10f-monitor
+    role: satellite
+    channel: 0
+    filter_type: highpass
+    polarity: normal
+  sat_right:
+    identity: xrk10f-monitor
+    role: satellite
+    channel: 1
+    filter_type: highpass
+    polarity: normal
+  sub1:
+    identity: sub-custom-15  # TODO(owner): Replace with actual sub identity for this venue
+    role: subwoofer
+    channel: 2
+    filter_type: lowpass
+    polarity: normal
+  sub2:
+    identity: sub-custom-15  # TODO(owner): Replace with actual sub identity for this venue
+    role: subwoofer
+    channel: 3
+    filter_type: lowpass
+    polarity: normal
+
+monitoring:
+  hp_left: 4
+  hp_right: 5
+  hp2_left: 6
+  hp2_right: 7
+
+gain_staging:
+  satellite:
+    headroom_db: -10.0
+    power_limit_db: -18.0  # CRITICAL: 10F rated 10W. 450W amp at -18dB ~ 7W. Do not increase.
+  subwoofer:
+    headroom_db: -7.0
+    power_limit_db: -24.0
+
+target_curve: flat
+filter_taps: 16384

@@ -1,0 +1,25 @@
+# HOQS ELF 18" subwoofer with LaVoce SAF185.00 driver
+# Bass-reflex (ported) enclosure optimized for deep sub-bass.
+#
+# Data source: loudspeakerdatabase.com (verified 2026-03-27)
+# Full T/S parameters from manufacturer data.
+# Very low Qts (0.23) — designed for horn/bandpass/ported loading.
+
+name: "HOQS ELF 18 (LaVoce SAF185.00)"
+manufacturer: "HOQS / LaVoce"
+model: "ELF 18 (SAF185.00)"
+type: ported
+
+impedance_ohm: 8
+sensitivity_db_spl: 96  # 95.6 dB (1W/1m infinite baffle), rounded up for ported loading boost.
+
+# D-029 gain staging
+max_boost_db: 0
+mandatory_hpf_hz: 28  # Below estimated port tuning (~30 Hz). ELF design targets deep sub-bass.
+
+# Power handling
+max_power_watts: 1600  # AES rating. Program power 3200W.
+power_limit_note: "1600W AES / 3200W program. Xmax 11.6mm, Xlim 18.6mm. Very high excursion capability."
+
+# Compensation EQ (none — correction via FIR)
+compensation_eq: []

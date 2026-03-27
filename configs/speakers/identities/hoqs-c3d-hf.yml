@@ -1,0 +1,27 @@
+# HOQS C3D HF section — 2x HOQS HF143N Neo 1.4" compression drivers on horn
+# Used in HOQS C3D 3-way active system.
+# CVR DSP 3004 bypassed — mugge handles active crossover as combined FIR.
+#
+# Data source: hoqs.com.au (Wayback Machine 2024-11-12)
+# SAFETY: Only 80W nominal per driver! Most fragile component in the system.
+# Manufacturer recommends crossover at 800 Hz minimum (BW24).
+# Titanium diaphragm — susceptible to breakup modes above ~10 kHz.
+
+name: "HOQS C3D HF (2x HF143N)"
+manufacturer: "HOQS"
+model: "C3D HF Section (2x HF143N Neo 1.4)"
+type: horn
+
+impedance_ohm: 8  # Per driver. 2x parallel = 4 ohm, 2x series = 16 ohm. TODO(owner): Verify wiring.
+sensitivity_db_spl: 110  # Per driver. 2x adds ~3 dB = ~113 dB. Massively higher than mid/sub — gain must be reduced.
+
+# D-029 gain staging
+max_boost_db: 0
+mandatory_hpf_hz: 800  # MANUFACTURER MINIMUM. Our 48dB/oct FIR at 1000 Hz provides additional safety margin.
+
+# Power handling — FRAGILE
+max_power_watts: 80  # Per driver! 2x = 160W total if parallel. CRITICAL: Do not exceed.
+power_limit_note: "CRITICAL: Only 80W per driver. Titanium diaphragm. Over-power or sub-crossover energy destroys diaphragms instantly. Thermal protection (US-092) + steep HPF mandatory."
+
+# Compensation EQ (none — FIR handles titanium breakup mode correction)
+compensation_eq: []
