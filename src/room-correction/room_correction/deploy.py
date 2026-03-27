@@ -2,7 +2,7 @@
 Deploy generated filters to PipeWire filter-chain.
 
 Handles copying filter WAV files to the PipeWire filter-chain coefficients
-directory.
+directory and deploying the generated PW filter-chain .conf drop-in.
 
 SAFETY: This module refuses to deploy filters that have not passed
 verification (run_all_checks). The deploy function requires explicit
@@ -16,6 +16,11 @@ user before proceeding.
 TK-166: Supports versioned (timestamped) filenames for deployment
 traceability. Each deployment uses unique paths so that deployed versions
 can be identified and rolled back if needed.
+
+D-040: All CamillaDSP references replaced with PipeWire filter-chain
+equivalents. The .conf drop-in deploys to
+~/.config/pipewire/pipewire.conf.d/30-filter-chain-convolver.conf
+and WAV coefficients to /etc/pi4audio/coeffs/.
 """
 
 import glob
@@ -29,10 +34,21 @@ from .export import CHANNEL_FILENAMES, TIMESTAMP_FORMAT, versioned_filename
 # Default PipeWire filter-chain coefficients directory on the Pi (D-040)
 DEFAULT_COEFFS_DIR = "/etc/pi4audio/coeffs"
 
+# Default PipeWire config drop-in directory
+DEFAULT_PW_CONF_DIR = os.path.expanduser(
+    "~/.config/pipewire/pipewire.conf.d"
+)
+
+# Default name for the filter-chain convolver config drop-in
+DEFAULT_PW_CONF_NAME = "30-filter-chain-convolver.conf"
+
 # Regex to match versioned coefficient files: combined_{channel}_{YYYYMMDD_HHMMSS}.wav
 _VERSIONED_RE = re.compile(
     r"^combined_(.+)_(\d{8}_\d{6})\.wav$"
 )
+
+# Regex to extract filename values from PW filter-chain .conf files
+_PW_FILENAME_RE = re.compile(r'filename\s*=\s*"([^"]+)"')
 
 
 def deploy_filters(
@@ -104,6 +120,44 @@ def deploy_filters(
     return deployed
 
 
+def deploy_pw_config(
+    conf_content,
+    pw_conf_dir=DEFAULT_PW_CONF_DIR,
+    conf_name=DEFAULT_PW_CONF_NAME,
+    dry_run=False,
+):
+    """
+    Deploy a PipeWire filter-chain .conf drop-in file.
+
+    Parameters
+    ----------
+    conf_content : str
+        The complete .conf file content (from pw_config_generator).
+    pw_conf_dir : str
+        PipeWire config drop-in directory.
+    conf_name : str
+        Filename for the drop-in config.
+    dry_run : bool
+        If True, print what would be done without writing.
+
+    Returns
+    -------
+    str
+        Path to the deployed config file.
+    """
+    dst = os.path.join(pw_conf_dir, conf_name)
+
+    if dry_run:
+        print(f"  [DRY RUN] Would write PW config to {dst}")
+        return dst
+
+    os.makedirs(pw_conf_dir, exist_ok=True)
+    with open(dst, "w") as f:
+        f.write(conf_content)
+    print(f"  Deployed PW config: {dst}")
+    return dst
+
+
 def list_versioned_files(channel, coeffs_dir=DEFAULT_COEFFS_DIR):
     """
     List all versioned coefficient files for a channel, sorted oldest first.
@@ -131,29 +185,31 @@ def list_versioned_files(channel, coeffs_dir=DEFAULT_COEFFS_DIR):
     return [path for _, path in matches]
 
 
-def _get_active_filenames(host="localhost", port=1234):
+def _get_active_filenames(pw_conf_dir=DEFAULT_PW_CONF_DIR):
     """
-    Query CamillaDSP for currently active FIR coefficient filenames.
+    Parse PipeWire filter-chain .conf files for active FIR coefficient filenames.
 
-    Returns an empty set if pycamilladsp is not available or connection fails.
+    Scans all .conf files in the PW config drop-in directory for
+    ``filename = "/path/to/file.wav"`` entries in convolver node configs.
+
+    Returns an empty set if the directory doesn't exist or no filenames found.
     """
-    try:
-        from camilladsp import CamillaClient
-        client = CamillaClient(host, port)
-        client.connect()
-        config = client.config.active()
-        client.disconnect()
-    except Exception:
-        return set()
-
     active = set()
-    filters = config.get("filters", {})
-    for filt in filters.values():
-        params = filt.get("parameters", {})
-        if filt.get("type") == "Conv" and params.get("type") == "Wav":
-            fname = params.get("filename", "")
+    if not os.path.isdir(pw_conf_dir):
+        return active
+
+    for conf_file in glob.glob(os.path.join(pw_conf_dir, "*.conf")):
+        try:
+            with open(conf_file, "r") as f:
+                content = f.read()
+        except OSError:
+            continue
+
+        for match in _PW_FILENAME_RE.finditer(content):
+            fname = match.group(1)
             if fname:
                 active.add(os.path.basename(fname))
+
     return active
 
 
@@ -161,34 +217,31 @@ def cleanup_old_coefficients(
     coeffs_dir=DEFAULT_COEFFS_DIR,
     keep=2,
     dry_run=False,
-    host="localhost",
-    port=1234,
+    pw_conf_dir=DEFAULT_PW_CONF_DIR,
 ):
     """
     Remove old versioned coefficient files, keeping the last N versions.
 
-    Never deletes the currently-active version (checked against CamillaDSP
-    active config if reachable).
+    Never deletes the currently-active version (checked by parsing PipeWire
+    filter-chain config files for referenced filenames).
 
     Parameters
     ----------
     coeffs_dir : str
-        CamillaDSP coefficients directory.
+        PipeWire filter-chain coefficients directory.
     keep : int
         Number of most recent versions to keep per channel.
     dry_run : bool
         If True, print what would be deleted without actually deleting.
-    host : str
-        CamillaDSP websocket host (for active config check).
-    port : int
-        CamillaDSP websocket port.
+    pw_conf_dir : str
+        PipeWire config drop-in directory (for active file detection).
 
     Returns
     -------
     list of str
         Paths of deleted (or would-be-deleted) files.
     """
-    active_basenames = _get_active_filenames(host, port)
+    active_basenames = _get_active_filenames(pw_conf_dir)
     deleted = []
 
     for channel in CHANNEL_FILENAMES:
@@ -212,50 +265,57 @@ def cleanup_old_coefficients(
     return deleted
 
 
-def reload_camilladsp(host="localhost", port=1234):
+def reload_pipewire():
     """
-    Reload CamillaDSP configuration via the websocket API.
+    Reload the PipeWire filter-chain by restarting the PipeWire user service.
 
-    Uses pycamilladsp config.reload() which is glitch-free (no audio
-    interruption, no USBStreamer transients). This is safe to call
-    without muting amplifiers.
+    WARNING: Restarting PipeWire resets the USBStreamer, producing transients
+    through the amplifier chain that can damage speakers. The caller MUST
+    ensure amplifiers are off or muted before calling this function.
 
-    On macOS (development), pycamilladsp may not be available. In that
-    case, prints instructions for manual reload and returns False.
-
-    Parameters
-    ----------
-    host : str
-        CamillaDSP websocket host.
-    port : int
-        CamillaDSP websocket port.
+    On macOS (development), systemctl is not available. In that case, prints
+    instructions for manual reload and returns False.
 
     Returns
     -------
     bool
         True if reload succeeded, False if skipped or failed.
     """
-    try:
-        from camilladsp import CamillaClient
-    except ImportError:
+    import subprocess
+
+    # Check if systemctl is available (Linux with systemd)
+    if shutil.which("systemctl") is None:
         print(
-            "\n  pycamilladsp not available (expected on macOS dev)."
-            "\n  To reload manually on the Pi:"
-            f"\n    from camilladsp import CamillaClient"
-            f"\n    client = CamillaClient('{host}', {port})"
-            "\n    client.connect()"
-            "\n    client.config.reload()"
+            "\n  systemctl not available (expected on macOS dev)."
+            "\n  To reload PipeWire on the Pi:"
+            "\n    systemctl --user restart pipewire.service"
+            "\n"
+            "\n  WARNING: Restarting PipeWire resets the USBStreamer!"
+            "\n  Ensure amplifiers are OFF or MUTED before restarting."
             "\n"
         )
         return False
 
     try:
-        client = CamillaClient(host, port)
-        client.connect()
-        client.config.reload()
-        client.disconnect()
-        print("  CamillaDSP config reloaded successfully.")
-        return True
+        print(
+            "\n  WARNING: Restarting PipeWire will reset the USBStreamer."
+            "\n  Ensure amplifiers are OFF or MUTED."
+        )
+        result = subprocess.run(
+            ["systemctl", "--user", "restart", "pipewire.service"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            print("  PipeWire restarted successfully.")
+            return True
+        else:
+            print(f"  WARNING: PipeWire restart failed: {result.stderr.strip()}")
+            return False
+    except subprocess.TimeoutExpired:
+        print("  WARNING: PipeWire restart timed out after 15s.")
+        return False
     except Exception as e:
-        print(f"  WARNING: CamillaDSP reload failed: {e}")
+        print(f"  WARNING: PipeWire restart failed: {e}")
         return False
