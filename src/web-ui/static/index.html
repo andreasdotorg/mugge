@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pi Audio Workstation</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-    <link rel="stylesheet" href="/static/style.css?v=43">
+    <link rel="stylesheet" href="/static/style.css?v=47">
 </head>
 <body>
 
@@ -465,6 +465,72 @@
                     <div class="fir-results-verification" id="fir-results-verification"></div>
                 </div>
             </div>
+
+            <!-- Deploy panel (T-090-5) -->
+            <div class="cfg-section" id="fir-deploy-panel">
+                <div class="cfg-section-title">DEPLOY FILTERS</div>
+                <div class="fir-deploy-active" id="fir-deploy-active">
+                    <span class="fir-deploy-active-label">Active filters:</span>
+                    <span class="fir-deploy-active-value c-grey" id="fir-deploy-active-value">--</span>
+                </div>
+                <div class="fir-deploy-actions">
+                    <button class="cfg-apply-btn fir-deploy-btn" id="fir-deploy-btn" type="button" disabled>
+                        DEPLOY TO PI
+                    </button>
+                    <span class="fir-spinner hidden" id="fir-deploy-spinner"></span>
+                </div>
+                <div class="fir-deploy-status" id="fir-deploy-status"></div>
+                <div class="fir-deploy-result hidden" id="fir-deploy-result"></div>
+                <div class="fir-reload-section hidden" id="fir-reload-section">
+                    <div class="fir-reload-warning">
+                        Restarting PipeWire will interrupt audio output. Ensure amplifiers are OFF or system is MUTED.
+                    </div>
+                    <label class="fir-reload-confirm-label">
+                        <input type="checkbox" id="fir-reload-confirm-cb">
+                        <span>I confirm amps are off / system is muted</span>
+                    </label>
+                    <div class="fir-deploy-actions">
+                        <button class="cfg-apply-btn fir-reload-btn" id="fir-reload-btn" type="button" disabled>
+                            RELOAD PIPEWIRE
+                        </button>
+                        <span class="fir-spinner hidden" id="fir-reload-spinner"></span>
+                    </div>
+                    <div class="fir-deploy-status" id="fir-reload-status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Version History (US-090 T-090-6) -->
+    <div class="cfg-layout cfg-versions-layout" id="cfg-filter-versions">
+        <div class="cfg-column" style="grid-column: 1 / -1">
+            <div class="cfg-section">
+                <div class="cfg-section-title">
+                    FILTER VERSION HISTORY
+                    <button class="fv-refresh-btn" id="fv-refresh-btn" type="button" title="Refresh version list">REFRESH</button>
+                    <span class="fir-spinner hidden" id="fv-spinner"></span>
+                </div>
+                <div class="fv-empty" id="fv-empty">
+                    No filter versions found. Generate and deploy filters to see version history.
+                </div>
+                <div class="fv-channel-list" id="fv-channel-list">
+                    <!-- Populated by filter-versions.js -->
+                </div>
+                <div class="fv-status" id="fv-status"></div>
+                <div class="fv-rollback-result hidden" id="fv-rollback-result"></div>
+                <div class="fv-cleanup-section">
+                    <div class="fv-cleanup-info" id="fv-cleanup-info">--</div>
+                    <div class="fv-cleanup-row">
+                        <label class="fv-cleanup-confirm-label">
+                            <input type="checkbox" id="fv-cleanup-confirm-cb">
+                            <span>I confirm deletion of old versions</span>
+                        </label>
+                        <button class="cfg-reset-btn fv-cleanup-btn" id="fv-cleanup-btn" type="button" disabled>
+                            CLEAN UP OLD VERSIONS
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -532,6 +598,60 @@
                         <button class="cfg-reset-btn spk-cancel-btn" id="spk-cancel-btn" type="button">CANCEL</button>
                     </div>
                     <div class="spk-form-status" id="spk-form-status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hardware configuration (US-093) -->
+    <div class="cfg-layout cfg-hardware-layout" id="cfg-hardware">
+        <!-- Left column: lists -->
+        <div class="cfg-column">
+            <div class="cfg-section">
+                <div class="cfg-section-title">AMPLIFIERS</div>
+                <div class="hw-list" id="hw-amp-list">
+                    <div class="hw-loading">Loading...</div>
+                </div>
+                <div class="hw-list-actions">
+                    <button class="hw-add-btn" id="hw-add-amp" type="button">+ NEW AMPLIFIER</button>
+                </div>
+            </div>
+            <div class="cfg-section">
+                <div class="cfg-section-title">DACs</div>
+                <div class="hw-list" id="hw-dac-list">
+                    <div class="hw-loading">Loading...</div>
+                </div>
+                <div class="hw-list-actions">
+                    <button class="hw-add-btn" id="hw-add-dac" type="button">+ NEW DAC</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right column: detail / edit form -->
+        <div class="cfg-column">
+            <div class="cfg-section" id="hw-detail-panel">
+                <div class="hw-detail-empty" id="hw-detail-empty">
+                    Select an amplifier or DAC to view details.
+                </div>
+                <div class="hw-detail-content hidden" id="hw-detail-content">
+                    <div class="hw-detail-header">
+                        <span class="hw-detail-title" id="hw-detail-title">--</span>
+                        <span class="hw-detail-type-badge" id="hw-detail-badge">--</span>
+                    </div>
+                    <div class="hw-detail-body" id="hw-detail-body"></div>
+                    <div class="hw-detail-actions" id="hw-detail-actions">
+                        <button class="hw-edit-btn" id="hw-edit-btn" type="button">EDIT</button>
+                        <button class="hw-delete-btn" id="hw-delete-btn" type="button">DELETE</button>
+                    </div>
+                </div>
+                <div class="hw-form-content hidden" id="hw-form-content">
+                    <div class="hw-form-title" id="hw-form-title">New Amplifier</div>
+                    <div class="hw-form-body" id="hw-form-body"></div>
+                    <div class="hw-form-actions">
+                        <button class="cfg-apply-btn hw-save-btn" id="hw-save-btn" type="button">SAVE</button>
+                        <button class="cfg-reset-btn hw-cancel-btn" id="hw-cancel-btn" type="button">CANCEL</button>
+                    </div>
+                    <div class="hw-form-status" id="hw-form-status"></div>
                 </div>
             </div>
         </div>
@@ -1010,6 +1130,18 @@
                         <option value="monitor" selected>Monitor (L+R)</option>
                     </select>
                 </div>
+                <div class="tt-target-curve-row" id="tt-target-curve-row">
+                    <button class="tt-peak-toggle" id="tt-target-toggle" type="button">TARGET</button>
+                    <select class="tt-source-select tt-target-curve-select" id="tt-target-curve">
+                        <option value="flat">Flat</option>
+                        <option value="harman" selected>Harman</option>
+                        <option value="pa">PA</option>
+                    </select>
+                    <label class="tt-target-phon-label" id="tt-target-phon-wrap">
+                        <input type="number" class="tt-target-phon-input" id="tt-target-phon"
+                               min="20" max="90" step="5" value="" placeholder="phon">
+                    </label>
+                </div>
                 <div class="tt-spectrum-container">
                     <canvas class="tt-spectrum-canvas" id="tt-spectrum-canvas"></canvas>
                     <div class="tt-spectrum-overlay hidden" id="tt-spectrum-no-mic">
@@ -1065,18 +1197,20 @@
 <script src="/static/js/app.js?v=40"></script>
 <script src="/static/js/statusbar.js?v=42"></script>
 <script src="/static/js/fft-pipeline.js?v=40"></script>
-<script src="/static/js/spectrum-renderer.js?v=40"></script>
+<script src="/static/js/spectrum-renderer.js?v=41"></script>
 <script src="/static/js/spectrum.js?v=40"></script>
 <script src="/static/js/dashboard.js?v=42"></script>
 <script src="/static/js/system.js?v=40"></script>
 <script src="/static/js/graph.js?v=41"></script>
 <script src="/static/js/config.js?v=40"></script>
 <script src="/static/js/speaker-config.js?v=40"></script>
+<script src="/static/js/hardware-config.js?v=40"></script>
 <script src="/static/js/protection.js?v=40"></script>
-<script src="/static/js/filter-gen.js?v=41"></script>
+<script src="/static/js/filter-gen.js?v=42"></script>
+<script src="/static/js/filter-versions.js?v=40"></script>
 <script src="/static/js/measure.js?v=40"></script>
 <script src="/static/js/rc-wizard.js?v=40"></script>
-<script src="/static/js/test.js?v=40"></script>
+<script src="/static/js/test.js?v=41"></script>
 <script src="/static/js/midi.js?v=40"></script>
 </body>
 </html>

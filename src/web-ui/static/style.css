@@ -2591,6 +2591,45 @@ html, body {
     color: var(--accent);
 }
 
+/* -- Target curve overlay controls -- */
+
+.tt-target-curve-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0 4px 0;
+}
+
+.tt-target-curve-row .tt-peak-toggle {
+    /* Reuse the toggle style already defined */
+}
+
+#tt-target-toggle.active {
+    background: rgba(100, 220, 255, 0.15);
+    color: rgb(100, 220, 255);
+    border-color: rgba(100, 220, 255, 0.5);
+}
+
+.tt-target-curve-select {
+    max-width: 80px;
+}
+
+.tt-target-phon-input {
+    font-family: inherit;
+    font-size: 9px;
+    width: 52px;
+    padding: 1px 4px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    text-align: center;
+}
+
+.tt-target-phon-input::placeholder {
+    color: var(--text-dim);
+}
+
 .tt-spectrum-container {
     position: relative;
     min-height: 200px;
@@ -3712,6 +3751,121 @@ html, body {
     color: var(--danger);
 }
 
+/* -- Deploy panel (T-090-5) -- */
+
+#fir-deploy-panel {
+    margin-top: 8px;
+}
+
+.fir-deploy-active {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 11px;
+}
+
+.fir-deploy-active-label {
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.fir-deploy-active-value {
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    word-break: break-all;
+}
+
+.fir-deploy-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.fir-deploy-btn {
+    font-size: 11px;
+    padding: 5px 14px;
+}
+
+.fir-deploy-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.fir-deploy-status {
+    font-size: 11px;
+    min-height: 1.2em;
+    margin-bottom: 4px;
+}
+
+.fir-deploy-result {
+    font-size: 10px;
+    font-family: var(--font-mono, monospace);
+    color: var(--text-secondary);
+    padding: 6px 8px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 3px;
+    margin-bottom: 8px;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.fir-reload-section {
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    margin-top: 8px;
+}
+
+.fir-reload-warning {
+    font-size: 11px;
+    color: var(--warning);
+    margin-bottom: 6px;
+    line-height: 1.4;
+}
+
+.fir-reload-confirm-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    cursor: pointer;
+}
+
+.fir-reload-confirm-label input {
+    margin: 0;
+}
+
+.fir-reload-btn {
+    font-size: 11px;
+    padding: 5px 14px;
+    background: var(--warning);
+    color: var(--bg);
+}
+
+.fir-reload-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.fir-reload-btn:not(:disabled):hover {
+    filter: brightness(1.15);
+}
+
+.fir-deploy-pending {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(255, 165, 0, 0.15);
+    color: var(--warning);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
 .cfg-speakers-layout {
     border-top: 1px solid var(--border);
     margin-top: 0;
@@ -4251,5 +4405,475 @@ html, body {
     .spk-f-spk-polarity {
         width: 100%;
     }
+}
+
+/* ===================================================================
+   Hardware Configuration (US-093)
+   ================================================================ */
+
+/* -- Hardware list -- */
+
+.hw-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.hw-list-item {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 12px;
+    background: var(--bg-bar);
+    border-radius: 3px;
+    color: var(--text);
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.hw-list-item:hover {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
+.hw-list-item--active {
+    background: rgba(240, 160, 48, 0.12);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.hw-list-empty,
+.hw-loading {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 8px 12px;
+    font-style: italic;
+}
+
+.hw-list-actions {
+    margin-top: 8px;
+}
+
+.hw-add-btn {
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 6px 12px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.hw-add-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+/* -- Hardware detail panel -- */
+
+.hw-detail-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 24px;
+    text-align: center;
+    font-style: italic;
+}
+
+.hw-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.hw-detail-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.hw-detail-type-badge {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 8px;
+}
+
+.hw-badge--amp {
+    background: rgba(240, 160, 48, 0.15);
+    color: var(--accent);
+}
+
+.hw-badge--dac {
+    background: rgba(0, 188, 212, 0.15);
+    color: var(--primary);
+}
+
+.hw-detail-body .cfg-kv-grid {
+    margin-bottom: 4px;
+}
+
+.hw-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.hw-edit-btn,
+.hw-delete-btn {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 8px 16px;
+    min-height: 36px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.hw-edit-btn {
+    flex: 2;
+    background: rgba(0, 188, 212, 0.12);
+    border: 1px solid rgba(0, 188, 212, 0.5);
+    color: var(--primary);
+}
+
+.hw-edit-btn:hover {
+    background: rgba(0, 188, 212, 0.25);
+}
+
+.hw-delete-btn {
+    flex: 1;
+    background: rgba(229, 69, 58, 0.1);
+    border: 1px solid rgba(229, 69, 58, 0.3);
+    color: var(--danger);
+}
+
+.hw-delete-btn:hover {
+    background: rgba(229, 69, 58, 0.25);
+}
+
+/* -- Hardware form panel -- */
+
+.hw-form-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+}
+
+.hw-form-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.hw-form-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 150px;
+    flex-shrink: 0;
+}
+
+.hw-form-input {
+    font-family: var(--font-numeric);
+    font-size: 12px;
+    padding: 6px 10px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    flex: 1;
+    min-width: 0;
+}
+
+.hw-form-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.hw-form-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+}
+
+.hw-form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.hw-form-status {
+    font-size: 11px;
+    margin-top: 8px;
+    min-height: 16px;
+}
+
+/* -- Hardware config responsive -- */
+
+@media (max-width: 899px) {
+    .cfg-hardware-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===================================================================
+   Filter Version History (US-090 T-090-6)
+   ================================================================ */
+
+.cfg-versions-layout {
+    grid-template-columns: 1fr;
+    border-top: 1px solid var(--border);
+    margin-top: 0;
+    padding-top: 16px;
+}
+
+.cfg-versions-layout .cfg-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.fv-refresh-btn {
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.fv-refresh-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+.fv-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 12px 0;
+    font-style: italic;
+}
+
+.fv-loading,
+.fv-error {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 8px 0;
+    font-style: italic;
+}
+
+.fv-error {
+    color: var(--danger);
+}
+
+.fv-channel-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.fv-channel-group {
+    background: var(--bg-bar);
+    border-radius: 4px;
+    padding: 8px 12px;
+}
+
+.fv-channel-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
+.fv-version-count {
+    font-weight: 400;
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+.fv-version-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px;
+    border-radius: 3px;
+    margin-bottom: 2px;
+    font-size: 11px;
+}
+
+.fv-version-row--active {
+    background: rgba(121, 226, 91, 0.06);
+    border: 1px solid rgba(121, 226, 91, 0.2);
+}
+
+.fv-version-ts {
+    font-family: var(--font-numeric);
+    color: var(--text-dim);
+    min-width: 130px;
+}
+
+.fv-version-file {
+    font-family: var(--font-numeric);
+    color: var(--text-dim);
+    font-size: 10px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fv-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.fv-badge--active {
+    background: rgba(121, 226, 91, 0.15);
+    color: var(--safe);
+}
+
+.fv-badge--pass {
+    background: rgba(121, 226, 91, 0.15);
+    color: var(--safe);
+}
+
+.fv-badge--fail {
+    background: rgba(255, 80, 80, 0.15);
+    color: var(--danger);
+}
+
+.fv-rollback-btn {
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 3px 8px;
+    background: rgba(240, 160, 48, 0.1);
+    border: 1px solid rgba(240, 160, 48, 0.3);
+    border-radius: 3px;
+    color: var(--accent);
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+
+.fv-rollback-btn:hover {
+    background: rgba(240, 160, 48, 0.25);
+}
+
+.fv-status {
+    font-size: 11px;
+    margin-top: 8px;
+    min-height: 16px;
+}
+
+.fv-rollback-result {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.fv-verify-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+}
+
+.fv-verify-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+}
+
+.fv-verify-file {
+    font-family: var(--font-numeric);
+    font-size: 10px;
+    color: var(--text-dim);
+    flex: 1;
+}
+
+.fv-verify-db {
+    font-family: var(--font-numeric);
+    font-size: 10px;
+    color: var(--text-dim);
+}
+
+.fv-cleanup-section {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.fv-cleanup-info {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+}
+
+.fv-cleanup-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.fv-cleanup-confirm-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.fv-cleanup-confirm-label input {
+    margin: 0;
+}
+
+.fv-cleanup-btn {
+    font-size: 10px;
+    padding: 5px 12px;
+    opacity: 0.5;
+}
+
+.fv-cleanup-btn:not(:disabled):hover {
+    opacity: 1;
 }
 
