@@ -397,6 +397,47 @@
             ''}";
           };
 
+          # Room simulation E2E tests (T-067-6, US-067).
+          # Runs sim config generator, correction roundtrip, and mock E2E tests
+          # in isolated temp XDG directories. Pure Python — no PipeWire needed.
+          # PW headless tests (T-067-5) extend this with a real PW instance.
+          test-room-sim-e2e = {
+            type = "app";
+            program = "${pkgs.writeShellScript "test-room-sim-e2e" ''
+              set -euo pipefail
+              REPO_DIR="${toString ./.}"
+              TMPBASE="''${TMPDIR:-/tmp}/room-sim-e2e-$$"
+              mkdir -p "$TMPBASE"
+              export XDG_RUNTIME_DIR="$TMPBASE/runtime"
+              export XDG_CONFIG_HOME="$TMPBASE/config"
+              export XDG_DATA_HOME="$TMPBASE/data"
+              export XDG_CACHE_HOME="$TMPBASE/cache"
+              export ROOM_SIM_OUTPUT_DIR="$TMPBASE/sim-output"
+              mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" \
+                       "$XDG_CACHE_HOME" "$ROOM_SIM_OUTPUT_DIR"
+              chmod 700 "$XDG_RUNTIME_DIR"
+              cleanup() {
+                if [ "''${ROOM_SIM_KEEP_TMPDIR:-0}" = "1" ]; then
+                  echo "Keeping temp dir: $TMPBASE"
+                else
+                  rm -rf "$TMPBASE"
+                fi
+              }
+              trap cleanup EXIT
+              export PI_AUDIO_MOCK=1
+              export PYTHONDONTWRITEBYTECODE=1
+              echo "=== Room Simulation E2E Tests ==="
+              echo "Repo:    $REPO_DIR"
+              echo "Tmp dir: $TMPBASE"
+              echo "Output:  $ROOM_SIM_OUTPUT_DIR"
+              echo ""
+              cd "$REPO_DIR/src/room-correction"
+              exec ${testPython}/bin/python -m pytest tests/ -v --tb=short \
+                -k "test_sim_ or test_correction_roundtrip or test_mock_e2e" \
+                "$@"
+            ''}";
+          };
+
           test-all = {
             type = "app";
             program = "${pkgs.writeShellScript "test-all" ''
