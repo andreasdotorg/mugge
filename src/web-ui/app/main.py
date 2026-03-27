@@ -242,6 +242,12 @@ app.include_router(test_tool_router)
 app.include_router(config_router)
 app.include_router(graph_router)
 
+try:
+    from .speaker_routes import router as speaker_router
+    app.include_router(speaker_router)
+except ImportError:
+    pass  # speaker_routes not yet available (pre-commit)
+
 
 # -- Routes --
 
