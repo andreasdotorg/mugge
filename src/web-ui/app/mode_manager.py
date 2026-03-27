@@ -62,6 +62,8 @@ class ModeManager:
         self._ws_broadcast = ws_broadcast
         self._gm_host = gm_host
         self._gm_port = gm_port
+        # F-160: GM mode saved before entering measurement, restored on exit.
+        self._pre_measurement_gm_mode: Optional[str] = None
 
         # Startup recovery state -- read by middleware/lifespan.
         self.recovery_in_progress: bool = False
@@ -91,15 +93,37 @@ class ModeManager:
         """Switch to MEASUREMENT mode.
 
         Raises ``RuntimeError`` if already in MEASUREMENT mode.
+        Saves the current GM mode so it can be restored on exit (F-160).
         """
         if self._mode is DaemonMode.MEASUREMENT:
             raise RuntimeError(
                 "Cannot enter measurement mode: already in MEASUREMENT mode"
             )
+        # F-160: Query and save the current GM mode before switching.
+        if self.gm_available:
+            try:
+                client = await asyncio.to_thread(self._create_gm_client)
+                try:
+                    self._pre_measurement_gm_mode = await asyncio.to_thread(
+                        client.get_mode)
+                    log.info("F-160: Saved pre-measurement GM mode: %s",
+                             self._pre_measurement_gm_mode)
+                finally:
+                    try:
+                        client.close()
+                    except Exception:
+                        pass
+            except Exception as exc:
+                log.warning("F-160: Failed to query GM mode before measurement: "
+                            "%s — will restore to monitoring", exc)
+                self._pre_measurement_gm_mode = "monitoring"
+        else:
+            self._pre_measurement_gm_mode = "monitoring"
         self._mode = DaemonMode.MEASUREMENT
         self._measurement_session = session
         self._last_completed_session = None
-        log.info("Mode transition: MONITORING -> MEASUREMENT")
+        log.info("Mode transition: %s -> MEASUREMENT",
+                 self._pre_measurement_gm_mode.upper())
         await self._ws_broadcast({
             "type": "mode_change",
             "mode": DaemonMode.MEASUREMENT.value,
@@ -109,15 +133,17 @@ class ModeManager:
         """Switch back to MONITORING mode.
 
         If *restore_gm* is True (default), tells GraphManager to restore
-        monitoring routing.  Set to False when the measurement session
-        already handled restoration (e.g. successful filter deployment).
+        the mode that was active before measurement started (F-160).
+        Set to False when the measurement session already handled
+        restoration (e.g. successful filter deployment).
         """
         if restore_gm and self.gm_available:
-            await self._restore_monitoring_mode()
+            await self._restore_pre_measurement_mode()
         if self._measurement_session is not None:
             self._last_completed_session = self._measurement_session
         self._measurement_session = None
         self._mode = DaemonMode.MONITORING
+        self._pre_measurement_gm_mode = None
         log.info("Mode transition: MEASUREMENT -> MONITORING")
         await self._ws_broadcast({
             "type": "mode_change",
@@ -228,18 +254,19 @@ class ModeManager:
             except Exception:
                 pass
 
-    async def _restore_monitoring_mode(self) -> None:
-        """Tell GraphManager to switch back to monitoring routing."""
+    async def _restore_pre_measurement_mode(self) -> None:
+        """Tell GraphManager to restore the mode active before measurement (F-160)."""
+        target = self._pre_measurement_gm_mode or "monitoring"
         try:
             client = await asyncio.to_thread(self._create_gm_client)
             try:
-                await asyncio.to_thread(client.restore_production_mode)
-                log.info("Restored GraphManager to monitoring mode")
+                await asyncio.to_thread(client.set_mode, target)
+                log.info("F-160: Restored GraphManager to %s mode", target)
             finally:
                 try:
                     client.close()
                 except Exception:
                     pass
         except Exception as exc:
-            log.error("Failed to restore GraphManager monitoring mode: %s",
-                      exc)
+            log.error("Failed to restore GraphManager to %s mode: %s",
+                      target, exc)

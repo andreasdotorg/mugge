@@ -44,6 +44,7 @@
     var freqDebounce = null;
     var sweepEndDebounce = null;
     var currentGmMode = "unknown"; // F-144: tracked from GM query
+    var preMeasGmMode = null; // F-160: GM mode before test tab switched to measurement
 
     // T-088-7: Pre-measurement state saved before auto-defaults.
     var preMeasFftSize = null;    // FFT size before measurement mode
@@ -553,6 +554,10 @@
                 try {
                     var data = JSON.parse(xhr.responseText);
                     currentGmMode = data.mode || "measurement";
+                    // F-160: Save the previous mode for restoration on tab hide.
+                    if (data.switched && data.previous) {
+                        preMeasGmMode = data.previous;
+                    }
                 } catch (e) {
                     currentGmMode = "measurement";
                 }
@@ -1501,6 +1506,16 @@
         onHide: function () {
             // Keep siggen WS alive so STOP still works from status bar.
             destroySpectrum();
+            // F-160: Restore the GM mode that was active before the test tab
+            // switched to measurement mode.
+            if (preMeasGmMode && preMeasGmMode !== "measurement") {
+                var xhr = new XMLHttpRequest();
+                xhr.open("POST", "/api/v1/test-tool/restore-mode", true);
+                xhr.setRequestHeader("Content-Type", "application/json");
+                xhr.send(JSON.stringify({ mode: preMeasGmMode }));
+                preMeasGmMode = null;
+                currentGmMode = "unknown";
+            }
         }
     });
 
