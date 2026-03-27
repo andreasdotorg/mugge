@@ -500,6 +500,18 @@ async def deploy_filters_endpoint(req: FilterDeployRequest):
     Use POST /api/v1/filters/reload-pw separately after confirming amps
     are off/muted.
     """
+    # S-001 residual: restrict output_dir to within DEFAULT_OUTPUT_DIR
+    if not os.path.abspath(req.output_dir).startswith(
+        os.path.abspath(DEFAULT_OUTPUT_DIR)
+    ):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "invalid_output_dir",
+                "detail": "output_dir must be within the server's output directory.",
+            },
+        )
+
     try:
         result = await asyncio.to_thread(_run_deploy, req)
     except FileNotFoundError as e:

@@ -431,6 +431,7 @@ class TestReloadPWRequest:
 
 # -- POST /api/v1/filters/deploy -------------------------------------------
 
+@patch("app.filter_routes.DEFAULT_OUTPUT_DIR", "/tmp")
 class TestDeployEndpoint:
     @patch("app.filter_routes._run_deploy")
     def test_deploy_success(self, mock_deploy, client):
@@ -498,10 +499,10 @@ class TestDeployEndpoint:
 
     @patch("app.filter_routes._run_deploy")
     def test_deploy_dir_not_found(self, mock_deploy, client):
-        mock_deploy.side_effect = FileNotFoundError("Output directory not found: /nonexistent")
+        mock_deploy.side_effect = FileNotFoundError("Output directory not found: /tmp/nonexistent")
         resp = client.post(
             "/api/v1/filters/deploy",
-            json={"output_dir": "/nonexistent"},
+            json={"output_dir": "/tmp/nonexistent"},
         )
         assert resp.status_code == 404
         assert resp.json()["error"] == "not_found"
@@ -568,6 +569,30 @@ class TestDeployEndpoint:
             json={},
         )
         assert resp.status_code == 422
+
+
+
+# -- S-001 path traversal tests (use real DEFAULT_OUTPUT_DIR) ---------------
+
+class TestDeployPathTraversal:
+    def test_deploy_rejects_path_traversal(self, client):
+        """S-001 residual: output_dir outside DEFAULT_OUTPUT_DIR is rejected."""
+        resp = client.post(
+            "/api/v1/filters/deploy",
+            json={"output_dir": "/etc/passwd"},
+        )
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["error"] == "invalid_output_dir"
+
+    def test_deploy_rejects_relative_traversal(self, client):
+        """S-001 residual: relative path traversal out of output dir is rejected."""
+        resp = client.post(
+            "/api/v1/filters/deploy",
+            json={"output_dir": "/tmp/../etc/shadow"},
+        )
+        assert resp.status_code == 400
+        assert resp.json()["error"] == "invalid_output_dir"
 
 
 # -- POST /api/v1/filters/reload-pw ----------------------------------------
