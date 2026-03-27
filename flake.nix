@@ -388,6 +388,20 @@
             ''}";
           };
 
+          # Full user journey E2E test — speaker setup through verified room
+          # correction.  Runs real DSP code with MockSoundDevice + Playwright
+          # headless browser.  Slower than the regular E2E suite (~30-60s).
+          test-journey = {
+            type = "app";
+            program = "${pkgs.writeShellScript "test-journey" ''
+              export PI_AUDIO_MOCK=1
+              export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+              export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+              cd ${toString ./.}/src/web-ui
+              exec ${e2ePython}/bin/python -m pytest tests/e2e/test_full_user_journey.py -v "$@"
+            ''}";
+          };
+
           test-room-correction = {
             type = "app";
             program = "${pkgs.writeShellScript "test-room-correction" ''
