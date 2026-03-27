@@ -116,7 +116,8 @@ something with the system.
 | Document | Description |
 |----------|-------------|
 | **You are here** -- [Introduction](introduction.md) | Project overview and documentation map |
-| [How-To Guides](howto/) | Step-by-step procedures for setup, mode switching, calibration, remote access (US-016, in progress) |
+| [Venue Setup](howto/venue-setup.md) | Step-by-step venue workflow: power-on, speaker profile, room measurement, filter deployment, sound check |
+| [Development Tasks](howto/development.md) | Nix environment, running tests, deploying to the Pi, CI pipeline |
 
 ### Architecture
 
@@ -125,8 +126,18 @@ Technical reference for how the system is built and configured.
 | Document | Description |
 |----------|-------------|
 | [RT Audio Stack](../architecture/rt-audio-stack.md) | PREEMPT_RT kernel, thread priorities, PipeWire RT scheduling, filter-chain convolver, buffer sizing, verification commands |
+| [Room Compensation](../architecture/room-compensation.md) | Room simulator (image source method) and compensation pipeline (measurement through deployable FIR filter) |
+| [GraphManager](../architecture/graph-manager.md) | PipeWire link topology manager -- mode transitions, reconciler, watchdog |
+| [RT Services](../architecture/rt-services.md) | Real-time service architecture (GraphManager, signal-gen, pcm-bridge) |
+| [RT Signal Generator](../architecture/rt-signal-generator.md) | Measurement audio source -- sweep generation, safety cap, channel isolation |
+| [Measurement Daemon](../architecture/measurement-daemon.md) | Backend measurement session state machine and API |
+| [Measurement Workflow UX](../architecture/measurement-workflow-ux.md) | Measurement wizard user experience design |
 | [Web UI Architecture](../architecture/web-ui.md) | Monitoring web interface design |
 | [Web UI Monitoring Plan](../architecture/web-ui-monitoring-plan.md) | Implementation plan for the web monitoring dashboard |
+| [Config Management and MIDI Control](../architecture/config-management-midi-control.md) | Speaker profiles, hardware config, MIDI integration |
+| [Test Tool Page](../architecture/test-tool-page.md) | Test/measurement tab architecture |
+| [Persistent Status Bar](../architecture/persistent-status-bar.md) | Status bar design (MUTE, xruns, DSP load, PipeWire state) |
+| [Graph Analysis](../architecture/unified-graph-analysis.md) | PipeWire graph visualization and topology analysis |
 
 ### Theory
 
@@ -137,6 +148,7 @@ designed the way it is.
 |----------|-------------|
 | [Design Rationale](../theory/design-rationale.md) | The story behind the technical decisions -- signal flow, filter design, latency management, room correction theory, time alignment, why combined FIR instead of IIR crossover |
 | [Enclosure Topologies](../theory/enclosure-topologies.md) | Sealed vs ported vs horn-loaded vs transmission line -- group delay, transient behavior, interaction with FIR correction |
+| [Speaker Catalog](../speakers/catalog.md) | 16 speaker designs in inventory -- driver specs, crossover topology, enclosure type, platform implications, research gaps |
 | [Zynq Exploration](../theory/zynq-exploration.md) | Second-generation platform analysis: FPGA-based audio processing with dedicated hardware DSP |
 
 ### Project Management
