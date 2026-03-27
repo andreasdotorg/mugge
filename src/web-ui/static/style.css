@@ -59,6 +59,15 @@
     /* -- Meter -- */
     --meter-peak: #ffffff;
 
+    /* -- Semantic aliases (used by Config, FIR gen, Graph) -- */
+    --bg-card: var(--bg-panel);
+    --card-bg: var(--bg-panel);
+    --bg-secondary: var(--bg-bar);
+    --bg-primary: var(--bg);
+    --text-primary: var(--text);
+    --text-secondary: var(--text-dim);
+    --font-mono: var(--font-numeric);
+
     /* -- Legacy aliases (transitional) -- */
     --green: var(--safe);
     --yellow: var(--warning);
