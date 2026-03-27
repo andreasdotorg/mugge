@@ -6944,6 +6944,293 @@ All phases developable locally without Pi. Only actual measurement run (sweep + 
 
 ---
 
+## US-099: Speaker Discovery — Near-Field Characterization of Unknown Speakers
+
+**As** the system operator arriving at a venue with unfamiliar speakers,
+**I want** a guided near-field measurement workflow that characterizes each driver's frequency response, identifies crossover points, and estimates driver capabilities without requiring prior knowledge of the speaker design,
+**so that** I can create an accurate speaker identity and profile from scratch, even when manufacturer specs are unavailable or untrustworthy.
+
+**Status:** draft (2026-03-27)
+**Depends on:** US-096 (calibrated UMIK-1), US-088 (spectrum display), US-052 (signal generator for sweeps)
+**Blocks:** US-100 (speaker identity creation needs characterization data)
+**Priority:** HIGH — owner priority ("I have no idea what I'm dealing with here, let me measure it")
+**Tier:** 13
+
+### Background
+
+The existing speaker configuration workflow (US-089) assumes you already know your speakers — driver specs, crossover points, topology. At events with borrowed or unfamiliar PA systems, the operator has none of this information. Near-field measurement is the standard technique for characterizing individual drivers without room influence: place the UMIK-1 within 1-2cm of each driver cone, play a sweep, and measure the direct response. The existing `measure_nearfield.py` script (TK-141, 1412 lines) provides the measurement engine; this story wraps it in a guided web UI workflow.
+
+Near-field measurement reveals: (a) each driver's usable frequency range, (b) existing crossover points in passive crossover systems, (c) driver sensitivity differences, (d) resonance frequencies (Fs), and (e) port tuning frequencies. Combined, these allow the operator to build a speaker identity even without T/S parameter sheets.
+
+### Acceptance criteria
+
+- [ ] Web UI "Speaker Discovery" workflow accessible from Speaker Config page (US-089) or measurement wizard
+- [ ] Step 1 — Setup: operator names the speaker system being characterized (e.g., "Venue PA Left"), selects how many drivers to measure per cabinet (2/3/4), describes driver positions (top/bottom, horn/cone)
+- [ ] Step 2 — Per-driver near-field measurement: for each driver, guided instructions for UMIK-1 placement (within 1-2cm of cone center, perpendicular to cone). Photo/diagram reference. Safety: signal level capped at -40dBFS for near-field (S-010 lesson from `measure_nearfield.py`)
+- [ ] Step 3 — Sweep and capture: per-driver log sweep (20Hz-20kHz) via signal-gen, recorded through UMIK-1 with calibration applied (US-096). Deconvolution extracts per-driver impulse response. Live spectrum display during sweep (US-088)
+- [ ] Step 4 — Port measurement (optional): if speaker has visible ports, prompt operator to measure port output. Near-field port measurement reveals tuning frequency as a peak in the port's response
+- [ ] Step 5 — Analysis and results per driver:
+  - Frequency response plot (magnitude vs frequency, calibrated dBSPL)
+  - Detected usable frequency range (-6dB points)
+  - Sensitivity estimate (dBSPL at 1W/1m, derived from near-field measurement with distance correction)
+  - Resonance frequency (Fs) detected from impedance-like features in response
+  - If port measured: port tuning frequency (Fb) identified
+- [ ] Step 6 — Crossover detection: overlay all drivers' responses on one plot. Automatic detection of crossover region(s) where adjacent drivers' responses intersect. Suggested crossover frequency displayed with confidence indicator
+- [ ] Step 7 — Parameter guidance: for each detected/derived parameter, display: what it is, why it matters, what happens if it's wrong. Example: "Crossover frequency: 1200 Hz (detected). This is where the horn takes over from the woofer. Getting this wrong means a gap or overlap in frequency coverage."
+- [ ] Measurement results exportable as JSON/YAML for import into speaker identity creation (US-100)
+- [ ] All near-field measurements saved in session directory for later reference
+- [ ] Backend: wraps existing `measure_nearfield.py` functionality via REST API, with WebSocket progress streaming
+- [ ] Safety: all near-field sweeps use capped output level per S-010. Hard limit enforced server-side, not just UI
+
+### Definition of Done
+
+- [ ] All acceptance criteria met
+- [ ] AE review: near-field measurement methodology, parameter derivation accuracy, sensitivity estimation
+- [ ] UX review: guidance quality, parameter explanations, measurement flow
+- [ ] AD review: safety (S-010 near-field level cap, transient risk)
+- [ ] QE review: E2E test with mock measurement data
+
+---
+
+## US-100: Speaker Identity Creation from Discovery Data
+
+**As** the system operator who has just characterized an unknown speaker,
+**I want** to create a speaker identity and profile from the discovery measurement data, with the system pre-filling what it can derive and clearly indicating what's missing or uncertain,
+**so that** I can go from "unknown speakers" to "configured and ready to correct" in a single workflow without needing to look up datasheets.
+
+**Status:** draft (2026-03-27)
+**Depends on:** US-099 (discovery measurements provide characterization data), US-089 (speaker config management — identity/profile CRUD), US-039 (driver database — optional matching)
+**Blocks:** US-102 (quick-start needs identities in the database)
+**Priority:** HIGH — completes the discovery-to-configuration path
+**Tier:** 13
+
+### Background
+
+US-099 produces per-driver frequency responses, detected crossover points, estimated sensitivities, and port tuning frequencies. This story bridges that data into the speaker identity/profile schema (US-011b, US-089). The system should auto-populate what it can and clearly flag what requires operator input or is unknown. The goal is minimum required parameters for a functional correction — not perfect T/S characterization.
+
+### Acceptance criteria
+
+- [ ] "Create Identity from Measurements" action available after completing US-099 discovery workflow
+- [ ] Auto-populated fields from measurement data:
+  - Topology (2-way/3-way/4-way) — from number of measured drivers
+  - Crossover frequencies — from detected crossover points (US-099 Step 6)
+  - Per-driver sensitivity (dBSPL/W/m) — from near-field measurement with distance correction
+  - Port tuning frequency (Fb) — from port measurement if performed
+  - Per-driver usable frequency range — from -6dB points
+- [ ] Required fields with guidance for manual entry:
+  - Speaker name and manufacturer (free text)
+  - Enclosure type per driver (sealed/ported/horn — operator selects from visual guide)
+  - Impedance (ohms) — prompt: "Check the label on the back of the cabinet, or use 8 ohms as default"
+- [ ] Optional fields with explanation of impact:
+  - Pe_max (thermal power rating) — "Without this, thermal protection (US-092) uses conservative defaults. Check the driver label or spec sheet."
+  - Xmax (excursion limit) — "Without this, mechanical protection uses conservative estimates based on driver diameter."
+  - Fs, Qts (T/S parameters) — "Without these, the system cannot model the driver's low-frequency behavior. Near-field measurement provides a reasonable estimate of Fs."
+- [ ] Driver database matching (optional): search US-039 database by measured characteristics (sensitivity, Fs, diameter). If a match is found, offer to import full T/S parameters. Display match confidence.
+- [ ] Parameter confidence indicators: each auto-derived parameter shows green (high confidence from clean measurement), yellow (derived with assumptions), red (default/placeholder — operator should verify)
+- [ ] Validation before save: minimum viable identity requires topology + crossover frequencies + per-driver sensitivity. Missing thermal/mechanical parameters trigger a warning (not a block) explaining reduced protection
+- [ ] Generated identity saved as YAML in `configs/speakers/identities/` per existing schema
+- [ ] Generated profile saved as YAML in `configs/speakers/profiles/` with crossover parameters pre-configured
+- [ ] Profile immediately activatable via existing D-053 safety flow (US-089)
+
+### Definition of Done
+
+- [ ] All acceptance criteria met
+- [ ] AE review: parameter derivation accuracy, default values for missing parameters
+- [ ] UX review: parameter guidance quality, confidence indicators, progressive disclosure
+- [ ] Architect review: integration with existing identity/profile schema
+- [ ] QE review: E2E test covering full discovery-to-identity path
+
+---
+
+## US-101: Room Correction Quick Start — Known Speaker Fast Path
+
+**As** the system operator arriving at a venue with speakers already in the identity database,
+**I want** a streamlined workflow that skips speaker characterization entirely and goes straight from speaker selection to room measurement and filter deployment,
+**so that** setup time for known speakers is under 10 minutes.
+
+**Status:** draft (2026-03-27)
+**Depends on:** US-089 (speaker config with saved profiles/identities), US-097 (room compensation wizard), US-090 (filter generation and deployment)
+**Blocks:** none
+**Priority:** HIGH — the common case for repeat events with the same PA
+**Tier:** 13
+
+### Background
+
+The full venue workflow (US-099 discovery, US-100 identity creation, US-097 room measurement, US-090 filter deployment) is designed for unknown speakers. For the owner's own speakers (Bose, HOQS, etc.) that already have identities and profiles in the database, most of this workflow is unnecessary. This story provides a fast path: select profile, measure room, deploy filters.
+
+### Acceptance criteria
+
+- [ ] "Quick Start" action on the main dashboard or Speaker Config page
+- [ ] Step 1 — Select speaker profile: dropdown/list of saved profiles. Shows last-used profile highlighted. Profile summary displayed (topology, crossover points, driver names, thermal limits)
+- [ ] Step 2 — Activate profile: if not already active, triggers D-053 safety flow (mute, switch, ramp-up). If already active, skip
+- [ ] Step 3 — Room measurement: launches US-097 measurement wizard at Step 2 (mic placement), skipping pre-flight speaker config checks that are already satisfied
+- [ ] Step 4 — Review and deploy: shows measurement results, filter preview, and "Deploy" button. Single click deploys filters and delay values
+- [ ] Total workflow: select profile (30s) + measure room 3 positions (8-10 min) + deploy (30s) = under 12 minutes
+- [ ] "Last venue" shortcut: if a previous measurement session exists for the active profile, offer "Re-measure" (new session) or "Re-deploy last" (redeploy previous filters without re-measuring — useful when returning to the same venue)
+- [ ] Progress tracker: visual timeline showing current step and remaining steps. Estimated time remaining based on configured positions count
+- [ ] Abort at any step returns to dashboard with no changes applied
+
+### Definition of Done
+
+- [ ] All acceptance criteria met
+- [ ] UX review: workflow efficiency, minimal clicks, clear progress indication
+- [ ] AE review: measurement parameter defaults appropriate for quick-start scenario
+- [ ] QE review: E2E test covering fast-path workflow
+
+---
+
+## US-102: Venue Setup Pre-Flight Checklist
+
+**As** the system operator setting up at a venue,
+**I want** an automated pre-flight check that verifies all hardware, software, and configuration prerequisites before starting measurements,
+**so that** I discover problems (missing mic, wrong profile, dead channel) before wasting time on a measurement session that will fail or produce bad data.
+
+**Status:** draft (2026-03-27)
+**Depends on:** US-096 (UMIK-1 verification), US-089 (active speaker config), US-093 (amp calibration), US-027a (system health monitoring)
+**Blocks:** none
+**Priority:** MEDIUM — operational reliability, prevents wasted measurement sessions
+**Tier:** 13
+
+### Background
+
+Design principle #6 states the gig setup workflow is: "power on, audio stack auto-starts, place mic, run calibration script, remove mic, ready to perform." Before measurement starts, several things can go wrong silently: UMIK-1 not connected, wrong speaker profile active, amplifier off on some channels, PipeWire not at the right quantum, signal-gen not responding. Catching these before measurement prevents 10+ minutes of wasted time and confusing results.
+
+Design principle #7 requires platform self-diagnostics before each measurement session to detect drift from system updates.
+
+### Acceptance criteria
+
+- [ ] Pre-flight check runs automatically before any measurement session (US-097, US-099) and is also available as a standalone action
+- [ ] Hardware checks:
+  - [ ] USBStreamer connected and recognized by PipeWire (8 in / 8 out ports present)
+  - [ ] UMIK-1 connected and recognized (capture port present in PipeWire graph)
+  - [ ] UMIK-1 calibration file loaded and valid (US-096)
+  - [ ] All configured output channels producing signal when test tone played (per-channel connectivity test via signal-gen)
+- [ ] Software checks:
+  - [ ] PipeWire running at expected sample rate (48kHz)
+  - [ ] PipeWire quantum set appropriately for measurement (256 recommended for low-latency measurement)
+  - [ ] GraphManager responsive (RPC port 4002)
+  - [ ] Signal generator responsive (RPC port 4001)
+  - [ ] pcm-bridge responsive (port 9100)
+  - [ ] Active speaker profile loaded (US-089)
+  - [ ] Thermal protection active for current profile (US-092)
+- [ ] Environment checks:
+  - [ ] Ambient noise level below threshold (measured via UMIK-1 for 3 seconds — configurable threshold, default -50dBFS broadband)
+  - [ ] No active audio playback sources (Mixxx, Reaper) that would interfere with measurement
+- [ ] Results display: checklist with pass/fail/warning per item. Green = pass, yellow = warning (can proceed with caution), red = fail (blocks measurement)
+- [ ] "Fix" actions where possible: e.g., "Quantum is 1024, measurement works best at 256 — Switch now?" with a one-click fix
+- [ ] Pre-flight results saved in measurement session metadata
+- [ ] Bypass with acknowledgment: operator can skip failed checks with explicit confirmation (logged). Some checks are hard blocks (no UMIK-1 = cannot measure)
+
+### Definition of Done
+
+- [ ] All acceptance criteria met
+- [ ] AE review: measurement-critical checks, ambient noise threshold
+- [ ] AD review: which checks should be hard blocks vs skippable warnings
+- [ ] UX review: checklist presentation, fix actions, bypass flow
+- [ ] QE review: tests for each check category (mock hardware states)
+
+---
+
+## US-103: Measurement Session History and Venue Recall
+
+**As** the system operator returning to a venue or comparing results across sessions,
+**I want** to browse past measurement sessions, view their results, compare frequency responses between sessions, and recall previous filter deployments,
+**so that** I can track how a venue sounds over time, reuse good measurements, and diagnose regression when something sounds wrong.
+
+**Status:** draft (2026-03-27)
+**Depends on:** US-097 (measurement sessions — basic session listing implemented, browse/compare deferred to Phase 3), US-090 (filter deployment with rollback)
+**Blocks:** none
+**Priority:** MEDIUM — operational convenience, deferred from US-097 Phase 3
+**Tier:** 13
+
+### Background
+
+US-097 deferred session browse/compare to Phase 3 (PO decision 2026-03-27). Each measurement session already saves raw recordings, impulse responses, computed filters, delay values, and verification results in a timestamped directory. This story provides the UI for browsing, comparing, and recalling those sessions.
+
+### Acceptance criteria
+
+- [ ] Session list view: all past measurement sessions with date, venue name (if tagged), speaker profile used, number of positions, pass/fail verification status
+- [ ] Session detail view: per-channel frequency response plots (raw measurement, corrected, target overlay), impulse response plots, time alignment delays, filter summary, verification results
+- [ ] Session comparison: select 2 sessions and overlay their per-channel frequency responses on the same plot. Useful for: same venue different days (drift check), same speakers different venues (speaker consistency), before/after a speaker change
+- [ ] Venue tagging: associate a session with a venue name (free text). Sessions from the same venue grouped in the list
+- [ ] Filter recall: "Re-deploy filters from this session" button — deploys the filters and delays from a historical session without re-measuring. Uses existing US-090 deployment path with D-053 safety flow
+- [ ] Session export: download a session's data as a ZIP file (WAV recordings, IRs, filter WAVs, YAML metadata, response plots as PNG)
+- [ ] Session delete with confirmation: removes session directory and all associated data
+- [ ] Storage management: display total session storage used. Oldest sessions highlighted when storage exceeds configurable threshold (default 1GB)
+- [ ] Search/filter: by date range, venue name, speaker profile, pass/fail status
+
+### Definition of Done
+
+- [ ] All acceptance criteria met
+- [ ] UX review: session browsing flow, comparison visualization, venue recall workflow
+- [ ] Architect review: session storage structure, export format
+- [ ] QE review: E2E tests for browse, compare, recall, delete lifecycle
+
+---
+
+## US-104: End-to-End Venue Workflow Validation — Real Hardware
+
+**As** the project owner,
+**I want** the complete venue workflow validated end-to-end on the Pi with real speakers, real amplifiers, and a real room,
+**so that** I have confidence the entire chain works before the first live event.
+
+**Status:** draft (2026-03-27)
+**Depends on:** US-099 (speaker discovery), US-100 (identity creation), US-101 (quick start), US-102 (pre-flight), US-097 (room measurement), US-090 (filter deployment), US-098 (pipeline verification)
+**Blocks:** US-029 (DJ/PA UAT — enhanced by venue workflow), US-030 (Live Vocal UAT — enhanced by venue workflow)
+**Priority:** HIGH — gate for live event readiness
+**Tier:** 13
+
+### Background
+
+All preceding stories (US-089 through US-103) can be developed and tested locally with mock data and the US-067 room simulator. This story is the Pi hardware validation: the complete workflow executed on real hardware in a real room. It is both a test plan and a user story — the acceptance criteria define what "ready for a live event" means.
+
+### Acceptance criteria
+
+**Scenario A — Unknown speakers (full discovery path):**
+- [ ] Operator starts with speakers they have never measured before
+- [ ] Pre-flight check passes (US-102)
+- [ ] Near-field characterization completes for all drivers (US-099)
+- [ ] Speaker identity created from measurements with auto-populated parameters (US-100)
+- [ ] Speaker profile activated via D-053 safety flow
+- [ ] Room measurement completes at 3+ positions (US-097)
+- [ ] Correction filters generated and deployed (US-090)
+- [ ] Verification measurement passes: corrected response within 3dB of target in correction band (US-098)
+- [ ] Total time: under 30 minutes for a 2-way stereo system
+
+**Scenario B — Known speakers (quick start path):**
+- [ ] Operator selects existing speaker profile (e.g., Bose PS28 + 802 Series IV)
+- [ ] Quick-start workflow completes: select, measure, deploy (US-101)
+- [ ] Verification measurement passes
+- [ ] Total time: under 12 minutes for a 2-way stereo system
+
+**Scenario C — Return to venue:**
+- [ ] Operator re-deploys filters from a previous session (US-103 recall)
+- [ ] Verification measurement confirms filters still effective (within 3dB of target)
+- [ ] If verification fails (venue changed), operator re-measures and re-deploys
+- [ ] Total time for recall + verify: under 5 minutes
+
+**Cross-cutting validation:**
+- [ ] All measurements use calibrated UMIK-1 (US-096)
+- [ ] Thermal protection active throughout (US-092)
+- [ ] ISO 226 compensation applied at target SPL (US-094)
+- [ ] Mode transition (DJ to live or vice versa) works after correction deployed
+- [ ] No xruns during measurement or playback at production quantum
+- [ ] System thermally stable (< 75C) during full workflow
+- [ ] Web UI responsive throughout (no freezes, progress updates visible)
+
+### Definition of Done
+
+- [ ] Scenario A completed successfully on Pi with real speakers
+- [ ] Scenario B completed successfully on Pi with owner's known speakers
+- [ ] Scenario C completed successfully (requires two sessions at same location)
+- [ ] AE sign-off: correction quality, measurement methodology in real conditions
+- [ ] AD sign-off: safety procedures followed throughout, no transient incidents
+- [ ] QE sign-off: all acceptance criteria witnessed and documented
+- [ ] Owner sign-off: subjective listening test — "does it sound right?"
+- [ ] Test evidence documented in `docs/test-evidence/US-104/`
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
@@ -7083,4 +7370,13 @@ US-052 ──> US-082 (Audio File Playback in signal-gen — MP3/WAV/FLAC, play_
 US-082 ──> US-053 (test tab file playback controls depend on signal-gen file support)
 US-075 ──> US-083 (Integration Smoke Tests Against Local-Demo Stack — real data pipeline testing, catches F-098/F-101/F-102/F-103/F-105 class)
 D-049 + TK-097 + US-051 + D-047 ──> US-084 (Level-Bridge Extraction and 24-Channel Metering — 3 instances, self-linking, always-on)
+
+Tier 13 — Venue Workflow (2026-03-27):
+US-096 + US-088 + US-052 ──> US-099 (Speaker Discovery — near-field characterization of unknown speakers)
+US-099 + US-089 + US-039 ──> US-100 (Speaker Identity Creation from Discovery Data)
+US-089 + US-097 + US-090 ──> US-101 (Room Correction Quick Start — known speaker fast path)
+US-096 + US-089 + US-093 + US-027a ──> US-102 (Venue Setup Pre-Flight Checklist)
+US-097 + US-090 ──> US-103 (Measurement Session History and Venue Recall — deferred from US-097 Phase 3)
+US-099 + US-100 + US-101 + US-102 + US-097 + US-090 + US-098 ──> US-104 (End-to-End Venue Workflow Validation — Real Hardware)
+US-104 ──> US-029 + US-030 (DJ/PA and Live Vocal UATs enhanced by venue workflow)
 ```
