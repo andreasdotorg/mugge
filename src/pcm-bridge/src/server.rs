@@ -168,6 +168,21 @@ where
     // acceptance when no audio data is flowing.
     let wait_timeout = Duration::from_millis(200);
 
+    // F-081: Heartbeat frame for idle-path client pruning.
+    // A valid v2 frame with frame_count=0 and no PCM payload (24 bytes).
+    // Clients handle this gracefully (zero frames = no FFT processing).
+    let heartbeat: [u8; 24] = {
+        let mut hb = [0u8; 24];
+        hb[0] = 2; // version
+        // bytes 1..24 are zero: pad=0, frame_count=0, graph_pos=0, graph_nsec=0
+        hb
+    };
+
+    // F-081: Counter for idle ticks (no data flowing). At 200ms per tick,
+    // 25 ticks = ~5 seconds between heartbeat prunes.
+    let mut idle_ticks: u32 = 0;
+    const IDLE_PRUNE_INTERVAL: u32 = 25;
+
     while !shutdown.load(Ordering::Relaxed) {
         // Accept all pending new connections.
         while let Some((stream, peer)) = accept(listener) {
@@ -184,6 +199,28 @@ where
         // the PW process callback (US-077 Phase 4: replaces thread::sleep).
         let min_read = clients.iter().map(|c| c.read_pos).min().unwrap_or(wp);
         if wp < min_read + quantum {
+            idle_ticks += 1;
+
+            // F-081: Prune dead clients on idle path by sending a heartbeat
+            // frame. Dead sockets return BrokenPipe/ConnectionReset on write.
+            if idle_ticks >= IDLE_PRUNE_INTERVAL && !clients.is_empty() {
+                let before = clients.len();
+                clients.retain_mut(|client| {
+                    match client.stream.write_all(&heartbeat) {
+                        Ok(()) => true,
+                        Err(_) => {
+                            info!("Client disconnected (idle heartbeat prune)");
+                            false
+                        }
+                    }
+                });
+                let pruned = before - clients.len();
+                if pruned > 0 {
+                    info!("F-081: pruned {} dead client(s) during idle", pruned);
+                }
+                idle_ticks = 0;
+            }
+
             notifier.wait(wait_timeout);
             continue;
         }
@@ -198,6 +235,9 @@ where
         // We read at the minimum read_pos — clients ahead of this will skip.
         // Actually, each client has its own read_pos, but the ring buffer data
         // is the same for all. We read once per quantum and broadcast.
+        // F-081: Data is flowing — reset idle counter.
+        idle_ticks = 0;
+
         match ring.read_interleaved(min_read, quantum) {
             Some(samples) => {
                 // Stamp metadata from ring buffer's latest chunk.
@@ -249,9 +289,18 @@ where
             }
             None => {
                 // Ring returned None — reset all clients to current write pos.
-                for client in clients.iter_mut() {
-                    client.read_pos = ring.write_pos();
-                }
+                // F-081: Also prune dead clients via heartbeat (same leak vector).
+                let ring_wp = ring.write_pos();
+                clients.retain_mut(|client| {
+                    client.read_pos = ring_wp;
+                    match client.stream.write_all(&heartbeat) {
+                        Ok(()) => true,
+                        Err(_) => {
+                            info!("Client disconnected (ring-None prune)");
+                            false
+                        }
+                    }
+                });
                 notifier.wait(wait_timeout);
             }
         }
