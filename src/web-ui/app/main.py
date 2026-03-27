@@ -306,6 +306,12 @@ async def index():
 
 # -- REST endpoints --
 
+@app.get("/api/v1/status")
+async def status():
+    """Health-check endpoint — returns 200 when the service is up."""
+    return {"status": "ok"}
+
+
 @app.get("/api/v1/pcm-sources")
 async def list_pcm_sources():
     """List available PCM source names for /ws/pcm/{source}."""
