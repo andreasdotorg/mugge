@@ -434,12 +434,27 @@ export PI4AUDIO_LEVELS_HW_OUT_PORT=9101
 export PI4AUDIO_LEVELS_HW_IN_PORT=9102
 export PI4AUDIO_SKIP_GM_RECOVERY=1
 export PI4AUDIO_SIGGEN=1
-# Filter output + session dirs: writable temp paths (Nix store is read-only,
-# so the defaults in filter_routes.py resolve into read-only paths when
-# running via nix run .#local-demo).
+# Writable temp paths for all config/data dirs. Nix store is read-only,
+# and the defaults point at /etc/pi4audio/* or ~/.config/pipewire/* which
+# are either missing or the host's real config — both wrong for local-demo.
 export PI4AUDIO_FILTER_OUTPUT_DIR="/tmp/pi4audio-demo/filters"
 export PI4AUDIO_SESSION_DIR="/tmp/pi4audio-demo/sessions"
+# G-3: PW filter-chain config deploy dir — must be the local-demo PW config,
+# not the host's real ~/.config/pipewire/pipewire.conf.d.
+# XDG_CONFIG_HOME is set by eval "$("$PW_TEST_ENV" env)" above.
+export PI4AUDIO_PW_CONF_DIR="$XDG_CONFIG_HOME/pipewire/pipewire.conf.d"
+# G-6: Speaker and hardware profile write dirs — seeded from repo configs.
+export PI4AUDIO_SPEAKERS_DIR="/tmp/pi4audio-demo/speakers"
+export PI4AUDIO_HARDWARE_DIR="/tmp/pi4audio-demo/hardware"
 mkdir -p "$PI4AUDIO_FILTER_OUTPUT_DIR" "$PI4AUDIO_SESSION_DIR"
+mkdir -p "$PI4AUDIO_SPEAKERS_DIR/profiles" "$PI4AUDIO_SPEAKERS_DIR/identities"
+mkdir -p "$PI4AUDIO_HARDWARE_DIR/amplifiers" "$PI4AUDIO_HARDWARE_DIR/dacs"
+# Seed speaker/hardware dirs from repo configs (copy, not symlink, so writes work).
+cp -n "$REPO_DIR"/configs/speakers/profiles/*.yml "$PI4AUDIO_SPEAKERS_DIR/profiles/" 2>/dev/null || true
+cp -n "$REPO_DIR"/configs/speakers/identities/*.yml "$PI4AUDIO_SPEAKERS_DIR/identities/" 2>/dev/null || true
+cp -n "$REPO_DIR"/configs/hardware/*.yml "$PI4AUDIO_HARDWARE_DIR/" 2>/dev/null || true
+cp -n "$REPO_DIR"/configs/hardware/amplifiers/*.yml "$PI4AUDIO_HARDWARE_DIR/amplifiers/" 2>/dev/null || true
+cp -n "$REPO_DIR"/configs/hardware/dacs/*.yml "$PI4AUDIO_HARDWARE_DIR/dacs/" 2>/dev/null || true
 
 cd "$REPO_DIR/src/web-ui"
 "$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload &
@@ -466,6 +481,7 @@ echo ""
 echo "  PW nodes:     alsa_output.usb-MiniDSP_USBStreamer (null sink)"
 echo "                alsa_input.usb-MiniDSP_USBStreamer (null source)"
 echo "                alsa_input.usb-miniDSP_UMIK-1 (null source, mono)"
+echo "                ada8200-in (null source, 8ch ADC capture)"
 echo "                pi4audio-convolver (filter-chain, dirac passthrough)"
 echo "                pi4audio-convolver-out (filter-chain output)"
 echo ""

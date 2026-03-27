@@ -154,6 +154,26 @@ context.objects = [
             node.pause-on-idle = false
         }
     }
+    # ADA8200 ADC capture replacement: 8ch null Audio/Source.
+    # Production: WirePlumber renames the ADA8200's ADAT input to "ada8200-in".
+    # GM uses Exact("ada8200-in") match for level-bridge-hw-in links (8 links)
+    # and live mode Reaper capture links.
+    # Ports: capture_AUX0..AUX7 (ch 1 vocal mic, ch 2 spare, etc.).
+    { factory = adapter
+        args = {
+            factory.name     = support.null-audio-sink
+            node.name        = "ada8200-in"
+            media.class      = Audio/Source
+            object.linger    = true
+            audio.channels   = 8
+            audio.rate       = 48000
+            audio.position   = [ AUX0 AUX1 AUX2 AUX3 AUX4 AUX5 AUX6 AUX7 ]
+            node.autoconnect = false
+            node.always-process = true
+            session.suspend-timeout-seconds = 0
+            node.pause-on-idle = false
+        }
+    }
 ]
 
 # NOTE: The filter-chain convolver config is injected by local-demo.sh
@@ -196,6 +216,7 @@ monitor.audio-adapter.rules = [
       { node.name = "~alsa_output.usb-MiniDSP_USBStreamer*" }
       { node.name = "~alsa_input.usb-MiniDSP_USBStreamer*" }
       { node.name = "~alsa_input.usb-miniDSP_UMIK*" }
+      { node.name = "ada8200-in" }
     ]
     actions = {
       update-props = {
