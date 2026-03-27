@@ -16,6 +16,17 @@ from pathlib import Path
 import pytest
 
 
+def _run(coro):
+    """Run async coroutine in sync test context (works with pytest-playwright's loop)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 # ---------------------------------------------------------------------------
 # TK-128: processing_load wire-format tests
 # ---------------------------------------------------------------------------
@@ -147,7 +158,7 @@ class TestTK132MockPCMStream:
                 )
                 assert len(msg) > 0, "Received empty message"
 
-        asyncio.run(_test())
+        _run(_test())
 
     def test_pcm_first_message_header_format(self, pcm_server):
         """v2 header: byte 0 = version 2, bytes 4..8 = LE uint32 frame count."""
@@ -169,7 +180,7 @@ class TestTK132MockPCMStream:
                     f"got {frame_count}"
                 )
 
-        asyncio.run(_test())
+        _run(_test())
 
     def test_pcm_first_message_total_size(self, pcm_server):
         """Total message: 24 + (256 * 4 * 4) = 4120 bytes."""
@@ -186,7 +197,7 @@ class TestTK132MockPCMStream:
                     f"{NUM_CHANNELS} channels * 4 bytes = {EXPECTED_TOTAL_SIZE}"
                 )
 
-        asyncio.run(_test())
+        _run(_test())
 
     def test_pcm_payload_is_valid_float32(self, pcm_server):
         """Payload after header must be decodable as float32 values."""
@@ -209,7 +220,7 @@ class TestTK132MockPCMStream:
                     "All PCM samples are zero -- stream may not be generating data"
                 )
 
-        asyncio.run(_test())
+        _run(_test())
 
     def test_pcm_stream_sends_multiple_messages(self, pcm_server):
         """Verify the stream is continuous: receive at least 3 messages."""
@@ -233,4 +244,4 @@ class TestTK132MockPCMStream:
                         f"got {len(msg)}"
                     )
 
-        asyncio.run(_test())
+        _run(_test())

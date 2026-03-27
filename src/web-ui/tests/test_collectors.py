@@ -650,8 +650,14 @@ _GM_STATE_MONITORING = {
 
 
 def _run_async(coro):
-    """Run an async coroutine in a fresh event loop (no pytest-asyncio needed)."""
-    return asyncio.run(coro)
+    """Run an async coroutine in sync test context (works with pytest-playwright's loop)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 async def _gm_handler(reader, writer, responses):

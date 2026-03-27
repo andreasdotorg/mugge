@@ -1631,8 +1631,14 @@ def activate_dir(tmp_path, monkeypatch):
 # ── Async tests: _activate_profile_impl ──────────────────────────
 
 def _run_async(coro):
-    """Helper to run async coroutine in sync test context."""
-    return asyncio.run(coro)
+    """Helper to run async coroutine in sync test context (works with pytest-playwright's loop)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 def _patch_pw_gen(return_value=None, side_effect=None):

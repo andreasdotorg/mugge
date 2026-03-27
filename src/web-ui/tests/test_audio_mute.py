@@ -45,8 +45,14 @@ def _make_convolver_pw_data(gain_nodes: dict) -> list:
 
 
 def _run(coro):
-    """Run async coroutine in sync test context."""
-    return asyncio.run(coro)
+    """Run async coroutine in sync test context (works with pytest-playwright's loop)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 # Standard topologies
