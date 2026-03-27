@@ -363,7 +363,9 @@ impl RoutingTable {
         // detected, set volume to unity to prevent post-DSP clipping.
         let mut links = Self::convolver_to_usbstreamer_links();
         // F-124: No level-bridge-sw in monitoring — no app to tap.
-        // F-131: No pcm-bridge in monitoring — no app to tap.
+        // F-131: No pcm-bridge app tap in monitoring — no app to tap.
+        // Always-on UMIK-1 capture for SPL metering (ch3, optional).
+        links.push(Self::pcm_bridge_umik_link());
         links.extend(Self::level_bridge_hw_links());
         links
     }
@@ -440,6 +442,9 @@ impl RoutingTable {
                 optional: false,
             });
         }
+
+        // Always-on UMIK-1 capture for SPL metering (ch3, optional).
+        links.push(Self::pcm_bridge_umik_link());
 
         // D-043/US-084: level-bridge always active.
         links.extend(Self::level_bridge_hw_links());
@@ -557,6 +562,9 @@ impl RoutingTable {
             });
         }
 
+        // Always-on UMIK-1 capture for SPL metering (ch3, optional).
+        links.push(Self::pcm_bridge_umik_link());
+
         // D-043/US-084: level-bridge always active.
         links.extend(Self::level_bridge_hw_links());
         // F-124: level-bridge-sw taps Reaper outputs (8ch: Master L/R + unused 3-4 + HP L/R + IEM L/R).
@@ -584,7 +592,6 @@ impl RoutingTable {
         let cv_in = AppPortNaming::ConvolverInput;
         let umik = AppPortNaming::Umik1Capture;
         let sg_cap = AppPortNaming::SignalGenCaptureInput;
-        let pcm = AppPortNaming::PcmBridgeInput;
 
         // F-097: Mono signal-gen output_AUX0 → all 4 convolver inputs.
         // PW fans out: each convolver input gets a copy of the same signal.
@@ -601,16 +608,8 @@ impl RoutingTable {
         // Convolver → USBStreamer (ch 1-4: measurement signal to speakers).
         links.extend(Self::convolver_to_usbstreamer_links());
 
-        // US-088: pcm-bridge taps UMIK-1 capture (room response for spectrum).
-        // Replaces signal-gen tap — the spectrum analyzer shows what the mic
-        // picks up from the room, not the stimulus signal.
-        links.push(DesiredLink {
-            output_node: NodeMatch::Prefix(UMIK1_PREFIX.to_string()),
-            output_port: umik.port_name(1),
-            input_node: NodeMatch::Exact(PCM_BRIDGE.to_string()),
-            input_port: pcm.port_name(1),
-            optional: true, // UMIK-1 may not be plugged in
-        });
+        // Always-on UMIK-1 capture for SPL metering (ch3, optional).
+        links.push(Self::pcm_bridge_umik_link());
 
         // UMIK-1 → signal-gen capture (mono measurement mic).
         links.push(DesiredLink {
@@ -636,6 +635,24 @@ impl RoutingTable {
     // -------------------------------------------------------------------
     // Shared link sets
     // -------------------------------------------------------------------
+
+    /// UMIK-1 capture → pcm-bridge channel 3 (always-on SPL/spectrum source).
+    ///
+    /// UMIK-1 is routed to pcm-bridge input channel 3 in ALL modes. Channels
+    /// 1-2 are reserved for the app stereo tap (DJ/Live) or measurement
+    /// stimulus. Channel 3 is always the mic capture, avoiding signal mixing.
+    /// The link is optional because UMIK-1 may not be plugged in.
+    fn pcm_bridge_umik_link() -> DesiredLink {
+        let umik = AppPortNaming::Umik1Capture;
+        let pcm = AppPortNaming::PcmBridgeInput;
+        DesiredLink {
+            output_node: NodeMatch::Prefix(UMIK1_PREFIX.to_string()),
+            output_port: umik.port_name(1),
+            input_node: NodeMatch::Exact(PCM_BRIDGE.to_string()),
+            input_port: pcm.port_name(3), // ch3: dedicated UMIK-1 channel
+            optional: true,
+        }
+    }
 
     /// App output → pcm-bridge input (F-131).
     ///
@@ -879,36 +896,39 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn monitoring_has_20_links() {
+    fn monitoring_has_21_links() {
         // convolver-out → USBStreamer ch 0-3 (4)
-        // + level-bridge-hw-out (8) + level-bridge-hw-in (8) = 20.
+        // + UMIK-1 → pcm-bridge ch3 (1, always-on)
+        // + level-bridge-hw-out (8) + level-bridge-hw-in (8) = 21.
         // F-124: No level-bridge-sw in monitoring (no app to tap).
-        // F-131: No pcm-bridge in monitoring (no app to tap).
+        // F-131: No pcm-bridge app tap in monitoring (no app to tap).
         let table = RoutingTable::production();
-        assert_eq!(table.links_for(Mode::Monitoring).len(), 20);
+        assert_eq!(table.links_for(Mode::Monitoring).len(), 21);
     }
 
     #[test]
-    fn dj_has_38_links() {
+    fn dj_has_39_links() {
         // Mixxx → convolver mains (2) + Mixxx → convolver subs fan-out (4)
         // + convolver → USBStreamer (4) + F-131: Mixxx → pcm-bridge stereo (2)
         // + Mixxx → USBStreamer HP (2)
+        // + UMIK-1 → pcm-bridge ch3 (1, always-on)
         // + level-bridge-hw-out (8) + level-bridge-hw-in (8)
-        // + F-124: Mixxx → level-bridge-sw (8: consistent 8-ch metering) = 38.
+        // + F-124: Mixxx → level-bridge-sw (8: consistent 8-ch metering) = 39.
         let table = RoutingTable::production();
-        assert_eq!(table.links_for(Mode::Dj).len(), 38);
+        assert_eq!(table.links_for(Mode::Dj).len(), 39);
     }
 
     #[test]
-    fn live_has_48_links() {
+    fn live_has_49_links() {
         // REAPER → convolver mains (2) + REAPER → convolver subs fan-out (4)
         // + convolver → USBStreamer (4) + F-131: REAPER → pcm-bridge stereo (2)
         // + REAPER → USBStreamer HP (2) + REAPER → USBStreamer IEM (2)
         // + ADA8200 → REAPER capture (8)
+        // + UMIK-1 → pcm-bridge ch3 (1, always-on)
         // + level-bridge-hw-out (8) + level-bridge-hw-in (8)
-        // + F-124: REAPER → level-bridge-sw (8) = 48.
+        // + F-124: REAPER → level-bridge-sw (8) = 49.
         let table = RoutingTable::production();
-        assert_eq!(table.links_for(Mode::Live).len(), 48);
+        assert_eq!(table.links_for(Mode::Live).len(), 49);
     }
 
     #[test]
@@ -953,8 +973,10 @@ mod tests {
 
     #[test]
     fn pcm_bridge_links_per_mode() {
-        // F-131: pcm-bridge taps app output (stereo master) for spectrum.
-        // Monitoring: 0 (no app). DJ/Live: 2 (stereo L/R). Measurement: 1 (mono).
+        // F-131: pcm-bridge taps app output (stereo master) for spectrum on ch1-2.
+        // UMIK-1 always-on tap on ch3 in all modes.
+        // Monitoring: 1 (UMIK-1 only). DJ/Live: 3 (stereo L/R + UMIK-1).
+        // Measurement: 1 (UMIK-1 ch3; no app tap).
         let table = RoutingTable::production();
         for mode in Mode::ALL {
             let links = table.links_for(mode);
@@ -965,9 +987,9 @@ mod tests {
                 })
                 .collect();
             let expected = match mode {
-                Mode::Monitoring => 0,   // F-131: no app to tap
-                Mode::Measurement => 1,  // F-097: mono signal-gen
-                _ => 2,                  // F-131: stereo master L/R
+                Mode::Monitoring => 1,   // UMIK-1 ch3 only (no app to tap)
+                Mode::Measurement => 1,  // UMIK-1 ch3 only (no app tap in measurement)
+                _ => 3,                  // F-131: stereo master L/R + UMIK-1 ch3
             };
             assert_eq!(
                 pcm_links.len(),
@@ -986,8 +1008,9 @@ mod tests {
     }
 
     #[test]
-    fn pcm_bridge_monitoring_has_no_links() {
-        // F-131: Monitoring mode has no pcm-bridge links — no app to tap.
+    fn pcm_bridge_monitoring_has_umik_link() {
+        // Monitoring mode has 1 pcm-bridge link: UMIK-1 ch3 (always-on).
+        // No app tap (F-131: no app to tap).
         let table = RoutingTable::production();
         let links = table.links_for(Mode::Monitoring);
         let pcm_links: Vec<_> = links
@@ -996,12 +1019,16 @@ mod tests {
                 matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-pcm-bridge")
             })
             .collect();
-        assert_eq!(pcm_links.len(), 0);
+        assert_eq!(pcm_links.len(), 1);
+        assert!(matches!(&pcm_links[0].output_node, NodeMatch::Prefix(p) if p.contains("UMIK")));
+        assert_eq!(pcm_links[0].input_port, "input_3");
+        assert!(pcm_links[0].optional);
     }
 
     #[test]
     fn pcm_bridge_dj_taps_mixxx_stereo() {
-        // F-131: DJ mode taps Mixxx master L/R for spectrum display.
+        // F-131: DJ mode taps Mixxx master L/R for spectrum display (ch1-2).
+        // Plus always-on UMIK-1 on ch3.
         let table = RoutingTable::production();
         let links = table.links_for(Mode::Dj);
         let pcm_links: Vec<_> = links
@@ -1010,19 +1037,22 @@ mod tests {
                 matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-pcm-bridge")
             })
             .collect();
-        assert_eq!(pcm_links.len(), 2);
-        // Both links come from Mixxx master L/R.
+        assert_eq!(pcm_links.len(), 3); // Mixxx L + Mixxx R + UMIK-1
+        // First two links: Mixxx master L/R.
         assert!(matches!(&pcm_links[0].output_node, NodeMatch::Prefix(p) if p == "Mixxx"));
         assert_eq!(pcm_links[0].output_port, "out_0");
         assert_eq!(pcm_links[0].input_port, "input_1");
         assert!(matches!(&pcm_links[1].output_node, NodeMatch::Prefix(p) if p == "Mixxx"));
         assert_eq!(pcm_links[1].output_port, "out_1");
         assert_eq!(pcm_links[1].input_port, "input_2");
+        // Third link: UMIK-1 on ch3.
+        assert!(matches!(&pcm_links[2].output_node, NodeMatch::Prefix(p) if p.contains("UMIK")));
+        assert_eq!(pcm_links[2].input_port, "input_3");
     }
 
     #[test]
     fn pcm_bridge_measurement_taps_umik1() {
-        // US-088: Measurement mode taps UMIK-1 capture (room response for spectrum).
+        // UMIK-1 always-on tap on pcm-bridge ch3 (consistent across all modes).
         let table = RoutingTable::production();
         let links = table.links_for(Mode::Measurement);
         let pcm_links: Vec<_> = links
@@ -1031,14 +1061,14 @@ mod tests {
                 matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-pcm-bridge")
             })
             .collect();
-        assert_eq!(pcm_links.len(), 1, "US-088: UMIK-1 mono → 1 pcm-bridge link");
+        assert_eq!(pcm_links.len(), 1, "UMIK-1 mono → 1 pcm-bridge link");
         assert!(
             matches!(&pcm_links[0].output_node, NodeMatch::Prefix(p) if p.contains("UMIK")),
             "Measurement pcm-bridge link should come from UMIK-1, got: {}",
             pcm_links[0].output_node,
         );
-        assert_eq!(pcm_links[0].output_port, "capture_MONO", "US-088: UMIK-1 mono capture port");
-        assert_eq!(pcm_links[0].input_port, "input_1", "pcm-bridge ch 1");
+        assert_eq!(pcm_links[0].output_port, "capture_MONO", "UMIK-1 mono capture port");
+        assert_eq!(pcm_links[0].input_port, "input_3", "pcm-bridge ch3 (dedicated UMIK-1)");
     }
 
     #[test]
@@ -1644,6 +1674,7 @@ mod tests {
     fn dj_has_no_app_capture_links() {
         // DJ mode has no app-bound capture links — Mixxx doesn't use mic input.
         // Level-bridge-hw-in has capture links (ADA8200 → level-bridge), which is fine.
+        // UMIK-1 → pcm-bridge (always-on SPL tap) is infrastructure, not app capture.
         let table = RoutingTable::production();
         let dj_links = table.links_for(Mode::Dj);
         let app_capture_links: Vec<_> = dj_links
@@ -1651,6 +1682,7 @@ mod tests {
             .filter(|l| {
                 l.output_port.starts_with("capture_")
                     && !matches!(&l.input_node, NodeMatch::Exact(n) if n.starts_with("pi4audio-level-bridge"))
+                    && !matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-pcm-bridge")
             })
             .collect();
         assert_eq!(app_capture_links.len(), 0);
