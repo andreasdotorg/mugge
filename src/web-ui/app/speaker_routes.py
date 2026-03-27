@@ -699,6 +699,41 @@ def _deep_validate_profile(profile: dict) -> dict:
             "available_modes": available_modes,
         })
 
+    # 12. Mode constraint enforcement — cross-reference declared modes vs budget
+    declared_modes = profile.get("mode_constraints")
+    if isinstance(declared_modes, list) and declared_modes:
+        for mode in declared_modes:
+            if mode == "live" and "live" not in available_modes:
+                errors.append({
+                    "check": "mode_constraint_impossible",
+                    "message": (f"Profile declares 'live' mode but channel budget has no "
+                                f"IEM channels ({n_monitoring_ch} monitoring). "
+                                f"Live vocal mode requires 4 monitoring channels (HP + IEM)."),
+                })
+            elif mode == "dj" and "dj" not in available_modes:
+                errors.append({
+                    "check": "mode_constraint_impossible",
+                    "message": (f"Profile declares 'dj' mode but channel budget has no "
+                                f"headphone channels ({n_monitoring_ch} monitoring). "
+                                f"DJ mode requires 2 monitoring channels (HP)."),
+                })
+    elif not isinstance(declared_modes, list) or not declared_modes:
+        # Auto-derive: warn about mode limitations when no explicit constraints
+        if "live" not in available_modes and "dj" in available_modes:
+            warnings.append({
+                "check": "mode_auto_derived",
+                "message": (f"No mode_constraints declared. Channel budget limits this "
+                            f"profile to DJ/PA mode only (no IEM for live vocal)."),
+                "available_modes": available_modes,
+            })
+        elif "dj" not in available_modes and "live" not in available_modes:
+            warnings.append({
+                "check": "mode_auto_derived",
+                "message": (f"No mode_constraints declared. Channel budget limits this "
+                            f"profile to testing/evaluation only (no monitoring)."),
+                "available_modes": available_modes,
+            })
+
     valid = len(errors) == 0
     result = {"valid": valid, "errors": errors, "warnings": warnings}
     result["channel_budget"] = {
@@ -722,6 +757,71 @@ async def validate_profile_endpoint(name: str):
         )
     result = _deep_validate_profile(data)
     return result
+
+
+@router.post("/profiles/{name}/check-mode/{mode}")
+async def check_mode_compatibility(name: str, mode: str):
+    """Pre-flight check: can this profile support the requested GM mode?
+
+    Returns {compatible: bool, reason: str, available_modes: [...],
+             channel_budget: {...}}.
+    """
+    if mode not in _VALID_GM_MODES:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_mode",
+                     "detail": f"Mode must be one of: {', '.join(sorted(_VALID_GM_MODES))}"},
+        )
+    data = _read_yaml("profiles", name)
+    if data is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "not_found",
+                     "detail": f"Speaker profile '{name}' not found"},
+        )
+    result = _deep_validate_profile(data)
+    budget = result.get("channel_budget", {})
+    available = budget.get("available_modes", [])
+
+    # Check explicit mode_constraints first
+    declared = data.get("mode_constraints")
+    if isinstance(declared, list) and declared:
+        if mode not in declared:
+            return {
+                "compatible": False,
+                "reason": (f"Profile explicitly excludes '{mode}' mode. "
+                           f"Declared modes: {', '.join(declared)}."),
+                "available_modes": available,
+                "declared_modes": declared,
+                "channel_budget": budget,
+            }
+
+    # Check channel budget supports the mode
+    if mode == "live" and "live" not in available:
+        return {
+            "compatible": False,
+            "reason": (f"Live vocal mode requires IEM channels (4 monitoring). "
+                       f"This profile has {budget.get('monitoring_channels', 0)} "
+                       f"monitoring channels."),
+            "available_modes": available,
+            "channel_budget": budget,
+        }
+    if mode == "dj" and "dj" not in available:
+        return {
+            "compatible": False,
+            "reason": (f"DJ mode requires headphone channels (2 monitoring). "
+                       f"This profile has {budget.get('monitoring_channels', 0)} "
+                       f"monitoring channels."),
+            "available_modes": available,
+            "channel_budget": budget,
+        }
+
+    return {
+        "compatible": True,
+        "reason": f"Profile supports '{mode}' mode.",
+        "available_modes": available,
+        "channel_budget": budget,
+    }
 
 
 # -- Activate endpoint --------------------------------------------------------

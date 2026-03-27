@@ -254,6 +254,12 @@ try:
 except ImportError:
     pass  # filter_routes not yet available (pre-commit)
 
+try:
+    from .thermal_routes import router as thermal_router
+    app.include_router(thermal_router)
+except ImportError:
+    pass  # thermal_routes not yet available (pre-commit)
+
 
 # -- Routes --
 
