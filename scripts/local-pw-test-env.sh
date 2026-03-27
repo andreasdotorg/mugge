@@ -187,15 +187,21 @@ EOF
     # from 8ch (AUX0..7) to stereo (FL/FR), breaking GraphManager routing.
     mkdir -p "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d"
 
-    # 90-no-auto-link: GM is sole link manager (D-039) for managed nodes.
-    # All managed nodes use node.autoconnect=false, so WP's standard
-    # linking policy leaves them alone. We keep policy.linking.standard
-    # enabled so that dynamic client streams (e.g. pw-record with
-    # node.autoconnect=true and --target) get linked by WP normally.
-    # This is essential for the measurement pipeline's pw-record capture.
+    # 90-no-auto-link: disable WP linking policies only (GM is sole link
+    # manager per D-039). Keep policy.node enabled — it configures adapter
+    # nodes' PortConfig to DSP mode, which creates ports. Without this,
+    # null-audio-sink adapter nodes stay in "suspended" state with zero
+    # ports and GraphManager cannot create any links.
     #
-    # Disable only policy.linking.role-based (not needed, avoids
-    # unexpected role-based link rearrangements).
+    # WP 0.5's main profile requires policy.standard, which is a virtual
+    # component that transitively requires policy.linking.standard. We
+    # cannot just disable the linking sub-components — that breaks the
+    # dependency chain. Instead, disable the entire policy.standard bundle
+    # and re-enable every sub-component EXCEPT the two linking ones.
+    #
+    # pw-record capture works because the UMIK-1 loopback source clears
+    # node.link-group (F-163), allowing pw-link to create external links.
+    # pw_capture.py creates the link manually after starting pw-record.
     cat > "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d/90-no-auto-link.conf" << 'EOF'
 wireplumber.profiles = {
   main = {
@@ -204,7 +210,6 @@ wireplumber.profiles = {
     policy.device.profile = required
     policy.device.routes = required
     policy.default-nodes = required
-    policy.linking.standard = required
     policy.node = required
     support.standard-event-source = required
   }
