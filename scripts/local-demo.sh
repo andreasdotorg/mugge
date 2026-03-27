@@ -212,6 +212,25 @@ sed "s|COEFFS_DIR|$COEFFS_DIR|g" \
     > "$PW_CONF_DIR/30-convolver.conf"
 echo "[local-demo] Convolver config installed (coefficients: $COEFFS_DIR)"
 
+# F-159: Install UMIK-1 loopback config for measurement E2E testing.
+# Replaces the null-audio-sink UMIK-1 (which outputs silence) with a PW
+# loopback module that echoes its sink input to its source output. This lets
+# the measurement pipeline receive real audio via the room-sim convolver.
+cp "$REPO_DIR/configs/local-demo/umik1-loopback.conf" \
+    "$PW_CONF_DIR/35-umik1-loopback.conf"
+echo "[local-demo] UMIK-1 loopback config installed (measurement E2E)"
+
+# F-159: Generate room simulator IR and install room-sim convolver config.
+# The room-sim convolver applies a synthetic room IR between the speaker
+# convolver output and the UMIK-1 loopback sink. This gives the measurement
+# pipeline a realistic room response without any special code paths.
+echo "[local-demo] Generating room simulator impulse response..."
+"$PYTHON" "$REPO_DIR/scripts/generate-room-sim-ir.py" "$COEFFS_DIR"
+sed "s|COEFFS_DIR|$COEFFS_DIR|g" \
+    "$REPO_DIR/configs/local-demo/room-sim-convolver.conf" \
+    > "$PW_CONF_DIR/36-room-sim-convolver.conf"
+echo "[local-demo] Room-sim convolver config installed (room_sim_ir.wav: $COEFFS_DIR)"
+
 # ---- 3. Start PipeWire test environment ----
 echo ""
 echo "[local-demo] Starting PipeWire test environment..."
@@ -253,11 +272,15 @@ echo "[local-demo] GraphManager running (PID ${PIDS[-1]})"
 # ---- 5. Start signal-gen (managed mode) ----
 # Managed mode: no AUTOCONNECT, no --target. GraphManager creates links.
 # F-097: 1 mono output channel. GM routes to all 4 convolver inputs.
+# F-159: capture-target set to UMIK-1 loopback source so that playrec
+#   works for measurement sessions. In local-demo the UMIK-1 source is
+#   a PW loopback module (umik1-loopback.conf) that echoes audio from
+#   the room-sim convolver output back as simulated mic input.
 echo ""
-echo "[local-demo] Starting signal-gen (port 4001, managed mode, mono)..."
+echo "[local-demo] Starting signal-gen (port 4001, managed mode, mono, UMIK-1 capture)..."
 "$SG_BIN" \
     --managed \
-    --capture-target "" \
+    --capture-target "alsa_input.usb-miniDSP_UMIK-1" \
     --channels 1 \
     --rate 48000 \
     --listen tcp:127.0.0.1:4001 \
@@ -381,7 +404,11 @@ fi
 sleep 2  # allow GM reconciliation to complete
 LINK_COUNT=$(pw-link -l 2>/dev/null | grep -c '^\s*|' || echo 0)
 echo ""
-echo "[local-demo] $LINK_COUNT link endpoints active (GM reconciler, expected ~52 for measurement mode)."
+echo "[local-demo] $LINK_COUNT link endpoints active (GM reconciler, expected ~56 for measurement mode incl. F-159 room-sim chain)."
+
+# F-159: Convolver → room-sim → UMIK-1 loopback chain is managed by GM
+# (optional desired links in measurement mode). GM reconciler creates them
+# automatically when it detects the room-sim and loopback nodes.
 
 # ---- 10. Start web-ui ----
 echo ""
@@ -441,10 +468,13 @@ echo "  pcm-bridge:      tcp://127.0.0.1:9090 (PCM, managed mode)"
 echo ""
 echo "  PW nodes:     alsa_output.usb-MiniDSP_USBStreamer (null sink)"
 echo "                alsa_input.usb-MiniDSP_USBStreamer (null source)"
-echo "                alsa_input.usb-miniDSP_UMIK-1 (null source, mono)"
+echo "                alsa_input.usb-miniDSP_UMIK-1 (loopback source, mono)"
+echo "                umik1-loopback-sink (loopback sink, mono)"
 echo "                ada8200-in (null source, 8ch ADC capture)"
 echo "                pi4audio-convolver (filter-chain, dirac passthrough)"
 echo "                pi4audio-convolver-out (filter-chain output)"
+echo "                pi4audio-room-sim (room-sim convolver, F-159)"
+echo "                pi4audio-room-sim-out (room-sim output)"
 echo ""
 echo "  Press Ctrl+C to stop all services."
 echo "============================================================"

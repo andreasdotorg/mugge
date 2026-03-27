@@ -138,27 +138,14 @@ context.objects = [
             node.pause-on-idle = false
         }
     }
-    # UMIK-1 measurement microphone replacement: 1ch null Audio/Duplex.
-    # Production: alsa_input.usb-miniDSP_UMIK-1-00.mono-fallback
-    # GM uses Prefix("alsa_input.usb-miniDSP_UMIK-1") match.
-    # Port: capture_MONO (single mono channel).
-    # US-088: pcm-bridge capture-usb taps this node for spectrum analysis.
-    { factory = adapter
-        args = {
-            factory.name     = support.null-audio-sink
-            node.name        = "alsa_input.usb-miniDSP_UMIK-1"
-            media.class      = Audio/Duplex
-            object.linger    = true
-            node.driver      = true
-            audio.channels   = 1
-            audio.rate       = 48000
-            audio.position   = [ MONO ]
-            node.autoconnect = false
-            node.always-process = true
-            session.suspend-timeout-seconds = 0
-            node.pause-on-idle = false
-        }
-    }
+    # UMIK-1 measurement microphone: replaced by loopback module (F-159).
+    # The loopback config is injected by local-demo.sh as a separate
+    # drop-in file (umik1-loopback.conf). It echoes audio from its sink
+    # input to its source output so the measurement pipeline receives
+    # real audio instead of silence from a null source.
+    # The source node keeps the production name for GM routing:
+    #   Prefix("alsa_input.usb-miniDSP_UMIK-1") -> capture_MONO port.
+
     # ADA8200 ADC capture replacement: 8ch null Audio/Duplex.
     # Production: WirePlumber renames the ADA8200's ADAT input to "ada8200-in".
     # GM uses Exact("ada8200-in") match for level-bridge-hw-in links (8 links)

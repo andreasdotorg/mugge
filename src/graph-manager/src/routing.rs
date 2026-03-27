@@ -220,6 +220,21 @@ const REAPER_PREFIX: &str = "REAPER";
 /// Verified on Pi: exact name "ada8200-in" (C-005).
 const ADA8200_IN: &str = "ada8200-in";
 
+/// UMIK-1 loopback sink node (local-demo only, F-159).
+/// In local-demo, a PW loopback module echoes audio from its sink input to
+/// the UMIK-1 source so the measurement pipeline receives real audio instead
+/// of silence. On production Pi (real UMIK-1 mic), this node does not exist
+/// and the optional link is silently skipped.
+const UMIK1_LOOPBACK_SINK: &str = "umik1-loopback-sink";
+
+/// Room simulator convolver input (local-demo only, F-159).
+/// Mono filter-chain convolver that applies a synthetic room IR between the
+/// speaker convolver output and the UMIK-1 loopback sink.
+const ROOM_SIM_IN: &str = "pi4audio-room-sim";
+
+/// Room simulator convolver output (local-demo only, F-159).
+const ROOM_SIM_OUT: &str = "pi4audio-room-sim-out";
+
 // ---------------------------------------------------------------------------
 // Port naming — D-041 one-based channel mapping
 // ---------------------------------------------------------------------------
@@ -278,6 +293,10 @@ pub enum AppPortNaming {
     /// Same format as PcmBridgeInput (PW convention for no SPA positions).
     /// Channel 1 -> "input_1", channel 2 -> "input_2", etc.
     LevelBridgeInput,
+    /// UMIK-1 loopback sink playback port: `playback_MONO` (F-159).
+    /// Local-demo only — loopback module's Audio/Sink capture side.
+    /// Only channel 1 is valid.
+    Umik1LoopbackPlayback,
 }
 
 impl AppPortNaming {
@@ -309,6 +328,10 @@ impl AppPortNaming {
             AppPortNaming::ConvolverMonitor => format!("monitor_AUX{}", zero_based),
             AppPortNaming::UsbStreamerMonitor => format!("monitor_AUX{}", zero_based),
             AppPortNaming::LevelBridgeInput => format!("input_{}", channel),
+            AppPortNaming::Umik1LoopbackPlayback => {
+                assert_eq!(channel, 1, "UMIK-1 loopback sink is mono, only channel 1");
+                "playback_MONO".to_string()
+            }
         }
     }
 }
@@ -618,6 +641,36 @@ impl RoutingTable {
             input_node: NodeMatch::Exact(SIGNAL_GEN_CAPTURE.to_string()),
             input_port: sg_cap.port_name(1),
             optional: true, // UMIK-1 may not be plugged in
+        });
+
+        // F-159: Convolver → room-sim → UMIK-1 loopback (local-demo only).
+        // In local-demo, a room-sim convolver applies a synthetic room IR
+        // between the speaker convolver output and the UMIK-1 loopback sink.
+        // This gives the measurement pipeline a realistic room response
+        // without any special code paths. On production Pi (real mic, real
+        // room), these nodes don't exist and the optional links are silently
+        // skipped by the reconciler.
+        let cv_out = AppPortNaming::ConvolverOutput;   // output_AUX0
+        let rs_in = AppPortNaming::ConvolverInput;   // playback_AUX0
+        let rs_out = AppPortNaming::ConvolverOutput;  // output_AUX0
+        let lb = AppPortNaming::Umik1LoopbackPlayback;
+
+        // Hop 1: convolver-out ch1 → room-sim input
+        links.push(DesiredLink {
+            output_node: NodeMatch::Exact(CONVOLVER_OUT.to_string()),
+            output_port: cv_out.port_name(1), // output_AUX0 (left main)
+            input_node: NodeMatch::Exact(ROOM_SIM_IN.to_string()),
+            input_port: rs_in.port_name(1), // playback_AUX0
+            optional: true, // only present in local-demo
+        });
+
+        // Hop 2: room-sim output → UMIK-1 loopback sink
+        links.push(DesiredLink {
+            output_node: NodeMatch::Exact(ROOM_SIM_OUT.to_string()),
+            output_port: rs_out.port_name(1), // output_AUX0
+            input_node: NodeMatch::Exact(UMIK1_LOOPBACK_SINK.to_string()),
+            input_port: lb.port_name(1), // playback_MONO
+            optional: true, // only present in local-demo
         });
 
         // D-043/US-084: level-bridge always active.
@@ -932,13 +985,14 @@ mod tests {
     }
 
     #[test]
-    fn measurement_has_27_links() {
+    fn measurement_has_29_links() {
         // F-097: signal-gen mono fan-out → convolver (4) + convolver → USBStreamer (4)
         // + US-088: UMIK-1 → pcm-bridge (1) + UMIK-1 → signal-gen-capture (1)
         // + level-bridge-hw-out (8) + level-bridge-hw-in (8)
-        // + F-124: signal-gen → level-bridge-sw (1) = 27.
+        // + F-124: signal-gen → level-bridge-sw (1)
+        // + F-159: convolver→room-sim (1) + room-sim→UMIK-1 loopback (1) = 29.
         let table = RoutingTable::production();
-        assert_eq!(table.links_for(Mode::Measurement).len(), 27);
+        assert_eq!(table.links_for(Mode::Measurement).len(), 29);
     }
 
     #[test]
