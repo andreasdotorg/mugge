@@ -240,10 +240,16 @@
         PiAudio.setText("sb-buf", linksText,
             cdsp.gm_links_actual != null ? null : "c-grey");
 
-        // Clip count — no real data source (D-040: CamillaDSP removed,
-        // FilterChainCollector hardcodes 0, PW has no clip counter).
-        // Show "--" to avoid fake-truth display (F-088).
-        PiAudio.setText("sb-clip", "\u2014", "c-grey");
+        // F-136: Clip count — aggregate latched clips from client-side
+        // peak detection across all meter groups (capture + playback + physin).
+        var clipCount = 0;
+        for (var ci = 0; ci < 8; ci++) {
+            if (captureState[ci].clipLatched) clipCount++;
+            if (playbackState[ci].clipLatched) clipCount++;
+            if (physinState[ci].clipLatched) clipCount++;
+        }
+        PiAudio.setText("sb-clip", String(clipCount),
+            clipCount > 0 ? "c-danger" : "c-safe");
     }
 
     function onSystem(data) {
@@ -285,14 +291,14 @@
         }
 
         // Xrun count (from PipeWireCollector via /ws/system — pw-cli data)
-        // F-088: show em-dash when GM unreachable (xruns=0 is fallback, not real).
+        // F-136: show em-dash when xrun data unavailable (null = unknown).
         // Three-tier coloring per UX spec: green=0, yellow=1-5, red>5
-        if (pwConnected) {
-            var xruns = data.camilladsp.xruns || 0;
+        var xruns = data.camilladsp.xruns;
+        if (xruns != null && pwConnected) {
             PiAudio.setText("sb-xruns", String(xruns),
                 xruns > 5 ? "c-danger" : xruns > 0 ? "c-warning" : "c-safe");
         } else {
-            PiAudio.setText("sb-xruns", "\u2014", "no-data");
+            PiAudio.setText("sb-xruns", "\u2014", "c-grey");
         }
 
         // FIFO status (promoted from health bar)
@@ -503,6 +509,20 @@
                 : captureState;
             if (arr[ch]) arr[ch].clipLatched = false;
         });
+
+        // F-136: Click sb-clip to clear all latched clips
+        var clipEl = document.getElementById("sb-clip");
+        if (clipEl) {
+            clipEl.style.cursor = "pointer";
+            clipEl.title = "Click to reset clip indicators";
+            clipEl.addEventListener("click", function () {
+                for (var ci = 0; ci < 8; ci++) {
+                    captureState[ci].clipLatched = false;
+                    playbackState[ci].clipLatched = false;
+                    physinState[ci].clipLatched = false;
+                }
+            });
+        }
 
         // Start render loop
         animating = true;

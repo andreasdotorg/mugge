@@ -527,8 +527,8 @@
 
             // Peak hold line (with gradual decay after hold period, or
             // permanent when peakPermanent is true).
-            // Apply 3-point weighted average (0.25/0.5/0.25) to smooth
-            // segmented drops from bin-mapping boundaries (F-148).
+            // F-148: Multi-pass 3-point smooth (3 passes ≈ 7-pixel Gaussian)
+            // to eliminate segmented drops from bin-mapping boundaries.
             if (peakHoldEnabled && peakEnvelope) {
                 // Build peak array (apply decay only in non-permanent mode)
                 var resolvedPeaks = new Float32Array(lutLen);
@@ -542,13 +542,26 @@
                     }
                     resolvedPeaks[xp] = pd;
                 }
+                // 3-pass weighted smooth: each pass applies 0.25/0.5/0.25.
+                // Three passes produce an effective ~7-pixel approximate
+                // Gaussian that covers low-freq bin boundaries (~14px at
+                // 100 Hz / 4096 FFT) without over-blurring high frequencies.
+                var tmpSmooth = new Float32Array(lutLen);
+                for (var pass = 0; pass < 3; pass++) {
+                    for (var xs = 0; xs < lutLen; xs++) {
+                        tmpSmooth[xs] = resolvedPeaks[xs] * 0.5
+                            + (xs > 0 ? resolvedPeaks[xs - 1] : resolvedPeaks[0]) * 0.25
+                            + (xs < lutLen - 1 ? resolvedPeaks[xs + 1] : resolvedPeaks[lutLen - 1]) * 0.25;
+                    }
+                    var swap = resolvedPeaks;
+                    resolvedPeaks = tmpSmooth;
+                    tmpSmooth = swap;
+                }
                 // Draw smoothed peak hold line
                 var inPeakStroke = false;
                 ctx.beginPath();
                 for (var x3 = 0; x3 < lutLen; x3++) {
-                    var peakDb = resolvedPeaks[x3] * 0.5;
-                    peakDb += (x3 > 0 ? resolvedPeaks[x3 - 1] : resolvedPeaks[x3]) * 0.25;
-                    peakDb += (x3 < lutLen - 1 ? resolvedPeaks[x3 + 1] : resolvedPeaks[x3]) * 0.25;
+                    var peakDb = resolvedPeaks[x3];
                     if (peakDb <= floorDb) {
                         inPeakStroke = false;
                         continue;

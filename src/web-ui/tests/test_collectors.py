@@ -333,7 +333,7 @@ class TestFallbackSnapshots:
         assert snap["quantum"] == 256
         assert snap["sample_rate"] == 48000
         assert snap["graph_state"] == "unknown"
-        assert snap["xruns"] == 0
+        assert snap["xruns"] is None  # F-136: unknown when GM unavailable
         assert snap["pw_connected"] is False
         # Scheduling moved to SystemCollector (TK-245)
         assert "scheduling" not in snap
@@ -385,11 +385,15 @@ class TestFallbackSnapshots:
         snap = fc_collector.dsp_health_snapshot()
         assert snap["state"] == "Disconnected"
         assert snap["processing_load"] == 0.0
-        assert snap["xruns"] == 0
+        assert snap["xruns"] is None  # F-136: unknown, not 0
         assert snap["rate_adjust"] == 1.0
         assert snap["buffer_level"] == 0
         assert snap["chunksize"] == 0
         assert snap["cdsp_connected"] is False
+        # F-136: links are None when disconnected (not 0)
+        assert snap["gm_links_desired"] is None
+        assert snap["gm_links_actual"] is None
+        assert snap["gm_links_missing"] is None
 
     def test_filterchain_monitoring_fallback_has_spectrum(self, fc_collector):
         """Disconnected FilterChainCollector monitoring should include spectrum."""
@@ -433,7 +437,8 @@ class TestFilterChainStateDrivation:
         assert snap["gm_links_missing"] == 0
 
     def test_degraded_when_links_missing(self, fc_collector):
-        """With some links missing, state is Degraded."""
+        """With some links missing beyond grace period, state is Degraded."""
+        import time as _time
         fc_collector._connected = True
         fc_collector._links = {
             "ok": True,
@@ -444,9 +449,14 @@ class TestFilterChainStateDrivation:
             "links": [],
         }
         fc_collector._state = None
-        snap = fc_collector.dsp_health_snapshot()
-        assert snap["state"] == "Degraded"
-        assert snap["gm_links_missing"] == 2
+        # F-136: First call starts the debounce timer, keeps previous state
+        snap1 = fc_collector.dsp_health_snapshot()
+        assert snap1["state"] != "Degraded"  # grace period active
+        # Simulate grace period elapsed
+        fc_collector._degraded_since = _time.monotonic() - 3.0
+        snap2 = fc_collector.dsp_health_snapshot()
+        assert snap2["state"] == "Degraded"
+        assert snap2["gm_links_missing"] == 2
 
     def test_idle_in_monitoring_mode(self, fc_collector):
         """In monitoring mode (no active routing), state is Idle."""
@@ -740,7 +750,7 @@ class TestFilterChainRPCIntegration:
         _run_async(_test())
 
     def test_snapshot_degraded_with_missing_links(self):
-        """State is Degraded when some links are missing."""
+        """State is Degraded when some links are missing beyond grace period."""
         async def _test():
             server, port, _ = await _make_gm_server({
                 "get_links": _GM_LINKS_DEGRADED,
@@ -750,6 +760,11 @@ class TestFilterChainRPCIntegration:
                 fc = FilterChainCollector(host="127.0.0.1", port=port)
                 await fc.start()
                 await asyncio.sleep(1.0)
+                # F-136: First call starts the debounce timer
+                snap1 = fc.dsp_health_snapshot()
+                assert snap1["state"] != "Degraded"
+                # Wait for grace period to expire (>2s total since first call)
+                await asyncio.sleep(2.5)
                 snap = fc.dsp_health_snapshot()
                 await fc.stop()
 
@@ -991,7 +1006,7 @@ class TestPipeWireCollectorRPC:
             await pw.stop()
             assert snap["quantum"] == 256
             assert snap["graph_state"] == "unknown"
-            assert snap["xruns"] == 0
+            assert snap["xruns"] is None  # F-136: unknown when disconnected
             assert snap["pw_connected"] is False
         _run_async(_test())
 

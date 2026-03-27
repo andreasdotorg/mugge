@@ -38,6 +38,10 @@ _BACKOFF_BASE = 1.0
 _BACKOFF_FACTOR = 2.0
 _BACKOFF_CAP = 8.0
 
+# F-136: Grace period before reporting "Degraded" — suppresses transients
+# from quantum changes (links briefly torn down and recreated in <1s).
+_DEGRADED_GRACE_S = 2.0
+
 
 class FilterChainCollector:
     """Singleton collector for PipeWire filter-chain health via GraphManager."""
@@ -55,6 +59,12 @@ class FilterChainCollector:
         self._state: dict | None = None
         self._watchdog: dict | None = None
         self._gain_integrity: dict | None = None
+
+        # F-136: Debounce degraded state to suppress transients (e.g.
+        # quantum change briefly tears down links). Only report "Degraded"
+        # after links have been missing for >_DEGRADED_GRACE_S seconds.
+        self._degraded_since: float | None = None
+        self._prev_state: str = "Idle"
 
         self._task: asyncio.Task | None = None
 
@@ -165,7 +175,7 @@ class FilterChainCollector:
                 "processing_load": 0.0,
                 "buffer_level": 0,
                 "clipped_samples": 0,
-                "xruns": 0,
+                "xruns": None,
                 "rate_adjust": 1.0,
                 "capture_rate": 0,
                 "playback_rate": 0,
@@ -173,9 +183,9 @@ class FilterChainCollector:
                 "cdsp_connected": False,
                 "gm_connected": False,
                 "gm_mode": "dj",
-                "gm_links_desired": 0,
-                "gm_links_actual": 0,
-                "gm_links_missing": 0,
+                "gm_links_desired": None,
+                "gm_links_actual": None,
+                "gm_links_missing": None,
                 "gm_convolver": "unknown",
             }
 
@@ -185,14 +195,23 @@ class FilterChainCollector:
         missing = links.get("missing", 0)
 
         # Derive state from link health.
+        # F-136: Debounce degraded state — suppress transients from quantum
+        # changes by requiring missing links to persist >_DEGRADED_GRACE_S.
+        now = time.monotonic()
         if mode == "monitoring":
             state = "Idle"
+            self._degraded_since = None
         elif missing > 0:
-            state = "Degraded"
-        elif actual == desired and desired > 0:
-            state = "Running"
+            if self._degraded_since is None:
+                self._degraded_since = now
+            if now - self._degraded_since >= _DEGRADED_GRACE_S:
+                state = "Degraded"
+            else:
+                state = self._prev_state
         else:
             state = "Running"
+            self._degraded_since = None
+        self._prev_state = state
 
         # Buffer level as a percentage of link health (100% = all links ok).
         buffer_level = round(100 * actual / desired) if desired > 0 else 0
@@ -208,7 +227,7 @@ class FilterChainCollector:
             "processing_load": 0.0,
             "buffer_level": buffer_level,
             "clipped_samples": 0,
-            "xruns": 0,
+            "xruns": None,
             "rate_adjust": 1.0,
             "capture_rate": 48000 if self._connected else 0,
             "playback_rate": 48000 if self._connected else 0,

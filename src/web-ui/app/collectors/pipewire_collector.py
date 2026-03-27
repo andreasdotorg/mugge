@@ -88,7 +88,7 @@ class PipeWireCollector:
                         "quantum": effective_quantum if effective_quantum > 0 else 256,
                         "sample_rate": resp.get("sample_rate", 0) or 48000,
                         "graph_state": resp.get("graph_state", "unknown"),
-                        "xruns": resp.get("xruns", 0),
+                        "xruns": resp.get("xruns"),
                     }
                 await asyncio.sleep(1.0)
             except asyncio.CancelledError:
@@ -171,6 +171,6 @@ class PipeWireCollector:
             "quantum": 256,
             "sample_rate": 48000,
             "graph_state": "unknown",
-            "xruns": 0,
+            "xruns": None,
             "pw_connected": False,
         }

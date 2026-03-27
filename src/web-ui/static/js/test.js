@@ -503,6 +503,12 @@
                     currentGmMode = data.mode || "unknown";
                     if (currentGmMode !== prevMode) {
                         updateSourceSelectorLabels();
+                        // T-088-7: Auto-defaults on measurement mode transitions.
+                        if (currentGmMode === "measurement") {
+                            applyMeasurementDefaults();
+                        } else if (prevMode === "measurement") {
+                            restorePreviousDefaults();
+                        }
                     }
                 } catch (e) { /* keep unknown */ }
             }
@@ -551,6 +557,7 @@
                 }
                 // T-088-7: Update labels + status immediately after mode switch.
                 updateSourceSelectorLabels();
+                applyMeasurementDefaults();
                 updateMicStatus(
                     specPcmConnected ? "connected" : "disconnected",
                     specCurrentSource

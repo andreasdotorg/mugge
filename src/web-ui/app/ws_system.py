@@ -83,8 +83,9 @@ def _build_system_snapshot(app) -> dict:
     cdsp_snap = cdsp_col.dsp_health_snapshot() if cdsp_col else {}
 
     # Build camilladsp section, then override xruns from PipeWireCollector.
-    # FilterChainCollector hardcodes xruns=0 because GraphManager doesn't
-    # track xruns; PipeWireCollector reads them via GM RPC (get_graph_info).
+    # F-136: xruns default to None (unknown) — GM doesn't reliably expose
+    # xrun counts (F-056). PipeWireCollector returns None when GM omits the
+    # field; real values propagate when a proper data source is available.
     dsp_section = cdsp_snap if cdsp_snap else {
         "state": "Disconnected",
         "processing_load": 0.0,
@@ -93,16 +94,18 @@ def _build_system_snapshot(app) -> dict:
         "rate_adjust": 1.0,
         "buffer_level": 0,
         "clipped_samples": 0,
-        "xruns": 0,
+        "xruns": None,
         "chunksize": 0,
         "gm_connected": False,
         "gm_mode": "dj",
-        "gm_links_desired": 0,
-        "gm_links_actual": 0,
-        "gm_links_missing": 0,
+        "gm_links_desired": None,
+        "gm_links_actual": None,
+        "gm_links_missing": None,
         "gm_convolver": "unknown",
     }
-    dsp_section["xruns"] = pw_snap.get("xruns", 0)
+    pw_xruns = pw_snap.get("xruns")
+    if pw_xruns is not None:
+        dsp_section["xruns"] = pw_xruns
 
     # Scheduling comes from SystemCollector (TK-245: consolidated from
     # PipeWireCollector to avoid duplicate /proc PID scans).
