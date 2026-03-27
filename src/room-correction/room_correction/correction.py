@@ -36,6 +36,8 @@ def generate_correction_filter(
     n_taps=16384,
     sr=SAMPLE_RATE,
     margin_db=D009_MARGIN_DB,
+    target_phon=None,
+    reference_phon=80.0,
 ):
     """
     Generate a room correction filter from a measured impulse response.
@@ -52,6 +54,12 @@ def generate_correction_filter(
         Sample rate.
     margin_db : float
         D-009 safety margin. All gains clipped to this value.
+    target_phon : float or None
+        If provided, apply ISO 226 equal-loudness compensation for this
+        playback level (20-90 phon). None = no compensation.
+    reference_phon : float
+        Loudness level the content was mixed for (default 80 phon).
+        Only used when target_phon is not None.
 
     Returns
     -------
@@ -73,7 +81,10 @@ def generate_correction_filter(
     smoothed_mag = dsp_utils.psychoacoustic_smooth(magnitudes, freqs)
 
     # Step 4: Get target curve
-    target_db = tc.get_target_curve(target_curve_name, freqs)
+    target_db = tc.get_target_curve(
+        target_curve_name, freqs,
+        target_phon=target_phon, reference_phon=reference_phon,
+    )
     target_linear = dsp_utils.db_to_linear(target_db)
 
     # Step 5: Compute correction = target / measured

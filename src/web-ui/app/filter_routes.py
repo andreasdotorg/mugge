@@ -327,6 +327,57 @@ async def generate_filters(req: FilterGenerateRequest):
     return JSONResponse(content=result, status_code=status)
 
 
+@router.get("/target-curve")
+async def get_target_curve(
+    curve: str = "harman",
+    phon: Optional[float] = None,
+    reference: float = 80.0,
+    n_points: int = 256,
+):
+    """Return a target curve as JSON frequency/dB pairs.
+
+    Used by the spectrum display to render a visual overlay of the
+    selected target curve, optionally with ISO 226 loudness compensation.
+
+    Parameters
+    ----------
+    curve : str
+        Target curve name: 'flat', 'harman', or 'pa'.
+    phon : float, optional
+        If provided, apply ISO 226 equal-loudness compensation for this
+        playback level (20-90 phon).
+    reference : float
+        Reference loudness level (default 80 phon).
+    n_points : int
+        Number of frequency points in the response (default 256).
+    """
+    try:
+        import numpy as np
+        from room_correction.target_curves import get_target_curve as _get_curve
+
+        freqs = np.logspace(np.log10(20), np.log10(20000), n_points)
+        db = _get_curve(curve, freqs, target_phon=phon, reference_phon=reference)
+
+        return {
+            "curve": curve,
+            "phon": phon,
+            "reference": reference,
+            "freqs": [round(float(f), 1) for f in freqs],
+            "db": [round(float(d), 2) for d in db],
+        }
+    except ValueError as e:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "invalid_parameter", "detail": str(e)},
+        )
+    except Exception as e:
+        log.exception("Failed to compute target curve")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "computation_failed", "detail": str(e)},
+        )
+
+
 @router.get("/profiles")
 async def list_profiles():
     """List available speaker profiles for filter generation."""
