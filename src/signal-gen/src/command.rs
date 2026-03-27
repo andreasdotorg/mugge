@@ -39,8 +39,6 @@ pub enum PlayState {
     Stopped,
     Playing,
     Fading,
-    Recording,
-    PlayrecInProgress,
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +57,9 @@ pub struct Command {
 ///
 /// The process callback drains ALL pending commands per quantum
 /// (multi-command-per-quantum semantics, AD-D037-6).
+///
+/// Signal-gen is play-only (D-040 / US-067). Capture is handled by
+/// pw-record in the Python measurement session (Track A).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CommandKind {
     /// Start playback with the given parameters.
@@ -68,15 +69,6 @@ pub enum CommandKind {
         level_dbfs: f32,
         frequency: f32,
         duration_secs: Option<f32>,
-        sweep_end_hz: f32,
-    },
-    /// Start play+record simultaneously.
-    Playrec {
-        signal: SignalType,
-        channels: u8,
-        level_dbfs: f32,
-        frequency: f32,
-        duration_secs: f32,
         sweep_end_hz: f32,
     },
     /// Stop playback (fade out to silence).
@@ -89,10 +81,6 @@ pub enum CommandKind {
     SetSignal { signal: SignalType, frequency: f32 },
     /// Change frequency (phase-continuous for sine).
     SetFrequency { frequency: f32 },
-    /// Begin writing capture samples to the ring buffer.
-    StartCapture,
-    /// Stop writing capture samples.
-    StopCapture,
 }
 
 // ---------------------------------------------------------------------------
@@ -114,9 +102,6 @@ pub struct StateSnapshot {
     pub frequency: f32,
     pub elapsed_secs: f32,
     pub duration_secs: f32,
-    pub capture_peak: f32,
-    pub capture_rms: f32,
-    pub capture_connected: bool,
     pub samples_generated: u64,
 }
 
@@ -131,9 +116,6 @@ impl StateSnapshot {
             frequency: 0.0,
             elapsed_secs: 0.0,
             duration_secs: 0.0,
-            capture_peak: 0.0,
-            capture_rms: 0.0,
-            capture_connected: false,
             samples_generated: 0,
         }
     }
@@ -373,36 +355,6 @@ mod tests {
     }
 
     #[test]
-    fn command_playrec_round_trip() {
-        let q = CommandQueue::new();
-        let cmd = Command {
-            kind: CommandKind::Playrec {
-                signal: SignalType::Sweep,
-                channels: channels_to_bitmask(&[1]),
-                level_dbfs: -20.0,
-                frequency: 20.0,
-                duration_secs: 5.0,
-                sweep_end_hz: 20000.0,
-            },
-        };
-        q.push(cmd).unwrap();
-        let popped = q.pop().unwrap();
-        match popped.kind {
-            CommandKind::Playrec {
-                signal,
-                duration_secs,
-                sweep_end_hz,
-                ..
-            } => {
-                assert_eq!(signal, SignalType::Sweep);
-                assert_eq!(duration_secs, 5.0);
-                assert_eq!(sweep_end_hz, 20000.0);
-            }
-            other => panic!("Expected Playrec, got {:?}", other),
-        }
-    }
-
-    #[test]
     fn command_stop_round_trip() {
         let q = CommandQueue::new();
         q.push(Command { kind: CommandKind::Stop }).unwrap();
@@ -473,28 +425,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn command_start_stop_capture_round_trip() {
-        let q = CommandQueue::new();
-        q.push(Command {
-            kind: CommandKind::StartCapture,
-        })
-        .unwrap();
-        q.push(Command {
-            kind: CommandKind::StopCapture,
-        })
-        .unwrap();
-
-        match q.pop().unwrap().kind {
-            CommandKind::StartCapture => {}
-            other => panic!("Expected StartCapture, got {:?}", other),
-        }
-        match q.pop().unwrap().kind {
-            CommandKind::StopCapture => {}
-            other => panic!("Expected StopCapture, got {:?}", other),
-        }
-    }
-
     // -----------------------------------------------------------------------
     // StateSnapshot round-trip through queue
     // -----------------------------------------------------------------------
@@ -510,9 +440,6 @@ mod tests {
             frequency: 1000.0,
             elapsed_secs: 1.5,
             duration_secs: 10.0,
-            capture_peak: 0.05,
-            capture_rms: 0.02,
-            capture_connected: true,
             samples_generated: 72000,
         };
 
@@ -526,9 +453,6 @@ mod tests {
         assert_eq!(popped.frequency, 1000.0);
         assert_eq!(popped.elapsed_secs, 1.5);
         assert_eq!(popped.duration_secs, 10.0);
-        assert_eq!(popped.capture_peak, 0.05);
-        assert_eq!(popped.capture_rms, 0.02);
-        assert!(popped.capture_connected);
         assert_eq!(popped.samples_generated, 72000);
     }
 

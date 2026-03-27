@@ -13,13 +13,16 @@
 //! - Frequency validation (AE-MF-2): [20, 20000] Hz
 //! - Channel validation: [1..8]
 //! - Response formatting (ack, error, state, events)
+//!
+//! Signal-gen is play-only (D-040 / US-067). Capture is handled by
+//! pw-record in the Python measurement session (Track A).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::command::{
     channels_to_bitmask, bitmask_to_channels, Command, CommandKind, CommandQueue,
-    PlayState, SignalType, StateQueue, StateSnapshot,
+    PlayState, SignalType, StateSnapshot,
 };
 use crate::file_playback::FileBuffer;
 use crate::SharedFileSamples;
@@ -87,7 +90,6 @@ pub struct StatusResponse {
     pub cmd: &'static str,
     pub ok: bool,
     pub playing: bool,
-    pub recording: bool,
     pub signal: String,
     pub freq: f32,
     pub channels: Vec<u8>,
@@ -95,20 +97,7 @@ pub struct StatusResponse {
     pub elapsed: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<f32>,
-    pub capture_peak_dbfs: f32,
-    pub capture_rms_dbfs: f32,
-    pub capture_connected: bool,
     pub samples_generated: u64,
-}
-
-/// Capture level response.
-#[derive(Debug, Serialize)]
-pub struct CaptureLevelResponse {
-    pub r#type: &'static str,
-    pub cmd: &'static str,
-    pub ok: bool,
-    pub peak_dbfs: f32,
-    pub rms_dbfs: f32,
 }
 
 /// Async event broadcast.
@@ -146,19 +135,6 @@ pub fn signal_type_to_str(st: SignalType) -> &'static str {
         SignalType::Pink => "pink",
         SignalType::Sweep => "sweep",
         SignalType::File => "file",
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Level conversion
-// ---------------------------------------------------------------------------
-
-/// Convert linear amplitude to dBFS. Returns -infinity for zero.
-fn linear_to_dbfs(linear: f32) -> f32 {
-    if linear <= 0.0 {
-        f32::NEG_INFINITY
-    } else {
-        20.0 * linear.log10()
     }
 }
 
@@ -223,12 +199,8 @@ pub enum HandleResult {
     Ack(String),
     /// Command rejected with error message.
     Error(String, String),
-    /// Status query — return formatted status JSON.
+    /// Status query -- return formatted status JSON.
     StatusJson(String),
-    /// Capture level query — return formatted level JSON.
-    CaptureLevelJson(String),
-    /// Get recording — placeholder (actual data comes from capture module).
-    GetRecording,
 }
 
 /// Handle a parsed RPC request.
@@ -238,29 +210,26 @@ pub enum HandleResult {
 ///
 /// `max_level_dbfs` is the immutable hard cap from `--max-level-dbfs`.
 /// `latest_state` is the most recent StateSnapshot from the feedback queue.
-/// `capture_connected` indicates whether the capture device is present
-/// in the PipeWire registry. Used to reject `playrec` when no capture
-/// source is available (BUG-SG12-4).
+///
+/// Signal-gen is play-only (D-040 / US-067). The `playrec`, `capture_level`,
+/// and `get_recording` commands are no longer supported and return
+/// "unknown command".
 pub fn handle_request(
     req: &RpcRequest,
     cmd_queue: &CommandQueue,
     max_level_dbfs: f64,
     latest_state: &StateSnapshot,
-    capture_connected: bool,
     file_samples: &SharedFileSamples,
     sample_rate: u32,
 ) -> HandleResult {
     match req.cmd.as_str() {
-        "play" => handle_play(req, cmd_queue, max_level_dbfs, false, capture_connected, file_samples, sample_rate),
-        "playrec" => handle_play(req, cmd_queue, max_level_dbfs, true, capture_connected, file_samples, sample_rate),
+        "play" => handle_play(req, cmd_queue, max_level_dbfs, file_samples, sample_rate),
         "stop" => handle_stop(cmd_queue),
         "set_level" => handle_set_level(req, cmd_queue, max_level_dbfs),
         "set_signal" => handle_set_signal(req, cmd_queue),
         "set_channel" => handle_set_channel(req, cmd_queue),
         "set_freq" => handle_set_freq(req, cmd_queue),
         "status" => handle_status(latest_state),
-        "capture_level" => handle_capture_level(latest_state),
-        "get_recording" => HandleResult::GetRecording,
         other => HandleResult::Error(
             other.to_string(),
             format!("unknown command: \"{}\"", other),
@@ -272,61 +241,47 @@ fn handle_play(
     req: &RpcRequest,
     cmd_queue: &CommandQueue,
     max_level_dbfs: f64,
-    is_playrec: bool,
-    capture_connected: bool,
     file_samples: &SharedFileSamples,
     sample_rate: u32,
 ) -> HandleResult {
-    let cmd_name = if is_playrec { "playrec" } else { "play" };
-
-    // BUG-SG12-4: Reject playrec when capture device is not connected.
-    // Without this check, playrec silently records nothing and
-    // get_recording returns "no recording available".
-    if is_playrec && !capture_connected {
-        return HandleResult::Error(
-            cmd_name.to_string(),
-            "capture device not connected".to_string(),
-        );
-    }
-
     // Signal type (required).
     let signal_str = match &req.signal {
         Some(s) => s.as_str(),
-        None => return HandleResult::Error(cmd_name.to_string(), "missing \"signal\" field".to_string()),
+        None => return HandleResult::Error("play".to_string(), "missing \"signal\" field".to_string()),
     };
     let signal = match parse_signal_type(signal_str) {
         Ok(s) => s,
-        Err(e) => return HandleResult::Error(cmd_name.to_string(), e),
+        Err(e) => return HandleResult::Error("play".to_string(), e),
     };
 
     // Channels (required).
     let ch_list = match &req.channels {
         Some(c) => c.as_slice(),
-        None => return HandleResult::Error(cmd_name.to_string(), "missing \"channels\" field".to_string()),
+        None => return HandleResult::Error("play".to_string(), "missing \"channels\" field".to_string()),
     };
     if let Err(e) = validate_channels(ch_list) {
-        return HandleResult::Error(cmd_name.to_string(), e);
+        return HandleResult::Error("play".to_string(), e);
     }
     let channels = channels_to_bitmask(ch_list);
 
     // Level (required).
     let level_dbfs = match req.level_dbfs {
         Some(l) => l,
-        None => return HandleResult::Error(cmd_name.to_string(), "missing \"level_dbfs\" field".to_string()),
+        None => return HandleResult::Error("play".to_string(), "missing \"level_dbfs\" field".to_string()),
     };
     if let Err(e) = validate_level(level_dbfs, max_level_dbfs) {
-        return HandleResult::Error(cmd_name.to_string(), e);
+        return HandleResult::Error("play".to_string(), e);
     }
 
     // File playback: decode the file and store samples in the shared slot.
     if signal == SignalType::File {
         let path = match &req.path {
             Some(p) if !p.is_empty() => p.as_str(),
-            _ => return HandleResult::Error(cmd_name.to_string(), "missing \"path\" field for file playback".to_string()),
+            _ => return HandleResult::Error("play".to_string(), "missing \"path\" field for file playback".to_string()),
         };
         // SEC: only allow absolute paths to prevent directory traversal.
         if !path.starts_with('/') {
-            return HandleResult::Error(cmd_name.to_string(), "path must be absolute".to_string());
+            return HandleResult::Error("play".to_string(), "path must be absolute".to_string());
         }
         let mut file_buf = FileBuffer::new();
         match file_buf.load_file(path, sample_rate) {
@@ -337,7 +292,7 @@ fn handle_play(
                     Err(poisoned) => *poisoned.into_inner() = file_buf.samples(),
                 }
             }
-            Err(e) => return HandleResult::Error(cmd_name.to_string(), e),
+            Err(e) => return HandleResult::Error("play".to_string(), e),
         }
     }
 
@@ -345,7 +300,7 @@ fn handle_play(
     let freq = req.freq.unwrap_or(1000.0);
     if signal == SignalType::Sine || signal == SignalType::Sweep {
         if let Err(e) = validate_freq(freq) {
-            return HandleResult::Error(cmd_name.to_string(), e);
+            return HandleResult::Error("play".to_string(), e);
         }
     }
 
@@ -353,57 +308,36 @@ fn handle_play(
     let sweep_end = req.sweep_end.unwrap_or(20000.0);
     if signal == SignalType::Sweep {
         if let Err(e) = validate_freq(sweep_end) {
-            return HandleResult::Error(cmd_name.to_string(), e);
+            return HandleResult::Error("play".to_string(), e);
         }
         if sweep_end <= freq {
             return HandleResult::Error(
-                cmd_name.to_string(),
+                "play".to_string(),
                 format!("sweep_end {:.1} must be > freq {:.1}", sweep_end, freq),
             );
         }
     }
 
-    // Duration.
+    // Duration (optional for play).
     let duration = req.duration;
 
-    // Playrec requires a finite duration.
-    if is_playrec && duration.is_none() {
-        return HandleResult::Error(
-            cmd_name.to_string(),
-            "playrec requires a finite \"duration\"".to_string(),
-        );
-    }
-
     // Build and push the command.
-    let cmd = if is_playrec {
-        Command {
-            kind: CommandKind::Playrec {
-                signal,
-                channels,
-                level_dbfs: level_dbfs as f32,
-                frequency: freq as f32,
-                duration_secs: duration.unwrap() as f32,
-                sweep_end_hz: sweep_end as f32,
-            },
-        }
-    } else {
-        Command {
-            kind: CommandKind::Play {
-                signal,
-                channels,
-                level_dbfs: level_dbfs as f32,
-                frequency: freq as f32,
-                duration_secs: duration.map(|d| d as f32),
-                sweep_end_hz: sweep_end as f32,
-            },
-        }
+    let cmd = Command {
+        kind: CommandKind::Play {
+            signal,
+            channels,
+            level_dbfs: level_dbfs as f32,
+            frequency: freq as f32,
+            duration_secs: duration.map(|d| d as f32),
+            sweep_end_hz: sweep_end as f32,
+        },
     };
 
     if cmd_queue.push(cmd).is_err() {
-        return HandleResult::Error(cmd_name.to_string(), "command queue full".to_string());
+        return HandleResult::Error("play".to_string(), "command queue full".to_string());
     }
 
-    HandleResult::Ack(cmd_name.to_string())
+    HandleResult::Ack("play".to_string())
 }
 
 fn handle_stop(cmd_queue: &CommandQueue) -> HandleResult {
@@ -527,11 +461,7 @@ fn handle_set_freq(req: &RpcRequest, cmd_queue: &CommandQueue) -> HandleResult {
 fn handle_status(latest_state: &StateSnapshot) -> HandleResult {
     let is_playing = matches!(
         latest_state.state,
-        PlayState::Playing | PlayState::Fading | PlayState::PlayrecInProgress
-    );
-    let is_recording = matches!(
-        latest_state.state,
-        PlayState::Recording | PlayState::PlayrecInProgress
+        PlayState::Playing | PlayState::Fading
     );
 
     let resp = StatusResponse {
@@ -539,7 +469,6 @@ fn handle_status(latest_state: &StateSnapshot) -> HandleResult {
         cmd: "status",
         ok: true,
         playing: is_playing,
-        recording: is_recording,
         signal: signal_type_to_str(latest_state.signal).to_string(),
         freq: latest_state.frequency,
         channels: bitmask_to_channels(latest_state.channels),
@@ -550,30 +479,12 @@ fn handle_status(latest_state: &StateSnapshot) -> HandleResult {
         } else {
             None
         },
-        capture_peak_dbfs: linear_to_dbfs(latest_state.capture_peak),
-        capture_rms_dbfs: linear_to_dbfs(latest_state.capture_rms),
-        capture_connected: latest_state.capture_connected,
         samples_generated: latest_state.samples_generated,
     };
     let json = serde_json::to_string(&resp).unwrap_or_else(|_| {
         r#"{"type":"ack","ok":false,"error":"internal: failed to serialize status"}"#.to_string()
     });
     HandleResult::StatusJson(json)
-}
-
-fn handle_capture_level(latest_state: &StateSnapshot) -> HandleResult {
-    let resp = CaptureLevelResponse {
-        r#type: "ack",
-        cmd: "capture_level",
-        ok: true,
-        peak_dbfs: linear_to_dbfs(latest_state.capture_peak),
-        rms_dbfs: linear_to_dbfs(latest_state.capture_rms),
-    };
-    let json = serde_json::to_string(&resp).unwrap_or_else(|_| {
-        r#"{"type":"ack","ok":false,"error":"internal: failed to serialize capture_level"}"#
-            .to_string()
-    });
-    HandleResult::CaptureLevelJson(json)
 }
 
 // ---------------------------------------------------------------------------
@@ -610,8 +521,6 @@ pub fn format_line_too_long() -> String {
 /// Format an async event as a JSON line.
 pub fn format_event(event: &str) -> String {
     let data = serde_json::Map::new();
-    // Events can carry additional data depending on type.
-    // The base event structure is minimal.
     let resp = EventResponse {
         r#type: "event",
         event: event.to_string(),
@@ -624,11 +533,7 @@ pub fn format_event(event: &str) -> String {
 pub fn format_state_broadcast(snap: &StateSnapshot) -> String {
     let is_playing = matches!(
         snap.state,
-        PlayState::Playing | PlayState::Fading | PlayState::PlayrecInProgress
-    );
-    let is_recording = matches!(
-        snap.state,
-        PlayState::Recording | PlayState::PlayrecInProgress
+        PlayState::Playing | PlayState::Fading
     );
 
     let resp = StatusResponse {
@@ -636,7 +541,6 @@ pub fn format_state_broadcast(snap: &StateSnapshot) -> String {
         cmd: "status",
         ok: true,
         playing: is_playing,
-        recording: is_recording,
         signal: signal_type_to_str(snap.signal).to_string(),
         freq: snap.frequency,
         channels: bitmask_to_channels(snap.channels),
@@ -647,9 +551,6 @@ pub fn format_state_broadcast(snap: &StateSnapshot) -> String {
         } else {
             None
         },
-        capture_peak_dbfs: linear_to_dbfs(snap.capture_peak),
-        capture_rms_dbfs: linear_to_dbfs(snap.capture_rms),
-        capture_connected: snap.capture_connected,
         samples_generated: snap.samples_generated,
     };
     serde_json::to_string(&resp).unwrap_or_default()
@@ -741,16 +642,6 @@ mod tests {
         assert_eq!(req.freq, Some(440.0));
     }
 
-    #[test]
-    fn parse_playrec_command() {
-        let json = r#"{"cmd":"playrec","signal":"sweep","channels":[1],"level_dbfs":-20.0,"freq":20.0,"sweep_end":20000.0,"duration":10.0}"#;
-        let req = parse_line(json).unwrap();
-        assert_eq!(req.cmd, "playrec");
-        assert_eq!(req.signal.as_deref(), Some("sweep"));
-        assert_eq!(req.duration, Some(10.0));
-        assert_eq!(req.sweep_end, Some(20000.0));
-    }
-
     // -----------------------------------------------------------------------
     // JSON parsing: invalid/malformed
     // -----------------------------------------------------------------------
@@ -766,10 +657,6 @@ mod tests {
     #[test]
     fn parse_missing_cmd_field() {
         let result = parse_line(r#"{"signal":"sine"}"#);
-        // serde will default cmd to "" since String has no default via Deserialize
-        // Actually, cmd is not Option and has no default, so this should fail
-        // Let's check: serde requires cmd since it's String, not Option<String>
-        // With no default, missing field causes deserialization error
         assert!(result.is_err());
     }
 
@@ -792,7 +679,6 @@ mod tests {
 
     #[test]
     fn line_exceeding_limit_rejected() {
-        // Create a line that's just over 4096 bytes.
         let padding = "x".repeat(MAX_LINE_LENGTH + 1);
         let result = parse_line(&padding);
         assert!(result.is_err());
@@ -802,17 +688,10 @@ mod tests {
 
     #[test]
     fn line_at_exact_limit_accepted() {
-        // A valid JSON that's exactly 4096 bytes.
-        // We can't easily make valid JSON exactly 4096 bytes, but we can
-        // verify that a line of exactly MAX_LINE_LENGTH passes the length check.
         let padding = " ".repeat(MAX_LINE_LENGTH - r#"{"cmd":"stop"}"#.len());
         let json = format!(r#"{{"cmd":"stop","_":"{}"}}"#, padding);
-        // This may or may not be exactly MAX_LINE_LENGTH, but it tests
-        // the boundary behavior. What matters: <= MAX_LINE_LENGTH passes.
         if json.len() <= MAX_LINE_LENGTH {
-            // Should pass length check (may fail JSON parse if too large,
-            // but the point is the length check doesn't reject it).
-            let _ = parse_line(&json); // length check passes
+            let _ = parse_line(&json);
         }
     }
 
@@ -826,7 +705,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_level","level_dbfs":-5.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "set_level");
@@ -842,7 +721,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_level","level_dbfs":-20.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Ack(cmd) => assert_eq!(cmd, "set_level"),
             HandleResult::Error(_, msg) => panic!("Should accept at cap: {}", msg),
@@ -856,7 +735,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_level","level_dbfs":-30.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Ack(cmd) => assert_eq!(cmd, "set_level"),
             _ => panic!("Expected ack"),
@@ -869,7 +748,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"play","signal":"sine","channels":[1],"level_dbfs":-5.0,"freq":1000.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "play");
@@ -889,7 +768,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_freq","freq":10.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "set_freq");
@@ -905,7 +784,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_freq","freq":25000.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "set_freq");
@@ -921,7 +800,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_freq","freq":1000.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Ack(cmd) => assert_eq!(cmd, "set_freq"),
             _ => panic!("Expected ack for valid freq"),
@@ -933,15 +812,13 @@ mod tests {
         let q = make_queue();
         let state = default_state();
 
-        // Exactly 20 Hz.
         let json = r#"{"cmd":"set_freq","freq":20.0}"#;
         let req = parse_line(json).unwrap();
-        assert!(matches!(handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000), HandleResult::Ack(_)));
+        assert!(matches!(handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000), HandleResult::Ack(_)));
 
-        // Exactly 20000 Hz.
         let json = r#"{"cmd":"set_freq","freq":20000.0}"#;
         let req = parse_line(json).unwrap();
-        assert!(matches!(handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000), HandleResult::Ack(_)));
+        assert!(matches!(handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000), HandleResult::Ack(_)));
     }
 
     // -----------------------------------------------------------------------
@@ -954,7 +831,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"set_channel","channels":[9]}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "set_channel");
@@ -970,10 +847,9 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"play","signal":"sine","channels":[1,3,5],"level_dbfs":-20.0,"freq":1000.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         assert!(matches!(result, HandleResult::Ack(_)));
 
-        // Verify the command was pushed with correct bitmask.
         let cmd = q.pop().unwrap();
         match cmd.kind {
             CommandKind::Play { channels, .. } => {
@@ -993,7 +869,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"play","signal":"sweep","channels":[1],"level_dbfs":-20.0,"freq":1000.0,"sweep_end":500.0,"duration":1.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Error(_, msg) => {
                 assert!(msg.contains("must be > freq"), "Error: {}", msg);
@@ -1003,22 +879,41 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Playrec validation
+    // D-040: playrec returns unknown command
     // -----------------------------------------------------------------------
 
     #[test]
-    fn playrec_requires_duration() {
+    fn playrec_returns_unknown_command() {
         let q = make_queue();
         let state = default_state();
-        let json = r#"{"cmd":"playrec","signal":"pink","channels":[1],"level_dbfs":-20.0}"#;
+        let json = r#"{"cmd":"playrec","signal":"sweep","channels":[1],"level_dbfs":-20.0,"freq":20.0,"sweep_end":20000.0,"duration":10.0}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Error(cmd, msg) => {
                 assert_eq!(cmd, "playrec");
-                assert!(msg.contains("duration"), "Error: {}", msg);
+                assert!(msg.contains("unknown command"), "Error: {}", msg);
             }
-            _ => panic!("Expected error for playrec without duration"),
+            _ => panic!("Expected error for playrec (removed in D-040)"),
+        }
+        assert!(q.pop().is_none(), "No command should be queued");
+    }
+
+    // -----------------------------------------------------------------------
+    // Play works standalone (D-040)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn play_works_standalone() {
+        let q = make_queue();
+        let state = default_state();
+        let json = r#"{"cmd":"play","signal":"sine","channels":[1],"level_dbfs":-20.0,"freq":1000.0}"#;
+        let req = parse_line(json).unwrap();
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
+        match result {
+            HandleResult::Ack(cmd) => assert_eq!(cmd, "play"),
+            HandleResult::Error(_, msg) => panic!("play should work standalone: {}", msg),
+            _ => panic!("Expected Ack"),
         }
     }
 
@@ -1036,16 +931,13 @@ mod tests {
             frequency: 1000.0,
             elapsed_secs: 1.5,
             duration_secs: 10.0,
-            capture_peak: 0.05,
-            capture_rms: 0.02,
-            capture_connected: true,
             samples_generated: 72000,
         };
 
         let q = make_queue();
         let json = r#"{"cmd":"status"}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
 
         match result {
             HandleResult::StatusJson(json_str) => {
@@ -1054,18 +946,18 @@ mod tests {
                 assert_eq!(v["cmd"], "status");
                 assert_eq!(v["ok"], true);
                 assert_eq!(v["playing"], true);
-                assert_eq!(v["recording"], false);
                 assert_eq!(v["signal"], "sine");
                 assert_eq!(v["freq"], 1000.0);
                 assert_eq!(v["channels"], serde_json::json!([1, 2]));
                 assert_eq!(v["level_dbfs"], -20.0);
                 assert_eq!(v["elapsed"], 1.5);
                 assert_eq!(v["duration"], 10.0);
-                assert!(v["capture_connected"].as_bool().unwrap());
                 assert_eq!(v["samples_generated"], 72000);
-                // capture_peak_dbfs and capture_rms_dbfs should be present.
-                assert!(v["capture_peak_dbfs"].is_number());
-                assert!(v["capture_rms_dbfs"].is_number());
+                // Capture fields should NOT be present.
+                assert!(v.get("recording").is_none());
+                assert!(v.get("capture_peak_dbfs").is_none());
+                assert!(v.get("capture_rms_dbfs").is_none());
+                assert!(v.get("capture_connected").is_none());
             }
             _ => panic!("Expected StatusJson"),
         }
@@ -1105,7 +997,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"stop"}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         assert!(matches!(result, HandleResult::Ack(_)));
 
         let cmd = q.pop().unwrap();
@@ -1122,7 +1014,7 @@ mod tests {
         let state = default_state();
         let json = r#"{"cmd":"reboot"}"#;
         let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
+        let result = handle_request(&req, &q, -20.0, &state, &test_file_samples(), 48000);
         match result {
             HandleResult::Error(_, msg) => {
                 assert!(msg.contains("unknown command"), "Error: {}", msg);
@@ -1160,9 +1052,6 @@ mod tests {
             frequency: 0.0,
             elapsed_secs: 0.0,
             duration_secs: 0.0,
-            capture_peak: 0.0,
-            capture_rms: 0.0,
-            capture_connected: false,
             samples_generated: 0,
         };
         let json = format_state_broadcast(&snap);
@@ -1170,7 +1059,8 @@ mod tests {
         assert_eq!(v["type"], "state");
         assert_eq!(v["cmd"], "status");
         assert_eq!(v["playing"], false);
-        assert_eq!(v["recording"], false);
+        // No recording field should be present.
+        assert!(v.get("recording").is_none());
     }
 
     // -----------------------------------------------------------------------
@@ -1206,67 +1096,5 @@ mod tests {
         assert!(validate_level(-19.9, -20.0).is_err()); // above cap
         assert!(validate_level(-60.0, -20.0).is_ok()); // at minimum
         assert!(validate_level(-61.0, -20.0).is_err()); // below minimum
-    }
-
-    // -----------------------------------------------------------------------
-    // BUG-SG12-4: playrec rejected when capture disconnected
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn playrec_rejected_when_capture_disconnected() {
-        let q = make_queue();
-        let state = default_state();
-        let json = r#"{"cmd":"playrec","signal":"sweep","channels":[1],"level_dbfs":-20.0,"freq":20.0,"sweep_end":20000.0,"duration":10.0}"#;
-        let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, false, &test_file_samples(), 48000);
-        match result {
-            HandleResult::Error(cmd, msg) => {
-                assert_eq!(cmd, "playrec");
-                assert!(
-                    msg.contains("capture device not connected"),
-                    "Error: {}",
-                    msg
-                );
-            }
-            _ => panic!("Expected error for playrec with disconnected capture"),
-        }
-        // Verify no command was pushed to the queue.
-        assert!(q.pop().is_none(), "No command should be queued");
-    }
-
-    #[test]
-    fn playrec_accepted_when_capture_connected() {
-        let q = make_queue();
-        let state = default_state();
-        let json = r#"{"cmd":"playrec","signal":"sweep","channels":[1],"level_dbfs":-20.0,"freq":20.0,"sweep_end":20000.0,"duration":10.0}"#;
-        let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, true, &test_file_samples(), 48000);
-        match result {
-            HandleResult::Ack(cmd) => assert_eq!(cmd, "playrec"),
-            HandleResult::Error(_, msg) => {
-                panic!("playrec should be accepted when capture connected: {}", msg)
-            }
-            _ => panic!("Expected Ack"),
-        }
-        // Verify the command was queued.
-        let cmd = q.pop().unwrap();
-        assert!(matches!(cmd.kind, CommandKind::Playrec { .. }));
-    }
-
-    #[test]
-    fn play_accepted_when_capture_disconnected() {
-        // Regular play (not playrec) should work regardless of capture state.
-        let q = make_queue();
-        let state = default_state();
-        let json = r#"{"cmd":"play","signal":"sine","channels":[1],"level_dbfs":-20.0,"freq":1000.0}"#;
-        let req = parse_line(json).unwrap();
-        let result = handle_request(&req, &q, -20.0, &state, false, &test_file_samples(), 48000);
-        match result {
-            HandleResult::Ack(cmd) => assert_eq!(cmd, "play"),
-            HandleResult::Error(_, msg) => {
-                panic!("play should succeed even without capture: {}", msg)
-            }
-            _ => panic!("Expected Ack"),
-        }
     }
 }

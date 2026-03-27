@@ -23,8 +23,6 @@
 //! - `register_registry_listener()`: PW-specific setup (only compiles with PW)
 //! - `format_device_event()`: JSON formatting for RPC broadcast
 
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-
 use command::SpscQueue;
 
 use crate::command;
@@ -193,45 +191,6 @@ impl TrackedDevices {
 }
 
 // ---------------------------------------------------------------------------
-// Capture connection state (shared between PW main loop and RPC thread)
-// ---------------------------------------------------------------------------
-
-/// Atomic flag indicating whether the capture device is connected.
-///
-/// Set by the registry listener (PW main loop thread).
-/// Read by the RPC thread for state broadcasts and playrec rejection.
-pub struct CaptureConnectionState {
-    connected: AtomicBool,
-    node_id: AtomicU32,
-}
-
-impl CaptureConnectionState {
-    pub fn new() -> Self {
-        Self {
-            connected: AtomicBool::new(false),
-            node_id: AtomicU32::new(0),
-        }
-    }
-
-    pub fn set_connected(&self, node_id: u32) {
-        self.node_id.store(node_id, Ordering::Relaxed);
-        self.connected.store(true, Ordering::Release);
-    }
-
-    pub fn set_disconnected(&self) {
-        self.connected.store(false, Ordering::Release);
-    }
-
-    pub fn is_connected(&self) -> bool {
-        self.connected.load(Ordering::Acquire)
-    }
-
-    pub fn node_id(&self) -> u32 {
-        self.node_id.load(Ordering::Relaxed)
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Event formatting for RPC broadcast
 // ---------------------------------------------------------------------------
 
@@ -314,10 +273,8 @@ pub fn matches_watch_pattern(node_name: &str, pattern: &str) -> bool {
 ///
 /// The listener watches for PW nodes whose `node.name` property matches
 /// the `watch_pattern` (substring match). When a matching node appears,
-/// a `DeviceEvent::Added` is pushed to the event queue and the
-/// `CaptureConnectionState` is set to connected. When a tracked node
-/// disappears, a `DeviceEvent::Removed` is pushed and the state is
-/// set to disconnected.
+/// a `DeviceEvent::Added` is pushed to the event queue. When a tracked
+/// node disappears, a `DeviceEvent::Removed` is pushed.
 ///
 /// Returns the registry and its listener. Both must be kept alive for
 /// the duration of the PW main loop.
@@ -325,12 +282,10 @@ pub fn matches_watch_pattern(node_name: &str, pattern: &str) -> bool {
 /// # Arguments
 /// * `core` - The PW core connection.
 /// * `event_queue` - SPSC queue for delivering events to the RPC thread.
-/// * `conn_state` - Shared connection state flag.
 /// * `watch_pattern` - Device name pattern to match (e.g., "UMIK-1").
 pub fn register_registry_listener(
     core: &pipewire::core::Core,
     event_queue: std::sync::Arc<DeviceEventQueue>,
-    conn_state: std::sync::Arc<CaptureConnectionState>,
     watch_pattern: String,
 ) -> (pipewire::registry::Registry, Box<dyn std::any::Any>) {
     use std::cell::RefCell;
@@ -346,8 +301,6 @@ pub fn register_registry_listener(
 
     let eq_add = event_queue.clone();
     let eq_remove = event_queue;
-    let cs_add = conn_state.clone();
-    let cs_remove = conn_state;
     let pattern_add = watch_pattern.clone();
 
     let listener = registry
@@ -360,13 +313,12 @@ pub fn register_registry_listener(
                     if matches_watch_pattern(node_name, &pattern_add) {
                         let name = DeviceName::from_str(node_name);
                         tracked_add.borrow_mut().add(global.id, name);
-                        cs_add.set_connected(global.id);
                         let _ = eq_add.push(DeviceEvent::Added {
                             name,
                             node_id: global.id,
                         });
                         log::info!(
-                            "Capture device detected: {} (node_id={})",
+                            "Device detected: {} (node_id={})",
                             node_name,
                             global.id
                         );
@@ -377,16 +329,12 @@ pub fn register_registry_listener(
         .global_remove(move |id| {
             let mut tracked = tracked_remove.borrow_mut();
             if let Some(name) = tracked.remove(id) {
-                // If no tracked devices remain, mark as disconnected.
-                if tracked.is_empty() {
-                    cs_remove.set_disconnected();
-                }
                 let _ = eq_remove.push(DeviceEvent::Removed {
                     name,
                     node_id: id,
                 });
                 log::info!(
-                    "Capture device removed: {} (node_id={})",
+                    "Device removed: {} (node_id={})",
                     name.as_str(),
                     id
                 );
@@ -517,29 +465,6 @@ mod tests {
 
         // One more should fail.
         assert!(!tracked.add(99, DeviceName::from_str("overflow")));
-    }
-
-    // -----------------------------------------------------------------------
-    // CaptureConnectionState
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn capture_connection_state_initially_disconnected() {
-        let state = CaptureConnectionState::new();
-        assert!(!state.is_connected());
-        assert_eq!(state.node_id(), 0);
-    }
-
-    #[test]
-    fn capture_connection_state_connect_disconnect() {
-        let state = CaptureConnectionState::new();
-
-        state.set_connected(47);
-        assert!(state.is_connected());
-        assert_eq!(state.node_id(), 47);
-
-        state.set_disconnected();
-        assert!(!state.is_connected());
     }
 
     // -----------------------------------------------------------------------
