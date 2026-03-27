@@ -43,6 +43,7 @@
     var levelDebounce = null;
     var freqDebounce = null;
     var sweepEndDebounce = null;
+    var currentGmMode = "unknown"; // F-144: tracked from GM query
 
     // -- DOM helpers --
 
@@ -484,6 +485,74 @@
         return burstInput ? parseFloat(burstInput.value) || 5 : 5;
     }
 
+    // -- F-144: Measurement mode management --
+
+    function fetchCurrentMode() {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "/api/v1/test-tool/current-mode", true);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    currentGmMode = data.mode || "unknown";
+                } catch (e) { /* keep unknown */ }
+            }
+        };
+        xhr.send();
+    }
+
+    function ensureMeasurementMode(callback) {
+        // Already in measurement mode — proceed immediately.
+        if (currentGmMode === "measurement") {
+            callback();
+            return;
+        }
+
+        // Confirm mode switch with user.
+        var msg = "Playing test tones requires measurement mode.\n\n" +
+            "This will switch the audio routing to measurement mode";
+        if (currentGmMode !== "unknown") {
+            msg += " (currently: " + currentGmMode + ")";
+        }
+        msg += ".\nAny active DJ or live audio will stop.\n\nContinue?";
+        if (!confirm(msg)) return;
+
+        // Call backend to switch mode.
+        var playBtn = $("tt-play-btn");
+        if (playBtn) {
+            playBtn.textContent = "Switching mode...";
+            playBtn.disabled = true;
+        }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/v1/test-tool/ensure-measurement-mode", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (playBtn) {
+                playBtn.textContent = "PLAY";
+                playBtn.disabled = false;
+            }
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    currentGmMode = data.mode || "measurement";
+                } catch (e) {
+                    currentGmMode = "measurement";
+                }
+                callback();
+            } else {
+                var detail = "unknown error";
+                try {
+                    detail = JSON.parse(xhr.responseText).detail || detail;
+                } catch (e) { /* use default */ }
+                alert("Failed to switch to measurement mode: " + detail);
+            }
+        };
+        xhr.send("{}");
+    }
+
     // -- PLAY / STOP --
 
     function initPlayStop() {
@@ -517,36 +586,43 @@
                     hasConfirmedThisSession = true;
                 }
 
-                var duration = getDuration();
-                // F-108: Sweeps must have a finite duration.  If the user
-                // left "Continuous" selected, fall back to the burst input
-                // value (default 5 s) so the sweep actually ends.
-                if (selectedSignal === "sweep" && duration == null) {
-                    var burstInput = $("tt-burst-sec");
-                    duration = burstInput ? parseFloat(burstInput.value) || 5 : 5;
-                }
-                var cmd = {
-                    cmd: "play",
-                    signal: selectedSignal,
-                    channels: selectedChannels,
-                    level_dbfs: Math.min(currentLevel, HARD_CAP_DBFS),
-                    freq: currentFreq,
-                    duration: duration
-                };
-                if (selectedSignal === "sweep") {
-                    cmd.sweep_end = currentSweepEnd;
-                }
-                if (selectedSignal === "file") {
-                    var pathInput = $("tt-file-path");
-                    var filePath = pathInput ? pathInput.value.trim() : "";
-                    if (!filePath) {
-                        if (pathInput) pathInput.focus();
-                        return;
-                    }
-                    cmd.path = filePath;
-                }
-                sendCmd(cmd);
+                // F-144: Ensure measurement mode before playing.
+                ensureMeasurementMode(function () {
+                    doPlay();
+                });
             });
+        }
+
+        function doPlay() {
+            var duration = getDuration();
+            // F-108: Sweeps must have a finite duration.  If the user
+            // left "Continuous" selected, fall back to the burst input
+            // value (default 5 s) so the sweep actually ends.
+            if (selectedSignal === "sweep" && duration == null) {
+                var burstInput = $("tt-burst-sec");
+                duration = burstInput ? parseFloat(burstInput.value) || 5 : 5;
+            }
+            var cmd = {
+                cmd: "play",
+                signal: selectedSignal,
+                channels: selectedChannels,
+                level_dbfs: Math.min(currentLevel, HARD_CAP_DBFS),
+                freq: currentFreq,
+                duration: duration
+            };
+            if (selectedSignal === "sweep") {
+                cmd.sweep_end = currentSweepEnd;
+            }
+            if (selectedSignal === "file") {
+                var pathInput = $("tt-file-path");
+                var filePath = pathInput ? pathInput.value.trim() : "";
+                if (!filePath) {
+                    if (pathInput) pathInput.focus();
+                    return;
+                }
+                cmd.path = filePath;
+            }
+            sendCmd(cmd);
         }
 
         if (stopBtn) {
@@ -877,6 +953,7 @@
 
         onShow: function () {
             connectWs();
+            fetchCurrentMode(); // F-144: query GM mode for play guard
             initSpectrum();
         },
 

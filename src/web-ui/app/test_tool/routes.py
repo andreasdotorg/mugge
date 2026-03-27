@@ -13,6 +13,10 @@ Endpoints:
     POST /api/v1/test-tool/channel  Set active channels
     POST /api/v1/test-tool/freq     Set frequency (sine/sweep)
     GET  /api/v1/test-tool/status   Get signal generator state
+    POST /api/v1/test-tool/ensure-measurement-mode
+                                    Switch GM to measurement mode (F-144)
+    GET  /api/v1/test-tool/current-mode
+                                    Query current GM routing mode (F-144)
 
 Safety:
     - D-009 hard cap (-0.5 dBFS) enforced server-side on all level fields.
@@ -24,10 +28,12 @@ Safety:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import socket
+import sys
 import time
 from typing import Any, List, Optional
 
@@ -317,3 +323,90 @@ async def status():
     if not SIGGEN_MODE:
         return _not_enabled()
     return await _rpc_or_error({"cmd": "status"})
+
+
+# ---------------------------------------------------------------------------
+# GraphManager mode switching (F-144)
+# ---------------------------------------------------------------------------
+
+# GM connection parameters (shared with main.py lifespan).
+GM_HOST = os.environ.get("PI4AUDIO_GM_HOST", "127.0.0.1")
+GM_PORT = int(os.environ.get("PI4AUDIO_GM_PORT", "4002"))
+
+
+@contextlib.contextmanager
+def _gm_client():
+    """Yield a connected GraphManager client, closing it on exit."""
+    meas_dir = os.environ.get("PI4AUDIO_MEAS_DIR", os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "measurement")))
+    if meas_dir not in sys.path:
+        sys.path.insert(0, meas_dir)
+    from graph_manager_client import GraphManagerClient, MockGraphManagerClient
+    mock_mode = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
+    ClientCls = MockGraphManagerClient if mock_mode else GraphManagerClient
+    client = ClientCls(host=GM_HOST, port=GM_PORT)
+    client.connect()
+    try:
+        yield client
+    finally:
+        client.close()
+
+
+def _gm_get_mode() -> str:
+    """Query current GM routing mode via TCP RPC."""
+    with _gm_client() as client:
+        return client.get_mode()
+
+
+def _gm_set_mode(mode: str) -> str:
+    """Set GM routing mode via TCP RPC and return the new mode."""
+    with _gm_client() as client:
+        client.set_mode(mode)
+        return mode
+
+
+@router.get("/current-mode")
+async def current_mode():
+    """Return the current GraphManager routing mode (F-144)."""
+    try:
+        mode = await asyncio.to_thread(_gm_get_mode)
+        return {"mode": mode}
+    except Exception as exc:
+        log.warning("Failed to query GM mode: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"error": "gm_unavailable", "detail": str(exc)},
+        )
+
+
+@router.post("/ensure-measurement-mode")
+async def ensure_measurement_mode():
+    """Switch GraphManager to measurement mode if not already there (F-144).
+
+    Signal-gen needs measurement routing to have PipeWire links.  This
+    endpoint is called by the test page before playing test tones.
+
+    Returns {"mode": "measurement", "switched": true/false}.
+    """
+    try:
+        current = await asyncio.to_thread(_gm_get_mode)
+    except Exception as exc:
+        log.warning("Failed to query GM mode: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"error": "gm_unavailable", "detail": str(exc)},
+        )
+
+    if current == "measurement":
+        return {"mode": "measurement", "switched": False}
+
+    try:
+        await asyncio.to_thread(_gm_set_mode, "measurement")
+        log.info("F-144: Switched GM to measurement mode (was: %s)", current)
+        return {"mode": "measurement", "switched": True, "previous": current}
+    except Exception as exc:
+        log.error("Failed to switch GM to measurement mode: %s", exc)
+        return JSONResponse(
+            status_code=502,
+            content={"error": "gm_mode_switch_failed", "detail": str(exc)},
+        )

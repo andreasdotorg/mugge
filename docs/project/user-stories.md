@@ -6276,7 +6276,7 @@ directly to the browser, bypassing the Python uvicorn relay,
 **so that** the ~31% CPU consumed by Python PCM relay is eliminated,
 freeing headroom for audio workloads on the Pi.
 
-**Status:** draft
+**Status:** selected (owner directive 2026-03-26: CPU consumption is priority #3, event in 2 days)
 **Depends on:** US-084 (level-bridge extraction), D-050 (GM lifecycle),
 US-085 (GM-managed lifecycle for pcm-bridge)
 **Blocks:** none (but directly addresses F-127 CPU budget)
@@ -6411,6 +6411,82 @@ its scope.
 - [ ] All acceptance criteria met
 - [ ] TW sign-off
 - [ ] Owner review (journeys match actual operational experience)
+
+---
+
+## US-088: Measurement Spectrum — UMIK-1 Input with Permanent Peak Hold
+
+**As** the system operator performing room correction measurements,
+**I want** to see the UMIK-1 microphone input displayed on the spectrum
+analyzer with a non-decaying peak hold overlay and a manual reset button,
+**so that** I can observe the cumulative maximum energy at each frequency
+during a measurement sweep or sustained signal, which is the first step
+toward integrating the spectrum display into the room correction workflow.
+
+**Status:** selected (owner directive 2026-03-26: measurement capability is next strategic priority)
+**Depends on:** F-144 (auto-switch to measurement mode — FILED), US-084
+(level-bridge wiring for PHYS IN group — UMIK-1 on hw-in ch1, phases 1-3
+done, web UI wiring remaining), US-079 (pre-convolver capture point)
+**Blocks:** US-047 (Path A measurement), US-010 (room correction)
+**Priority:** HIGH — owner priority #2 (after F-144)
+**Critical path:** US-084 remaining phases → F-113 resolution → US-088 unblocked
+**Decisions:** D-046 (FFT presets)
+
+### Background
+
+The current spectrum display shows post-convolver output via pcm-bridge.
+For room correction measurements, the operator needs to see the UMIK-1
+microphone INPUT spectrum — what the mic is picking up in the room, not
+the processed output. The peak hold must be permanent (non-decaying) so
+the operator can run a sweep and see the accumulated frequency response
+afterward, then manually reset before the next measurement.
+
+This is the bridge between the monitoring web UI and the automated room
+correction pipeline described in CLAUDE.md.
+
+### Acceptance criteria
+
+- [ ] Spectrum display can switch input source to UMIK-1 (hw-in ch1)
+- [ ] Peak hold mode: non-decaying overlay that accumulates max magnitude
+  at each frequency bin. Does NOT use the D-047 PPM 2s decay — holds
+  indefinitely.
+- [ ] Manual "Reset Peak" button clears the peak hold overlay
+- [ ] Peak hold rendered as a distinct visual layer (e.g., thin line or
+  dots above the live spectrum bars)
+- [ ] Works in measurement mode (signal-gen → speakers → UMIK-1 → spectrum)
+- [ ] UMIK-1 calibration file applied to displayed spectrum (magnitude
+  correction from `/home/ela/7161942.txt`)
+- [ ] FFT preset selection available (D-046: 4 presets)
+
+### Implementation notes
+
+**Option A selected (PO recommendation 2026-03-26):** GM rewires pcm-bridge
+to UMIK-1 in measurement mode. This aligns with US-080 Tap 5 (UMIK-1
+capture, already designed). GM dynamically rewires pcm-bridge to the
+selected tap point. The web UI's tap point selector (US-080 AC) switches
+between app output and UMIK-1 input. A second pcm-bridge instance
+(Option B) was rejected -- higher resource cost, contradicts D-049.
+
+- GM measurement mode adds link: `ADA8200:capture_AUX0` (UMIK-1) ->
+  pcm-bridge input. pcm-bridge receives 1ch UMIK-1 PCM for spectrum FFT.
+- Level data (for meters) still via level-bridge-hw-in (port 9102, ch1)
+- Peak hold is purely client-side: maintain a Float32Array of max values,
+  render as overlay, reset on button click
+- Calibration: parse UMIK-1 cal file (magnitude-only, frequency/dB pairs),
+  interpolate to FFT bin frequencies, apply as dB offset per bin
+- Consider adding source selector to spectrum UI header (output / mic input)
+
+**Scope decision (owner 2026-03-26):** AC #6 (UMIK-1 calibration) stays
+in scope. Not deferred. Calibration file application is part of the
+initial US-088 delivery.
+
+### Definition of Done
+
+- [ ] All acceptance criteria met
+- [ ] AE review: calibration application correct, measurement workflow sound
+- [ ] QE review: E2E test with mock UMIK-1 data or signal-gen loopback
+- [ ] UX review: peak hold visual is clear, reset button discoverable
+- [ ] Owner validation on Pi with real UMIK-1
 
 ---
 

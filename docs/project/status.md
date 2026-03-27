@@ -89,6 +89,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-081 | **IMPLEMENT** | **TBD** | **Owner validation FAILED** (2026-03-25, tested `c4fc54b`+`8b84518`). F-103 RESOLVED. F-112 FIXED (`9a8bae2`). F-113 **RESOLVED** (`dd0bc3a`). **All blockers cleared — ready for owner re-validation.** |
 | US-082 | **IMPLEMENT** | **TBD** | **Owner validation FAILED** (2026-03-25, tested `8b84518`). symphonia decoder works. F-104 RESOLVED (`5269fe7`), F-106 RESOLVED, F-107 RESOLVED, F-108 RESOLVED, F-109 RESOLVED. **All blockers cleared — ready for owner re-validation.** |
 | US-084 | **IMPLEMENT** | **7/13** | Phases 1-6 DONE (crate extraction, pcm-bridge strip, local-demo, web UI 3 LB wiring `dd0bc3a`, local-demo 3 instances `468533e`, signal-gen mono `468533e`). **T-084-10 local-demo verification PASSED** (24 meters, 3 LB instances). F-104 RESOLVED (`5269fe7`). F-100 RESOLVED (`af2372f`). Systemd template (T-084-8) awaiting diff confirmation. Remaining: Pi deployment (T-084-9), Pi self-link verification (T-084-11). |
+| US-087 | **DECOMPOSE** | **TBD** | **Selected** (owner directive 2026-03-26: CPU consumption priority #3, event in 2 days). Direct WebSocket from Rust — eliminate Python PCM/level relay (~31% CPU on Pi). Awaiting architect breakdown. Phase 1: pcm-bridge direct WS (highest impact). |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -228,6 +229,25 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - CONFIRMED: F-133 (auto-scaling good), F-143 (frequency skew fixed), F-138 (colors applied)
 - F-138 STILL OPEN: owner wants green/amber group colors replaced -- too confusing with warning thresholds. UX to propose alternatives.
 - NEW: **F-145** (HIGH) -- spectrum shows regular spikes, possible quantization/aliasing artifact in log-frequency bin mapping.
+
+**Owner verification round 5:**
+- F-145 RESOLVED (spectrum spikes gone)
+- F-138: bar colors confirmed good (copper/rose), but group LABEL colors still wrong -- worker-1 fixing. Kept open.
+- F-133 REOPENED: auto-scaling works but smooth transitions lost (D-048 attack 200ms / release 2s not applied). Follow-up needed.
+- F-142: spectrum still starts at 30 Hz (still open)
+- NEW: **F-146** (Medium) -- periodic CPU spikes during spectrum display
+- NEW: **F-147** (Low/design) -- auto-range floor question: should -120 dB bottom also adapt?
+
+**Updated open defect summary (post round 5):** HIGH: F-133 (REOPENED, transitions), F-134, F-136, F-141, **F-148** (decay segments). Medium: F-137, F-138 (labels pending), F-142, F-144, **F-146** (CPU spikes). Low: F-139, **F-147** (design), ENH-004, F-119, F-068, ENH-002, ENH-003. Resolved this session: F-122-F-132, F-135, F-127, F-139, F-140, F-143, F-145.
+
+**F-148 filed (HIGH):** Spectrum decay drops in segments with spikes between boundaries -- binning/rendering bug in decay path.
+**US-088 filed (HIGH):** Measurement Spectrum -- UMIK-1 input with permanent (non-decaying) peak hold + UI reset button. Bridge between monitoring UI and room correction pipeline.
+
+**Owner priorities (2026-03-26):**
+1. F-144: Signal generator auto-switch to measurement mode
+2. US-088: UMIK-1 spectrum with permanent peak hold (measurement workflow)
+3. F-146 / US-087: pw-dump CPU elimination
+4. US-087: Direct WebSocket from Rust (eliminate Python PCM relay)
 
 **F-140 RESOLVED (2026-03-26):** Root cause: systemd service `--channels 8` instead of `--channels 1` (F-097 mono). Secondary: mono bitmask normalization in `main.rs`.
 **F-144 filed (Medium):** Test tool page doesn't auto-switch to measurement mode -- signal-gen has no links outside measurement mode. UX/workflow issue.

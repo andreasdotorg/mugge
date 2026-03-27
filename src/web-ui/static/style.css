@@ -468,12 +468,12 @@ html, body {
 }
 
 .meter-group-label-main {
-    color: #a0aab8;
+    color: var(--group-main);
     font-size: 9px;
 }
 
 .meter-group-label-app {
-    color: #00a8b5;
+    color: var(--group-app);
 }
 
 .meter-group-label-dspout {

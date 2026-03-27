@@ -4649,7 +4649,7 @@ appropriate floor values per use case. Verify that the Y-axis auto-ranging
 
 **Filed:** 2026-03-26
 **Severity:** Medium → **HIGH** (REGRESSED 2026-03-26: grid snap fix broke auto-scaling entirely — nothing scales at all)
-**Status:** RESOLVED (2026-03-26). Owner confirmed auto-scaling looks good after fix.
+**Status:** REOPENED (2026-03-26). Auto-scaling works but release decay too fast — owner wants ~5 seconds release (current D-048 spec says 2s, owner now wants longer). Also smooth transitions lost — jumps abruptly. Needs both: slower release (~5s) AND smooth interpolation.
 **Affects:** Web UI spectrum renderer (auto-range logic)
 **Found by:** Owner (live testing 2026-03-26)
 **Related:** D-048 (auto-ranging Y axis)
@@ -4828,7 +4828,7 @@ text is entered and vice versa.
 
 **Filed:** 2026-03-26
 **Severity:** Medium
-**Status:** OPEN — colors now applied but owner wants green and amber group colors replaced. Too confusing with warning thresholds. UX to propose new colors.
+**Status:** OPEN — bar colors confirmed good (copper/rose), but group LABEL colors still wrong for MAIN and APP->CONV groups. Owner confirmed (2026-03-26). Worker-1 fixing. Keep open until all group labels match their assigned palette colors.
 **Affects:** Web UI status bar mini meters (`statusbar.js`, CSS)
 **Found by:** Owner (live testing 2026-03-26)
 **Related:** US-076 (L2 Soft Lilac color palette), D-047 (PPM spec)
@@ -5085,13 +5085,21 @@ and undiscoverable.
 This is a UX/workflow issue, not a signal-gen bug. Signal-gen correctly
 produces output when GM has created the appropriate links.
 
+### Follow-up (QE review 2026-03-27)
+
+**Unit tests needed** for the two new REST endpoints added by F-144 fix:
+- `/api/v1/test-tool/current-mode` (GET) — route-level unit test
+- `/api/v1/test-tool/ensure-measurement-mode` (POST) — route-level unit test
+
+Not blocking commit but should be added. Tracked here for assignment.
+
 ---
 
 ## F-145: Spectrum shows weird spikes at regular intervals
 
 **Filed:** 2026-03-26
 **Severity:** High
-**Status:** OPEN
+**Status:** RESOLVED (2026-03-26). Owner confirmed spikes gone.
 **Affects:** Web UI spectrum renderer / FFT pipeline
 **Found by:** Owner (live testing 2026-03-26)
 **Related:** F-143 (frequency skew, resolved), F-142 (sub-30Hz rendering)
@@ -5129,3 +5137,139 @@ Investigate the FFT pipeline (`fft-pipeline.js`, `spectrum-renderer.js`):
    appear at mathematically regular intervals
 4. Compare raw FFT output (before log mapping) vs rendered display to
    isolate whether the issue is in the FFT math or the rendering
+
+---
+
+## F-146: Periodic CPU spikes observed during spectrum display
+
+**Filed:** 2026-03-26
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Pi performance / Web UI responsiveness
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** F-127 (pw-dump storm, mitigated), F-134 (freezes), US-087 (direct WS)
+
+### Description
+
+Owner observes periodic CPU spikes during normal spectrum display operation.
+These may be related to the mitigated-but-not-eliminated pw-dump subprocess
+calls, garbage collection in the Python relay, or the FFT computation in
+the browser triggering layout reflows.
+
+### Recommended Fix
+
+Profile on Pi during spectrum display:
+1. Check if pw-dump calls are still occurring (F-127 mitigation may not
+   have fully eliminated them)
+2. Monitor Python uvicorn process CPU (US-087 would eliminate this entirely)
+3. Check if spikes correlate with WebSocket reconnects or buffer flushes
+4. Browser-side: check if canvas redraws are triggering expensive reflows
+
+---
+
+## F-147: Auto-range floor question — should -120 dB bottom also adapt?
+
+**Filed:** 2026-03-26
+**Severity:** Low (design question)
+**Status:** OPEN — needs D-048 clarification
+**Affects:** Web UI spectrum renderer (auto-range Y axis)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** D-048 (auto-ranging Y axis), F-132 (DB_MIN floor, resolved)
+
+### Description
+
+D-048 specifies auto-ranging Y axis with attack 200ms and release 2s for
+the TOP of the range. The owner asks whether the BOTTOM of the range
+(currently fixed at -120 dB per F-132 fix) should also adapt.
+
+For example, when signal is strong (-30 to 0 dBFS), the bottom could rise
+to -90 dB to show more detail. When signal is quiet (-80 to -40 dBFS),
+the bottom could drop to -120 dB.
+
+### Recommended Fix
+
+This is a design decision, not a bug. Options:
+1. Fixed floor at -120 dB (current behavior, simple, predictable)
+2. Adaptive floor that tracks signal level with same attack/release as top
+3. Preset-dependent: Analysis/Measurement presets use fixed -120 dB,
+   Performance/Balanced use adaptive floor
+
+Recommend consulting UX specialist and/or owner for preference. If adaptive,
+must ensure the floor never rises above the noise floor of the signal
+(otherwise useful data gets clipped).
+
+---
+
+## F-148: Spectrum decay drops in segments with spikes between them
+
+**Filed:** 2026-03-26
+**Severity:** High
+**Status:** OPEN
+**Affects:** Web UI spectrum renderer (decay path)
+**Found by:** Owner (live testing 2026-03-26)
+**Related:** F-145 (spikes, resolved), F-133 (auto-scaling, reopened), F-142 (sub-30Hz)
+
+### Description
+
+The spectrum decay trail does not fade smoothly. Instead, it drops in
+discrete segments with visible spikes at the boundaries between segments.
+This creates a jagged, stepped appearance that obscures the actual signal
+envelope.
+
+The artifact is likely in the decay rendering path, not the live FFT
+pipeline (since the live spectrum bars appear correct after F-145 fix).
+
+Possible causes:
+1. **Bin-mapping mismatch in decay buffer:** The decay buffer may use a
+   different bin-to-bar mapping than the live renderer, creating alignment
+   artifacts at segment boundaries.
+2. **Decay applied per-bin then remapped:** If decay is applied to raw FFT
+   bins and then remapped to log-frequency bars, the remapping step
+   introduces discontinuities where bin boundaries don't align with bar
+   boundaries.
+3. **Frame timing inconsistency:** If decay frames don't arrive at a
+   consistent rate (e.g., due to F-146 CPU spikes), the decay envelope
+   jumps by variable amounts, creating steps.
+4. **Integer truncation in decay calculation:** If the decay multiplier
+   or the subtraction uses integer arithmetic, small values get truncated
+   to zero prematurely, creating flat segments.
+
+### Recommended Fix
+
+Investigate the decay path in `spectrum-renderer.js`:
+1. Verify decay is applied AFTER log-frequency bin mapping (per-bar),
+   not before (per-bin)
+2. Check that the decay buffer uses the same bar count and bin mapping
+   as the live renderer
+3. Ensure decay uses floating-point arithmetic throughout
+4. Test with a single sustained tone — the decay trail should be a smooth
+   exponential curve at that frequency, not stepped
+
+---
+
+## F-149: E2E teardown errors from unfiltered /ws/pcm 502 responses
+
+**Filed:** 2026-03-27
+**Severity:** Low
+**Status:** OPEN
+**Affects:** E2E test suite (`test_capture_spectrum.py`, conftest.py page fixture)
+**Found by:** QE (recovery batch review 2026-03-27)
+**Related:** F-048 (E2E test failures)
+
+### Description
+
+The `page` fixture in conftest.py filters `/ws/siggen` WebSocket errors during
+test teardown but does not filter `/ws/pcm` 502 responses. This causes ~11-12
+teardown errors in `test_capture_spectrum.py` when the mock server shuts down
+before the browser's PCM WebSocket connection is closed.
+
+This is a pre-existing test infrastructure bug — the 502s are expected during
+teardown (server is stopping) and should be filtered alongside the existing
+`/ws/siggen` filter.
+
+### Recommended Fix
+
+Add `/ws/pcm` to the error filter list in conftest.py's `page` fixture
+teardown handler, matching the existing `/ws/siggen` pattern. Alternatively,
+implement a blanket WebSocket 502 filter during teardown for all `/ws/*`
+endpoints.

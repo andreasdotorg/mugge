@@ -523,16 +523,27 @@
             ctx.lineWidth = 1.5;
             ctx.stroke();
 
-            // Peak hold line (with gradual decay after hold period)
+            // Peak hold line (with gradual decay after hold period).
+            // Apply 3-point weighted average (0.25/0.5/0.25) to the decayed
+            // values to smooth segmented drops from bin-mapping boundaries.
             if (peakHoldEnabled && peakEnvelope) {
+                // Build decayed peak array
+                var decayedPeaks = new Float32Array(lutLen);
+                for (var xp = 0; xp < lutLen; xp++) {
+                    var pd = peakEnvelope[xp];
+                    var pa = now - peakTimes[xp];
+                    if (pa > PEAK_DECAY_MS) {
+                        pd -= PEAK_DECAY_DB_PER_S * (pa - PEAK_DECAY_MS) / 1000;
+                    }
+                    decayedPeaks[xp] = pd;
+                }
+                // Draw smoothed peak hold line
                 var inPeakStroke = false;
                 ctx.beginPath();
                 for (var x3 = 0; x3 < lutLen; x3++) {
-                    var peakDb = peakEnvelope[x3];
-                    var peakAge = now - peakTimes[x3];
-                    if (peakAge > PEAK_DECAY_MS) {
-                        peakDb -= PEAK_DECAY_DB_PER_S * (peakAge - PEAK_DECAY_MS) / 1000;
-                    }
+                    var peakDb = decayedPeaks[x3] * 0.5;
+                    peakDb += (x3 > 0 ? decayedPeaks[x3 - 1] : decayedPeaks[x3]) * 0.25;
+                    peakDb += (x3 < lutLen - 1 ? decayedPeaks[x3 + 1] : decayedPeaks[x3]) * 0.25;
                     if (peakDb <= floorDb) {
                         inPeakStroke = false;
                         continue;
@@ -607,12 +618,18 @@
 
             // Snap tracking vars to 12 dB grid, then smooth toward snap targets.
             // This gives gradual transitions between grid lines instead of jumps.
+            // Attack (range expands) uses fast 200ms; release (range shrinks) uses
+            // slow 5s so the Y axis doesn't jump around on brief signal drops.
             var snapTargetMin = Math.floor(autoDbMin / AUTO_SNAP_DB) * AUTO_SNAP_DB;
             var snapTargetMax = Math.ceil(autoDbMax / AUTO_SNAP_DB) * AUTO_SNAP_DB;
-            // Use the same attack/release smoothing for the snap chase.
-            var snapCoeff = 1.0 - Math.exp(-dt / (AUTO_ATTACK_MS / 1000));
-            smoothSnapMin += (snapTargetMin - smoothSnapMin) * snapCoeff;
-            smoothSnapMax += (snapTargetMax - smoothSnapMax) * snapCoeff;
+            var snapAttack = 1.0 - Math.exp(-dt / (AUTO_ATTACK_MS / 1000));
+            var snapRelease = 1.0 - Math.exp(-dt / 5.0);  // 5-second release
+            // Max expands upward (attack) or contracts downward (release)
+            var maxCoeff = snapTargetMax > smoothSnapMax ? snapAttack : snapRelease;
+            // Min expands downward (attack) or contracts upward (release)
+            var minCoeff = snapTargetMin < smoothSnapMin ? snapAttack : snapRelease;
+            smoothSnapMin += (snapTargetMin - smoothSnapMin) * minCoeff;
+            smoothSnapMax += (snapTargetMax - smoothSnapMax) * maxCoeff;
         }
 
         // ---- Public API ----
