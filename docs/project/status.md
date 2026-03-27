@@ -273,15 +273,67 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **Audio Engineer:** ALL 5 stories APPROVED. No rework.
 - **Security Specialist:** S-001/S-002 HIGH RESOLVED (#109 + #115 committed). No open security findings.
 - **Architect:** 3 rework items ALL RESOLVED (#110, #112, #111). 5 warnings noted (not blocking). 9 GOOD.
-**Workers:** Worker-1 on local-demo launch. Workers 2+3 idle — available for US-067 tasks once decomposition is reviewed.
+**Current worker assignments (2026-03-27 late evening — PM priority decision, updated):**
+- worker-1 → #150 (null-sink suspended state fix — Architect provided PW node properties) — IN PROGRESS, CRITICAL
+- worker-2 → IDLE (#154 E2E journey test COMPLETED — 14 pass, 3 skip, 0 fail. Not yet committed.)
+- worker-3 → **F-156** (numpy bool serialization in filter_routes.py — 500 on filter generate) — ASSIGNED by PM
 
-**Completed this phase:** #54, #56, #58, #59, #60, #61, #62, #63, #64, #65, #66, #67, #68, #69, #70, #71, #72, #73, #74, #75, #76, #78, #79, #80, #81, #82, #83, #84, #85, #86, #87, #88, #89, #90, #91, #92, #93, #94, #95.
+**Worker-3 priority queue (PM decision):**
+1. **F-156** (HIGH, demo-blocking) — fix numpy bool_ JSON serialization in filter generation API
+2. **F-153** (MEDIUM, defensive) — add PW/convolver/USBStreamer pre-flight checks
+3. **F-154** (MEDIUM, resilience) — measurement WS reconnect logic
 
-**Next steps:**
-- **Pi deployment** tonight (task #53, 85+ commits). Owner must confirm amps off (USBStreamer transient safety). Rust rebuilds needed: graph-manager + pcm-bridge.
-- **Venue workflow stories** US-099–US-104 filed (Tier 13). Ready for PO prioritization and architect decomposition after deployment.
-- **US-087** (Direct WebSocket from Rust) deferred — too risky for event eve. Architect breakdown complete and stored.
-- **Owner TODOs:** Per-sample Xmax limiter scope decision, speaker sensitivity_db_spl verification.
+**NOTE:** Tasks #154, #155, #156, #157, #158 are code-complete but NOT YET COMMITTED. Working tree has all changes. Needs CM commit batch.
+
+**E2E journey test results (#154):** 14 PASSED, 3 SKIPPED (Phase 2 crossover-only FIR gen — blocked by F-156 numpy bool bug). Fixing F-156 should enable 17/17 pass.
+
+**Completed this phase:** #54, #56, #58, #59, #60, #61, #62, #63, #64, #65, #66, #67, #68, #69, #70, #71, #72, #73, #74, #75, #76, #78, #79, #80, #81, #82, #83, #84, #85, #86, #87, #88, #89, #90, #91, #92, #93, #94, #95, #96–#158 (all except #150). Full list includes: US-098 P0, US-067, GAP-1–8, stories US-099–104, integration tests, cache-bust, tooltips, health endpoint, CSS fix, brand rename, AD mock/safety fixes, E2E journey test, spectrum auto-scaling fix, cache-bust v=36.
+
+**Session total: 100+ commits pushed to origin/main (exact count pending #154/#157/#158 commits).**
+
+**Completed since last sync (94→100 commits):**
+- #151 DONE: /api/v1/status health-check endpoint + /api/v1/measurement/preflight 404 fix
+- #152 DONE: 7 CSS variable aliases (presentation-critical visual fix)
+- #153 DONE: Brand rename "Pi Audio" → "mugge" (title + nav)
+- #155 DONE: F-151 — `simulatePipelineMock()` removed from rc-wizard.js (AD W-3 honesty fix)
+- #156 DONE: F-152 — Silent-pass pre-flight catch block fixed to WARN (AD W-3 safety fix)
+- Venue workflow HOWTO written (`docs/guide/howto/venue-setup.md`)
+- Introduction doc map updated
+- QE demo smoke test script (19 tests, 85 checks)
+
+**AD assessment findings (2026-03-27):**
+- **W-1 (CRITICAL):** GM reconciler root cause — NOT code bug. PW null-sink nodes stay suspended with zero ports. pw-link workaround in local-demo.sh silently fails (2>/dev/null). Worker-1 fixing PW config. Architect confirmed GM code is correct and provided fix (two node properties).
+- **W-2 (HIGH):** 100 commits never on Pi. Deployment BLOCKED — Pi offline. Rust builds done, service restarts pending.
+- **W-3 (HIGH):** Mock pipeline fallback — **RESOLVED** (F-151, #155 completed).
+- **W-3 (HIGH):** Silent-pass pre-flight — **RESOLVED** (F-152, #156 completed).
+- **W-4/W-5:** USBStreamer transient risk + no auth (F-037) — protocol/risk-accepted.
+
+**New AD findings (filed in defects.md):**
+- **F-153 (AD-DEMO-1, Medium):** Pre-flight doesn't check PipeWire/convolver/USBStreamer state. OPEN.
+- **F-154 (AD-DEMO-2, Medium):** Measurement WebSocket has no reconnect logic. OPEN.
+- **F-155 (AD-DEMO-3, Low):** Three DSP smoothing issues (windowing transition, psychoacoustic smoothing hard boundary, no outlier rejection in spatial averaging). OPEN.
+
+**Advisory engagement complete:**
+- UX: 14 findings, critical CSS fixed (#152)
+- TW: venue HOWTO + doc map done
+- QE: smoke test script done (19 tests, 85 checks)
+- AD: 5 original findings ALL addressed (3 RESOLVED, 2 risk-accepted) + 3 new findings filed (F-153/F-154/F-155)
+- Architect: confirmed reconciler code correct, advising on null-sink fix
+
+**US-067 COMPLETE** — all 8 tasks done (#117–#124).
+
+**US-098 P0 COMPLETE** — all 3 tasks PASS (#125, #126, #127).
+
+**GAP-1 through GAP-8 ALL CLOSED** — pipeline fully wired end-to-end.
+
+**Next steps (priority order):**
+1. **#150 (null-sink fix)** — CRITICAL. Blocks real E2E testing and mode transitions. Worker-1.
+2. **#154 (E2E journey test)** — CRITICAL. Proves system works end-to-end. Worker-2. Must produce `nix run .#test-journey`.
+3. **#155 + #156 (AD honesty/safety fixes)** — HIGH. Remove mock fallback + fix silent-pass. Worker-3.
+4. **DEPLOY-001 (Pi deployment)** — BLOCKED on Pi offline. 100 commits. Owner must confirm amps off when Pi available.
+5. **Venue workflow stories** US-099–US-104 filed (Tier 13). Post-deployment.
+6. **US-087** (Direct WebSocket from Rust) deferred — too risky for event eve.
+7. **Owner TODOs:** Per-sample Xmax limiter scope decision, speaker sensitivity_db_spl verification.
 
 ### Session Progress (2026-03-26, continued)
 

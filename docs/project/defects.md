@@ -4653,7 +4653,7 @@ appropriate floor values per use case. Verify that the Y-axis auto-ranging
 
 **Filed:** 2026-03-26
 **Severity:** Medium → **HIGH** (REGRESSED 2026-03-26: grid snap fix broke auto-scaling entirely — nothing scales at all)
-**Status:** REOPENED (2026-03-26). Auto-scaling works but release decay too fast — owner wants ~5 seconds release (current D-048 spec says 2s, owner now wants longer). Also smooth transitions lost — jumps abruptly. Needs both: slower release (~5s) AND smooth interpolation.
+**Status:** RESOLVED (2026-03-27, task #157). 5s release decay + smooth interpolation implemented.
 **Affects:** Web UI spectrum renderer (auto-range logic)
 **Found by:** Owner (live testing 2026-03-26)
 **Related:** D-048 (auto-ranging Y axis)
@@ -5337,6 +5337,138 @@ or writes them into the `.conf` defaults.
 
 This is addressed in US-091 AC: "Per-channel delay nodes" item. Should be
 implemented as part of T-089-1 (schema) + T-089-2 (config gen extension).
+
+---
+
+## F-151: Mock pipeline fallback shows fake green results on backend failure (RESOLVED)
+
+**Filed:** 2026-03-27
+**Severity:** High
+**Status:** Resolved (AD finding W-3, task #155 completed)
+**Affects:** Measurement wizard (`rc-wizard.js`), US-097
+**Found by:** Advocatus Diaboli (demo readiness assessment 2026-03-27)
+
+### Description
+
+`rc-wizard.js` line 11 notes "Pipeline visualization still uses mock simulation."
+The `simulatePipelineMock()` function (lines 424-449) renders fake channel cards
+with hardcoded data (left_hp: -1.2dB, etc.). If the real backend pipeline fails
+silently, the mock kicks in and shows fake green results — misleading the operator
+into believing correction was successful when it was not.
+
+### Resolution
+
+`simulatePipelineMock()` removed entirely. Backend failure now shows an error
+state instead of fake success data.
+
+---
+
+## F-152: Silent-pass-on-error in measurement pre-flight profile validation (RESOLVED)
+
+**Filed:** 2026-03-27
+**Severity:** High (safety-relevant — operator gets green light when backend is broken)
+**Status:** Resolved (AD finding W-3, task #156 completed)
+**Affects:** Measurement wizard pre-flight (`rc-wizard.js` lines 103-108), US-097
+**Found by:** Advocatus Diaboli (demo readiness assessment 2026-03-27)
+
+### Description
+
+The profile validation catch block in `rc-wizard.js` sets the indicator to "OK"
+green and marks `preflightResults.profile = true` when the validation endpoint
+returns ANY error (network, 500, timeout). The tooltip says "validation endpoint
+unavailable" but the visual says "OK". A broken backend should not silently pass
+pre-flight.
+
+### Resolution
+
+On error, indicator now shows WARN (yellow) instead of OK. Operator can see that
+validation could not be performed.
+
+---
+
+## F-153: Pre-flight doesn't check PipeWire/convolver/USBStreamer state (OPEN)
+
+**Filed:** 2026-03-27
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Measurement wizard pre-flight, US-097, demo reliability
+**Found by:** Advocatus Diaboli (AD-DEMO-1, demo readiness assessment 2026-03-27)
+
+### Description
+
+The measurement pre-flight checks validate profile and UMIK-1 presence, but do
+not check whether PipeWire is running, the convolver is loaded, or the USBStreamer
+is connected and active. During a live demo, any of these being down would cause
+the measurement to fail after passing pre-flight.
+
+---
+
+## F-154: Measurement WebSocket has no reconnect logic (OPEN)
+
+**Filed:** 2026-03-27
+**Severity:** Medium
+**Status:** OPEN
+**Affects:** Measurement wizard WebSocket connection, US-097, demo reliability
+**Found by:** Advocatus Diaboli (AD-DEMO-2, demo readiness assessment 2026-03-27)
+**Related:** Signal-gen WebSocket (has reconnect logic)
+
+### Description
+
+The measurement session WebSocket in the frontend has no reconnect logic. If the
+WebSocket connection drops during a measurement (network blip, backend restart),
+the session is lost with no recovery. The signal-gen WebSocket already has
+reconnect logic that could serve as a pattern.
+
+---
+
+## F-155: DSP smoothing issues — windowing transition, psychoacoustic smoothing, spatial averaging (OPEN)
+
+**Filed:** 2026-03-27
+**Severity:** Low (design quality, not demo-blocking)
+**Status:** OPEN
+**Affects:** Room correction pipeline (`correction.py`, `combine.py`), US-090, US-097
+**Found by:** Advocatus Diaboli (AD-DEMO-3, demo readiness assessment 2026-03-27)
+
+### Description
+
+Three DSP smoothing issues identified:
+1. Frequency-dependent windowing has a hard transition — should use a smooth
+   crossfade between correction regions
+2. Psychoacoustic smoothing uses a hard transition at frequency boundaries
+   (200 Hz, 1 kHz) — should interpolate smoothly
+3. Spatial averaging (`spatial_average()`) has no outlier rejection — a bad
+   measurement position could skew the average
+
+These affect correction quality but are not demo-blocking. They should be
+addressed for production use.
+
+---
+
+## F-156: POST /api/v1/filters/generate returns 500 — numpy bool_ not JSON serializable (OPEN)
+
+**Filed:** 2026-03-27
+**Severity:** High (demo-blocking — crossover-only filter generation fails)
+**Status:** OPEN
+**Affects:** US-090 (FIR Filter Generation), filter_routes.py, E2E journey test Phase 2
+**Found by:** E2E journey test (#154) — 3 tests skipped due to 500 response
+
+### Description
+
+`POST /api/v1/filters/generate` returns HTTP 500 with `TypeError: Object of
+type bool_ is not JSON serializable`. The `bool_` is a numpy boolean that
+gets included in the filter generation response without conversion to a
+native Python bool.
+
+This blocks crossover-only filter generation from the Config tab. The full
+measurement pipeline (which generates correction filters via a different code
+path) works — but the standalone "generate filters from profile" path fails.
+
+### Recommended Fix
+
+Find where numpy bool values enter the response in `filter_routes.py` (or the
+filter generation pipeline it calls). Convert numpy types to Python native
+types before JSON serialization. Common patterns: `bool(np_bool)`,
+`int(np_int)`, `float(np_float)`, or a recursive numpy-to-native converter.
 
 ---
 
