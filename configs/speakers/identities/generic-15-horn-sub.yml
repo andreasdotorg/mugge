@@ -19,6 +19,10 @@ sensitivity_db_spl: 103  # TODO(owner): Estimate — horn loading adds 6-12 dB o
 max_boost_db: 0
 mandatory_hpf_hz: 40  # TODO(owner): Critical — below horn cutoff the horn unloads and excursion rises sharply.
 
+# Horn characteristics
+horn_cutoff_freq_hz: 55  # TODO(owner): Measure or calculate from horn geometry. Typical 15" folded horn: 40-70 Hz.
+horn_path_length_m: 2.0  # TODO(owner): Measure total acoustic path (throat to mouth). Used for time alignment.
+
 # Power handling
 max_power_watts: 600  # TODO(owner): Depends on driver. Typical 15" PA: 400-1000W.
 power_limit_note: "Template value. Replace with actual driver power handling."

@@ -632,8 +632,82 @@ def _deep_validate_profile(profile: dict) -> dict:
                                 f"max_boost ({max_boost}dB) + margin ({_D029_MARGIN_DB}dB)"),
                 })
 
+    # 10. Horn crossover proximity warning
+    import math
+    for spk_name, spk in speakers.items():
+        id_name = spk.get("identity", "")
+        identity = identities.get(id_name, {})
+        horn_cutoff = identity.get("horn_cutoff_freq_hz")
+        if not isinstance(horn_cutoff, (int, float)):
+            continue
+        # Check if any crossover frequency is within 0.5 octaves of horn cutoff
+        for freq in freqs:
+            octave_distance = abs(math.log2(freq / horn_cutoff))
+            if octave_distance < 0.5:
+                warnings.append({
+                    "check": "horn_crossover_proximity",
+                    "message": (
+                        f"Speaker '{spk_name}' ({id_name}): crossover {freq}Hz is "
+                        f"{octave_distance:.2f} octaves from horn cutoff {horn_cutoff}Hz "
+                        f"(< 0.5 oct). Horn unloads below cutoff — excursion risk."
+                    ),
+                    "horn_cutoff_freq_hz": horn_cutoff,
+                    "horn_path_length_m": identity.get("horn_path_length_m"),
+                })
+
+    # 11. D-054 channel budget analysis — monitoring availability per topology
+    speaker_channels = set(channel_map.keys())
+    n_speaker_ch = len(speaker_channels)
+    monitoring_channels: set[int] = set()
+    if isinstance(monitoring, dict):
+        for ch in monitoring.values():
+            if isinstance(ch, int):
+                monitoring_channels.add(ch)
+    n_monitoring_ch = len(monitoring_channels - speaker_channels)
+    available_for_monitoring = 8 - n_speaker_ch
+
+    # Determine available modes based on monitoring capacity
+    has_hp = n_monitoring_ch >= 2
+    has_iem = n_monitoring_ch >= 4
+
+    available_modes: list[str] = []
+    if has_hp:
+        available_modes.append("dj")
+    if has_iem:
+        available_modes.append("live")
+    if not has_hp:
+        available_modes.append("testing")
+
+    if n_speaker_ch >= 8 and n_monitoring_ch == 0:
+        warnings.append({
+            "check": "channel_budget_no_monitoring",
+            "message": (f"All 8 channels used for speakers — no monitoring "
+                        f"(headphones/IEM). Testing and evaluation only (D-054)."),
+            "speaker_channels": n_speaker_ch,
+            "monitoring_channels": n_monitoring_ch,
+            "available_for_monitoring": available_for_monitoring,
+            "available_modes": available_modes,
+        })
+    elif n_speaker_ch >= 6 and not has_iem:
+        warnings.append({
+            "check": "channel_budget_no_iem",
+            "message": (f"{n_speaker_ch} speaker channels, {n_monitoring_ch} monitoring — "
+                        f"no IEM channels available. Live vocal mode blocked (D-054)."),
+            "speaker_channels": n_speaker_ch,
+            "monitoring_channels": n_monitoring_ch,
+            "available_for_monitoring": available_for_monitoring,
+            "available_modes": available_modes,
+        })
+
     valid = len(errors) == 0
-    return {"valid": valid, "errors": errors, "warnings": warnings}
+    result = {"valid": valid, "errors": errors, "warnings": warnings}
+    result["channel_budget"] = {
+        "speaker_channels": n_speaker_ch,
+        "monitoring_channels": n_monitoring_ch,
+        "available_for_monitoring": available_for_monitoring,
+        "available_modes": available_modes,
+    }
+    return result
 
 
 @router.post("/profiles/{name}/validate")
@@ -740,8 +814,18 @@ async def _activate_profile_impl(
         identities_dir = str(base / "identities") if base else None
 
         from room_correction.pw_config_generator import generate_filter_chain_conf
+
+        # Extract per-channel delay_ms from profile speakers section.
+        speakers = profile.get("speakers", {})
+        delays_ms = {}
+        for spk_name, spk_cfg in speakers.items():
+            d = spk_cfg.get("delay_ms", 0.0)
+            if isinstance(d, (int, float)) and d > 0:
+                delays_ms[spk_name] = float(d)
+
         pw_conf = generate_filter_chain_conf(
             name,
+            delays_ms=delays_ms if delays_ms else None,
             profiles_dir=profiles_dir,
             identities_dir=identities_dir,
             validate=False,  # Already validated above

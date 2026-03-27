@@ -716,6 +716,15 @@ _ID_NO_HPF = {
     "name": "No HPF Speaker", "type": "sealed", "impedance_ohm": 8,
     "sensitivity_db_spl": 88, "max_boost_db": 0,
 }
+_ID_HORN_SUB = {
+    "name": "Horn Sub", "type": "horn", "impedance_ohm": 8,
+    "sensitivity_db_spl": 103, "max_boost_db": 0, "mandatory_hpf_hz": 40,
+    "horn_cutoff_freq_hz": 55, "horn_path_length_m": 2.0,
+}
+_ID_HORN_NO_CUTOFF = {
+    "name": "Horn No Cutoff", "type": "horn", "impedance_ohm": 8,
+    "sensitivity_db_spl": 103, "max_boost_db": 0, "mandatory_hpf_hz": 40,
+}
 
 
 @pytest.fixture
@@ -734,6 +743,10 @@ def deep_val_dir(tmp_path, monkeypatch):
         yaml.dump(_ID_HIGH_SENS, default_flow_style=False, sort_keys=False))
     (identities / "no-hpf-speaker.yml").write_text(
         yaml.dump(_ID_NO_HPF, default_flow_style=False, sort_keys=False))
+    (identities / "horn-sub.yml").write_text(
+        yaml.dump(_ID_HORN_SUB, default_flow_style=False, sort_keys=False))
+    (identities / "horn-no-cutoff.yml").write_text(
+        yaml.dump(_ID_HORN_NO_CUTOFF, default_flow_style=False, sort_keys=False))
 
     import app.speaker_routes as mod
     monkeypatch.setattr(mod, "_speakers_dir", lambda: tmp_path)
@@ -970,6 +983,285 @@ class TestDeepValidateD029GainStaging:
         """Profile without gain_staging should not error."""
         result = _deep_validate_profile(_make_profile())
         assert isinstance(result["valid"], bool)
+
+
+class TestDeepValidateChannelBudgetD054:
+    """D-054 channel budget analysis — monitoring availability per topology."""
+
+    def test_2way_stereo_full_monitoring(self, deep_val_dir):
+        """2-way stereo: 4 speaker + 4 monitoring — DJ + live modes available."""
+        profile = _make_profile(
+            monitoring={"hp_left": 4, "hp_right": 5, "iem_left": 6, "iem_right": 7},
+        )
+        result = _deep_validate_profile(profile)
+        checks = [w["check"] for w in result["warnings"]]
+        assert "channel_budget_no_monitoring" not in checks
+        assert "channel_budget_no_iem" not in checks
+        budget = result["channel_budget"]
+        assert budget["speaker_channels"] == 4
+        assert budget["monitoring_channels"] == 4
+        assert "dj" in budget["available_modes"]
+        assert "live" in budget["available_modes"]
+
+    def test_3way_stereo_no_iem(self, deep_val_dir):
+        """3-way stereo: 6 speaker + 2 monitoring — no IEM, live mode blocked."""
+        speakers = {
+            "sub_left": {"identity": "test-sub", "role": "subwoofer", "channel": 0, "filter_type": "lowpass"},
+            "sub_right": {"identity": "test-sub", "role": "subwoofer", "channel": 1, "filter_type": "lowpass"},
+            "mid_left": {"identity": "test-sat", "role": "midrange", "channel": 2, "filter_type": "bandpass"},
+            "mid_right": {"identity": "test-sat", "role": "midrange", "channel": 3, "filter_type": "bandpass"},
+            "tweet_left": {"identity": "test-sat", "role": "tweeter", "channel": 4, "filter_type": "highpass"},
+            "tweet_right": {"identity": "test-sat", "role": "tweeter", "channel": 5, "filter_type": "highpass"},
+        }
+        xovers = [
+            {"frequency_hz": 250, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+            {"frequency_hz": 2500, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        ]
+        profile = _make_profile(
+            speakers=speakers, topology="3way", crossover=xovers,
+            monitoring={"hp_left": 6, "hp_right": 7},
+        )
+        result = _deep_validate_profile(profile)
+        checks = [w["check"] for w in result["warnings"]]
+        assert "channel_budget_no_iem" in checks
+        budget = result["channel_budget"]
+        assert budget["speaker_channels"] == 6
+        assert budget["monitoring_channels"] == 2
+        assert budget["available_for_monitoring"] == 2
+        assert "dj" in budget["available_modes"]
+        assert "live" not in budget["available_modes"]
+
+    def test_4way_stereo_no_monitoring(self, deep_val_dir):
+        """4-way stereo: 8 speaker + 0 monitoring — testing only."""
+        speakers = {
+            f"spk{i}": {"identity": "test-sat", "role": "satellite", "channel": i}
+            for i in range(8)
+        }
+        profile = _make_profile(speakers=speakers, topology="4way")
+        result = _deep_validate_profile(profile)
+        checks = [w["check"] for w in result["warnings"]]
+        assert "channel_budget_no_monitoring" in checks
+        budget = result["channel_budget"]
+        assert budget["speaker_channels"] == 8
+        assert budget["monitoring_channels"] == 0
+        assert budget["available_for_monitoring"] == 0
+        assert "testing" in budget["available_modes"]
+        assert "dj" not in budget["available_modes"]
+        assert "live" not in budget["available_modes"]
+
+    def test_4way_mono_full_monitoring(self, deep_val_dir):
+        """4-way mono: 4 speaker + 4 monitoring — full modes available."""
+        speakers = {
+            "sub": {"identity": "test-sub", "role": "subwoofer", "channel": 0, "filter_type": "lowpass"},
+            "woofer": {"identity": "test-sat", "role": "satellite", "channel": 1, "filter_type": "bandpass"},
+            "mid": {"identity": "test-sat", "role": "midrange", "channel": 2, "filter_type": "bandpass"},
+            "tweet": {"identity": "test-sat", "role": "tweeter", "channel": 3, "filter_type": "highpass"},
+        }
+        xovers = [
+            {"frequency_hz": 80, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+            {"frequency_hz": 500, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+            {"frequency_hz": 4000, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        ]
+        profile = _make_profile(
+            speakers=speakers, topology="4way", crossover=xovers,
+            monitoring={"hp_left": 4, "hp_right": 5, "iem_left": 6, "iem_right": 7},
+        )
+        result = _deep_validate_profile(profile)
+        checks = [w["check"] for w in result["warnings"]]
+        assert "channel_budget_no_monitoring" not in checks
+        assert "channel_budget_no_iem" not in checks
+        budget = result["channel_budget"]
+        assert budget["speaker_channels"] == 4
+        assert budget["monitoring_channels"] == 4
+        assert "dj" in budget["available_modes"]
+        assert "live" in budget["available_modes"]
+
+    def test_3way_mono_sub_hp_plus_one_iem(self, deep_val_dir):
+        """3-way mono sub: 5 speaker + 3 monitoring — HP + one IEM channel."""
+        speakers = {
+            "sat_left": {"identity": "test-sat", "role": "satellite", "channel": 0, "filter_type": "highpass"},
+            "sat_right": {"identity": "test-sat", "role": "satellite", "channel": 1, "filter_type": "highpass"},
+            "mid_left": {"identity": "test-sat", "role": "midrange", "channel": 2, "filter_type": "bandpass"},
+            "mid_right": {"identity": "test-sat", "role": "midrange", "channel": 3, "filter_type": "bandpass"},
+            "sub_mono": {"identity": "test-sub", "role": "subwoofer", "channel": 4, "filter_type": "lowpass"},
+        }
+        xovers = [
+            {"frequency_hz": 80, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+            {"frequency_hz": 2500, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        ]
+        profile = _make_profile(
+            speakers=speakers, topology="3way", crossover=xovers,
+            monitoring={"hp_left": 5, "hp_right": 6, "iem_mono": 7},
+        )
+        result = _deep_validate_profile(profile)
+        budget = result["channel_budget"]
+        assert budget["speaker_channels"] == 5
+        assert budget["monitoring_channels"] == 3
+        assert budget["available_for_monitoring"] == 3
+        # 3 monitoring channels: has HP (2+) but not full IEM (4)
+        assert "dj" in budget["available_modes"]
+        assert "live" not in budget["available_modes"]
+
+    def test_channel_budget_in_result(self, deep_val_dir):
+        """Result always includes channel_budget summary."""
+        result = _deep_validate_profile(_make_profile())
+        assert "channel_budget" in result
+        budget = result["channel_budget"]
+        assert "speaker_channels" in budget
+        assert "monitoring_channels" in budget
+        assert "available_for_monitoring" in budget
+        assert "available_modes" in budget
+
+    def test_no_monitoring_section_still_reports(self, deep_val_dir):
+        """Profile without monitoring section still reports budget."""
+        profile = _make_profile()
+        profile.pop("monitoring", None)
+        result = _deep_validate_profile(profile)
+        budget = result["channel_budget"]
+        assert budget["speaker_channels"] == 4
+        assert budget["monitoring_channels"] == 0
+        assert budget["available_for_monitoring"] == 4
+
+    def test_4way_no_monitoring_warning_message(self, deep_val_dir):
+        """Warning message mentions D-054 and testing only."""
+        speakers = {
+            f"spk{i}": {"identity": "test-sat", "role": "satellite", "channel": i}
+            for i in range(8)
+        }
+        profile = _make_profile(speakers=speakers, topology="4way")
+        result = _deep_validate_profile(profile)
+        warn = [w for w in result["warnings"] if w["check"] == "channel_budget_no_monitoring"]
+        assert len(warn) == 1
+        assert "D-054" in warn[0]["message"]
+        assert "testing" in warn[0]["message"].lower() or "evaluation" in warn[0]["message"].lower()
+
+    def test_3way_no_iem_warning_message(self, deep_val_dir):
+        """Warning message mentions live vocal mode blocked."""
+        speakers = {
+            "sub_left": {"identity": "test-sub", "role": "subwoofer", "channel": 0, "filter_type": "lowpass"},
+            "sub_right": {"identity": "test-sub", "role": "subwoofer", "channel": 1, "filter_type": "lowpass"},
+            "mid_left": {"identity": "test-sat", "role": "midrange", "channel": 2, "filter_type": "bandpass"},
+            "mid_right": {"identity": "test-sat", "role": "midrange", "channel": 3, "filter_type": "bandpass"},
+            "tweet_left": {"identity": "test-sat", "role": "tweeter", "channel": 4, "filter_type": "highpass"},
+            "tweet_right": {"identity": "test-sat", "role": "tweeter", "channel": 5, "filter_type": "highpass"},
+        }
+        xovers = [
+            {"frequency_hz": 250, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+            {"frequency_hz": 2500, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        ]
+        profile = _make_profile(
+            speakers=speakers, topology="3way", crossover=xovers,
+            monitoring={"hp_left": 6, "hp_right": 7},
+        )
+        result = _deep_validate_profile(profile)
+        warn = [w for w in result["warnings"] if w["check"] == "channel_budget_no_iem"]
+        assert len(warn) == 1
+        assert "live vocal mode blocked" in warn[0]["message"].lower()
+
+
+class TestDeepValidateHornCrossoverProximity:
+    def test_crossover_near_horn_cutoff_warns(self, deep_val_dir):
+        """Crossover 60Hz is 0.12 octaves from horn cutoff 55Hz — should warn."""
+        speakers = {
+            "sat_left": {"identity": "test-sat", "role": "satellite", "channel": 0, "filter_type": "highpass"},
+            "sub1": {"identity": "horn-sub", "role": "subwoofer", "channel": 2, "filter_type": "lowpass",
+                     "enclosure_type": "horn"},
+        }
+        profile = _make_profile(
+            speakers=speakers,
+            crossover={"frequency_hz": 60, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        )
+        result = _deep_validate_profile(profile)
+        checks = [w["check"] for w in result["warnings"]]
+        assert "horn_crossover_proximity" in checks
+        horn_warn = [w for w in result["warnings"] if w["check"] == "horn_crossover_proximity"][0]
+        assert horn_warn["horn_cutoff_freq_hz"] == 55
+        assert horn_warn["horn_path_length_m"] == 2.0
+
+    def test_crossover_far_from_horn_cutoff_no_warning(self, deep_val_dir):
+        """Crossover 100Hz is 0.86 octaves from horn cutoff 55Hz — no warning."""
+        speakers = {
+            "sat_left": {"identity": "test-sat", "role": "satellite", "channel": 0, "filter_type": "highpass"},
+            "sub1": {"identity": "horn-sub", "role": "subwoofer", "channel": 2, "filter_type": "lowpass",
+                     "enclosure_type": "horn"},
+        }
+        profile = _make_profile(
+            speakers=speakers,
+            crossover={"frequency_hz": 100, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        )
+        result = _deep_validate_profile(profile)
+        checks = [w["check"] for w in result["warnings"]]
+        assert "horn_crossover_proximity" not in checks
+
+    def test_horn_without_cutoff_freq_no_warning(self, deep_val_dir):
+        """Horn identity without horn_cutoff_freq_hz should not trigger warning."""
+        speakers = {
+            "sat_left": {"identity": "test-sat", "role": "satellite", "channel": 0, "filter_type": "highpass"},
+            "sub1": {"identity": "horn-no-cutoff", "role": "subwoofer", "channel": 2, "filter_type": "lowpass",
+                     "enclosure_type": "horn"},
+        }
+        profile = _make_profile(
+            speakers=speakers,
+            crossover={"frequency_hz": 60, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        )
+        result = _deep_validate_profile(profile)
+        checks = [w["check"] for w in result["warnings"]]
+        assert "horn_crossover_proximity" not in checks
+
+    def test_non_horn_speaker_no_warning(self, deep_val_dir):
+        """Non-horn speaker should never trigger horn proximity warning."""
+        result = _deep_validate_profile(_make_profile())
+        checks = [w["check"] for w in result["warnings"]]
+        assert "horn_crossover_proximity" not in checks
+
+    def test_crossover_exactly_at_cutoff_warns(self, deep_val_dir):
+        """Crossover exactly at horn cutoff (0 octaves distance) — should warn."""
+        speakers = {
+            "sat_left": {"identity": "test-sat", "role": "satellite", "channel": 0, "filter_type": "highpass"},
+            "sub1": {"identity": "horn-sub", "role": "subwoofer", "channel": 2, "filter_type": "lowpass",
+                     "enclosure_type": "horn"},
+        }
+        profile = _make_profile(
+            speakers=speakers,
+            crossover={"frequency_hz": 55, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        )
+        result = _deep_validate_profile(profile)
+        checks = [w["check"] for w in result["warnings"]]
+        assert "horn_crossover_proximity" in checks
+
+    def test_multi_crossover_one_near_cutoff(self, deep_val_dir):
+        """3-way: only the crossover near the horn cutoff should warn."""
+        speakers = {
+            "sub1": {"identity": "horn-sub", "role": "subwoofer", "channel": 0, "filter_type": "lowpass",
+                     "enclosure_type": "horn"},
+            "mid": {"identity": "test-sat", "role": "midrange", "channel": 1, "filter_type": "bandpass"},
+            "tweet": {"identity": "test-sat", "role": "tweeter", "channel": 2, "filter_type": "highpass"},
+        }
+        xovers = [
+            {"frequency_hz": 60, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+            {"frequency_hz": 2500, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        ]
+        profile = _make_profile(speakers=speakers, crossover=xovers, topology="3way")
+        result = _deep_validate_profile(profile)
+        horn_warnings = [w for w in result["warnings"] if w["check"] == "horn_crossover_proximity"]
+        assert len(horn_warnings) == 1
+        assert "60Hz" in horn_warnings[0]["message"]
+
+    def test_horn_path_length_included(self, deep_val_dir):
+        """Warning includes horn_path_length_m from identity."""
+        speakers = {
+            "sat_left": {"identity": "test-sat", "role": "satellite", "channel": 0, "filter_type": "highpass"},
+            "sub1": {"identity": "horn-sub", "role": "subwoofer", "channel": 2, "filter_type": "lowpass",
+                     "enclosure_type": "horn"},
+        }
+        profile = _make_profile(
+            speakers=speakers,
+            crossover={"frequency_hz": 55, "slope_db_per_oct": 48, "type": "linkwitz-riley"},
+        )
+        result = _deep_validate_profile(profile)
+        horn_warnings = [w for w in result["warnings"] if w["check"] == "horn_crossover_proximity"]
+        assert len(horn_warnings) >= 1
+        assert horn_warnings[0]["horn_path_length_m"] == 2.0
 
 
 class TestDeepValidateMixed:
