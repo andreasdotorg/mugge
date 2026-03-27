@@ -374,7 +374,55 @@ else
     echo "  echo '{\"cmd\":\"play\",\"signal\":\"sine\",\"freq\":440,\"level_dbfs\":-20,\"channels\":[1]}' > /dev/tcp/127.0.0.1/4001"
 fi
 
-# ---- 9. Start web-ui ----
+# ---- 9. Manual pw-link workaround (reconciler bug) ----
+# The GM reconciler has known bugs that prevent it from creating links in
+# local-demo. Create the measurement-mode links manually using pw-link.
+# This matches the approach used for the GM-12 production DJ session.
+# Links are idempotent — pw-link silently succeeds if the link exists.
+echo ""
+echo "[local-demo] Creating manual pw-link connections (reconciler workaround)..."
+sleep 1  # give PW time to settle all node registrations
+
+# Helper: create a link, log on failure but don't abort (optional links may fail).
+pw_link_quiet() {
+    pw-link "$1" "$2" 2>/dev/null || true
+}
+
+# signal-gen mono → 4 convolver inputs (F-097 fan-out).
+for ch in 0 1 2 3; do
+    pw_link_quiet "pi4audio-signal-gen:output_AUX0" "pi4audio-convolver:playback_AUX${ch}"
+done
+
+# convolver-out → USBStreamer playback (ch 1-4: speakers).
+for ch in 0 1 2 3; do
+    pw_link_quiet "pi4audio-convolver-out:output_AUX${ch}" "alsa_output.usb-MiniDSP_USBStreamer:playback_AUX${ch}"
+done
+
+# UMIK-1 → pcm-bridge ch3 (SPL metering, optional — UMIK-1 may not exist).
+pw_link_quiet "alsa_input.usb-miniDSP_UMIK-1:capture_MONO" "pi4audio-pcm-bridge:input_3"
+
+# UMIK-1 → signal-gen capture (measurement mic input, optional).
+pw_link_quiet "alsa_input.usb-miniDSP_UMIK-1:capture_MONO" "pi4audio-signal-gen-capture:input_MONO"
+
+# level-bridge-hw-out: USBStreamer monitor → level-bridge-hw-out (8ch).
+for ch in 0 1 2 3 4 5 6 7; do
+    pw_link_quiet "alsa_output.usb-MiniDSP_USBStreamer:monitor_AUX${ch}" "pi4audio-level-bridge-hw-out:input_$((ch + 1))"
+done
+
+# level-bridge-hw-in: USBStreamer capture → level-bridge-hw-in (8ch).
+# In local-demo, alsa_input.usb-MiniDSP_USBStreamer replaces ADA8200.
+for ch in 0 1 2 3 4 5 6 7; do
+    pw_link_quiet "alsa_input.usb-MiniDSP_USBStreamer:capture_AUX${ch}" "pi4audio-level-bridge-hw-in:input_$((ch + 1))"
+done
+
+# level-bridge-sw: signal-gen output → level-bridge-sw (1ch mono, F-124).
+pw_link_quiet "pi4audio-signal-gen:output_AUX0" "pi4audio-level-bridge-sw:input_1"
+
+# Count links created.
+LINK_COUNT=$(pw-link -l 2>/dev/null | grep -c '|' || echo 0)
+echo "[local-demo] $LINK_COUNT links active (expected ~26 for measurement mode; 27 if capture stream active)."
+
+# ---- 10. Start web-ui ----
 echo ""
 echo "[local-demo] Starting web-ui (port 8080, real collectors)..."
 export PI_AUDIO_MOCK=0
@@ -386,6 +434,12 @@ export PI4AUDIO_LEVELS_HW_OUT_PORT=9101
 export PI4AUDIO_LEVELS_HW_IN_PORT=9102
 export PI4AUDIO_SKIP_GM_RECOVERY=1
 export PI4AUDIO_SIGGEN=1
+# Filter output + session dirs: writable temp paths (Nix store is read-only,
+# so the defaults in filter_routes.py resolve into read-only paths when
+# running via nix run .#local-demo).
+export PI4AUDIO_FILTER_OUTPUT_DIR="/tmp/pi4audio-demo/filters"
+export PI4AUDIO_SESSION_DIR="/tmp/pi4audio-demo/sessions"
+mkdir -p "$PI4AUDIO_FILTER_OUTPUT_DIR" "$PI4AUDIO_SESSION_DIR"
 
 cd "$REPO_DIR/src/web-ui"
 "$PYTHON" -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload &

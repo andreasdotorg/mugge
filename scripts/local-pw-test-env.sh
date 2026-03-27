@@ -168,6 +168,44 @@ context.properties = {
     support.dbus = false
 }
 EOF
+
+    # WirePlumber drop-ins: disable auto-linking and ACP channel renegotiation.
+    # Without these, WP's default policy renegotiates null-audio-sink nodes
+    # from 8ch (AUX0..7) to stereo (FL/FR), breaking GraphManager routing.
+    mkdir -p "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d"
+
+    # 90-no-auto-link: disable linking policies (matches production config).
+    # GM is the sole link manager (D-039).
+    cat > "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d/90-no-auto-link.conf" << 'EOF'
+wireplumber.profiles = {
+  main = {
+    policy.standard = disabled
+    policy.linking.standard = disabled
+    policy.linking.role-based = disabled
+  }
+}
+EOF
+
+    # 80-preserve-channels: prevent ACP from renegotiating channel counts
+    # on our null-audio-sink adapter nodes. Matches node names used in
+    # 00-headless-test.conf above.
+    cat > "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d/80-preserve-channels.conf" << 'EOF'
+monitor.audio-adapter.rules = [
+  {
+    matches = [
+      { node.name = "~alsa_output.usb-MiniDSP_USBStreamer*" }
+      { node.name = "~alsa_input.usb-MiniDSP_USBStreamer*" }
+      { node.name = "~alsa_input.usb-miniDSP_UMIK*" }
+    ]
+    actions = {
+      update-props = {
+        audio.adapt.follower = ""
+        channelmix.disable = true
+      }
+    }
+  }
+]
+EOF
 }
 
 # Start PipeWire + WirePlumber (WP activates nodes; GM manages links per D-039)
