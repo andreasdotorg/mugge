@@ -114,17 +114,21 @@ context.objects = [
             node.pause-on-idle = false
         }
     }
-    # USBStreamer capture replacement: 8ch null Audio/Source.
+    # USBStreamer capture replacement: 8ch null Audio/Duplex.
     # Production: alsa_input.usb-MiniDSP_USBStreamer-00.pro-input-0
     # GM uses Prefix("alsa_input.usb-MiniDSP_USBStreamer") match.
     # Ports: capture_AUX0..AUX7 (ch 1 vocal mic, ch 2 spare, etc.).
     # level-bridge-hw-in taps this node in capture mode.
+    # Uses Audio/Duplex because null-audio-sink cannot drive a graph as
+    # Audio/Source (PW "Start error"). Duplex nodes get both playback_*
+    # (input) and capture_* (output) ports and run as graph driver.
     { factory = adapter
         args = {
             factory.name     = support.null-audio-sink
             node.name        = "alsa_input.usb-MiniDSP_USBStreamer"
-            media.class      = Audio/Source
+            media.class      = Audio/Duplex
             object.linger    = true
+            node.driver      = true
             audio.channels   = 8
             audio.rate       = 48000
             audio.position   = [ AUX0 AUX1 AUX2 AUX3 AUX4 AUX5 AUX6 AUX7 ]
@@ -134,7 +138,7 @@ context.objects = [
             node.pause-on-idle = false
         }
     }
-    # UMIK-1 measurement microphone replacement: 1ch null Audio/Source.
+    # UMIK-1 measurement microphone replacement: 1ch null Audio/Duplex.
     # Production: alsa_input.usb-miniDSP_UMIK-1-00.mono-fallback
     # GM uses Prefix("alsa_input.usb-miniDSP_UMIK-1") match.
     # Port: capture_MONO (single mono channel).
@@ -143,8 +147,9 @@ context.objects = [
         args = {
             factory.name     = support.null-audio-sink
             node.name        = "alsa_input.usb-miniDSP_UMIK-1"
-            media.class      = Audio/Source
+            media.class      = Audio/Duplex
             object.linger    = true
+            node.driver      = true
             audio.channels   = 1
             audio.rate       = 48000
             audio.position   = [ MONO ]
@@ -154,7 +159,7 @@ context.objects = [
             node.pause-on-idle = false
         }
     }
-    # ADA8200 ADC capture replacement: 8ch null Audio/Source.
+    # ADA8200 ADC capture replacement: 8ch null Audio/Duplex.
     # Production: WirePlumber renames the ADA8200's ADAT input to "ada8200-in".
     # GM uses Exact("ada8200-in") match for level-bridge-hw-in links (8 links)
     # and live mode Reaper capture links.
@@ -163,8 +168,9 @@ context.objects = [
         args = {
             factory.name     = support.null-audio-sink
             node.name        = "ada8200-in"
-            media.class      = Audio/Source
+            media.class      = Audio/Duplex
             object.linger    = true
+            node.driver      = true
             audio.channels   = 8
             audio.rate       = 48000
             audio.position   = [ AUX0 AUX1 AUX2 AUX3 AUX4 AUX5 AUX6 AUX7 ]
