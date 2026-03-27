@@ -188,7 +188,7 @@ scripts/deploy/deploy.sh --pi ela@10.0.0.5       # deploy to a different host
 scripts/deploy/deploy.sh --reboot                # deploy and reboot
 ```
 
-The script runs 9 sections:
+The script runs 10 sections:
 
 1. Validate prerequisites (clean git, Pi reachable, source files exist)
 2. Deploy user-level configs (PipeWire, WirePlumber, labwc, systemd user units)
@@ -196,6 +196,7 @@ The script runs 9 sections:
 4. Deploy FIR coefficient files to `/etc/pi4audio/coeffs/`
 5. Reload systemd (system + user)
 6. Deploy scripts to `~/bin/` (test, stability, launch scripts)
+6b. Deploy Rust binaries to `~/bin/` (with `.bak` rollback + version check)
 7. Deploy web UI, measurement, and room correction code via rsync
 8. Verify (PipeWire config syntax, script syntax, libjack resolution)
 9. Optionally reboot
@@ -205,6 +206,88 @@ The script runs 9 sections:
 For quick code-only updates during development sessions, the CM may run
 `git pull` on the Pi instead of the full deploy script. This is only
 appropriate for changes to scripts and application code (not system configs).
+
+### 4.4 Rust Binary Deployment
+
+The project has 4 Rust crates that produce binaries deployed to `~/bin/`
+on the Pi:
+
+| Crate | Binary name | Build directory | Systemd service |
+|-------|------------|-----------------|-----------------|
+| `src/graph-manager/` | `pi4audio-graph-manager` | `src/graph-manager/target/release/` | `pi4audio-graph-manager.service` |
+| `src/pcm-bridge/` | `pcm-bridge` | `src/target/release/` | `pcm-bridge@monitor.service` |
+| `src/signal-gen/` | `pi4audio-signal-gen` | `src/target/release/` | `pi4audio-signal-gen.service` |
+| `src/level-bridge/` | `level-bridge` | `src/target/release/` | `level-bridge@monitor.service` |
+
+Note: `graph-manager` has its own `Cargo.toml` and builds independently.
+The other three are in a Cargo workspace (`src/Cargo.toml`), which is why
+their build output lands in `src/target/release/`.
+
+#### Building on the Pi (native ARM)
+
+The Pi has Rust installed via rustup (`~/.cargo/env`). Non-login SSH
+sessions do not source this automatically, so prefix build commands:
+
+```sh
+# Build graph-manager (separate crate, own Cargo.lock)
+ssh ela@192.168.178.185 "source ~/.cargo/env && cd ~/pi4-audio-workstation/src/graph-manager && cargo build --release"
+
+# Build workspace binaries (pcm-bridge, signal-gen, level-bridge)
+ssh ela@192.168.178.185 "source ~/.cargo/env && cd ~/pi4-audio-workstation/src && cargo build --release"
+```
+
+#### Deploying binaries
+
+**Option A: deploy.sh** — Section 6b of `deploy.sh` handles Rust binary
+deployment automatically. It looks for local release binaries, backs up
+existing binaries as `.bak`, copies the new ones, and runs `--version`
+verification. If no local release binaries exist, section 6b is skipped.
+
+**Option B: Manual deployment** — After building on the Pi:
+
+```sh
+# Stop services first (binaries may be read-only while running)
+ssh ela@192.168.178.185 "systemctl --user stop pi4audio-graph-manager.service pcm-bridge@monitor.service pi4audio-signal-gen.service level-bridge@monitor.service"
+
+# Back up + copy binaries
+ssh ela@192.168.178.185 "cd ~/pi4-audio-workstation && \
+  for bin in pi4audio-graph-manager; do \
+    test -f ~/bin/\$bin && cp ~/bin/\$bin ~/bin/\$bin.bak; \
+    chmod u+w ~/bin/\$bin 2>/dev/null; \
+    cp src/graph-manager/target/release/\$bin ~/bin/\$bin && chmod +x ~/bin/\$bin; \
+  done && \
+  for bin in pcm-bridge pi4audio-signal-gen level-bridge; do \
+    test -f ~/bin/\$bin && cp ~/bin/\$bin ~/bin/\$bin.bak; \
+    chmod u+w ~/bin/\$bin 2>/dev/null; \
+    cp src/target/release/\$bin ~/bin/\$bin && chmod +x ~/bin/\$bin; \
+  done"
+
+# Restart services
+ssh ela@192.168.178.185 "systemctl --user start pi4audio-graph-manager.service pcm-bridge@monitor.service pi4audio-signal-gen.service level-bridge@monitor.service"
+```
+
+**SAFETY:** Stopping PipeWire-connected services does NOT restart PipeWire
+itself (no USBStreamer transient risk). However, if restarting the graph
+manager, audio routing will be interrupted until it comes back up.
+
+#### Rollback
+
+If a newly deployed binary causes issues, restore from the `.bak` file:
+
+```sh
+ssh ela@192.168.178.185 "systemctl --user stop pi4audio-graph-manager.service && \
+  cp ~/bin/pi4audio-graph-manager.bak ~/bin/pi4audio-graph-manager && \
+  systemctl --user start pi4audio-graph-manager.service"
+```
+
+#### Version verification
+
+Three of the four binaries support `--version` (pcm-bridge, signal-gen,
+level-bridge). Graph-manager does not have a version flag yet.
+
+```sh
+ssh ela@192.168.178.185 "~/bin/pcm-bridge --version && ~/bin/pi4audio-signal-gen --version && ~/bin/level-bridge --version"
+```
 
 
 ## 5. Environment Variables
