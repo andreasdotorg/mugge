@@ -98,6 +98,19 @@ target_curve: flat
 filter_taps: 16384
 
 amp_notes: |
-  REQUIRES 6 AMP CHANNELS. Owner's 4ch Class D amp insufficient.
-  Use venue CVR DSP 3004 amps in bypass/flat mode, or hybrid setup
-  (own amp for subs, venue amps for mid+HF).
+  CVR DSP 3004: 3000W/ch @ 8 ohm touring amplifier (4 channels).
+  Per-channel gain for 120 dB SPL @ 3m (balanced):
+    Sub (ch 1-2): 42 dB — ~1122W into SAF185.00 (1600W rated, 30% margin)
+    Mid (ch 3-4): 38 dB — ~475W into N123 (500W rated, 5% margin)
+    HF (ch 5-6): 28 dB — ~45W into HF143N (80W rated, 44% margin)
+  CRITICAL: HF destruction threshold at 31 dB gain (80W into 8 ohm).
+  DO NOT exceed 28 dB on HF channels.
+  Set amp to FLAT/BYPASS (no DSP EQ/crossover/limiting).
+  Input: USBStreamer 0 dBu — well within 8.7 Vrms (+21 dBu) max input.
+  Per-channel gain set via Ethernet/LCD DSP interface.
+
+# PW filter-chain Mult starting values (session-only per C-009):
+#   Sub (AUX0-1):  Mult ~1.0  (full scale — amp gain does the work)
+#   Mid (AUX2-3):  Mult ~1.0
+#   HF  (AUX4-5):  Mult ~1.0
+#   HP  (AUX6-7):  Mult 0.001 (-60 dB)
