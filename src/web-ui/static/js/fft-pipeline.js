@@ -33,6 +33,8 @@
      * @param {number} [opts.dbMin=-60]
      * @param {number} [opts.dbMax=0]
      * @param {number} [opts.smoothing=0.3]
+     * @param {number} [opts.channelIndex=-1] -1 = L+R average (ch0+ch1),
+     *        0-3 = extract single channel (e.g. 3 for UMIK-1)
      */
     function create(opts) {
         opts = opts || {};
@@ -42,6 +44,8 @@
         var DB_MIN = opts.dbMin !== undefined ? opts.dbMin : -60;
         var DB_MAX = opts.dbMax !== undefined ? opts.dbMax : 0;
         var SMOOTHING = opts.smoothing !== undefined ? opts.smoothing : 0.3;
+        // Task #52: channel extraction mode (-1 = L+R average, 0-3 = single ch)
+        var channelIndex = opts.channelIndex !== undefined ? opts.channelIndex : -1;
 
         var V2_HEADER = 24;
 
@@ -68,6 +72,7 @@
         // Public state
         var dirty = false;
         var freqData = null; // Float32Array(FFT_SIZE/2 + 1) for dB data
+        var rmsLinear = 0;   // Broadband RMS of current FFT window (linear)
 
         // US-077: graph clock tracking for gap/discontinuity detection
         var prevGraphPos = 0;
@@ -144,6 +149,14 @@
 
         function processFFT() {
             if (!windowReady) return;
+
+            // Compute broadband RMS from raw PCM (before windowing).
+            var sumSq = 0;
+            for (var i = 0; i < FFT_SIZE; i++) {
+                var s = fftInputBuf[i];
+                sumSq += s * s;
+            }
+            rmsLinear = Math.sqrt(sumSq / FFT_SIZE);
 
             // Apply window to the frozen snapshot
             for (var i = 0; i < FFT_SIZE; i++) {
@@ -252,15 +265,23 @@
                 var frames = Math.floor(pcm.length / NUM_CHANNELS);
 
                 for (var i = 0; i < frames; i++) {
-                    var L = pcm[i * NUM_CHANNELS];
-                    var R = pcm[i * NUM_CHANNELS + 1];
-                    // Defense-in-depth: skip corrupted samples (e.g. header
-                    // bytes misinterpreted as float32 produce huge values).
-                    // Any real audio is well within [-2, 2] (0 dBFS = 1.0).
-                    if (L !== L || R !== R || L > 2 || L < -2 || R > 2 || R < -2) {
-                        continue;
+                    var mono;
+                    if (channelIndex >= 0) {
+                        // Task #52: Extract single channel (e.g. ch3 = UMIK-1)
+                        var s = pcm[i * NUM_CHANNELS + channelIndex];
+                        if (s !== s || s > 2 || s < -2) continue;
+                        mono = s;
+                    } else {
+                        var L = pcm[i * NUM_CHANNELS];
+                        var R = pcm[i * NUM_CHANNELS + 1];
+                        // Defense-in-depth: skip corrupted samples (e.g. header
+                        // bytes misinterpreted as float32 produce huge values).
+                        // Any real audio is well within [-2, 2] (0 dBFS = 1.0).
+                        if (L !== L || R !== R || L > 2 || L < -2 || R > 2 || R < -2) {
+                            continue;
+                        }
+                        mono = 0.5 * L + 0.5 * R;
                     }
-                    var mono = 0.5 * L + 0.5 * R;
                     accumBuf[accumPos] = mono;
                     accumPos++;
 
@@ -288,6 +309,12 @@
             prevGraphPos = 0;
         }
 
+        /** Task #52: Switch channel extraction mode and reset accumulator. */
+        function setChannelIndex(idx) {
+            channelIndex = idx;
+            reset();
+        }
+
         // -----------------------------------------------------------------
         // Public instance
         // -----------------------------------------------------------------
@@ -296,6 +323,7 @@
             processFFT: processFFT,
             feedPcmMessage: feedPcmMessage,
             reset: reset,
+            setChannelIndex: setChannelIndex,
             FFT_SIZE: FFT_SIZE,
             SAMPLE_RATE: SAMPLE_RATE,
             DB_MIN: DB_MIN,
@@ -310,6 +338,12 @@
         });
         Object.defineProperty(instance, "freqData", {
             get: function () { return freqData; }
+        });
+        Object.defineProperty(instance, "rmsLinear", {
+            get: function () { return rmsLinear; }
+        });
+        Object.defineProperty(instance, "channelIndex", {
+            get: function () { return channelIndex; }
         });
 
         return instance;

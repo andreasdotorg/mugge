@@ -48,6 +48,7 @@
     // T-088-7: Pre-measurement state saved before auto-defaults.
     var preMeasFftSize = null;    // FFT size before measurement mode
     var preMeasPeakHold = null;   // Peak hold state before measurement mode
+    var preMeasSource = null;     // Task #52: Source before measurement mode
 
     // -- DOM helpers --
 
@@ -582,6 +583,7 @@
         preMeasFftSize = SPEC_FFT_SIZE;
         var holdBtn = $("tt-peak-hold");
         preMeasPeakHold = holdBtn ? holdBtn.classList.contains("active") : false;
+        preMeasSource = specCurrentSource;
 
         // Auto-enable permanent peak hold.
         if (holdBtn && !holdBtn.classList.contains("active")) {
@@ -598,6 +600,14 @@
             specRecreatePipeline();
             var fftSelect = $("tt-fft-size");
             if (fftSelect) fftSelect.value = String(measFft);
+        }
+
+        // Task #52: Auto-select UMIK-1 source in measurement mode.
+        var srcSelect = $("tt-spectrum-source");
+        if (srcSelect && specCurrentSource !== "umik1") {
+            srcSelect.value = "umik1";
+            resetSplPeak();
+            if (specActive) specConnectPcm("umik1");
         }
     }
 
@@ -624,6 +634,17 @@
             }
         }
         preMeasPeakHold = null;
+
+        // Task #52: Restore pre-measurement source selection.
+        if (preMeasSource !== null && preMeasSource !== specCurrentSource) {
+            var srcSelect = $("tt-spectrum-source");
+            if (srcSelect) {
+                srcSelect.value = preMeasSource;
+                if (specActive) specConnectPcm(preMeasSource);
+            }
+        }
+        preMeasSource = null;
+        resetSplPeak();
     }
 
     // -- PLAY / STOP --
@@ -856,19 +877,78 @@
      * Subtracts the mic's dB deviation so the display shows true SPL.
      */
     function applyCalibration(freqData) {
-        // T-088-7: Only apply UMIK-1 calibration in measurement mode.
-        // In other modes, pcm-bridge carries app output (Mixxx/Reaper),
-        // not mic data — calibration correction would be wrong.
+        // Task #52: Apply UMIK-1 calibration when viewing ch3 (UMIK-1 data).
+        // Calibration is mic-specific — wrong for app output on ch0+ch1.
         if (!calEnabled || !calBinLUT || !freqData) return;
-        if (currentGmMode !== "measurement") return;
+        if (!specPipeline || specPipeline.channelIndex !== 3) return;
         var len = Math.min(freqData.length, calBinLUT.length);
         for (var i = 0; i < len; i++) {
             freqData[i] -= calBinLUT[i];
         }
     }
 
+    // -- SPL readout (Z-weighted broadband) --
+
+    var UMIK_SENSITIVITY = 121.4; // dBFS-to-dBSPL offset for UMIK-1
+    var splPeakDb = -Infinity;
+    var splUpdateCounter = 0;
+    // Throttle DOM writes to ~10 Hz (every 6th rAF at 60fps).
+    var SPL_UPDATE_INTERVAL = 6;
+
+    function updateSplReadout() {
+        // Task #52: Show SPL when viewing UMIK-1 channel (ch3), any mode.
+        var isUmik = specPipeline && specPipeline.channelIndex === 3;
+        var active = isUmik && specPcmConnected;
+        if (!active || !specPipeline || specPipeline.rmsLinear <= 0) {
+            setSplDisplay("--", "--", null);
+            setSplBanner(!active);
+            return;
+        }
+        var rms = specPipeline.rmsLinear;
+        var splZ = 20 * Math.log10(rms) + UMIK_SENSITIVITY;
+        // Track peak (no decay — reset manually or on mode change).
+        if (splZ > splPeakDb) splPeakDb = splZ;
+
+        // Throttle DOM updates.
+        splUpdateCounter++;
+        if (splUpdateCounter < SPL_UPDATE_INTERVAL) return;
+        splUpdateCounter = 0;
+
+        setSplDisplay(splZ.toFixed(1), splPeakDb.toFixed(1), splZ);
+        // Show uncalibrated banner when per-freq cal not loaded.
+        setSplBanner(!calEnabled);
+    }
+
+    function setSplDisplay(zVal, peakVal, splForColor) {
+        var elZ = $("tt-spl-a");
+        var elC = $("tt-spl-c");
+        var elPeak = $("tt-spl-peak");
+        if (elZ) {
+            elZ.textContent = zVal;
+            elZ.style.color = splForColor !== null
+                ? PiAudio.splColorRaw(splForColor) : "";
+        }
+        if (elC) elC.textContent = "--";
+        if (elPeak) {
+            elPeak.textContent = peakVal;
+            elPeak.style.color = (peakVal !== "--" && splForColor !== null)
+                ? PiAudio.splColorRaw(splPeakDb) : "";
+        }
+    }
+
+    function setSplBanner(show) {
+        var banner = $("tt-spl-uncal");
+        if (banner) banner.style.display = show ? "" : "none";
+    }
+
+    function resetSplPeak() {
+        splPeakDb = -Infinity;
+    }
+
     /** (Re)create the test tab FFT pipeline with current SPEC_FFT_SIZE. */
     function specRecreatePipeline() {
+        // Task #52: Preserve channel index across recreation.
+        var prevChIdx = specPipeline ? specPipeline.channelIndex : -1;
         if (specPipeline) specPipeline.reset();
         specPipeline = PiAudioFFT.create({
             fftSize: SPEC_FFT_SIZE,
@@ -876,7 +956,8 @@
             numChannels: 4,
             dbMin: SPEC_DB_MIN,
             dbMax: SPEC_DB_MAX,
-            smoothing: 0.3
+            smoothing: 0.3,
+            channelIndex: prevChIdx
         });
         specFreqData = null;
         if (specRenderer) specRenderer.setFFTSize(SPEC_FFT_SIZE);
@@ -897,6 +978,7 @@
         // T-088-6: Apply UMIK-1 calibration correction before display.
         applyCalibration(specFreqData);
         specRenderer.render(specFreqData, specPcmConnected);
+        updateSplReadout();
         specAnimFrame = requestAnimationFrame(specRender);
     }
 
@@ -906,8 +988,14 @@
         specDisconnectPcm();
         specCurrentSource = source;
 
+        // Task #52: "umik1" is a virtual source — use monitor WebSocket,
+        // extract ch3. Otherwise default to L+R average (ch -1).
+        var wsSource = source === "umik1" ? "monitor" : source;
+        var chIdx = source === "umik1" ? 3 : -1;
+        if (specPipeline) specPipeline.setChannelIndex(chIdx);
+
         var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-        var url = proto + "//" + window.location.host + "/ws/pcm/" + source;
+        var url = proto + "//" + window.location.host + "/ws/pcm/" + wsSource;
 
         try {
             specPcmWs = new WebSocket(url);
@@ -1001,11 +1089,9 @@
         } else {
             el.textContent = label + " (not available)";
             el.className = "c-danger";
-            // Show mic-specific overlay when UMIK-1 source is disconnected.
-            // US-088: In measurement mode, "monitor" carries UMIK-1 data.
+            // Task #52: Show mic overlay when UMIK-1 source is disconnected.
             if (overlay) {
-                var isMicSource = source === "umik1" || source === "capture-usb" ||
-                    (source === "monitor" && currentGmMode === "measurement");
+                var isMicSource = source === "umik1" || source === "capture-usb";
                 overlay.classList.toggle("hidden", !isMicSource);
             }
         }
@@ -1022,6 +1108,8 @@
 
         select.addEventListener("change", function () {
             var source = this.value;
+            // Task #52: Reset SPL peak on source switch (signal domain changes).
+            resetSplPeak();
             if (specActive) {
                 specConnectPcm(source);
             }
@@ -1045,13 +1133,9 @@
     }
 
     function getSourceLabel(name) {
-        // US-088: In measurement mode, the monitor source carries UMIK-1 data
-        // (GM rewires pcm-bridge to UMIK-1). Show a mode-aware label.
-        if (name === "monitor") {
-            return currentGmMode === "measurement"
-                ? "UMIK-1 (Measurement)"
-                : "Monitor (Dashboard)";
-        }
+        // Task #52: "umik1" is a virtual source (ch3 of monitor stream).
+        if (name === "umik1") return "UMIK-1 (Mic)";
+        if (name === "monitor") return "Monitor (L+R)";
         var staticLabels = {
             "capture-usb": "UMIK-1 (USB capture)",
             "capture-adat": "ADAT capture"
@@ -1081,8 +1165,21 @@
             select.appendChild(opt);
         }
 
+        // Task #52: Add virtual UMIK-1 channel view (ch3 of monitor source).
+        // Always available — pcm-bridge carries UMIK-1 on ch3 in all modes.
+        if (sources.indexOf("monitor") >= 0) {
+            var umikOpt = document.createElement("option");
+            umikOpt.value = "umik1";
+            umikOpt.textContent = getSourceLabel("umik1");
+            select.appendChild(umikOpt);
+        }
+
         // Restore previous selection if it still exists.
-        if (sources.indexOf(currentValue) >= 0) {
+        var allValues = [];
+        for (var j = 0; j < select.options.length; j++) {
+            allValues.push(select.options[j].value);
+        }
+        if (allValues.indexOf(currentValue) >= 0) {
             select.value = currentValue;
         }
     }
@@ -1132,6 +1229,12 @@
         var select = $("tt-spectrum-source");
         var source = select ? select.value : "monitor";
         specConnectPcm(source);
+
+        // SPL readout: set Z-weighted label (HTML has "SPL (A)" placeholder).
+        var splLabel = $("tt-spl-a");
+        if (splLabel && splLabel.previousElementSibling) {
+            splLabel.previousElementSibling.textContent = "SPL (Z)";
+        }
     }
 
     function destroySpectrum() {
