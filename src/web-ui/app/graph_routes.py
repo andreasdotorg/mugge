@@ -268,7 +268,12 @@ async def get_topology(request: Request):
 # -- Mock data for development ------------------------------------------------
 
 def _mock_topology() -> dict:
-    """Return a realistic mock topology for the Graph tab."""
+    """Return a realistic mock topology matching actual Pi PipeWire graph.
+
+    Includes all audio-relevant nodes visible in a real pw-dump: application
+    streams, filter-chain DSP, hardware sinks/sources, utility processes
+    (pcm-bridge, signal-gen), and MIDI devices (which the frontend skips).
+    """
     spa_topology = _read_spa_topology()
 
     convolver_node: dict[str, Any] = {
@@ -286,6 +291,7 @@ def _mock_topology() -> dict:
         "mode": "dj",
         "nodes": [
             convolver_node,
+            # -- App playback streams (sources) --
             {
                 "id": 55,
                 "name": "Mixxx",
@@ -294,14 +300,50 @@ def _mock_topology() -> dict:
                 "gm_managed": False,
                 "description": "Mixxx DJ",
             },
+            # -- Hardware sinks (outputs) --
             {
                 "id": 60,
                 "name": "alsa_output.usb-miniDSP_USBStreamer_B",
                 "media_class": "Audio/Sink",
                 "state": "running",
                 "gm_managed": True,
-                "description": "miniDSP USBStreamer B",
+                "description": "USBStreamer B",
             },
+            # -- Hardware sources (captures) --
+            {
+                "id": 70,
+                "name": "alsa_input.usb-miniDSP_USBStreamer_B",
+                "media_class": "Audio/Source",
+                "state": "running",
+                "gm_managed": True,
+                "description": "USBStreamer B Input",
+            },
+            {
+                "id": 71,
+                "name": "alsa_input.usb-miniDSP_UMIK-1",
+                "media_class": "Audio/Source",
+                "state": "running",
+                "gm_managed": True,
+                "description": "UMIK-1",
+            },
+            # -- Utility (app capture streams) --
+            {
+                "id": 80,
+                "name": "pi4audio-pcm-bridge",
+                "media_class": "Stream/Input/Audio",
+                "state": "running",
+                "gm_managed": True,
+                "description": "pcm-bridge",
+            },
+            {
+                "id": 81,
+                "name": "pi4audio-signal-gen",
+                "media_class": "Stream/Output/Audio",
+                "state": "idle",
+                "gm_managed": True,
+                "description": "Signal Generator",
+            },
+            # -- GraphManager (skipped by renderer) --
             {
                 "id": 65,
                 "name": "pi4audio-graphmanager",
@@ -310,8 +352,18 @@ def _mock_topology() -> dict:
                 "gm_managed": False,
                 "description": "GraphManager",
             },
+            # -- MIDI devices (skipped by renderer) --
+            {
+                "id": 90,
+                "name": "Midi-Bridge",
+                "media_class": "Midi/Bridge",
+                "state": "running",
+                "gm_managed": False,
+                "description": "MIDI Bridge",
+            },
         ],
         "links": [
+            # Mixxx FL -> convolver input_0 (left main)
             {
                 "id": 100,
                 "output_node": 55,
@@ -321,6 +373,7 @@ def _mock_topology() -> dict:
                 "state": "active",
                 "gm_managed": True,
             },
+            # Mixxx FR -> convolver input_1 (right main)
             {
                 "id": 101,
                 "output_node": 55,
@@ -330,7 +383,7 @@ def _mock_topology() -> dict:
                 "state": "active",
                 "gm_managed": True,
             },
-            # Sub mono sum: both FL+FR feed sub convolver inputs
+            # Sub mono sum: both FL+FR -> sub1 and sub2 convolver inputs
             {
                 "id": 102,
                 "output_node": 55,
@@ -367,6 +420,7 @@ def _mock_topology() -> dict:
                 "state": "active",
                 "gm_managed": True,
             },
+            # Convolver outputs -> USBStreamer playback
             {
                 "id": 110,
                 "output_node": 42,
@@ -400,6 +454,16 @@ def _mock_topology() -> dict:
                 "output_port": "output_3",
                 "input_node": 60,
                 "input_port": "playback_AUX3",
+                "state": "active",
+                "gm_managed": True,
+            },
+            # UMIK-1 capture -> pcm-bridge (level metering)
+            {
+                "id": 120,
+                "output_node": 71,
+                "output_port": "capture_AUX0",
+                "input_node": 80,
+                "input_port": "input_FL",
                 "state": "active",
                 "gm_managed": True,
             },

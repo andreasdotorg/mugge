@@ -42,11 +42,13 @@
     function initNodeColors() {
         var cv = PiAudio.cssVar;
         NODE_COLORS = {
-            source: cv("--group-app"),
-            dsp:    cv("--group-gain"),
-            gain:   cv("--group-gain"),
-            output: cv("--group-hw"),
-            other:  cv("--group-main")
+            source:  cv("--group-app"),
+            dsp:     cv("--group-dsp"),
+            gain:    cv("--group-gain"),
+            output:  cv("--group-hw"),
+            capture: cv("--gv-color-capture"),
+            utility: cv("--gv-color-utility"),
+            other:   cv("--group-main")
         };
     }
 
@@ -207,7 +209,7 @@
                     cx: 0, cy: py, r: PORT_R,
                     "data-port": opts.inputs[i]
                 }));
-                g.appendChild(svgText(14, py, opts.inputs[i], "gv-port-label gv-port-label--input"));
+                g.appendChild(svgText(14, py, shortPortName(opts.inputs[i]), "gv-port-label gv-port-label--input"));
                 inputPorts.push({ label: opts.inputs[i], cx: x, cy: y + py });
             }
         }
@@ -224,7 +226,7 @@
                     cx: w, cy: py2, r: PORT_R,
                     "data-port": opts.outputs[j]
                 }));
-                g.appendChild(svgText(w - 14, py2, opts.outputs[j], "gv-port-label gv-port-label--output"));
+                g.appendChild(svgText(w - 14, py2, shortPortName(opts.outputs[j]), "gv-port-label gv-port-label--output"));
                 outputPorts.push({ label: opts.outputs[j], cx: x + w, cy: y + py2 });
             }
         }
@@ -248,24 +250,50 @@
     }
 
     // -- Node classification --
+    // Classifies PipeWire nodes into rendering columns.
+    // Real pw-dump media.class values observed on Pi:
+    //   Stream/Output/Audio  — app playback (Mixxx, Reaper, signal-gen)
+    //   Stream/Input/Audio   — app capture (pcm-bridge, recording)
+    //   Audio/Sink           — hardware playback device or filter-chain sink
+    //   Audio/Source         — hardware capture device (UMIK-1, ADA8200 inputs)
+    //   Audio/Duplex         — duplex ALSA device (USBStreamer)
+    //   Midi/Bridge          — MIDI device (Hercules, APCmini, Nektar)
+    //   Video/Source         — camera (skip)
 
     function classifyNode(node) {
         var mc = (node.media_class || "").toLowerCase();
+        var name = (node.name || "").toLowerCase();
+
+        // Skip non-audio nodes
+        if (mc.indexOf("midi") !== -1) return "skip";
+        if (mc.indexOf("video") !== -1) return "skip";
+
+        // Filter-chain convolver = DSP (center column)
+        if (name === "pi4audio-convolver") return "dsp";
+
+        // GraphManager internal node — skip from graph
+        if (name.indexOf("graphmanager") !== -1) return "skip";
+
+        // App playback streams = sources (left column)
         if (mc.indexOf("stream/output") !== -1) return "source";
-        if (mc.indexOf("stream/input") !== -1) return "source";
-        if (mc === "audio/sink" && node.name === "pi4audio-convolver") return "dsp";
+
+        // App capture streams (pcm-bridge, signal-gen recorder) = utility
+        if (mc.indexOf("stream/input") !== -1) return "utility";
+
+        // Hardware capture devices (UMIK-1, ADA8200 inputs) = capture
+        if (mc === "audio/source") return "capture";
+
+        // Hardware playback sinks (USBStreamer output, HDMI, headphones)
         if (mc === "audio/sink") return "output";
-        if (mc === "audio/source") return "source";  // F-085 #2: capture devices on input side
-        // Fallback: skip GraphManager-like nodes that don't produce audio
-        if (node.name && node.name.indexOf("graphmanager") !== -1) return "skip";
+
+        // Duplex devices (USBStreamer appears as Audio/Duplex on some configs)
+        if (mc === "audio/duplex") return "output";
+
         return "other";
     }
 
     function colorKeyForClass(cls) {
-        if (cls === "source") return "source";
-        if (cls === "dsp") return "dsp";
-        if (cls === "output") return "output";
-        return "other";
+        return NODE_COLORS[cls] ? cls : "other";
     }
 
     // -- Internal topology expansion --
@@ -420,6 +448,40 @@
         return ports.length > 0 ? ports[0] : null;
     }
 
+    // -- Name shortening helpers --
+
+    function shortName(name) {
+        // Shorten long PipeWire node names for display:
+        //   "alsa_output.usb-miniDSP_USBStreamer_B..." -> "USBStreamer B"
+        //   "alsa_input.usb-miniDSP_UMIK-1..." -> "UMIK-1"
+        if (!name) return "?";
+        // Strip common ALSA prefixes
+        var s = name.replace(/^alsa_(output|input|playback|capture)\./i, "");
+        // Extract device name from USB path
+        var usbMatch = s.match(/usb-([^.]+)/);
+        if (usbMatch) {
+            s = usbMatch[1].replace(/_/g, " ");
+        }
+        // Trim trailing serial numbers / long suffixes
+        s = s.replace(/-\d{10,}.*$/, "");
+        return s || name;
+    }
+
+    function shortPortName(name) {
+        // Shorten port names for readability:
+        //   "playback_AUX0" -> "AUX0"
+        //   "capture_AUX0" -> "AUX0"
+        //   "monitor_FL" -> "mon FL"
+        //   "output_FL" -> "FL"
+        //   "input_0" -> "in 0"
+        if (!name) return "?";
+        if (name.indexOf("playback_") === 0) return name.substring(9);
+        if (name.indexOf("capture_") === 0) return name.substring(8);
+        if (name.indexOf("monitor_") === 0) return "mon " + name.substring(8);
+        if (name.indexOf("output_") === 0) return name.substring(7);
+        return name;
+    }
+
     // -- Port name extraction from node --
 
     function guessInputPorts(node) {
@@ -467,24 +529,31 @@
         modeLabel.id = "gv-mode-label";
         svgEl.appendChild(modeLabel);
 
-        // Classify nodes into columns
+        // Classify nodes into columns:
+        //   captures (hw input) | sources (app output) | DSP | outputs (hw sink) | utility (app input)
+        // Captures and utility share the left/right edges; sources and outputs
+        // are the primary signal-flow columns.
+        var captures = [];
         var sources = [];
         var dspNodes = [];
         var outputs = [];
+        var utilities = [];
         var nodeMap = {};  // id -> node data
 
         for (var n = 0; n < data.nodes.length; n++) {
             var node = data.nodes[n];
             nodeMap[node.id] = node;
             var cls = classifyNode(node);
-            if (cls === "source") sources.push(node);
+            if (cls === "capture") captures.push(node);
+            else if (cls === "source") sources.push(node);
             else if (cls === "dsp") dspNodes.push(node);
             else if (cls === "output") outputs.push(node);
+            else if (cls === "utility") utilities.push(node);
             // skip "skip" and "other" nodes
         }
 
-        // If no DSP nodes found but we have a convolver in nodes, it should be DSP
-        // (this handles edge cases where media_class might differ)
+        // Merge captures into sources column (same left column, captures above)
+        var leftNodes = captures.concat(sources);
 
         // Calculate column X positions
         var hasInternal = false;
@@ -501,44 +570,64 @@
             colX = [80, 320, 560];
         }
 
+        // Merge utilities into right column (outputs above, utilities below)
+        var rightNodes = outputs.concat(utilities);
+
         // F-085 #1: Pre-compute column heights to find a centerY that
         // prevents overlap. Fixed SVG_H/2 caused overlap with real data.
-        var srcTotalH = 0;
-        for (var sp = 0; sp < sources.length; sp++) {
-            var srcP = sources[sp];
-            var srcOutsP = collectPortNames(data.links, srcP.id, "output");
-            if (srcOutsP.length === 0) srcOutsP = ["out_0", "out_1"];
-            var srcHP = HEADER_H + PORT_PAD + Math.max(1, srcOutsP.length) * PORT_ROW_H + PORT_PAD;
-            srcTotalH += srcHP + (sp > 0 ? NODE_GAP : 0);
+        var leftTotalH = 0;
+        for (var sp = 0; sp < leftNodes.length; sp++) {
+            var srcP = leftNodes[sp];
+            var srcCls = classifyNode(srcP);
+            // Captures have inputs not outputs; sources have outputs
+            var srcPortsP = (srcCls === "capture")
+                ? collectPortNames(data.links, srcP.id, "input")
+                : collectPortNames(data.links, srcP.id, "output");
+            if (srcPortsP.length === 0) srcPortsP = ["port_0", "port_1"];
+            var srcHP = HEADER_H + PORT_PAD + Math.max(1, srcPortsP.length) * PORT_ROW_H + PORT_PAD;
+            leftTotalH += srcHP + (sp > 0 ? NODE_GAP : 0);
         }
-        var outTotalH = 0;
-        for (var op = 0; op < outputs.length; op++) {
-            var outP = outputs[op];
-            var outInsP = collectPortNames(data.links, outP.id, "input");
-            if (outInsP.length === 0) outInsP = ["in_0", "in_1"];
-            var outHP = HEADER_H + PORT_PAD + Math.max(1, outInsP.length) * PORT_ROW_H + PORT_PAD;
-            outTotalH += outHP + (op > 0 ? NODE_GAP : 0);
+        var rightTotalH = 0;
+        for (var op = 0; op < rightNodes.length; op++) {
+            var outP = rightNodes[op];
+            var outCls = classifyNode(outP);
+            // Outputs have inputs; utilities have outputs (they capture audio)
+            var outPortsP = (outCls === "utility")
+                ? collectPortNames(data.links, outP.id, "input")
+                : collectPortNames(data.links, outP.id, "input");
+            if (outPortsP.length === 0) outPortsP = ["port_0", "port_1"];
+            var outHP = HEADER_H + PORT_PAD + Math.max(1, outPortsP.length) * PORT_ROW_H + PORT_PAD;
+            rightTotalH += outHP + (op > 0 ? NODE_GAP : 0);
         }
         // Internal expansion: 4 convolver + 4 gain nodes stacked
         var dspTotalH = hasInternal
             ? 4 * (HEADER_H + PORT_PAD + PORT_ROW_H + PORT_PAD) + 3 * NODE_GAP
             : 120;
-        var maxColH = Math.max(srcTotalH, outTotalH, dspTotalH);
+        var maxColH = Math.max(leftTotalH, rightTotalH, dspTotalH);
         var centerY = Math.max(SVG_H / 2, maxColH / 2 + NODE_GAP);
 
-        // Build source nodes
+        // Build left-column nodes (captures + sources)
         var builtSources = [];
-        var srcY = centerY - srcTotalH / 2;
-        for (var s2 = 0; s2 < sources.length; s2++) {
-            var src2 = sources[s2];
-            var srcOuts2 = collectPortNames(data.links, src2.id, "output");
-            if (srcOuts2.length === 0) srcOuts2 = ["out_0", "out_1"];
+        var srcY = centerY - leftTotalH / 2;
+        for (var s2 = 0; s2 < leftNodes.length; s2++) {
+            var src2 = leftNodes[s2];
+            var src2Cls = classifyNode(src2);
+            var src2ColorKey = colorKeyForClass(src2Cls);
+            // Captures show input ports (they receive audio from hardware);
+            // sources show output ports (they send audio to the graph)
+            var srcIns2 = (src2Cls === "capture")
+                ? collectPortNames(data.links, src2.id, "input")
+                : [];
+            var srcOuts2 = (src2Cls === "capture")
+                ? collectPortNames(data.links, src2.id, "output")
+                : collectPortNames(data.links, src2.id, "output");
+            if (srcOuts2.length === 0 && srcIns2.length === 0) srcOuts2 = ["out_0", "out_1"];
             var built = buildNode({
                 id: "gv-node-" + src2.id,
-                label: src2.description || src2.name,
-                colorKey: "source",
+                label: src2.description || shortName(src2.name),
+                colorKey: src2ColorKey,
                 x: colX[0], y: srcY,
-                inputs: [],
+                inputs: srcIns2,
                 outputs: srcOuts2,
                 state: src2.state === "running" ? "active" : "absent",
                 gm_managed: src2.gm_managed
@@ -547,21 +636,26 @@
             srcY += built.height + NODE_GAP;
         }
 
-        // Build output nodes (outTotalH already computed above)
+        // Build right-column nodes (outputs + utilities)
         var builtOutputs = [];
-        var outY = centerY - outTotalH / 2;
+        var outY = centerY - rightTotalH / 2;
         var outColIdx = hasInternal ? 3 : 2;
-        for (var o2 = 0; o2 < outputs.length; o2++) {
-            var out2 = outputs[o2];
+        for (var o2 = 0; o2 < rightNodes.length; o2++) {
+            var out2 = rightNodes[o2];
+            var out2Cls = classifyNode(out2);
+            var out2ColorKey = colorKeyForClass(out2Cls);
             var outIns2 = collectPortNames(data.links, out2.id, "input");
-            if (outIns2.length === 0) outIns2 = ["in_0", "in_1"];
+            var outOuts2 = (out2Cls === "utility")
+                ? collectPortNames(data.links, out2.id, "output")
+                : [];
+            if (outIns2.length === 0 && outOuts2.length === 0) outIns2 = ["in_0", "in_1"];
             var builtOut = buildNode({
                 id: "gv-node-" + out2.id,
-                label: out2.description || out2.name,
-                colorKey: "output",
+                label: out2.description || shortName(out2.name),
+                colorKey: out2ColorKey,
                 x: colX[outColIdx], y: outY,
                 inputs: outIns2,
-                outputs: [],
+                outputs: outOuts2,
                 state: out2.state === "running" ? "active" : "absent",
                 gm_managed: out2.gm_managed
             });

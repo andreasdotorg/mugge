@@ -2650,6 +2650,8 @@ html, body {
     --gv-color-dsp: var(--group-dsp);
     --gv-color-hw: var(--group-hw);
     --gv-color-main: var(--group-main);
+    --gv-color-capture: #5c9ead;   /* teal — hw input devices (UMIK-1, ADA8200) */
+    --gv-color-utility: #8e99a4;   /* slate — utility processes (pcm-bridge) */
     --gv-node-bg: #1a1d23;
     --gv-border: #556;
     --gv-border-absent: #778;
