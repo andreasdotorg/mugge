@@ -194,14 +194,27 @@ EOF
     # from 8ch (AUX0..7) to stereo (FL/FR), breaking GraphManager routing.
     mkdir -p "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d"
 
-    # 90-no-auto-link: disable linking policies (matches production config).
-    # GM is the sole link manager (D-039).
+    # 90-no-auto-link: disable WP linking policies only (GM is sole link
+    # manager per D-039). Keep policy.node enabled — it configures adapter
+    # nodes' PortConfig to DSP mode, which creates ports. Without this,
+    # null-audio-sink adapter nodes stay in "suspended" state with zero
+    # ports and GraphManager cannot create any links.
+    #
+    # WP 0.5's main profile requires policy.standard, which is a virtual
+    # component that transitively requires policy.linking.standard. We
+    # cannot just disable the linking sub-components — that breaks the
+    # dependency chain. Instead, disable the entire policy.standard bundle
+    # and re-enable every sub-component EXCEPT the two linking ones.
     cat > "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d/90-no-auto-link.conf" << 'EOF'
 wireplumber.profiles = {
   main = {
     policy.standard = disabled
-    policy.linking.standard = disabled
-    policy.linking.role-based = disabled
+    policy.client.access = required
+    policy.device.profile = required
+    policy.device.routes = required
+    policy.default-nodes = required
+    policy.node = required
+    support.standard-event-source = required
   }
 }
 EOF
