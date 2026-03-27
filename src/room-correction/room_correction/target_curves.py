@@ -14,6 +14,7 @@ to the loudest band.
 import numpy as np
 
 from . import dsp_utils
+from .iso226 import loudness_compensation
 
 
 def flat_curve(freqs):
@@ -85,9 +86,41 @@ def pa_curve(freqs):
     return curve
 
 
-def get_target_curve(name, freqs):
+def apply_loudness_compensation(curve_db, freqs, target_phon, reference_phon=80.0):
     """
-    Get a target curve by name.
+    Apply ISO 226 equal-loudness compensation to a target curve.
+
+    Adjusts the target curve so that content mixed at ``reference_phon``
+    sounds perceptually balanced when played at ``target_phon``. At lower
+    playback levels, bass and treble are boosted; at higher levels, they
+    are reduced.
+
+    The compensation is magnitude-only, so it preserves minimum-phase
+    properties of the correction chain.
+
+    Parameters
+    ----------
+    curve_db : np.ndarray
+        Base target curve in dB (e.g., from harman_curve).
+    freqs : np.ndarray
+        Frequency array in Hz.
+    target_phon : float
+        Actual playback loudness level in phon (20-90).
+    reference_phon : float
+        Loudness level the content was mixed for (default 80 phon).
+
+    Returns
+    -------
+    np.ndarray
+        Compensated target curve in dB.
+    """
+    comp = loudness_compensation(target_phon, reference_phon, freqs)
+    return curve_db + comp
+
+
+def get_target_curve(name, freqs, target_phon=None, reference_phon=80.0):
+    """
+    Get a target curve by name, optionally with equal-loudness compensation.
 
     Parameters
     ----------
@@ -95,6 +128,12 @@ def get_target_curve(name, freqs):
         One of 'flat', 'harman', 'pa'.
     freqs : np.ndarray
         Frequency array in Hz.
+    target_phon : float or None
+        If provided, apply ISO 226 equal-loudness compensation for this
+        playback level (20-90 phon). None = no compensation.
+    reference_phon : float
+        Loudness level the content was mixed for (default 80 phon).
+        Only used when target_phon is not None.
 
     Returns
     -------
@@ -108,4 +147,7 @@ def get_target_curve(name, freqs):
     }
     if name not in curves:
         raise ValueError(f"Unknown target curve '{name}'. Available: {list(curves.keys())}")
-    return curves[name](freqs)
+    curve = curves[name](freqs)
+    if target_phon is not None:
+        curve = apply_loudness_compensation(curve, freqs, target_phon, reference_phon)
+    return curve
