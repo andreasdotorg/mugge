@@ -149,7 +149,7 @@
         var autoDbMin = dbMin;
         var autoDbMax = dbMax;
         var AUTO_ATTACK_MS = 200;
-        var AUTO_RELEASE_MS = 2000;
+        var AUTO_RELEASE_MS = 5000;  // F-133: slow release (~5s) for smooth decay
         var AUTO_MARGIN_DB = 6;
         var AUTO_FLOOR_DB = -120;
         var AUTO_MIN_RANGE_DB = 36;  // multiple of 12 for clean grid snap
