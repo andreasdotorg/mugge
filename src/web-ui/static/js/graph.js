@@ -62,8 +62,13 @@
     var panStartX = 0;
     var panStartY = 0;
     var curVB = { x: 0, y: 0, w: 860, h: 480 };
+    var fitVB = { w: 860, h: 480 };  // reference size from last fitViewBox
     var ZOOM_MIN = 0.3;
     var ZOOM_MAX = 3.0;
+
+    // Touch state for pinch-to-zoom
+    var lastTouchDist = 0;
+    var lastTouchMid = { x: 0, y: 0 };
 
     // -- SVG helpers --
 
@@ -859,6 +864,8 @@
                 curVB.y = Math.max(0, bbox.y - pad);
                 curVB.w = bbox.width + pad * 2;
                 curVB.h = bbox.height + pad * 2;
+                fitVB.w = curVB.w;
+                fitVB.h = curVB.h;
                 applyViewBox();
             }
         } catch (e) {
@@ -873,14 +880,19 @@
         return { x: curVB.x + sx * curVB.w, y: curVB.y + sy * curVB.h };
     }
 
+    function clampZoom(newW, newH) {
+        // Clamp zoom range relative to fitted content size
+        if (newW < fitVB.w * ZOOM_MIN || newH < fitVB.h * ZOOM_MIN) return false;
+        if (newW > fitVB.w * ZOOM_MAX || newH > fitVB.h * ZOOM_MAX) return false;
+        return true;
+    }
+
     function onWheel(evt) {
         evt.preventDefault();
         var factor = evt.deltaY > 0 ? 1.15 : 1 / 1.15;
         var newW = curVB.w * factor;
         var newH = curVB.h * factor;
-        // Clamp zoom range relative to initial fit
-        if (newW < 100 || newH < 60) return;
-        if (newW > 8000 || newH > 5000) return;
+        if (!clampZoom(newW, newH)) return;
         var pt = svgPointFromEvent(evt);
         curVB.x = pt.x - (pt.x - curVB.x) * factor;
         curVB.y = pt.y - (pt.y - curVB.y) * factor;
@@ -920,14 +932,89 @@
         fitViewBox();
     }
 
+    // -- Touch handlers for pinch-to-zoom + drag-to-pan --
+
+    function touchDist(t1, t2) {
+        var dx = t1.clientX - t2.clientX;
+        var dy = t1.clientY - t2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function touchMidSVG(t1, t2) {
+        var rect = svgEl.getBoundingClientRect();
+        var mx = ((t1.clientX + t2.clientX) / 2 - rect.left) / rect.width;
+        var my = ((t1.clientY + t2.clientY) / 2 - rect.top) / rect.height;
+        return { x: curVB.x + mx * curVB.w, y: curVB.y + my * curVB.h };
+    }
+
+    function onTouchStart(evt) {
+        if (evt.touches.length === 2) {
+            evt.preventDefault();
+            lastTouchDist = touchDist(evt.touches[0], evt.touches[1]);
+            lastTouchMid = touchMidSVG(evt.touches[0], evt.touches[1]);
+        } else if (evt.touches.length === 1) {
+            isPanning = true;
+            panStartX = evt.touches[0].clientX;
+            panStartY = evt.touches[0].clientY;
+        }
+    }
+
+    function onTouchMove(evt) {
+        if (evt.touches.length === 2) {
+            evt.preventDefault();
+            var dist = touchDist(evt.touches[0], evt.touches[1]);
+            if (lastTouchDist > 0) {
+                var factor = lastTouchDist / dist;
+                var newW = curVB.w * factor;
+                var newH = curVB.h * factor;
+                if (clampZoom(newW, newH)) {
+                    var mid = touchMidSVG(evt.touches[0], evt.touches[1]);
+                    curVB.x = mid.x - (mid.x - curVB.x) * factor;
+                    curVB.y = mid.y - (mid.y - curVB.y) * factor;
+                    curVB.w = newW;
+                    curVB.h = newH;
+                    applyViewBox();
+                }
+            }
+            lastTouchDist = dist;
+            lastTouchMid = touchMidSVG(evt.touches[0], evt.touches[1]);
+        } else if (evt.touches.length === 1 && isPanning) {
+            var rect = svgEl.getBoundingClientRect();
+            var dx = (evt.touches[0].clientX - panStartX) / rect.width * curVB.w;
+            var dy = (evt.touches[0].clientY - panStartY) / rect.height * curVB.h;
+            curVB.x -= dx;
+            curVB.y -= dy;
+            panStartX = evt.touches[0].clientX;
+            panStartY = evt.touches[0].clientY;
+            applyViewBox();
+        }
+    }
+
+    function onTouchEnd(evt) {
+        if (evt.touches.length < 2) {
+            lastTouchDist = 0;
+        }
+        if (evt.touches.length === 0) {
+            isPanning = false;
+        }
+    }
+
     function initPanZoom() {
         if (!svgEl) return;
         svgEl.style.cursor = "grab";
+        // Mouse events
         svgEl.addEventListener("wheel", onWheel, { passive: false });
         svgEl.addEventListener("mousedown", onPanStart);
         window.addEventListener("mousemove", onPanMove);
         window.addEventListener("mouseup", onPanEnd);
         svgEl.addEventListener("dblclick", onDblClick);
+        // Touch events (pinch zoom + drag pan)
+        svgEl.addEventListener("touchstart", onTouchStart, { passive: false });
+        svgEl.addEventListener("touchmove", onTouchMove, { passive: false });
+        svgEl.addEventListener("touchend", onTouchEnd);
+        // Fit button
+        var fitBtn = document.getElementById("gv-fit-btn");
+        if (fitBtn) fitBtn.addEventListener("click", fitViewBox);
     }
 
     // -- Topology polling --
