@@ -23,7 +23,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
-from .pw_helpers import pw_dump, find_gain_node, read_mult, set_mult, find_quantum, find_sample_rate, find_filter_info
+from .pw_helpers import pw_dump, find_convolver_node, find_gain_node, read_mult, set_mult, find_quantum, find_sample_rate, find_filter_info
 
 log = logging.getLogger(__name__)
 
@@ -32,8 +32,10 @@ MOCK_MODE = os.environ.get("PI_AUDIO_MOCK", "1") == "1"
 # D-009: hard cap — gain Mult must never exceed 1.0 (0 dB).
 MULT_HARD_CAP = 1.0
 
-# Gain node names must match PipeWire filter-chain config.
-GAIN_NODE_NAMES = [
+# Fallback gain node names for the default 2-way stereo topology.
+# Used in mock mode and as validator fallback.  On a real Pi, gain nodes
+# are discovered dynamically from pw-dump (supports N-way topologies).
+DEFAULT_GAIN_NODE_NAMES = [
     "gain_left_hp",   # AUX0 - Left main
     "gain_right_hp",  # AUX1 - Right main
     "gain_sub1_lp",   # AUX2 - Sub 1
@@ -46,6 +48,15 @@ GAIN_LABELS = {
     "gain_sub1_lp": "Sub 1 LP",
     "gain_sub2_lp": "Sub 2 LP",
 }
+
+
+def _gain_label(name: str) -> str:
+    """Human-readable label for a gain node.  Falls back to the node name."""
+    if name in GAIN_LABELS:
+        return GAIN_LABELS[name]
+    # Auto-generate label from node name: "gain_mid_l_bp" -> "Mid L BP"
+    suffix = name.removeprefix("gain_").replace("_", " ").upper()
+    return suffix
 
 # Allowed quantum values.
 VALID_QUANTUMS = {64, 128, 256, 512, 1024}  # F-141: removed 2048 (no use case, ALSA mismatch)
@@ -73,9 +84,9 @@ class GainRequest(BaseModel):
     @classmethod
     def validate_gains(cls, v: Dict[str, float]) -> Dict[str, float]:
         for name, mult in v.items():
-            if name not in GAIN_NODE_NAMES:
-                raise ValueError(f"Unknown gain node: {name!r}. "
-                                 f"Valid: {GAIN_NODE_NAMES}")
+            if not name.startswith("gain_"):
+                raise ValueError(f"Invalid gain node name: {name!r}. "
+                                 f"Must start with 'gain_'")
             if mult < 0.0:
                 raise ValueError(f"Mult must be >= 0.0, got {mult} for {name}")
             if mult > MULT_HARD_CAP:
@@ -111,8 +122,14 @@ async def get_config():
                      "detail": "Could not read PipeWire state"},
         )
 
+    # Discover gain nodes dynamically (supports N-way topologies)
+    convolver_id, gain_params = find_convolver_node(pw_data)
+    gain_names = sorted(k for k in gain_params if k.startswith("gain_"))
+    if not gain_names:
+        gain_names = list(DEFAULT_GAIN_NODE_NAMES)
+
     gains = {}
-    for name in GAIN_NODE_NAMES:
+    for name in gain_names:
         node_id, mult = find_gain_node(pw_data, name)
         # F-057: If pw-dump found the convolver but Mult is not in params,
         # fall back to pw-cli enum-params for a live reading.
@@ -122,7 +139,7 @@ async def get_config():
                 mult = live_mult
         gains[name] = {
             "mult": mult if mult is not None else 0.0,
-            "label": GAIN_LABELS.get(name, name),
+            "label": _gain_label(name),
             "found": mult is not None,
         }
 
@@ -235,10 +252,10 @@ async def set_quantum(body: QuantumRequest):
 def _mock_config_response() -> dict:
     """Build a mock config response for development."""
     gains = {}
-    for name in GAIN_NODE_NAMES:
+    for name in _mock_gains:
         gains[name] = {
-            "mult": _mock_gains.get(name, 0.001),
-            "label": GAIN_LABELS.get(name, name),
+            "mult": _mock_gains[name],
+            "label": _gain_label(name),
             "found": True,
         }
     return {

@@ -1,8 +1,9 @@
 """Audio mute/unmute via PipeWire filter-chain gain nodes (F-040).
 
-Controls the four ``linear`` builtin gain nodes in the production convolver
-filter-chain.  Mute sets all Mult values to 0.0; unmute restores the
-pre-mute values.
+Controls the ``linear`` builtin gain nodes in the production convolver
+filter-chain.  Gain nodes are discovered dynamically from pw-dump (supports
+2-way, 3-way, 4-way, and MEH topologies).  Mute sets all Mult values to
+0.0; unmute restores the pre-mute values.
 
 PipeWire subprocess helpers are in ``pw_helpers.py`` (shared with
 ``config_routes.py``).
@@ -10,17 +11,36 @@ PipeWire subprocess helpers are in ``pw_helpers.py`` (shared with
 
 import logging
 
-from .pw_helpers import pw_dump, find_gain_node, read_mult, set_mult
+from .pw_helpers import (
+    pw_dump, find_convolver_node, find_gain_node,
+    read_mult, set_mult,
+)
 
 log = logging.getLogger(__name__)
 
-# Gain node names must match PipeWire filter-chain config.
-GAIN_NODE_NAMES = [
+# Fallback gain node names for the default 2-way stereo topology.
+# Used only when pw-dump is unavailable or returns no gain nodes.
+DEFAULT_GAIN_NODE_NAMES = [
     "gain_left_hp",   # AUX0 - Left main
     "gain_right_hp",  # AUX1 - Right main
     "gain_sub1_lp",   # AUX2 - Sub 1
     "gain_sub2_lp",   # AUX3 - Sub 2
 ]
+
+
+def discover_gain_nodes(pw_data: list) -> list[str]:
+    """Discover gain node names from pw-dump data.
+
+    Scans the convolver node's params for all keys matching the ``gain_*``
+    naming convention (produced by the config generator).  Returns sorted
+    node names, or DEFAULT_GAIN_NODE_NAMES if none found.
+    """
+    _, gain_params = find_convolver_node(pw_data)
+    gain_names = [k for k in gain_params if k.startswith("gain_")]
+    if gain_names:
+        return sorted(gain_names)
+    log.warning("No gain_* nodes found in pw-dump; using 2-way defaults")
+    return list(DEFAULT_GAIN_NODE_NAMES)
 
 
 class AudioMuteManager:
@@ -33,6 +53,9 @@ class AudioMuteManager:
     async def mute(self) -> dict:
         """Set all gain nodes to Mult=0.0, storing pre-mute values.
 
+        Discovers gain nodes dynamically from pw-dump.  Supports any
+        number of channels (2-way through 4-way and MEH topologies).
+
         Returns a dict with ``ok`` bool and optional ``error`` string.
         """
         if self.is_muted:
@@ -42,12 +65,13 @@ class AudioMuteManager:
         if pw_data is None:
             return {"ok": False, "error": "pw-dump failed"}
 
+        gain_names = discover_gain_nodes(pw_data)
         pre_mute = {}
         errors = []
-        for name in GAIN_NODE_NAMES:
+        for name in gain_names:
             node_id, current_mult = find_gain_node(pw_data, name)
             if node_id is None:
-                errors.append(f"convolver node not found")
+                errors.append("convolver node not found")
                 break
             # F-057: If pw-dump didn't expose this gain param (None),
             # fall back to pw-cli enum-params.
