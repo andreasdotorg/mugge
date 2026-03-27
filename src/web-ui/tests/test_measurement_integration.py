@@ -526,21 +526,23 @@ class TestAbortNoSession:
 
 
 # ===========================================================================
-# Future endpoints return 501
+# Filter gen / deploy endpoints — no session
 # ===========================================================================
 
 class TestFutureEndpoints:
-    """Verify stub endpoints return 501 Not Implemented."""
+    """Verify endpoints handle missing session gracefully."""
 
-    def test_generate_filters_returns_501(self, client):
-        """POST /generate-filters returns 501."""
+    def test_generate_filters_no_session_returns_404(self, client):
+        """POST /generate-filters returns 404 when no session exists."""
         resp = client.post("/api/v1/measurement/generate-filters")
-        assert resp.status_code == 501
+        assert resp.status_code == 404
+        assert resp.json()["error"] == "not_found"
 
-    def test_deploy_returns_501(self, client):
-        """POST /deploy returns 501."""
+    def test_deploy_no_session_returns_404(self, client):
+        """POST /deploy returns 404 when no session exists."""
         resp = client.post("/api/v1/measurement/deploy")
-        assert resp.status_code == 501
+        assert resp.status_code == 404
+        assert resp.json()["error"] == "not_found"
 
     def test_list_sessions_returns_empty(self, client):
         """GET /sessions returns empty list."""

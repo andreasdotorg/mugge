@@ -332,24 +332,98 @@ async def reset_measurement_state(request: Request):
 
 
 @router.post("/generate-filters",
-             responses={501: {"model": ErrorResponse}})
+             responses={404: {"model": ErrorResponse},
+                        409: {"model": ErrorResponse}})
 async def generate_filters(request: Request):
-    """Trigger filter generation pipeline (future)."""
-    return JSONResponse(
-        status_code=501,
-        content={"error": "not_implemented",
-                 "detail": "Filter generation pipeline not yet integrated"},
-    )
+    """Trigger filter generation from completed measurement data.
+
+    Requires a session in COMPLETE or FILTER_GEN state.  Returns the cached
+    result on repeat calls if the pipeline already succeeded.
+    """
+    mode_manager = request.app.state.mode_manager
+    session = mode_manager.measurement_session or mode_manager.last_completed_session
+    if session is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "not_found",
+                     "detail": "No measurement session available"},
+        )
+
+    # Return cached result if filter gen already ran successfully.
+    cached = getattr(session, "_filter_gen_result", None)
+    if cached is not None:
+        return cached
+
+    # Only allow filter gen from appropriate states.
+    allowed = {MeasurementState.COMPLETE, MeasurementState.FILTER_GEN}
+    if session.state not in allowed:
+        return JSONResponse(
+            status_code=409,
+            content={"error": "invalid_state",
+                     "detail": f"Session is in {session.state.value} state; "
+                               f"expected one of {[s.value for s in allowed]}"},
+        )
+
+    try:
+        await session._run_filter_gen()
+        return session._filter_gen_result
+    except Exception as exc:
+        log.exception("Filter generation failed")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "filter_gen_failed", "detail": str(exc)},
+        )
 
 
-@router.post("/deploy", responses={501: {"model": ErrorResponse}})
+@router.post("/deploy",
+             responses={404: {"model": ErrorResponse},
+                        409: {"model": ErrorResponse}})
 async def deploy_filters(request: Request):
-    """Trigger filter deployment (future)."""
-    return JSONResponse(
-        status_code=501,
-        content={"error": "not_implemented",
-                 "detail": "Filter deployment not yet integrated"},
-    )
+    """Deploy generated filters to the Pi.
+
+    Requires filter generation to have completed successfully (i.e.
+    ``_filter_gen_result`` is set and ``all_pass`` is True).  Returns the
+    cached deploy result on repeat calls.
+    """
+    mode_manager = request.app.state.mode_manager
+    session = mode_manager.measurement_session or mode_manager.last_completed_session
+    if session is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "not_found",
+                     "detail": "No measurement session available"},
+        )
+
+    # Return cached result if deploy already ran successfully.
+    cached = getattr(session, "_deploy_result", None)
+    if cached is not None:
+        return cached
+
+    # Require successful filter generation first.
+    fg = getattr(session, "_filter_gen_result", None)
+    if fg is None:
+        return JSONResponse(
+            status_code=409,
+            content={"error": "not_ready",
+                     "detail": "Filter generation has not been run yet"},
+        )
+    if not fg.get("all_pass", False):
+        return JSONResponse(
+            status_code=409,
+            content={"error": "verification_failed",
+                     "detail": "Filter verification did not pass; "
+                               "deployment blocked"},
+        )
+
+    try:
+        await session._run_deploy()
+        return session._deploy_result
+    except Exception as exc:
+        log.exception("Filter deployment failed")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "deploy_failed", "detail": str(exc)},
+        )
 
 
 @router.get("/sessions")

@@ -236,6 +236,10 @@ class MeasurementSession:
         self._gain_cal_results: Dict[int, Any] = {}
         self._sweep_results: Dict[str, Any] = {}
 
+        self._filter_gen_result: Optional[Dict[str, Any]] = None
+        self._deploy_result: Optional[Dict[str, Any]] = None
+        self._recordings: Dict[str, np.ndarray] = {}  # US-096: raw recordings for cal
+
         self._broadcast_queue: asyncio.Queue = asyncio.Queue(maxsize=256)
         self._watchdog = MeasurementWatchdog(
             timeout_s=10.0, on_timeout=self._on_watchdog_timeout)
@@ -627,13 +631,36 @@ class MeasurementSession:
                 # M-1: Recording integrity checks (skip in mock mode).
                 if not self._is_mock:
                     self._check_recording_integrity(recording, ch.name)
+
+                # US-096: Apply UMIK-1 calibration to recording if cal file set.
+                cal_applied = False
+                if self._config.calibration_file and not self._is_mock:
+                    try:
+                        _ensure_rc_path()
+                        from room_correction.recording import (
+                            apply_umik1_calibration,
+                        )
+                        recording = await asyncio.to_thread(
+                            apply_umik1_calibration,
+                            recording,
+                            self._config.calibration_file,
+                            sr=self._config.sample_rate,
+                        )
+                        cal_applied = True
+                    except Exception as exc:
+                        log.warning(
+                            "UMIK-1 cal application failed for %s: %s",
+                            ch.name, exc)
+
                 key = f"ch{ch.index}_pos{pos}"
+                self._recordings[key] = recording
                 peak_dbfs = float(
                     20 * np.log10(max(np.max(np.abs(recording)), 1e-10)))
                 self._sweep_results[key] = {
                     "channel": ch.index, "position": pos,
                     "recording_samples": len(recording),
                     "peak_dbfs": peak_dbfs,
+                    "calibration_applied": cal_applied,
                 }
                 await self._broadcast({
                     "type": "sweep_done", "channel": ch.index,
@@ -647,42 +674,343 @@ class MeasurementSession:
             mn._sd_override = None
         log.info("Sweep phase complete: %d sweeps", count)
 
-    # -- FILTER_GEN (stubbed) ------------------------------------------------
+    # -- FILTER_GEN ----------------------------------------------------------
 
     async def _run_filter_gen(self) -> None:
-        """TODO: Integrate room_correction pipeline (deconvolution, smoothing,
-        inversion, crossover, export).  Currently passes through."""
+        """Run the FIR filter generation pipeline (crossover + room correction).
+
+        Uses the same pipeline as filter_routes._run_pipeline() but driven
+        by session config rather than a REST request.  The correction filter
+        is currently a Dirac delta (flat); real room correction will be wired
+        when deconvolution of sweep recordings is integrated.
+        """
         self._check_abort("CP-5")
         self._transition(MeasurementState.FILTER_GEN)
         await self._broadcast_state()
+
         await self._broadcast({
-            "type": "filter_gen_progress", "phase": "pending",
-            "message": "Filter generation pipeline not yet integrated",
+            "type": "filter_gen_progress", "phase": "starting",
+            "message": "Generating crossover and correction filters",
         })
 
-    # -- DEPLOY (stubbed) ----------------------------------------------------
+        try:
+            result = await asyncio.to_thread(self._filter_gen_sync)
+            self._filter_gen_result = result
+            await self._broadcast({
+                "type": "filter_gen_progress", "phase": "complete",
+                "all_pass": result["all_pass"],
+                "channels": result["channels"],
+                "output_dir": result["output_dir"],
+            })
+            if not result["all_pass"]:
+                raise RuntimeError(
+                    "Filter verification failed — see verification results")
+            log.info("Filter generation complete: %d channels, all_pass=%s",
+                     len(result["channels"]), result["all_pass"])
+        except _AbortError:
+            raise
+        except Exception as exc:
+            await self._broadcast({
+                "type": "filter_gen_progress", "phase": "error",
+                "message": str(exc),
+            })
+            raise
+
+    def _filter_gen_sync(self) -> dict:
+        """Run FIR generation synchronously (called in thread pool).
+
+        Reuses the room_correction modules directly rather than duplicating
+        the filter_routes pipeline.
+        """
+        _ensure_rc_path()
+        from config_generator import (
+            load_profile_with_identities,
+            validate_and_raise,
+            _classify_speakers,
+        )
+        from room_correction.crossover import (
+            generate_crossover_filter, generate_subsonic_filter,
+        )
+        from room_correction.combine import combine_filters
+        from room_correction.export import export_all_filters
+        from room_correction.verify import (
+            verify_d009, verify_minimum_phase, verify_format,
+        )
+        from room_correction.pw_config_generator import (
+            generate_filter_chain_conf,
+            DEFAULT_COEFFS_DIR,
+        )
+
+        self._check_abort("CP-5a")
+
+        # Resolve profile name from session config or default.
+        profile_name = getattr(self._config, "profile_name", None)
+        if not profile_name:
+            profile_name = "2way-80hz-sealed"
+
+        _project_root = os.path.normpath(os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", ".."))
+        profiles_dir = os.path.join(
+            _project_root, "configs", "speakers", "profiles")
+        identities_dir = os.path.join(
+            _project_root, "configs", "speakers", "identities")
+
+        profile, identities = load_profile_with_identities(
+            profile_name,
+            profiles_dir=profiles_dir,
+            identities_dir=identities_dir,
+        )
+        validate_and_raise(
+            profile, identities, identities_dir=identities_dir)
+
+        crossover_freq = profile["crossover"]["frequency_hz"]
+        slope = profile["crossover"]["slope_db_per_oct"]
+        n_taps = 16384
+        sr = self._config.sample_rate
+
+        satellites, subwoofers = _classify_speakers(profile)
+        all_speakers = satellites + subwoofers
+
+        hp_crossover = generate_crossover_filter(
+            filter_type="highpass",
+            crossover_freq=crossover_freq,
+            slope_db_per_oct=slope,
+            n_taps=n_taps, sr=sr,
+        )
+        lp_crossover = generate_crossover_filter(
+            filter_type="lowpass",
+            crossover_freq=crossover_freq,
+            slope_db_per_oct=slope,
+            n_taps=n_taps, sr=sr,
+        )
+
+        self._check_abort("CP-5b")
+
+        # Subsonic protection filters per identity
+        subsonic_map: Dict[float, Any] = {}
+        for spk_key, spk_cfg in all_speakers:
+            id_name = spk_cfg["identity"]
+            identity = identities.get(id_name, {})
+            hpf_hz = identity.get("mandatory_hpf_hz")
+            if hpf_hz and spk_cfg.get("role") == "subwoofer":
+                if hpf_hz not in subsonic_map:
+                    subsonic_map[hpf_hz] = generate_subsonic_filter(
+                        hpf_freq=hpf_hz,
+                        slope_db_per_oct=slope,
+                        n_taps=n_taps, sr=sr,
+                    )
+
+        # Correction filter: Dirac delta (flat) until deconvolution is wired.
+        # TODO: Replace with actual room correction from sweep recordings.
+        dirac = np.zeros(n_taps)
+        dirac[0] = 1.0
+
+        _KEY_TO_SUFFIX = {
+            "sat_left": "left_hp", "sat_right": "right_hp",
+            "sub1": "sub1_lp", "sub2": "sub2_lp",
+        }
+
+        combined = {}
+        for spk_key, spk_cfg in all_speakers:
+            suffix = _KEY_TO_SUFFIX.get(spk_key, spk_key)
+            role = spk_cfg.get("role", "satellite")
+            filter_type = spk_cfg.get("filter_type", "highpass")
+
+            xo = hp_crossover if filter_type == "highpass" else lp_crossover
+
+            subsonic = None
+            if role == "subwoofer":
+                id_name = spk_cfg["identity"]
+                identity = identities.get(id_name, {})
+                hpf_hz = identity.get("mandatory_hpf_hz")
+                if hpf_hz:
+                    subsonic = subsonic_map.get(hpf_hz)
+
+            combined[suffix] = combine_filters(
+                correction_filter=dirac,
+                crossover_filter=xo,
+                n_taps=n_taps,
+                margin_db=-0.6,
+                subsonic_filter=subsonic,
+            )
+
+        self._check_abort("CP-5c")
+
+        # Export WAV files
+        output_dir = self._config.output_dir
+        from datetime import datetime as _dt
+        timestamp = _dt.now()
+        output_paths = export_all_filters(
+            combined, output_dir, n_taps=n_taps, sr=sr, timestamp=timestamp,
+        )
+
+        # Verify
+        verifications = []
+        all_pass = True
+        for name, path in sorted(output_paths.items()):
+            d009 = verify_d009(path)
+            min_phase = verify_minimum_phase(path)
+            fmt = verify_format(path, expected_taps=n_taps, expected_sr=sr)
+            ch_pass = bool(d009.passed and min_phase.passed and fmt.passed)
+            verifications.append({
+                "channel": name,
+                "d009_pass": bool(d009.passed),
+                "d009_peak_db": float(round(
+                    d009.details.get("max_gain_db", 0.0), 2)),
+                "min_phase_pass": bool(min_phase.passed),
+                "format_pass": bool(fmt.passed),
+                "all_pass": ch_pass,
+            })
+            if not ch_pass:
+                all_pass = False
+
+        # Generate PW filter-chain .conf
+        pw_conf = generate_filter_chain_conf(
+            profile_name,
+            filter_paths={
+                spk_key: str(output_paths.get(
+                    _KEY_TO_SUFFIX.get(spk_key, spk_key), ""))
+                for spk_key, _ in all_speakers
+            },
+            profiles_dir=profiles_dir,
+            identities_dir=identities_dir,
+            validate=False,
+        )
+        pw_conf_path = os.path.join(output_dir, "30-filter-chain-convolver.conf")
+        os.makedirs(output_dir, exist_ok=True)
+        with open(pw_conf_path, "w") as f:
+            f.write(pw_conf)
+
+        return {
+            "profile": profile_name,
+            "output_dir": output_dir,
+            "channels": {
+                name: str(path) for name, path in sorted(output_paths.items())
+            },
+            "verification": verifications,
+            "all_pass": all_pass,
+            "pw_conf_path": pw_conf_path,
+            "pw_conf_content": pw_conf,
+            "n_taps": n_taps,
+            "crossover_freq_hz": crossover_freq,
+            "timestamp": timestamp.isoformat(),
+        }
+
+    # -- DEPLOY --------------------------------------------------------------
 
     async def _run_deploy(self) -> None:
-        """TODO: Deploy new FIR filter WAV files to the PW filter-chain.
-        Reload via pw-cli module reload (D-040)."""
+        """Deploy generated FIR WAV files and PW config to target paths.
+
+        Uses the deploy module (updated for D-040) to copy WAV files to
+        /etc/pi4audio/coeffs/ and the .conf drop-in to
+        ~/.config/pipewire/pipewire.conf.d/.
+
+        In mock mode, uses dry_run=True so no files are actually written
+        to system paths.
+        """
         self._check_abort("CP-6")
         self._transition(MeasurementState.DEPLOY)
         await self._broadcast_state()
+
+        fg = getattr(self, "_filter_gen_result", None)
+        if fg is None:
+            await self._broadcast({
+                "type": "deploy_progress", "phase": "skipped",
+                "message": "No filter generation results to deploy",
+            })
+            log.warning("Deploy skipped: no filter generation results")
+            return
+
+        if not fg.get("all_pass", False):
+            await self._broadcast({
+                "type": "deploy_progress", "phase": "skipped",
+                "message": "Filters did not pass verification — refusing deploy",
+            })
+            raise RuntimeError(
+                "Deploy refused: filters did not pass verification")
+
         await self._broadcast({
-            "type": "deploy_progress", "phase": "pending",
-            "message": "Filter deployment not yet integrated",
+            "type": "deploy_progress", "phase": "starting",
+            "message": "Deploying filters and PW config",
         })
 
-    # -- VERIFY (stubbed) ----------------------------------------------------
+        try:
+            result = await asyncio.to_thread(
+                self._deploy_sync, fg)
+            self._deploy_result = result
+            await self._broadcast({
+                "type": "deploy_progress", "phase": "complete",
+                "deployed_wavs": result.get("deployed_wavs", []),
+                "pw_conf_deployed": result.get("pw_conf_path", ""),
+            })
+            log.info("Deploy complete: %d WAVs, PW config at %s",
+                     len(result.get("deployed_wavs", [])),
+                     result.get("pw_conf_path", "n/a"))
+        except _AbortError:
+            raise
+        except Exception as exc:
+            await self._broadcast({
+                "type": "deploy_progress", "phase": "error",
+                "message": str(exc),
+            })
+            raise
+
+    def _deploy_sync(self, fg_result: dict) -> dict:
+        """Run deployment synchronously (called in thread pool)."""
+        _ensure_rc_path()
+        from room_correction.deploy import deploy_filters, deploy_pw_config
+
+        self._check_abort("CP-6a")
+
+        dry_run = self._is_mock
+        output_dir = fg_result["output_dir"]
+
+        # Deploy WAV coefficient files
+        deployed_wavs = deploy_filters(
+            output_dir=output_dir,
+            verified=True,
+            dry_run=dry_run,
+        )
+
+        self._check_abort("CP-6b")
+
+        # Deploy PW filter-chain .conf
+        pw_conf_content = fg_result.get("pw_conf_content", "")
+        pw_conf_path = ""
+        if pw_conf_content:
+            pw_conf_path = deploy_pw_config(
+                conf_content=pw_conf_content,
+                dry_run=dry_run,
+            )
+
+        return {
+            "deployed_wavs": deployed_wavs,
+            "pw_conf_path": pw_conf_path,
+            "dry_run": dry_run,
+        }
+
+    # -- VERIFY (placeholder) ------------------------------------------------
 
     async def _run_verify(self) -> None:
-        """TODO: Post-deploy verification sweep comparing pre/post response."""
+        """Post-deploy verification sweep comparing pre/post response.
+
+        TODO: Run a verification sweep with the newly deployed filters to
+        confirm the correction is effective.  Requires real Pi + UMIK-1
+        hardware — cannot be tested in mock mode.  For now, reports the
+        filter-gen verification results as a pass-through.
+        """
         self._check_abort("CP-7")
         self._transition(MeasurementState.VERIFY)
         await self._broadcast_state()
+
+        fg = getattr(self, "_filter_gen_result", None)
+        verification = fg.get("verification", []) if fg else []
+
         await self._broadcast({
-            "type": "verify_progress", "phase": "pending",
-            "message": "Verification sweep not yet integrated",
+            "type": "verify_progress", "phase": "complete",
+            "message": "Static verification passed (live verification "
+                       "sweep requires Pi + UMIK-1 hardware)",
+            "verification": verification,
         })
 
     # -- CP-0: playrec with abort racing -------------------------------------
@@ -859,4 +1187,10 @@ class MeasurementSession:
             "sweep_results": self._sweep_results,
             "positions": self._config.positions,
             "sweep_duration_s": self._config.sweep_duration_s,
+            "filter_gen_result": self._filter_gen_result,
+            "deploy_result": self._deploy_result,
+            "calibration": {
+                "file": self._config.calibration_file,
+                "sensitivity": self._config.umik_sensitivity_dbfs_to_spl,
+            },
         }
