@@ -1,10 +1,21 @@
 """Tests for ThermalMonitor (T-092-2)."""
 
 import asyncio
+import concurrent.futures
 import math
 import time
 import unittest
 from unittest.mock import MagicMock
+
+
+def _run(coro):
+    """Run async coroutine in sync test context (works with pytest-playwright's loop)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 import sys
 import os
@@ -310,7 +321,7 @@ class TestThermalMonitorAsync(unittest.TestCase):
             await monitor.stop()
             return monitor.snapshot()
 
-        snap = asyncio.new_event_loop().run_until_complete(run())
+        snap = _run(run())
         # Channel should have accumulated some power
         self.assertGreater(snap[0]["power_watts"], 0)
 
@@ -325,7 +336,7 @@ class TestThermalMonitorAsync(unittest.TestCase):
             await asyncio.sleep(0.1)
             await monitor.stop()
 
-        asyncio.new_event_loop().run_until_complete(run())
+        _run(run())
 
 
 class TestThermalRoutes(unittest.TestCase):

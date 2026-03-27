@@ -1,10 +1,21 @@
 """Tests for ThermalGainLimiter (T-092-3)."""
 
 import asyncio
+import concurrent.futures
 import math
 import time
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
+
+
+def _run(coro):
+    """Run async coroutine in sync test context (works with pytest-playwright's loop)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 import sys
 import os
@@ -384,9 +395,7 @@ class TestEnforceTick(unittest.TestCase):
         ]
         limiter = self._make_limiter_with_thermal(thermal)
 
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(limiter._enforce_tick(time.monotonic()))
-        loop.close()
+        _run(limiter._enforce_tick(time.monotonic()))
 
         self.assertFalse(limiter._channels["sat_left"].is_limiting)
         self.assertFalse(limiter._channels["sub1"].is_limiting)
@@ -399,9 +408,7 @@ class TestEnforceTick(unittest.TestCase):
         ]
         limiter = self._make_limiter_with_thermal(thermal)
 
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(limiter._enforce_tick(time.monotonic()))
-        loop.close()
+        _run(limiter._enforce_tick(time.monotonic()))
 
         self.assertTrue(limiter._channels["sat_left"].is_limiting)
         self.assertFalse(limiter._channels["sub1"].is_limiting)
@@ -415,9 +422,7 @@ class TestEnforceTick(unittest.TestCase):
         ]
         limiter = self._make_limiter_with_thermal(thermal)
 
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(limiter._enforce_tick(time.monotonic()))
-        loop.close()
+        _run(limiter._enforce_tick(time.monotonic()))
 
         ch = limiter._channels["sat_left"]
         self.assertTrue(ch.is_limiting)
@@ -430,9 +435,8 @@ class TestEnforceTick(unittest.TestCase):
             {"name": "sub1", "headroom_db": 20.0, "pct_of_ceiling": 1.0},
         ])
 
-        loop = asyncio.new_event_loop()
         # First tick: engage
-        loop.run_until_complete(limiter._enforce_tick(time.monotonic()))
+        _run(limiter._enforce_tick(time.monotonic()))
         self.assertTrue(limiter._channels["sat_left"].is_limiting)
 
         # Update thermal to show recovery
@@ -440,9 +444,8 @@ class TestEnforceTick(unittest.TestCase):
             {"name": "sat_left", "headroom_db": 10.0, "pct_of_ceiling": 10.0},
             {"name": "sub1", "headroom_db": 20.0, "pct_of_ceiling": 1.0},
         ]
-        loop.run_until_complete(limiter._enforce_tick(time.monotonic()))
+        _run(limiter._enforce_tick(time.monotonic()))
         self.assertFalse(limiter._channels["sat_left"].is_limiting)
-        loop.close()
 
     def test_tick_audit_engage_disengage(self):
         """Engage/disengage transitions are logged in audit trail."""
@@ -451,15 +454,13 @@ class TestEnforceTick(unittest.TestCase):
             {"name": "sub1", "headroom_db": 20.0, "pct_of_ceiling": 1.0},
         ])
 
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(limiter._enforce_tick(time.monotonic()))
+        _run(limiter._enforce_tick(time.monotonic()))
 
         limiter._monitor.snapshot.return_value = [
             {"name": "sat_left", "headroom_db": 10.0, "pct_of_ceiling": 10.0},
             {"name": "sub1", "headroom_db": 20.0, "pct_of_ceiling": 1.0},
         ]
-        loop.run_until_complete(limiter._enforce_tick(time.monotonic()))
-        loop.close()
+        _run(limiter._enforce_tick(time.monotonic()))
 
         entries = limiter.audit_log()
         actions = [e["action"] for e in entries]
@@ -480,9 +481,7 @@ class TestEnforceTick(unittest.TestCase):
             expires_at=time.monotonic() - 10,
         )
 
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(limiter._enforce_tick(time.monotonic()))
-        loop.close()
+        _run(limiter._enforce_tick(time.monotonic()))
 
         self.assertNotIn("sat_left", limiter._overrides)
         entries = limiter.audit_log()
@@ -504,7 +503,7 @@ class TestAsyncLifecycle(unittest.TestCase):
             await asyncio.sleep(0.2)
             await limiter.stop()
 
-        asyncio.new_event_loop().run_until_complete(run())
+        _run(run())
 
 
 # -- API routes ----------------------------------------------------------------
