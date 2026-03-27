@@ -181,15 +181,27 @@ def psychoacoustic_smooth(magnitudes, freqs):
     smooth_3 = fractional_octave_smooth(magnitudes, freqs, 3)
     smooth_2 = fractional_octave_smooth(magnitudes, freqs, 2)
 
+    # Smooth crossfade between regions using raised cosine tapers.
+    # Transition bands: 150-250 Hz (1/6 -> 1/3) and 750-1250 Hz (1/3 -> 1/2).
     result = np.copy(magnitudes)
     for i in range(len(freqs)):
         f = freqs[i]
         if f <= 0:
             continue
-        if f < 200:
+        if f < 150:
             result[i] = smooth_6[i]
-        elif f < 1000:
+        elif f < 250:
+            # Raised cosine crossfade from 1/6 to 1/3 octave
+            t = (f - 150.0) / 100.0  # 0..1
+            w = 0.5 * (1.0 - np.cos(np.pi * t))
+            result[i] = smooth_6[i] * (1.0 - w) + smooth_3[i] * w
+        elif f < 750:
             result[i] = smooth_3[i]
+        elif f < 1250:
+            # Raised cosine crossfade from 1/3 to 1/2 octave
+            t = (f - 750.0) / 500.0  # 0..1
+            w = 0.5 * (1.0 - np.cos(np.pi * t))
+            result[i] = smooth_3[i] * (1.0 - w) + smooth_2[i] * w
         else:
             result[i] = smooth_2[i]
     return result
@@ -255,7 +267,9 @@ def frequency_dependent_window(ir, sr=SAMPLE_RATE, transition_freq=500.0):
     ir = np.asarray(ir, dtype=np.float64)
     n = len(ir)
 
-    # Design crossover to split bands
+    # Design crossover to split bands using complementary Butterworth filters.
+    # The 4th-order Butterworth provides a smooth spectral crossfade between
+    # the LF and HF bands (no hard transition in the frequency domain).
     nyq = sr / 2.0
     wn = min(transition_freq / nyq, 0.99)
     sos_lp = scipy.signal.butter(4, wn, btype='low', output='sos')
@@ -269,6 +283,16 @@ def frequency_dependent_window(ir, sr=SAMPLE_RATE, transition_freq=500.0):
     # Short window for high frequencies (truncate early to avoid reflections)
     short_len = min(n, int(sr * 0.005))  # ~5ms window
     short_win = np.zeros(n)
-    short_win[:short_len] = fade_window(short_len, 0, short_len // 4)
+    if short_len > 0:
+        short_win[:short_len] = fade_window(short_len, 0, short_len // 4)
+
+    # Apply a raised cosine taper to the time-domain crossfade between
+    # long and short windows. This smooths the transition in the overlap
+    # region where both bands contribute (around transition_freq).
+    taper_len = min(n, int(sr * 0.002))  # ~2ms taper
+    if taper_len > 0 and short_len > 0 and short_len + taper_len <= n:
+        taper = 0.5 * (1.0 + np.cos(np.pi * np.arange(taper_len) / taper_len))
+        short_win[short_len:short_len + taper_len] = np.maximum(
+            short_win[short_len:short_len + taper_len], taper * long_win[short_len:short_len + taper_len])
 
     return ir_low * long_win + ir_high * short_win

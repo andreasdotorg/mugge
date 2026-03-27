@@ -81,8 +81,29 @@ def spatial_average(
         for fft_result in fft_results
     ])
 
-    # Average magnitudes in dB domain
-    mean_db = np.mean(magnitudes_db, axis=0)
+    # IQR-based outlier rejection per frequency bin.
+    # With >= 4 measurements, exclude bins outside 1.5*IQR from the median.
+    # With fewer measurements, skip rejection (too few samples for IQR).
+    n_meas = magnitudes_db.shape[0]
+    if n_meas >= 4:
+        q1 = np.percentile(magnitudes_db, 25, axis=0)
+        q3 = np.percentile(magnitudes_db, 75, axis=0)
+        iqr = q3 - q1
+        lower = q1 - 1.5 * iqr
+        upper = q3 + 1.5 * iqr
+        # Mask outliers, then compute mean of remaining values per bin
+        masked = np.where(
+            (magnitudes_db >= lower) & (magnitudes_db <= upper),
+            magnitudes_db, np.nan,
+        )
+        with np.errstate(all='ignore'):
+            mean_db = np.nanmean(masked, axis=0)
+        # Fall back to full mean for bins where all values were rejected
+        all_nan = np.isnan(mean_db)
+        if np.any(all_nan):
+            mean_db[all_nan] = np.mean(magnitudes_db[:, all_nan], axis=0)
+    else:
+        mean_db = np.mean(magnitudes_db, axis=0)
 
     # Convert back to linear magnitude
     mean_mag = 10.0 ** (mean_db / 20.0)
