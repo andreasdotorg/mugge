@@ -7231,6 +7231,71 @@ All preceding stories (US-089 through US-103) can be developed and tested locall
 
 ---
 
+## US-105: Nix-Based Deployment Pipeline
+
+**As** the owner,
+**I want** a reproducible, Nix-based deployment pipeline that builds and deploys all components to the Pi from a single command,
+**so that** deployments are deterministic, rollback-capable, and independent of ad-hoc build environments.
+
+**Status:** draft (2026-03-27)
+**Depends on:** F-157 (deploy.sh rewrite — immediate fix), F-158 (Rust binary deploy — immediate fix)
+**Priority:** P1 (blocks reliable gig operations long-term)
+**Tier:** 14
+**Related:** F-094 (rsync --delete wiped TLS certs), F-082 (deployment dir mismatch)
+
+### Background
+
+The immediate deployment gaps are addressed by two defect fixes:
+- **F-157:** Mechanical rewrite of `deploy.sh` — remove CamillaDSP references, add
+  PW filter-chain config/service/speaker/hardware config deployment, update `--mode`
+  to set PW quantum. No design decisions needed.
+- **F-158:** Document the rsync-based Rust binary procedure that worked in #53, add
+  Rust binary section to deploy.sh with rsync + version check.
+
+This story provides the **proper solution** that replaces the manual rsync approach
+with a reproducible Nix-based path. It also adds service lifecycle management with
+USBStreamer safety gates, deploy logging, and rollback capability.
+
+### Acceptance Criteria
+
+**AC1: Nix cross-compilation for ARM binaries**
+- [ ] `nix build .#graph-manager` / `.#pcm-bridge` / `.#signal-gen` / `.#level-bridge` produces aarch64 binaries from dev machine
+- [ ] Cross-compilation target added to `flake.nix` (aarch64-linux)
+- [ ] Build time documented (baseline for CI)
+
+**AC2: Nix-based deployment workflow**
+- [ ] `nix copy --to ssh://ela@192.168.178.185` workflow documented and tested
+- [ ] Alternative: deploy script uses `nix build` outputs for rsync-based deploy
+- [ ] Binary version verification after deploy (`--version` check)
+- [ ] Rollback: previous binaries preserved as `.bak` before overwrite
+
+**AC3: Service lifecycle management**
+- [ ] deploy.sh handles service restart sequence with safety warnings
+- [ ] Explicit USBStreamer transient warning before PipeWire-affecting restarts
+- [ ] User confirmation gate before service restarts (interactive) or `--yes` flag for CI
+- [ ] Restart order: stop services -> deploy -> start services
+- [ ] Verification: service status check after restart
+
+**AC4: Room correction module deployment**
+- [ ] `src/room-correction/` deployed as standalone Python module to Pi
+- [ ] Separate from web-ui deployment (it's a dependency, not part of web-ui)
+- [ ] Include driver database sync option (`--include-drivers` flag, default off due to size)
+
+**AC5: Dry-run, logging, and verification**
+- [ ] `--dry-run` shows complete manifest of what would be deployed
+- [ ] Post-deploy verification: PW config syntax, service health, binary versions
+- [ ] Deploy log written to `~/deploy-log/<timestamp>.log` on Pi
+
+### Definition of Done
+
+- [ ] AC1-AC3 implemented and tested
+- [ ] AC4-AC5 documented or implemented
+- [ ] Architect review of Nix cross-compilation design
+- [ ] QE: deploy + rollback tested on Pi
+- [ ] `docs/guide/howto/development.md` updated with Nix build/deploy procedure
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the

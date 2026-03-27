@@ -5472,6 +5472,89 @@ types before JSON serialization. Common patterns: `bool(np_bool)`,
 
 ---
 
+## F-157: deploy.sh stale — still references CamillaDSP, missing D-040 configs and Rust binaries (OPEN)
+
+**Filed:** 2026-03-27
+**Severity:** High (deployment blocker — worker had to improvise during #53 deployment)
+**Status:** OPEN
+**Affects:** All Pi deployments, operational reliability
+**Found by:** Architect assessment during #53 deployment review
+**Scope:** Immediate defect fix (mechanical rewrite). Prerequisite to US-105 (Nix-Based Deployment Pipeline).
+
+### Description
+
+`scripts/deploy/deploy.sh` still references the pre-D-040 CamillaDSP
+architecture. Specific gaps (PO audit):
+
+1. **Section 3 (SYSTEM_CONFIGS)** deploys CamillaDSP configs to
+   `/etc/camilladsp/production/` — CamillaDSP service is stopped (D-040)
+2. **Section 4** sets "active CamillaDSP config" via symlink — obsolete
+3. **Section 8a** runs `camilladsp -c` syntax check — obsolete
+4. **Missing:** Does not deploy `configs/pipewire/30-filter-chain-convolver.conf`
+   (the D-040 convolver config)
+5. **Missing:** Does not deploy PW filter-chain systemd services:
+   `pi4audio-graph-manager.service`, `pcm-bridge@.service`,
+   `pi4audio-signal-gen.service`
+6. **Missing:** Does not deploy Rust binaries (`graph-manager`, `pcm-bridge`,
+   `signal-gen`)
+7. **Missing:** Does not deploy `src/room-correction/` Python module (partially
+   present via web-ui rsync but not as standalone module)
+8. **Missing:** Does not deploy speaker/hardware config directories
+   (`configs/speakers/`, `configs/hardware/`)
+9. **Missing:** Does not deploy driver database (`configs/drivers/`)
+10. **`--mode dj|live`** flag references CamillaDSP active config, should
+    reference PW quantum setting
+
+### Impact
+
+- Every deployment requires manual improvisation
+- No repeatable, auditable deployment process for Rust services
+- Risk of deploying mismatched binary/config versions
+- The deploy script gives a false sense of automation — it runs to completion
+  but deploys stale CamillaDSP configs and skips the actual DSP engine
+
+### Fix
+
+Full rewrite of deploy.sh under US-105.
+
+**Related:** F-158, F-094 (rsync --delete wiped TLS certs), F-082 (deployment
+dir mismatch)
+
+---
+
+## F-158: No repeatable Rust binary deployment process (OPEN)
+
+**Filed:** 2026-03-27
+**Severity:** High (deployment blocker)
+**Status:** OPEN
+**Affects:** graph-manager, pcm-bridge, signal-gen, level-bridge deployment
+**Found by:** Architect assessment during #53 deployment review
+**Scope:** Immediate defect fix — document the rsync procedure from #53, add Rust binary section to deploy.sh. Prerequisite to US-105 (Nix-Based Deployment Pipeline).
+
+### Description
+
+The project has 4 Rust crates (`src/graph-manager/`, `src/pcm-bridge/`,
+`src/signal-gen/`, `src/level-bridge/`) and the Nix flake defines packages for
+them, but:
+
+1. No documented procedure to build ARM binaries for Pi from the dev machine
+   (cross-compilation)
+2. No documented procedure to build on the Pi itself (cargo install)
+3. Today's deployment (task #53) required improvisation — worker tried raw
+   `cargo build` (not installed), fell back to manual `rsync` of pre-built
+   binaries
+4. The `nix build` path exists in the flake but no deploy workflow connects
+   flake outputs to the Pi
+5. No versioning or rollback for deployed binaries
+
+### Fix
+
+Addressed by US-105 AC2 (Rust binary build + deploy).
+
+**Related:** F-157 (stale deploy.sh), F-094, F-082
+
+---
+
 ## S-001/S-002: Directory traversal via user-controlled paths in filter API (RESOLVED)
 
 **Severity:** High
