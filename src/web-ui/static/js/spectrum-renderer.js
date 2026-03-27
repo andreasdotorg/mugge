@@ -165,6 +165,11 @@
         var peakEnvelope = null;
         var peakTimes = null;
 
+        // Target curve overlay state
+        var targetCurveFreqs = null;  // Float64Array of frequencies (Hz)
+        var targetCurveDb = null;     // Float64Array of dB values
+        var targetCurveLabel = null;  // String label for legend
+
         // Canvas state
         var canvas = null;
         var ctx = null;
@@ -595,6 +600,47 @@
             ctx.fillText(noSignalText, cssW / 2, cssH / 2);
         }
 
+        // ---- Target curve overlay ----
+
+        function drawTargetCurve() {
+            if (!targetCurveFreqs || !targetCurveDb || !ctx) return;
+            var len = targetCurveFreqs.length;
+            if (len < 2) return;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.setLineDash([6, 4]);
+            ctx.strokeStyle = "rgba(100, 220, 255, 0.7)";
+            ctx.lineWidth = 1.5;
+
+            var started = false;
+            for (var i = 0; i < len; i++) {
+                var freq = targetCurveFreqs[i];
+                var norm = freqToNorm(freq);
+                if (norm < 0 || norm > 1) continue;
+                var x = plotX + norm * plotW;
+                var y = dbToY(targetCurveDb[i]);
+                if (!started) {
+                    ctx.moveTo(x, y);
+                    started = true;
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Legend label (top-right of plot area)
+            if (targetCurveLabel) {
+                ctx.font = "9px monospace";
+                ctx.fillStyle = "rgba(100, 220, 255, 0.8)";
+                ctx.textAlign = "right";
+                ctx.textBaseline = "top";
+                ctx.fillText(targetCurveLabel, plotX + plotW - 4, plotY + 4);
+            }
+            ctx.restore();
+        }
+
         // ---- Auto-range ----
 
         function updateAutoRange(freqData, now) {
@@ -682,6 +728,9 @@
             } else {
                 drawNoSignalMessage();
             }
+
+            // Target curve overlay (drawn on top of spectrum or background)
+            drawTargetCurve();
         }
 
         function invalidate() {
@@ -728,6 +777,28 @@
             lastAutoTime = 0;
         }
 
+        /**
+         * Set a target curve to overlay on the spectrum.
+         * @param {number[]} freqs - Frequency points in Hz.
+         * @param {number[]} db - dB values at each frequency.
+         * @param {string} [label] - Legend label (e.g. "Harman 85 phon").
+         */
+        function setTargetCurve(freqs, db, label) {
+            if (!freqs || !db || freqs.length < 2) {
+                clearTargetCurve();
+                return;
+            }
+            targetCurveFreqs = freqs;
+            targetCurveDb = db;
+            targetCurveLabel = label || null;
+        }
+
+        function clearTargetCurve() {
+            targetCurveFreqs = null;
+            targetCurveDb = null;
+            targetCurveLabel = null;
+        }
+
         return {
             init: init,
             render: render,
@@ -736,6 +807,8 @@
             resetPeaks: resetPeaks,
             setPeakPermanent: setPeakPermanent,
             resetAutoRange: resetAutoRange,
+            setTargetCurve: setTargetCurve,
+            clearTargetCurve: clearTargetCurve,
             freqToNorm: freqToNorm,
             // Expose for external consumers (e.g. spectrogram overlays)
             get plotX() { return plotX; },

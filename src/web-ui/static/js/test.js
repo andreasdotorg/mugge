@@ -1341,6 +1341,87 @@
             specAnimFrame = null;
         }
         specDisconnectPcm();
+        // Clear target curve overlay (state preserved via targetCurveActive flag).
+        if (specRenderer) specRenderer.clearTargetCurve();
+    }
+
+    // -- Target curve overlay (AC10 / US-094) --
+
+    var targetCurveActive = false;
+    var targetCurveFetchXHR = null;
+
+    function initTargetCurve() {
+        var toggleBtn = $("tt-target-toggle");
+        var curveSelect = $("tt-target-curve");
+        var phonInput = $("tt-target-phon");
+        if (!toggleBtn) return;
+
+        toggleBtn.addEventListener("click", function () {
+            targetCurveActive = !targetCurveActive;
+            toggleBtn.classList.toggle("active", targetCurveActive);
+            if (targetCurveActive) {
+                fetchTargetCurve();
+            } else {
+                if (specRenderer) specRenderer.clearTargetCurve();
+            }
+        });
+
+        if (curveSelect) {
+            curveSelect.addEventListener("change", function () {
+                if (targetCurveActive) fetchTargetCurve();
+            });
+        }
+
+        if (phonInput) {
+            var phonDebounce = null;
+            phonInput.addEventListener("input", function () {
+                clearTimeout(phonDebounce);
+                phonDebounce = setTimeout(function () {
+                    if (targetCurveActive) fetchTargetCurve();
+                }, 300);
+            });
+        }
+    }
+
+    function fetchTargetCurve() {
+        var curveSelect = $("tt-target-curve");
+        var phonInput = $("tt-target-phon");
+        var curve = curveSelect ? curveSelect.value : "harman";
+        var phonVal = phonInput ? phonInput.value.trim() : "";
+
+        var url = "/api/v1/filters/target-curve?curve=" + encodeURIComponent(curve);
+        if (phonVal && !isNaN(parseFloat(phonVal))) {
+            url += "&phon=" + encodeURIComponent(phonVal);
+        }
+
+        // Abort any in-flight request.
+        if (targetCurveFetchXHR) {
+            targetCurveFetchXHR.abort();
+        }
+
+        var xhr = new XMLHttpRequest();
+        targetCurveFetchXHR = xhr;
+        xhr.open("GET", url, true);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            targetCurveFetchXHR = null;
+            if (xhr.status !== 200) {
+                console.warn("[test] Target curve fetch failed:", xhr.status);
+                return;
+            }
+            try {
+                var data = JSON.parse(xhr.responseText);
+                if (!data.freqs || !data.db) return;
+                var label = curve.charAt(0).toUpperCase() + curve.slice(1);
+                if (phonVal) label += " " + phonVal + " phon";
+                if (specRenderer) {
+                    specRenderer.setTargetCurve(data.freqs, data.db, label);
+                }
+            } catch (e) {
+                console.warn("[test] Failed to parse target curve:", e);
+            }
+        };
+        xhr.send();
     }
 
     // -- Peak hold controls (T-088-4) --
@@ -1381,6 +1462,7 @@
             initEmergencyStop();
             initSourceSelector();
             initPeakHold();
+            initTargetCurve();
             initTappableReadout("tt-freq-value", "tt-freq-slider", {
                 min: 20, max: 20000, step: 1,
                 getValue: function () { return currentFreq; },
@@ -1412,6 +1494,8 @@
             connectWs();
             fetchCurrentMode(); // F-144: query GM mode for play guard
             initSpectrum();
+            // Re-apply target curve overlay if it was active before hide.
+            if (targetCurveActive && specRenderer) fetchTargetCurve();
         },
 
         onHide: function () {

@@ -974,3 +974,66 @@ class TestCleanupEndpoint:
             json={"confirmed": True, "keep": 0},
         )
         assert resp.status_code == 422
+
+
+class TestTargetCurveEndpoint:
+    """Tests for GET /api/v1/filters/target-curve (AC10 / US-094)."""
+
+    @pytest.fixture
+    def client(self):
+        return TestClient(app)
+
+    def test_default_returns_harman(self, client):
+        resp = client.get("/api/v1/filters/target-curve")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["curve"] == "harman"
+        assert data["phon"] is None
+        assert len(data["freqs"]) == 256
+        assert len(data["db"]) == 256
+        # Harman has bass shelf, so low-freq dB should be > 0
+        assert data["db"][0] > 0
+
+    def test_flat_curve(self, client):
+        resp = client.get("/api/v1/filters/target-curve?curve=flat")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["curve"] == "flat"
+        # Flat should be all zeros
+        assert all(d == 0.0 for d in data["db"])
+
+    def test_pa_curve(self, client):
+        resp = client.get("/api/v1/filters/target-curve?curve=pa")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["curve"] == "pa"
+        assert len(data["freqs"]) > 0
+
+    def test_with_phon(self, client):
+        resp = client.get("/api/v1/filters/target-curve?curve=harman&phon=85")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["phon"] == 85.0
+        assert data["reference"] == 80.0
+
+    def test_phon_changes_curve(self, client):
+        """Phon=40 should differ from no-phon (ISO 226 compensation)."""
+        resp_none = client.get("/api/v1/filters/target-curve?curve=harman")
+        resp_40 = client.get("/api/v1/filters/target-curve?curve=harman&phon=40")
+        assert resp_none.status_code == 200
+        assert resp_40.status_code == 200
+        db_none = resp_none.json()["db"]
+        db_40 = resp_40.json()["db"]
+        assert db_none != db_40, "Phon compensation should change the curve"
+
+    def test_custom_n_points(self, client):
+        resp = client.get("/api/v1/filters/target-curve?n_points=64")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["freqs"]) == 64
+        assert len(data["db"]) == 64
+
+    def test_invalid_curve_name(self, client):
+        resp = client.get("/api/v1/filters/target-curve?curve=nonexistent")
+        assert resp.status_code == 400
+        assert "invalid_parameter" in resp.json()["error"]
