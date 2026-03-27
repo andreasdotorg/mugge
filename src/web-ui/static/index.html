@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pi Audio Workstation</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-    <link rel="stylesheet" href="/static/style.css?v=42">
+    <link rel="stylesheet" href="/static/style.css?v=43">
 </head>
 <body>
 
@@ -393,6 +393,25 @@
                         </select>
                     </div>
                     <div class="fir-form-row">
+                        <label class="fir-form-label">Mode</label>
+                        <div class="fir-mode-toggle">
+                            <label class="fir-mode-option">
+                                <input type="radio" name="fir-mode" value="crossover_only" checked>
+                                <span>Crossover Only</span>
+                            </label>
+                            <label class="fir-mode-option">
+                                <input type="radio" name="fir-mode" value="crossover_plus_correction">
+                                <span>Crossover + Correction</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="fir-form-row hidden" id="fir-session-row">
+                        <label class="fir-form-label" for="fir-session-dir">Session</label>
+                        <select class="fir-form-select" id="fir-session-dir">
+                            <option value="">No sessions available</option>
+                        </select>
+                    </div>
+                    <div class="fir-form-row">
                         <label class="fir-form-label" for="fir-n-taps">Filter Taps</label>
                         <select class="fir-form-select" id="fir-n-taps">
                             <option value="4096">4096 (light)</option>
@@ -410,15 +429,25 @@
                         </select>
                     </div>
                     <div class="fir-form-row">
-                        <label class="fir-form-label" for="fir-target-phon">Loudness (phon)</label>
+                        <label class="fir-form-label">Target SPL</label>
+                        <div class="fir-phon-presets" id="fir-phon-presets">
+                            <button class="fir-phon-btn" data-phon="70" type="button">Quiet 70</button>
+                            <button class="fir-phon-btn active" data-phon="85" type="button">Normal 85</button>
+                            <button class="fir-phon-btn" data-phon="95" type="button">Loud 95</button>
+                            <button class="fir-phon-btn" data-phon="105" type="button">Full 105</button>
+                        </div>
+                    </div>
+                    <div class="fir-form-row fir-advanced-row">
+                        <label class="fir-form-label" for="fir-target-phon">Custom phon</label>
                         <input class="fir-form-input" id="fir-target-phon" type="number"
-                               min="20" max="90" step="1" placeholder="optional (e.g. 70)">
+                               min="20" max="120" step="1" placeholder="override preset" value="85">
                     </div>
                 </div>
                 <div class="fir-actions">
                     <button class="cfg-apply-btn fir-generate-btn" id="fir-generate-btn" type="button">
                         GENERATE FILTERS
                     </button>
+                    <span class="fir-spinner hidden" id="fir-spinner"></span>
                 </div>
                 <div class="fir-status" id="fir-status"></div>
             </div>
@@ -1044,7 +1073,7 @@
 <script src="/static/js/config.js?v=40"></script>
 <script src="/static/js/speaker-config.js?v=40"></script>
 <script src="/static/js/protection.js?v=40"></script>
-<script src="/static/js/filter-gen.js?v=40"></script>
+<script src="/static/js/filter-gen.js?v=41"></script>
 <script src="/static/js/measure.js?v=40"></script>
 <script src="/static/js/rc-wizard.js?v=40"></script>
 <script src="/static/js/test.js?v=40"></script>

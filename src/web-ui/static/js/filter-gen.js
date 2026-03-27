@@ -5,7 +5,8 @@
  * via POST /api/v1/filters/generate and display results including
  * D-009 verification status per channel.
  *
- * Integrates into the Config tab below gain/quantum controls.
+ * Supports mode selection: crossover-only or crossover+correction,
+ * SPL preset buttons (ISO 226), and N-way topology channel display.
  */
 
 "use strict";
@@ -14,6 +15,7 @@
 
     var API_GENERATE = "/api/v1/filters/generate";
     var API_PROFILES = "/api/v1/filters/profiles";
+    var API_SESSIONS = "/api/v1/measurement/sessions";
 
     // -- Helpers --
 
@@ -30,6 +32,18 @@
         if (!el) return;
         el.textContent = text;
         el.className = cls ? ("fir-status " + cls) : "fir-status";
+    }
+
+    function setSpinner(visible) {
+        var sp = $("fir-spinner");
+        if (sp) sp.classList.toggle("hidden", !visible);
+    }
+
+    function formatCrossover(val) {
+        if (Array.isArray(val)) {
+            return val.join(" / ") + " Hz";
+        }
+        return val + " Hz";
     }
 
     // -- Profile loading --
@@ -62,6 +76,83 @@
             });
     }
 
+    // -- Session loading --
+
+    function loadSessions() {
+        var sel = $("fir-session-dir");
+        if (!sel) return;
+
+        fetch(API_SESSIONS)
+            .then(function (r) {
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                var sessions = data.sessions || [];
+                sel.innerHTML = "";
+                if (sessions.length === 0) {
+                    sel.innerHTML = '<option value="">No sessions available</option>';
+                    return;
+                }
+                for (var i = 0; i < sessions.length; i++) {
+                    var opt = document.createElement("option");
+                    opt.value = sessions[i].path || sessions[i];
+                    opt.textContent = sessions[i].name || sessions[i];
+                    sel.appendChild(opt);
+                }
+            })
+            .catch(function () {
+                sel.innerHTML = '<option value="">Failed to load sessions</option>';
+            });
+    }
+
+    // -- Mode toggle --
+
+    function getSelectedMode() {
+        var radios = document.querySelectorAll('input[name="fir-mode"]');
+        for (var i = 0; i < radios.length; i++) {
+            if (radios[i].checked) return radios[i].value;
+        }
+        return "crossover_only";
+    }
+
+    function onModeChange() {
+        var mode = getSelectedMode();
+        var sessionRow = $("fir-session-row");
+        if (sessionRow) {
+            sessionRow.classList.toggle("hidden", mode !== "crossover_plus_correction");
+        }
+        if (mode === "crossover_plus_correction") {
+            loadSessions();
+        }
+    }
+
+    // -- Phon presets --
+
+    function onPhonPresetClick(e) {
+        var btn = e.target.closest(".fir-phon-btn");
+        if (!btn) return;
+        var phon = btn.getAttribute("data-phon");
+        var input = $("fir-target-phon");
+        if (input) input.value = phon;
+
+        // Update active state
+        var btns = document.querySelectorAll(".fir-phon-btn");
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle("active", btns[i] === btn);
+        }
+    }
+
+    function onPhonInputChange() {
+        var input = $("fir-target-phon");
+        if (!input) return;
+        var val = input.value;
+        var btns = document.querySelectorAll(".fir-phon-btn");
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle("active", btns[i].getAttribute("data-phon") === val);
+        }
+    }
+
     // -- Generation --
 
     function generateFilters() {
@@ -71,21 +162,32 @@
             return;
         }
 
+        var mode = getSelectedMode();
         var nTaps = parseInt($("fir-n-taps").value, 10);
         var sampleRate = parseInt($("fir-sample-rate").value, 10);
         var phonInput = $("fir-target-phon").value.trim();
 
         var body = {
             profile: profile,
+            mode: mode,
             n_taps: nTaps,
             sample_rate: sampleRate
         };
         if (phonInput !== "") {
             body.target_phon = parseFloat(phonInput);
         }
+        if (mode === "crossover_plus_correction") {
+            var sessionDir = $("fir-session-dir").value;
+            if (!sessionDir) {
+                setStatus("Select a measurement session.", "c-warning");
+                return;
+            }
+            body.session_dir = sessionDir;
+        }
 
         var btn = $("fir-generate-btn");
         if (btn) btn.disabled = true;
+        setSpinner(true);
         setStatus("Generating filters...", "c-warning");
         showResults(null);
 
@@ -99,12 +201,13 @@
             })
             .then(function (resp) {
                 if (btn) btn.disabled = false;
+                setSpinner(false);
 
                 if (resp.status === 200) {
-                    setStatus("Generation complete — all checks passed.", "c-safe");
+                    setStatus("Generation complete -- all checks passed.", "c-safe");
                     showResults(resp.body);
                 } else if (resp.status === 207) {
-                    setStatus("Generation complete — some checks failed. See details.", "c-warning");
+                    setStatus("Generation complete -- some checks failed. See details.", "c-warning");
                     showResults(resp.body);
                 } else if (resp.status === 404) {
                     setStatus("Profile not found: " + (resp.body.detail || profile), "c-danger");
@@ -116,6 +219,7 @@
             })
             .catch(function (err) {
                 if (btn) btn.disabled = false;
+                setSpinner(false);
                 setStatus("Request failed: " + err.message, "c-danger");
             });
     }
@@ -139,10 +243,21 @@
             var allPass = data.all_pass;
             var badgeClass = allPass ? "fir-badge--pass" : "fir-badge--fail";
             var badgeText = allPass ? "ALL PASS" : "CHECKS FAILED";
+            var channelCount = data.channels ? Object.keys(data.channels).length : 0;
+            var modeLabel = data.mode === "crossover_plus_correction"
+                ? "Crossover + Correction" : "Crossover Only";
             summary.innerHTML =
                 '<div class="fir-summary-row">' +
                     '<span class="fir-summary-label">Profile</span>' +
                     '<span class="fir-summary-value">' + escapeHtml(data.profile) + '</span>' +
+                '</div>' +
+                '<div class="fir-summary-row">' +
+                    '<span class="fir-summary-label">Mode</span>' +
+                    '<span class="fir-summary-value">' + escapeHtml(modeLabel) + '</span>' +
+                '</div>' +
+                '<div class="fir-summary-row">' +
+                    '<span class="fir-summary-label">Channels</span>' +
+                    '<span class="fir-summary-value">' + channelCount + '</span>' +
                 '</div>' +
                 '<div class="fir-summary-row">' +
                     '<span class="fir-summary-label">Taps</span>' +
@@ -154,7 +269,7 @@
                 '</div>' +
                 '<div class="fir-summary-row">' +
                     '<span class="fir-summary-label">Crossover</span>' +
-                    '<span class="fir-summary-value">' + data.crossover_freq_hz + ' Hz @ ' + data.slope_db_per_oct + ' dB/oct</span>' +
+                    '<span class="fir-summary-value">' + formatCrossover(data.crossover_freq_hz) + ' @ ' + data.slope_db_per_oct + ' dB/oct</span>' +
                 '</div>' +
                 '<div class="fir-summary-row">' +
                     '<span class="fir-summary-label">Status</span>' +
@@ -165,7 +280,8 @@
         // Channels
         var channels = $("fir-results-channels");
         if (channels && data.channels) {
-            var html = '<div class="fir-channels-title">Generated Files</div>';
+            var html = '<div class="fir-channels-title">Generated Files (' +
+                Object.keys(data.channels).length + ' channels)</div>';
             var keys = Object.keys(data.channels);
             for (var i = 0; i < keys.length; i++) {
                 html += '<div class="fir-channel-row">' +
@@ -196,13 +312,14 @@
                 '</div>';
             for (var j = 0; j < data.verification.length; j++) {
                 var v = data.verification[j];
-                vhtml += '<div class="fir-verify-row">' +
+                var rowCls = v.all_pass ? "" : " fir-verify-row--fail";
+                vhtml += '<div class="fir-verify-row' + rowCls + '">' +
                     '<span class="fir-verify-col-ch">' + escapeHtml(v.channel) + '</span>' +
-                    '<span class="fir-verify-col ' + (v.d009_pass ? 'c-safe' : 'c-danger') + '">' + (v.d009_pass ? 'PASS' : 'FAIL') + '</span>' +
+                    '<span class="fir-verify-col"><span class="fir-badge-sm ' + (v.d009_pass ? 'fir-badge-sm--pass' : 'fir-badge-sm--fail') + '">' + (v.d009_pass ? 'PASS' : 'FAIL') + '</span></span>' +
                     '<span class="fir-verify-col">' + v.d009_peak_db + '</span>' +
-                    '<span class="fir-verify-col ' + (v.min_phase_pass ? 'c-safe' : 'c-danger') + '">' + (v.min_phase_pass ? 'PASS' : 'FAIL') + '</span>' +
-                    '<span class="fir-verify-col ' + (v.format_pass ? 'c-safe' : 'c-danger') + '">' + (v.format_pass ? 'PASS' : 'FAIL') + '</span>' +
-                    '<span class="fir-verify-col ' + (v.all_pass ? 'c-safe' : 'c-danger') + '">' + (v.all_pass ? 'OK' : 'FAIL') + '</span>' +
+                    '<span class="fir-verify-col"><span class="fir-badge-sm ' + (v.min_phase_pass ? 'fir-badge-sm--pass' : 'fir-badge-sm--fail') + '">' + (v.min_phase_pass ? 'PASS' : 'FAIL') + '</span></span>' +
+                    '<span class="fir-verify-col"><span class="fir-badge-sm ' + (v.format_pass ? 'fir-badge-sm--pass' : 'fir-badge-sm--fail') + '">' + (v.format_pass ? 'PASS' : 'FAIL') + '</span></span>' +
+                    '<span class="fir-verify-col"><span class="fir-badge-sm ' + (v.all_pass ? 'fir-badge-sm--pass' : 'fir-badge-sm--fail') + '">' + (v.all_pass ? 'OK' : 'FAIL') + '</span></span>' +
                     '</div>';
             }
             verification.innerHTML = vhtml;
@@ -214,6 +331,19 @@
     function bindEvents() {
         var btn = $("fir-generate-btn");
         if (btn) btn.addEventListener("click", generateFilters);
+
+        // Mode radio toggle
+        var radios = document.querySelectorAll('input[name="fir-mode"]');
+        for (var i = 0; i < radios.length; i++) {
+            radios[i].addEventListener("change", onModeChange);
+        }
+
+        // Phon presets
+        var presets = $("fir-phon-presets");
+        if (presets) presets.addEventListener("click", onPhonPresetClick);
+
+        var phonInput = $("fir-target-phon");
+        if (phonInput) phonInput.addEventListener("input", onPhonInputChange);
     }
 
     // -- View lifecycle --

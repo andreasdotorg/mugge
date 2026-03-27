@@ -3615,6 +3615,103 @@ html, body {
     font-family: var(--font-numeric);
 }
 
+.fir-verify-row--fail {
+    background: rgba(255, 80, 80, 0.08);
+}
+
+/* -- FIR mode toggle -- */
+
+.fir-mode-toggle {
+    display: flex;
+    gap: 8px;
+}
+
+.fir-mode-option {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.fir-mode-option input { margin: 0; }
+.fir-mode-option input:checked + span { color: var(--text-primary); }
+
+/* -- FIR phon presets -- */
+
+.fir-phon-presets {
+    display: flex;
+    gap: 4px;
+}
+
+.fir-phon-btn {
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.fir-phon-btn:hover {
+    border-color: var(--text-secondary);
+}
+
+.fir-phon-btn.active {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+}
+
+.fir-advanced-row {
+    opacity: 0.6;
+}
+
+.fir-advanced-row:focus-within {
+    opacity: 1;
+}
+
+/* -- FIR spinner -- */
+
+.fir-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: fir-spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-left: 8px;
+}
+
+@keyframes fir-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* -- FIR verification badges (small) -- */
+
+.fir-badge-sm {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 2px;
+}
+
+.fir-badge-sm--pass {
+    background: rgba(80, 200, 120, 0.15);
+    color: var(--safe);
+}
+
+.fir-badge-sm--fail {
+    background: rgba(255, 80, 80, 0.15);
+    color: var(--danger);
+}
+
 .cfg-speakers-layout {
     border-top: 1px solid var(--border);
     margin-top: 0;
