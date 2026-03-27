@@ -1836,3 +1836,135 @@ F-061/F-063/F-064 (web-UI overwhelmed by responsibilities it shouldn't
 own), F-095 (GM subprocess polling flood), F-100 (orphan processes from
 lack of centralized lifecycle), rt-services.md (architecture doc update
 needed), US-059 (GraphManager story)
+
+## D-051: Dynamic filter-chain config per speaker design (2026-03-27)
+
+**Context:** The PW filter-chain convolver config (D-040) was initially
+designed for a fixed 2-way stereo topology (4 convolver nodes). Supporting
+3-way and 4-way speaker designs requires variable numbers of convolver
+nodes, gain nodes, and delay nodes. The question: generate a single
+max-channels config that covers all topologies, or generate a topology-
+specific config per speaker profile?
+
+**Decision:** Generate one PW filter-chain config per speaker profile.
+Node count matches the speaker topology: 2-way produces 4 convolver
+nodes, 3-way produces 6, 4-way produces 8. No max-channels-always
+approach. The config generator (US-011b) accepts a speaker profile YAML
+and produces the corresponding filter-chain `.conf` file.
+
+**Rationale:** A max-channels config wastes CPU on unused convolver nodes
+and complicates gain staging (unused channels must be muted, not just
+disconnected). Topology-specific configs are simpler to audit, produce
+cleaner `pw-dump` output for debugging, and match the principle that
+configuration should reflect intent. Profile switching requires a PW
+module reload (~500ms audio dropout), which is acceptable for a setup
+operation (not mid-performance).
+
+**Impact:** Profile switching causes ~500ms audio dropout during
+filter-chain reload. The config generator must be parameterized by
+topology. Each speaker profile stores its topology, and the generator
+produces the matching config. US-089 (speaker config management) and
+US-091 (multi-way crossover) depend on this.
+
+**Related:** D-040 (PW filter-chain architecture), US-089 (speaker config
+management), US-091 (multi-way crossover support), US-011b (config
+generator)
+
+## D-052: ISO 226 baked into FIR target curve — entire chain minimum-phase (2026-03-27)
+
+**Context:** ISO 226:2003 equal-loudness contours define how human hearing
+sensitivity varies with frequency at different SPL levels. The system
+needs loudness compensation that adjusts the target spectral balance for
+operating SPL. The question: apply ISO 226 as a separate runtime PW node
+(boost/cut), or integrate it into the FIR target curve at generation time?
+
+**Decision:** Bake ISO 226 equal-loudness compensation into the FIR target
+curve at filter generation time. The entire filter chain must be
+consistently minimum-phase with no exceptions: mic calibration →
+measurement → target loudness curve (with ISO 226) → crossover → combined
+FIR. A mandatory `verify_minimum_phase()` gate checks every generated
+filter before deployment. D-009 (cut-only correction with -0.5dB margin)
+is preserved via target curve integration — ISO 226 modifies where the
+cut-only correction attenuates, not whether it boosts.
+
+**Rationale:** A separate runtime boost stage would defeat D-009 by
+potentially boosting frequencies with room modes. Integrating ISO 226
+into the target curve means the room correction pipeline's
+`compute_correction()` naturally respects it — the correction is still
+cut-only relative to the ISO 226-modified target. The minimum-phase
+constraint ensures no pre-ringing throughout the chain (D-001 design
+principle). ISO 226 is independent of per-channel sensitivity matching
+(US-092/US-093) — they operate at different levels.
+
+**Impact:** The room correction pipeline's target curve parameter must
+accept an operating SPL value. Filter regeneration required when SPL
+target changes (not a runtime adjustment). `verify_minimum_phase()` is a
+mandatory gate in the filter generation pipeline.
+
+**Related:** D-001 (minimum-phase FIR), D-009 (cut-only correction),
+US-090 (FIR filter generation), US-094 (ISO 226 compensation)
+
+## D-053: Profile switching safety flow mandatory (2026-03-27)
+
+**Context:** Switching speaker profiles requires reloading the PW
+filter-chain config, which causes a brief audio dropout. During the
+transition, gain levels, thermal protection limits, and link topology all
+change. An uncontrolled transition risks exposing speakers to incorrect
+gain levels or thermal limits from the previous profile.
+
+**Decision:** Profile switching follows a mandatory safety flow: (1) mute
+all gain nodes (~10ms), (2) write new filter-chain config, (3) PW module
+reload (~300-500ms), (4) GraphManager re-creates links (~100ms),
+(5) graduated gain ramp-up with UMIK-1 SPL interlock (~2-5s). Total
+transition ~3-6s. New thermal protection limits (US-092) are active
+BEFORE the ramp-up begins — never expose speakers to the old profile's
+thermal limits. This is safety-critical and not optional.
+
+**Rationale:** Psytrance source material at -0.5 LUFS leaves zero
+headroom. An uncontrolled gain jump during profile switch could exceed
+driver Xmax or thermal limits before protection engages. The mute-first
+approach guarantees silence during the transition. The slow ramp-up with
+SPL monitoring catches configuration errors (wrong gain, wrong channel
+assignment) before they reach damaging levels. The owner classified this
+as a SAFETY requirement.
+
+**Impact:** Profile switching is a setup operation, not a mid-performance
+action. UI displays "Do not switch profiles during live performance"
+warning. Activation UI shows progress through the 5 phases with an abort
+button. US-089 (speaker config activation) and US-092 (thermal
+protection) implement the flow.
+
+**Related:** D-009 (gain safety), D-031 (mandatory subsonic protection),
+US-089 (speaker config management), US-092 (thermal + mechanical
+protection)
+
+## D-054: 4-way stereo in scope — configurable per-profile channel assignment (2026-03-27)
+
+**Context:** The USBStreamer provides 8 output channels. A 4-way stereo
+configuration requires all 8 channels for speakers (2 x 4 ways), leaving
+none for monitoring (headphones, IEM). The question: is 4-way in scope,
+and how should channel assignment work across different topologies?
+
+**Decision:** 4-way stereo is in scope for testing and evaluation only
+(not gig use). Channel assignment is configurable per profile, not
+hardcoded. Valid configurations: 2-way stereo (4 speaker + 4 monitoring),
+3-way stereo (6 speaker + 2 monitoring), 3-way with mono sub (5 speaker +
+3 monitoring), 4-way stereo (8 speaker + 0 monitoring). The owner accepts
+HP/IEM sacrifice for 4-way evaluation sessions. A second USBStreamer is
+not required.
+
+**Rationale:** The owner's event inventory includes 4-way designs
+(DCX464+ME464+FB464). Supporting 4-way allows speaker testing and
+comparison without hardware changes. Per-profile channel assignment
+(rather than hardcoded mapping) accommodates the variety of topologies in
+the owner's inventory. The explicit "testing only" designation prevents
+accidental use in gig scenarios where monitoring is essential for safety
+(singer IEM, engineer headphones).
+
+**Impact:** UI must warn when 4-way leaves no monitoring channels.
+3-way stereo sacrifices IEM (blocks live vocal mode). Channel budget
+validation enforced per profile. US-089 (channel assignment editor) and
+US-091 (multi-way topology support) implement this.
+
+**Related:** D-051 (dynamic config gen), US-089 (speaker config
+management), US-091 (multi-way crossover support)

@@ -6497,12 +6497,12 @@ initial US-088 delivery.
 **I want** a web UI page for creating, editing, browsing, and activating speaker configurations that define speaker topology, crossover parameters, driver assignments, and channel routing,
 **so that** I can switch between different speaker setups (2-way, 3-way, different drivers) without manual config file editing.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-011b (speaker profile schema + config generator), US-039 (driver database schema), US-045 (hardware config schema)
 **Blocks:** US-090 (FIR generation needs a selected speaker config), US-092 (thermal limits per config)
 **Priority:** HIGH — owner priority #3, event use case
 **Tier:** 12
-**[RESOLVED: D-043 — profile switching requires mute → switch → slow ramp-up safety flow. D-044 — 4-way stereo in scope, configurable channel assignment per profile.]**
+**[RESOLVED: D-053 — profile switching requires mute → switch → slow ramp-up safety flow. D-054 — 4-way stereo in scope, configurable channel assignment per profile.]**
 
 ### Acceptance criteria
 
@@ -6512,8 +6512,8 @@ initial US-088 delivery.
   - Configuration name
   - Topology selector (2-way, 3-way, 4-way, MEH (Multiple Entry Horn), custom). MEH topology auto-configures coaxial driver positioning and horn-loaded acoustic parameters
   - Per-way driver assignment: select driver from US-039 database (searchable dropdown), assign output channel(s), set crossover frequency and slope
-  - Monitoring channel assignments (headphones, IEM) — optional, only when speaker topology leaves channels available. 4-way stereo configurations have no monitoring channels (D-044).
-- [ ] Channel assignment editor: per-profile assignment of USBStreamer channels to speaker ways and monitoring (HP/IEM). Not hardcoded — configurable per profile (D-044).
+  - Monitoring channel assignments (headphones, IEM) — optional, only when speaker topology leaves channels available. 4-way stereo configurations have no monitoring channels (D-054).
+- [ ] Channel assignment editor: per-profile assignment of USBStreamer channels to speaker ways and monitoring (HP/IEM). Not hardcoded — configurable per profile (D-054).
 - [ ] Channel budget validator: live count of assigned channels vs 8-channel USBStreamer limit. 4-way stereo = 8 speaker channels, 0 monitoring — display explicit warning "No headphone or IEM monitoring available in this configuration"
 - [ ] Speaker configuration includes enclosure type per driver: sealed, ported (with port tuning freq), horn-loaded (with horn cutoff freq), bandpass, onken, open baffle
 - [ ] Pre-configured speaker templates for the owner's event inventory:
@@ -6524,7 +6524,8 @@ initial US-088 delivery.
 - [ ] Each template stores: driver list, crossover points, enclosure type per driver, default gains, time alignment offsets, notes/description
 - [ ] Crossover point editor: frequency (Hz), slope (dB/oct, preset: 24/48/96), type (HP/LP/BP) — auto-derived from topology and driver position
 - [ ] Driver info panel: when a driver is selected, show key T/S parameters (Fs, Qts, Pe_max, sensitivity, Xmax) from the database
-- [ ] Activate configuration: safety flow per D-043 — mute all outputs → apply new config (triggers US-011b config generator for PW filter-chain `.conf` + US-090 FIR generation) → loudness test with slow ramp-up. Thermal protection limits (US-092) switch atomically with the speaker profile. This is a SAFETY requirement.
+- [ ] Activate configuration: safety flow per D-053 — mute all outputs → apply new config (triggers US-011b config generator for PW filter-chain `.conf` + US-090 FIR generation) → loudness test with slow ramp-up. Thermal protection limits (US-092) switch atomically with the speaker profile. This is a SAFETY requirement.
+- [ ] Profile activation causes ~500ms audio dropout during filter-chain reload, followed by D-053 graduated gain ramp-up (~2-5s). Total transition ~3-6s. This is a setup operation — display "Do not switch profiles during live performance" warning. The sequence: (1) mute all gain nodes (~10ms), (2) write new filter-chain config, (3) PW module reload (~300-500ms), (4) GraphManager re-creates links (~100ms), (5) safety ramp-up per D-053.
 - [ ] Activation safety UI: progress indicator showing mute → config switch → ramp-up phases. Abort button cancels and restores previous config.
 - [ ] Validation before activation: channel budget, crossover consistency (monotonic frequencies, no gaps/overlaps), driver protection (D-031 mandatory HPF present for each speaker channel)
 - [ ] Save/Load: configurations persisted as YAML files in `configs/speakers/` per US-011b schema
@@ -6548,7 +6549,7 @@ initial US-088 delivery.
 **I want** to trigger FIR crossover and room correction filter generation from the web UI, see progress and results, and apply the generated filters to the live PipeWire filter-chain,
 **so that** I can generate and deploy custom FIR filters at the venue without using command-line tools.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-089 (active speaker config), US-010 (correction filter generation module), US-011 (crossover integration module), US-012 (end-to-end automation), US-097 (room measurements provide correction data)
 **Blocks:** none
 **Priority:** HIGH — owner priority #3
@@ -6557,8 +6558,12 @@ initial US-088 delivery.
 ### Acceptance criteria
 
 - [ ] Web UI "Generate Filters" action available from Speaker Config page (US-089) or a dedicated Filters page
+- [ ] Filter generation API accepts two modes:
+  - "crossover_only": generates crossover-only FIR from speaker profile params (freq, slope, topology, taps). No measurements needed. Equivalent to current generate_bose_filters.py but generalized to any profile.
+  - "crossover_plus_correction": generates combined crossover + room correction FIR. Requires a measurement session from US-097.
+- [ ] Generalize generate_bose_filters.py: accept any profile name (not hardcoded Bose), generate bandpass for mid-range drivers (3-way/4-way), conditional subsonic HPF based on enclosure type (ported needs protection, sealed doesn't).
 - [ ] Filter generation workflow:
-  1. Select source: "crossover only" (no room correction) or "crossover + room correction" (requires measurements from US-097)
+  1. Select mode: "crossover only" or "crossover + room correction"
   2. Shows current active speaker config and crossover parameters
   3. If room correction selected, shows available measurement sessions with date/venue
   4. Progress indicator during generation (per-channel progress)
@@ -6588,12 +6593,12 @@ initial US-088 delivery.
 **I want** the crossover engine and speaker configuration to support 3-way (tweeter + midrange + woofer/sub) and 4-way (tweeter + upper-mid + lower-mid + sub) topologies,
 **so that** I can use multi-way speaker systems at events and generate appropriate per-driver FIR crossover filters.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-011 (crossover integration — currently 2-way only), US-011b (speaker profile schema — 3-way mentioned as Phase 2), US-089 (web UI for config management)
 **Blocks:** none
 **Priority:** MEDIUM — event use case, but 2-way covers most setups
 **Tier:** 12
-**[RESOLVED: D-041 — dynamic config gen per speaker design. D-044 — 4-way stereo in scope, HP/IEM sacrificed when channels exceeded, configurable per-profile wiring.]**
+**[RESOLVED: D-051 — dynamic config gen per speaker design. D-054 — 4-way stereo in scope, HP/IEM sacrificed when channels exceeded, configurable per-profile wiring.]**
 
 ### Background
 
@@ -6605,8 +6610,8 @@ Architect channel budget analysis:
 - 2-way stereo: 4 speaker + 4 monitoring (current default, full HP + IEM)
 - 3-way stereo: 6 speaker + 2 monitoring (HP only, no IEM — blocks live vocal mode)
 - 3-way with mono sub: 5 speaker + 3 monitoring (practical sweet spot — HP + one IEM channel)
-- 4-way stereo: 8 speaker + 0 monitoring (testing/evaluation only per D-044, no gig use)
-Per D-041, the config generator produces topology-specific configs for all tiers.
+- 4-way stereo: 8 speaker + 0 monitoring (testing/evaluation only per D-054, no gig use)
+Per D-051, the config generator produces topology-specific configs for all tiers.
 
 AE confirms: MEH is architecturally identical to conventional N-way for filter-chain purposes. The horn loading is captured in the FIR coefficients. The key acoustic considerations are: (1) crossover frequency must be above horn cutoff, (2) horn path length affects time alignment, (3) sensitivity mismatch of 10-20 dB between horn and direct-radiating drivers requires per-channel gain matching with at least 30 dB range.
 
@@ -6617,8 +6622,8 @@ AE confirms: MEH is architecturally identical to conventional N-way for filter-c
 - [ ] 4-way topology: HP (tweeter) + BP (upper-mid) + BP (lower-mid) + LP (sub), with three crossover points
 - [ ] Crossover slopes independently configurable per crossover point (24/48/96 dB/oct)
 - [ ] Bandpass filters are minimum-phase FIR (consistent with existing crossover design principle)
-- [ ] Channel budget validation per D-044: 3-way stereo = 6 speaker + 2 monitoring; 4-way stereo = 8 speaker + 0 monitoring. Channel assignment is per-profile, not hardcoded. Warn user when 4-way leaves no monitoring channels.
-- [ ] PW filter-chain config generation is dynamic per speaker design (D-041): 2-way generates 4 convolver nodes, 3-way generates 6, 4-way generates 8. No max-channels-always approach. Config generator in US-011b produces topology-specific configs.
+- [ ] Channel budget validation per D-054: 3-way stereo = 6 speaker + 2 monitoring; 4-way stereo = 8 speaker + 0 monitoring. Channel assignment is per-profile, not hardcoded. Warn user when 4-way leaves no monitoring channels.
+- [ ] PW filter-chain config generation is dynamic per speaker design (D-051): 2-way generates 4 convolver nodes, 3-way generates 6, 4-way generates 8. No max-channels-always approach. Config generator in US-011b produces topology-specific configs.
 - [ ] Live mode constraint warnings: 3-way stereo sacrifices IEM channels (singer monitoring unavailable). 4-way stereo has no monitoring at all. Display explicit mode-specific warnings: "3-way: no IEM — live vocal mode blocked" / "4-way: no monitoring — testing/evaluation only"
 - [ ] PW filter-chain config generator (US-011b) produces correct configs for 3-way and 4-way topologies
 - [ ] Time alignment support: per-driver delay values for all ways (acoustic center offset from driver database)
@@ -6632,6 +6637,7 @@ AE confirms: MEH is architecturally identical to conventional N-way for filter-c
 - [ ] Horn crossover frequency constraint: crossover point for horn-loaded drivers must be set well above the horn's cutoff frequency (where horn starts loading). Crossover at the cutoff produces poor pattern control. The speaker profile editor should show horn cutoff frequency (from driver/enclosure data) and warn if crossover is set too close to it.
 - [ ] Horn path length in time alignment: horn-loaded drivers have acoustic center at the horn mouth, not the diaphragm. A 0.5-1m horn path adds 1.5-3ms propagation delay vs direct-radiating drivers. The measurement-based pipeline handles this automatically (impulse response includes horn delay). Manual time alignment values must account for this — display horn path length from speaker profile as a reference.
 - [ ] MEH coaxial time alignment: in MEH designs, mid and HF drivers share the same horn and have similar acoustic centers. Time alignment concern is mainly between the horn-loaded section and any direct-radiating woofer/sub — not between drivers within the horn.
+- [ ] 4-way mono configuration: single cabinet with 4 drivers (tweeter + mid + woofer + sub) = 4 speaker channels, leaving 4 for HP/IEM. Use case: testing a single cabinet's crossover before committing to stereo. The channel budget validator supports stereo AND mono configurations per profile.
 
 ### Definition of Done
 
@@ -6649,7 +6655,7 @@ AE confirms: MEH is architecturally identical to conventional N-way for filter-c
 **I want** the system to enforce per-driver thermal power limits and SPL limiters in real time, computed from driver T/S parameters and hardware gain chain,
 **so that** speakers are protected from both thermal damage (voice coil overheating from sustained power) and mechanical damage (cone over-excursion from transient peaks) regardless of operator error, source material level, or FIR filter boost.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-046 (thermal ceiling computation — code exists), US-045 (hardware config), US-039 (driver database with Pe_max, impedance), US-089 (active speaker config links drivers to channels)
 **Blocks:** none
 **Related:** US-073 (Enhanced Gain Controls — UI visualization side of gain/thermal data that US-092 computes)
@@ -6668,7 +6674,7 @@ US-046 already computes thermal ceiling in dBFS from Pe_max + impedance + amp ga
 - [ ] Hard limit enforcement: PW filter-chain gain node clamps output to thermal ceiling. Implementation options: (a) runtime `pw-cli` gain adjustment, (b) GM-managed limiter node in filter-chain [PENDING: architect input]
 - [ ] SPL feedback limiting (Phase 2): UMIK-1 measures actual SPL at listening position; if measured SPL exceeds target + margin, system reduces output gain. Requires UMIK-1 to be connected and calibrated (US-096)
 - [ ] Override with confirmation: operator can temporarily increase ceiling by acknowledging the risk (logged, time-limited, resets on mode switch)
-- [ ] Profile switch integration (D-043): when speaker config changes, thermal ceilings recompute atomically as part of the mute → switch → ramp-up safety flow. New thermal limits are active BEFORE the ramp-up begins — never expose speakers to the old profile's thermal limits.
+- [ ] Profile switch integration (D-053): when speaker config changes, thermal ceilings recompute atomically as part of the mute → switch → ramp-up safety flow. New thermal limits are active BEFORE the ramp-up begins — never expose speakers to the old profile's thermal limits.
 - [ ] Dashboard integration: thermal status per channel in status bar or dashboard meters
 - [ ] Audit log: all thermal ceiling overrides and limit engagements logged with timestamp
 - [ ] Horn sensitivity matching: horn-loaded speakers (10-20 dB higher sensitivity than direct-radiating) reach thermal limit at lower amplifier power. Thermal ceiling computation (US-046) must use `sensitivity_db_spl` from speaker identity to compute correct per-driver safe levels. Per-channel gain node Mult defaults are computed to level-match horn vs direct-radiating drivers in mixed systems.
@@ -6694,7 +6700,7 @@ US-046 already computes thermal ceiling in dBFS from Pe_max + impedance + amp ga
 **I want** to configure amplifier specifications (gain, sensitivity, power rating, load impedance) in the web UI and have the system calibrate signal levels and thermal limits accordingly,
 **so that** I can swap amplifiers without manual recalculation of safe operating levels.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-045 (hardware config schema — amp config exists), US-092 (thermal protection uses amp gain), US-089 (speaker config references amp)
 **Blocks:** none
 **Priority:** MEDIUM — owner has one amp currently, but portability is a design goal
@@ -6730,12 +6736,12 @@ Horn-loaded speakers with 105 dB/W/m sensitivity need ~20 dB less amplifier powe
 **I want** the system to apply ISO 226 equal-loudness contour compensation that adjusts the frequency response based on the target listening SPL,
 **so that** music sounds perceptually balanced across the frequency range regardless of playback volume — bass and treble are not perceived as receding at lower SPL levels.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-090 (FIR filter generation — loudness compensation integrated into target curve), US-096 (UMIK-1 calibration for SPL measurement)
 **Blocks:** none
 **Priority:** MEDIUM — perceptual quality enhancement
 **Tier:** 12
-**[RESOLVED: D-042 — baked into FIR target curve. Entire chain minimum-phase: mic calibration → measurements → target loudness curve → crossover → combined FIR. No exceptions. D-009 preserved via target curve integration.]**
+**[RESOLVED: D-052 — baked into FIR target curve. Entire chain minimum-phase: mic calibration → measurements → target loudness curve → crossover → combined FIR. No exceptions. D-009 preserved via target curve integration.]**
 
 ### Background
 
@@ -6757,7 +6763,7 @@ AE confirms: ISO 226 and sensitivity matching are independent concerns operating
 - [ ] Integration point: room correction pipeline's `compute_correction()` target curve parameter accepts SPL-dependent curve from this module
 - [ ] Reference SPL: the SPL at which the target curve was designed (typically 85dB — "no compensation" baseline)
 - [ ] D-009 compliance: all generated filters still respect -0.5dB maximum gain at every frequency. The loudness compensation only changes WHERE the cut-only correction attenuates, not whether it boosts
-- [ ] Minimum-phase chain integrity (D-042): ISO 226 compensation is applied as magnitude shaping to the target curve. Since the entire chain (mic cal → measurement → target → crossover → combined FIR) must be minimum-phase with no exceptions, ISO 226 modifies only the magnitude target. The Hilbert transform produces the minimum-phase component of the final filter. No phase manipulation at this stage.
+- [ ] Minimum-phase chain integrity (D-052): ISO 226 compensation is applied as magnitude shaping to the target curve. Since the entire chain (mic cal → measurement → target → crossover → combined FIR) must be minimum-phase with no exceptions, ISO 226 modifies only the magnitude target. The Hilbert transform produces the minimum-phase component of the final filter. No phase manipulation at this stage.
 - [ ] Visual: display the effective target curve with and without loudness compensation overlay
 - [ ] Optional: real-time SPL tracking via UMIK-1 (US-096) to auto-select the appropriate compensation level. Phase 2 — manual selection for MVP
 
@@ -6777,7 +6783,7 @@ AE confirms: ISO 226 and sensitivity matching are independent concerns operating
 **I want** the PipeWire graph visualization to accurately reflect the real PipeWire topology with interactive pan and zoom, real-time updates, and clear visual distinction between managed and unmanaged nodes,
 **so that** I can navigate complex audio graphs and verify routing at a glance.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-064 (graph visualization Phase 3 — base renderer exists)
 **Blocks:** none
 **Priority:** MEDIUM — usability improvement for debugging
@@ -6810,7 +6816,7 @@ US-064 Phase 3 delivered a clean data-driven SVG renderer (`graph.js`) that hand
 **As** the system operator performing measurements,
 **I want** the UMIK-1 microphone to be fully calibrated throughout the signal chain — frequency response correction, absolute SPL calibration, and sensitivity verification — so that spectrum displays show calibrated dBSPL values and measurement data feeds accurately into the room correction pipeline.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-088 (basic UMIK-1 cal file applied to spectrum — DONE), US-045 (mic hardware config with sensitivity)
 **Blocks:** US-097 (room compensation needs calibrated measurements), US-047 (Path A measurement needs calibrated UMIK-1)
 **Priority:** HIGH — owner priority #1 area (measurements)
@@ -6850,7 +6856,7 @@ AE scoping: US-096 is about ensuring UMIK-1 calibration data is correctly applie
 **I want** a one-button web UI workflow that measures the room acoustic response using UMIK-1, computes room correction filters, combines them with crossover filters, and deploys them to the live PipeWire filter-chain,
 **so that** I can calibrate the sound system for each venue in under 15 minutes without command-line tools.
 
-**Status:** draft
+**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
 **Depends on:** US-096 (calibrated UMIK-1), US-089 (active speaker config), US-090 (FIR generation/application), US-008 (measurement engine), US-009 (time alignment), US-010 (correction filter generation), US-011 (crossover integration), US-012 (end-to-end automation script)
 **Blocks:** US-013 (T5 verification — needs real room-corrected filters)
 **Priority:** HIGH — owner strategic goal ("arrive, measure, correct, perform")
@@ -6861,7 +6867,7 @@ AE scoping: US-096 is about ensuring UMIK-1 calibration data is correctly applie
 The room correction pipeline modules already exist (TK-071: sweep, deconvolution, correction, crossover, combine, export, verify, spatial averaging). This story wraps them in a web UI wizard that guides the operator through the measurement process and orchestrates the pipeline.
 
 Architect recommendation: 3-phase delivery.
-- Phase 1: REST API wrapping existing TK-071 modules (no new DSP code). `POST /api/v1/measurement/run` orchestrates sweep→capture→deconvolve→correct→crossover→combine→verify→export. `POST /api/v1/measurement/deploy` copies WAVs to `/etc/pi4audio/coeffs/` and triggers PW filter-chain reload (mute→copy→reload→unmute per D-043 safety flow).
+- Phase 1: REST API wrapping existing TK-071 modules (no new DSP code). `POST /api/v1/measurement/run` orchestrates sweep→capture→deconvolve→correct→crossover→combine→verify→export. `POST /api/v1/measurement/deploy` copies WAVs to `/etc/pi4audio/coeffs/` and triggers PW filter-chain reload (mute→copy→reload→unmute per D-053 safety flow).
 - Phase 2: WebSocket progress streaming during measurement (step N of M, ETA).
 - Phase 3: One-button wizard UI in measure.js (wizard framework already exists).
 All phases developable locally without Pi. Only actual measurement run (sweep + UMIK-1 capture) requires Pi.
@@ -6880,7 +6886,7 @@ All phases developable locally without Pi. Only actual measurement run (sweep + 
 - [ ] Step 9 — Verify: mandatory verification measurement (existing `verify.py`). Plays sweep, measures, compares corrected response to target. Reports pass/fail per channel with deviation. If any channel fails (>3dB deviation from target in correction band), warns and offers re-measurement.
 - [ ] Session management: each measurement session saved with timestamp, venue name, speaker config, all raw WAV files, computed filters, and verification results. Sessions browsable and comparable.
 - [ ] Abort at any step: returns to previous state, no partial deployment
-- [ ] Backend (Phase 1): REST API wrapping existing Python modules. `POST /api/v1/measurement/run` orchestrates full pipeline. `POST /api/v1/measurement/deploy` deploys filters with D-043 safety flow.
+- [ ] Backend (Phase 1): REST API wrapping existing Python modules. `POST /api/v1/measurement/run` orchestrates full pipeline. `POST /api/v1/measurement/deploy` deploys filters with D-053 safety flow.
 - [ ] deploy.py D-040 update: update filter deployment paths from CamillaDSP to PW filter-chain coefficient paths (`/etc/pi4audio/coeffs/`). ~30 lines change.
 - [ ] WebSocket progress (Phase 2): long-running measurement operations stream progress updates (step N of M, ETA) via WebSocket.
 - [ ] Wizard UI (Phase 3): one-button wizard in measure.js wrapping the REST API. Wizard framework already exists.
