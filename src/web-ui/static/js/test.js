@@ -877,35 +877,54 @@
      * Subtracts the mic's dB deviation so the display shows true SPL.
      */
     function applyCalibration(freqData) {
-        // Task #52: Apply UMIK-1 calibration when viewing ch3 (UMIK-1 data).
-        // Calibration is mic-specific — wrong for app output on ch0+ch1.
+        // Task #52: Apply UMIK-1 calibration when viewing a mic source.
+        // Calibration is mic-specific — wrong for app output (monitor).
         if (!calEnabled || !calBinLUT || !freqData) return;
-        if (!specPipeline || specPipeline.channelIndex !== 3) return;
+        if (specCurrentSource !== "capture-usb" && specCurrentSource !== "umik1") return;
         var len = Math.min(freqData.length, calBinLUT.length);
         for (var i = 0; i < len; i++) {
             freqData[i] -= calBinLUT[i];
         }
     }
 
-    // -- SPL readout (Z-weighted broadband) --
+    // -- SPL readout (Z-weighted broadband, always from ch3 = UMIK-1) --
 
     var UMIK_SENSITIVITY = 121.4; // dBFS-to-dBSPL offset for UMIK-1
     var splPeakDb = -Infinity;
     var splUpdateCounter = 0;
     // Throttle DOM writes to ~10 Hz (every 6th rAF at 60fps).
     var SPL_UPDATE_INTERVAL = 6;
+    // Dedicated ch3 pipeline: always extracts UMIK-1 (ch3) for SPL,
+    // independent of which channel the spectrum display is showing.
+    var splPipeline = null;
+
+    function splCreatePipeline() {
+        splPipeline = PiAudioFFT.create({
+            fftSize: 4096,
+            sampleRate: SPEC_SAMPLE_RATE,
+            numChannels: 4,
+            dbMin: -90,
+            dbMax: 0,
+            smoothing: 0,
+            channelIndex: 3
+        });
+    }
 
     function updateSplReadout() {
-        // Task #52: Show SPL when viewing UMIK-1 channel (ch3), any mode.
-        var isUmik = specPipeline && specPipeline.channelIndex === 3;
-        var active = isUmik && specPcmConnected;
-        if (!active || !specPipeline || specPipeline.rmsLinear <= 0) {
+        if (!splPipeline || !specPcmConnected) {
             setSplDisplay("--", "--", null);
-            setSplBanner(!active);
+            setSplBanner(false);
             return;
         }
-        var rms = specPipeline.rmsLinear;
-        var splZ = 20 * Math.log10(rms) + UMIK_SENSITIVITY;
+        // Process ch3 FFT to update rmsLinear.
+        if (splPipeline.dirty) splPipeline.processFFT();
+        var rms = splPipeline.rmsLinear;
+        if (rms <= 0) {
+            setSplDisplay("--", "--", null);
+            setSplBanner(false);
+            return;
+        }
+        var splZ = 20 * Math.log10(Math.max(rms, 1e-10)) + UMIK_SENSITIVITY;
         // Track peak (no decay — reset manually or on mode change).
         if (splZ > splPeakDb) splPeakDb = splZ;
 
@@ -915,20 +934,19 @@
         splUpdateCounter = 0;
 
         setSplDisplay(splZ.toFixed(1), splPeakDb.toFixed(1), splZ);
-        // Show uncalibrated banner when per-freq cal not loaded.
-        setSplBanner(!calEnabled);
+        // Sensitivity constant (121.4) is hardcoded — SPL is calibrated
+        // whenever values are displayed. Hide the uncalibrated banner.
+        setSplBanner(false);
     }
 
     function setSplDisplay(zVal, peakVal, splForColor) {
         var elZ = $("tt-spl-a");
-        var elC = $("tt-spl-c");
         var elPeak = $("tt-spl-peak");
         if (elZ) {
             elZ.textContent = zVal;
             elZ.style.color = splForColor !== null
                 ? PiAudio.splColorRaw(splForColor) : "";
         }
-        if (elC) elC.textContent = "--";
         if (elPeak) {
             elPeak.textContent = peakVal;
             elPeak.style.color = (peakVal !== "--" && splForColor !== null)
@@ -1028,6 +1046,10 @@
             if (specPipeline) {
                 specPipeline.feedPcmMessage(ev.data, { detectGaps: true });
             }
+            // Feed dedicated ch3 SPL pipeline (always runs).
+            if (splPipeline) {
+                splPipeline.feedPcmMessage(ev.data, { detectGaps: true });
+            }
         };
 
         specPcmWs.onclose = function () {
@@ -1064,6 +1086,7 @@
         updateMicStatus("disconnected", specCurrentSource);
         // Reset FFT state for clean source switch.
         if (specPipeline) specPipeline.reset();
+        if (splPipeline) splPipeline.reset();
         specFreqData = null;
     }
 
@@ -1134,7 +1157,7 @@
 
     function getSourceLabel(name) {
         // Task #52: "umik1" is a virtual source (ch3 of monitor stream).
-        if (name === "umik1") return "UMIK-1 (Mic)";
+        if (name === "umik1") return "UMIK-1 (Live)";
         if (name === "monitor") return "Monitor (L+R)";
         var staticLabels = {
             "capture-usb": "UMIK-1 (USB capture)",
@@ -1206,6 +1229,7 @@
         });
 
         specRecreatePipeline();
+        splCreatePipeline();
 
         // T-088-6: Fetch UMIK-1 calibration (async, display works without it).
         fetchCalibration();
@@ -1234,6 +1258,11 @@
         var splLabel = $("tt-spl-a");
         if (splLabel && splLabel.previousElementSibling) {
             splLabel.previousElementSibling.textContent = "SPL (Z)";
+        }
+        // Hide SPL (C) row — not implemented yet (UX: avoid "--" clutter).
+        var splCRow = $("tt-spl-c");
+        if (splCRow && splCRow.parentElement) {
+            splCRow.parentElement.style.display = "none";
         }
     }
 
