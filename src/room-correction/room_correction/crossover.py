@@ -128,30 +128,7 @@ def generate_subsonic_filter(
     # Design target magnitude: highpass at hpf_freq
     magnitude = _design_crossover_magnitude(freqs, hpf_freq, 'highpass', slope_db_per_oct)
 
-    # Build minimum-phase FIR from target magnitude via cepstral method
-    log_mag_half = np.log(np.maximum(magnitude, 1e-10))
-    log_mag_full = np.zeros(n_fft, dtype=np.float64)
-    log_mag_full[:len(log_mag_half)] = log_mag_half
-    log_mag_full[len(log_mag_half):] = log_mag_half[-2:0:-1]
-
-    cepstrum = np.fft.ifft(log_mag_full).real
-
-    n_half = n_fft // 2
-    causal_window = np.zeros(n_fft)
-    causal_window[0] = 1.0
-    causal_window[1:n_half] = 2.0
-    if n_fft % 2 == 0:
-        causal_window[n_half] = 1.0
-
-    min_phase_cepstrum = cepstrum * causal_window
-    min_phase_spectrum = np.exp(np.fft.fft(min_phase_cepstrum))
-    subsonic_filter = np.fft.ifft(min_phase_spectrum).real
-
-    # Truncate with fade-out
-    subsonic_filter = subsonic_filter[:n_taps]
-    fade_out_len = n_taps // 20
-    fade = dsp_utils.fade_window(n_taps, 0, fade_out_len)
-    subsonic_filter *= fade
+    subsonic_filter = _magnitude_to_min_phase_fir(magnitude, n_fft, n_taps)
 
     # Normalize: passband (above hpf_freq) should be at unity
     passband_freqs, passband_mag = dsp_utils.rfft_magnitude(subsonic_filter)
@@ -164,41 +141,25 @@ def generate_subsonic_filter(
     return subsonic_filter
 
 
-def generate_crossover_filter(
-    filter_type,
-    crossover_freq=80.0,
-    slope_db_per_oct=48.0,
-    n_taps=16384,
-    sr=SAMPLE_RATE,
-):
-    """
-    Generate a minimum-phase FIR crossover filter.
+def _magnitude_to_min_phase_fir(magnitude, n_fft, n_taps):
+    """Synthesise a minimum-phase FIR from a half-spectrum magnitude.
+
+    Shared helper for all crossover filter types.
 
     Parameters
     ----------
-    filter_type : str
-        'highpass' for mains, 'lowpass' for subs.
-    crossover_freq : float
-        Crossover frequency in Hz.
-    slope_db_per_oct : float
-        Rolloff steepness (48-96 dB/oct recommended).
+    magnitude : np.ndarray
+        Target magnitude (rfft bins, linear scale).
+    n_fft : int
+        FFT size used for synthesis.
     n_taps : int
-        Output filter length.
-    sr : int
-        Sample rate.
+        Desired output FIR length.
 
     Returns
     -------
     np.ndarray
-        Minimum-phase FIR crossover filter.
+        Minimum-phase FIR of length *n_taps*, with fade-out window applied.
     """
-    n_fft = dsp_utils.next_power_of_2(n_taps * 4)
-    freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
-
-    # Design target magnitude
-    magnitude = _design_crossover_magnitude(freqs, crossover_freq, filter_type, slope_db_per_oct)
-
-    # Build minimum-phase FIR directly from target magnitude via cepstral method
     log_mag_half = np.log(np.maximum(magnitude, 1e-10))
     log_mag_full = np.zeros(n_fft, dtype=np.float64)
     log_mag_full[:len(log_mag_half)] = log_mag_half
@@ -215,16 +176,163 @@ def generate_crossover_filter(
 
     min_phase_cepstrum = cepstrum * causal_window
     min_phase_spectrum = np.exp(np.fft.fft(min_phase_cepstrum))
-    xo_filter = np.fft.ifft(min_phase_spectrum).real
+    fir = np.fft.ifft(min_phase_spectrum).real
 
     # Truncate with fade-out
-    xo_filter = xo_filter[:n_taps]
+    fir = fir[:n_taps]
     fade_out_len = n_taps // 20
     fade = dsp_utils.fade_window(n_taps, 0, fade_out_len)
-    xo_filter *= fade
+    fir *= fade
+    return fir
+
+
+def generate_bandpass_filter(
+    low_freq,
+    high_freq,
+    low_slope_db_per_oct=48.0,
+    high_slope_db_per_oct=96.0,
+    n_taps=16384,
+    sr=SAMPLE_RATE,
+):
+    """Generate a minimum-phase FIR bandpass crossover filter.
+
+    Creates a bandpass by multiplying a highpass magnitude response (at
+    *low_freq*) with a lowpass magnitude response (at *high_freq*) and
+    synthesising a minimum-phase FIR via the cepstral method.  Independent
+    slopes per edge allow different rolloff rates (e.g. gentle low-end
+    rolloff but steep high-end cutoff).
+
+    Parameters
+    ----------
+    low_freq : float
+        Lower crossover frequency in Hz (highpass edge).
+    high_freq : float
+        Upper crossover frequency in Hz (lowpass edge).
+    low_slope_db_per_oct : float
+        Rolloff steepness at the low edge in dB/octave.
+    high_slope_db_per_oct : float
+        Rolloff steepness at the high edge in dB/octave.
+    n_taps : int
+        Output filter length.
+    sr : int
+        Sample rate.
+
+    Returns
+    -------
+    np.ndarray
+        Minimum-phase FIR bandpass crossover filter, normalised to unity
+        gain in the passband centre.
+
+    Raises
+    ------
+    ValueError
+        If *low_freq* >= *high_freq*.
+    """
+    if low_freq >= high_freq:
+        raise ValueError(
+            f"low_freq ({low_freq}) must be less than high_freq ({high_freq})"
+        )
+
+    n_fft = dsp_utils.next_power_of_2(n_taps * 4)
+    freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+
+    hp_mag = _design_crossover_magnitude(freqs, low_freq, 'highpass', low_slope_db_per_oct)
+    lp_mag = _design_crossover_magnitude(freqs, high_freq, 'lowpass', high_slope_db_per_oct)
+    magnitude = hp_mag * lp_mag
+
+    fir = _magnitude_to_min_phase_fir(magnitude, n_fft, n_taps)
+
+    # Normalise: unity gain at passband centre (geometric mean of edges)
+    center_freq = np.sqrt(low_freq * high_freq)
+    passband_freqs, passband_mag = dsp_utils.rfft_magnitude(fir)
+    lo = max(low_freq * 1.5, center_freq * 0.7)
+    hi = min(high_freq * 0.67, center_freq * 1.4)
+    if lo >= hi:
+        lo, hi = low_freq * 1.2, high_freq * 0.8
+    mask = (passband_freqs >= lo) & (passband_freqs <= hi)
+    if np.any(mask):
+        passband_level = np.mean(passband_mag[mask])
+        if passband_level > 0:
+            fir /= passband_level
+
+    return fir
+
+
+def generate_crossover_filter(
+    filter_type,
+    crossover_freq=80.0,
+    slope_db_per_oct=48.0,
+    n_taps=16384,
+    sr=SAMPLE_RATE,
+    crossover_freq_high=None,
+    high_slope_db_per_oct=None,
+):
+    """
+    Generate a minimum-phase FIR crossover filter.
+
+    Parameters
+    ----------
+    filter_type : str
+        'highpass' for mains, 'lowpass' for subs, 'bandpass' for mid-range
+        drivers in 3-way or 4-way topologies.
+    crossover_freq : float
+        Crossover frequency in Hz.  For bandpass this is the *lower* edge.
+    slope_db_per_oct : float
+        Rolloff steepness (48-96 dB/oct recommended).  For bandpass this
+        applies to the lower edge.
+    n_taps : int
+        Output filter length.
+    sr : int
+        Sample rate.
+    crossover_freq_high : float, optional
+        Upper crossover frequency (required for bandpass).
+    high_slope_db_per_oct : float, optional
+        Rolloff steepness at the upper edge (bandpass only).  Defaults to
+        *slope_db_per_oct* if not provided.
+
+    Returns
+    -------
+    np.ndarray
+        Minimum-phase FIR crossover filter.
+
+    Raises
+    ------
+    ValueError
+        If filter_type is unknown or bandpass parameters are invalid.
+    """
+    if filter_type == 'bandpass':
+        if crossover_freq_high is None:
+            raise ValueError(
+                "crossover_freq_high is required for bandpass filter_type"
+            )
+        return generate_bandpass_filter(
+            low_freq=crossover_freq,
+            high_freq=crossover_freq_high,
+            low_slope_db_per_oct=slope_db_per_oct,
+            high_slope_db_per_oct=(
+                high_slope_db_per_oct if high_slope_db_per_oct is not None
+                else slope_db_per_oct
+            ),
+            n_taps=n_taps,
+            sr=sr,
+        )
+
+    if filter_type not in ('highpass', 'lowpass'):
+        raise ValueError(
+            f"Unknown filter_type '{filter_type}'; expected "
+            f"'highpass', 'lowpass', or 'bandpass'"
+        )
+
+    n_fft = dsp_utils.next_power_of_2(n_taps * 4)
+    freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+
+    # Design target magnitude
+    magnitude = _design_crossover_magnitude(freqs, crossover_freq, filter_type, slope_db_per_oct)
+
+    fir = _magnitude_to_min_phase_fir(magnitude, n_fft, n_taps)
 
     # Normalize: passband should be at 0dB (unity gain)
-    passband_freqs, passband_mag = dsp_utils.rfft_magnitude(xo_filter)
+    passband_freqs, passband_mag = dsp_utils.rfft_magnitude(fir)
     if filter_type == 'highpass':
         mask = (passband_freqs >= crossover_freq * 2) & (passband_freqs <= sr / 2 * 0.9)
     else:
@@ -233,6 +341,6 @@ def generate_crossover_filter(
     if np.any(mask):
         passband_level = np.mean(passband_mag[mask])
         if passband_level > 0:
-            xo_filter /= passband_level
+            fir /= passband_level
 
-    return xo_filter
+    return fir
