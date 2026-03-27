@@ -364,6 +364,53 @@ html, body {
 .sb-mode-badge--monitoring { background: var(--group-main); color: #111; }
 .sb-mode-badge--measurement { background: var(--warning); color: #111; }
 
+/* F-161: Clickable mode badge */
+.sb-mode-badge { cursor: pointer; position: relative; }
+.sb-mode-badge--measurement { cursor: default; }
+
+/* F-161: Mode switcher dropdown */
+.sb-anchor { position: relative; }
+.sb-mode-dropdown {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 200;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.4);
+}
+.sb-mode-dropdown.hidden { display: none; }
+.sb-mode-option {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: transparent;
+    color: var(--text);
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 4px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    text-align: left;
+}
+.sb-mode-option:hover { background: var(--primary-dim); color: #fff; }
+.sb-mode-option.active {
+    border-color: var(--primary);
+    background: var(--primary-dim);
+    color: #fff;
+}
+.sb-mode-option.switching {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
 /* -- Panic button (MUTE / ABORT) ----------------------------------------- */
 
 .sb-panic-btn {

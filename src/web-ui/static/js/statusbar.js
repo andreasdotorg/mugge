@@ -333,16 +333,21 @@
         // Mode badge (from GraphManager via FilterChainCollector)
         var modeEl = document.getElementById("sb-mode");
         if (modeEl) {
+            var modeLower = data.mode.toLowerCase();
+            currentModeFromWs = modeLower;
             modeEl.textContent = data.mode.toUpperCase();
             modeEl.classList.remove("c-grey");
             // Apply mode-specific badge color class
             modeEl.classList.remove("sb-mode-badge--dj", "sb-mode-badge--live",
                 "sb-mode-badge--monitoring", "sb-mode-badge--measurement");
-            var modeLower = data.mode.toLowerCase();
             if (modeLower === "dj") modeEl.classList.add("sb-mode-badge--dj");
             else if (modeLower === "live") modeEl.classList.add("sb-mode-badge--live");
             else if (modeLower === "monitoring") modeEl.classList.add("sb-mode-badge--monitoring");
             else if (modeLower === "measurement") modeEl.classList.add("sb-mode-badge--measurement");
+            // F-161: Disable badge click when in measurement mode
+            modeEl.title = modeLower === "measurement"
+                ? "Mode managed by measurement session"
+                : "Click to switch mode";
         }
 
         // F-072: Safety alerts from GraphManager (watchdog + gain integrity)
@@ -476,6 +481,73 @@
         }
     }
 
+    // -- F-161: Mode switcher dropdown --
+
+    var currentModeFromWs = "unknown";
+    var modeSwitching = false;
+
+    function openModeDropdown() {
+        var dropdown = document.getElementById("sb-mode-dropdown");
+        if (!dropdown) return;
+        // Highlight current mode
+        var opts = dropdown.querySelectorAll(".sb-mode-option");
+        for (var i = 0; i < opts.length; i++) {
+            opts[i].classList.remove("active");
+            if (opts[i].getAttribute("data-mode") === currentModeFromWs) {
+                opts[i].classList.add("active");
+            }
+        }
+        dropdown.classList.remove("hidden");
+    }
+
+    function closeModeDropdown() {
+        var dropdown = document.getElementById("sb-mode-dropdown");
+        if (dropdown) dropdown.classList.add("hidden");
+    }
+
+    function onModeBadgeClick(e) {
+        e.stopPropagation();
+        if (currentModeFromWs === "measurement" || modeSwitching) return;
+        var dropdown = document.getElementById("sb-mode-dropdown");
+        if (dropdown && !dropdown.classList.contains("hidden")) {
+            closeModeDropdown();
+        } else {
+            openModeDropdown();
+        }
+    }
+
+    function onModeOptionClick(e) {
+        var target = e.target.getAttribute("data-mode");
+        if (!target || target === currentModeFromWs || modeSwitching) return;
+        modeSwitching = true;
+        var opts = document.querySelectorAll(".sb-mode-option");
+        for (var i = 0; i < opts.length; i++) opts[i].classList.add("switching");
+        fetch("/api/v1/test-tool/restore-mode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: target }),
+        })
+            .then(function (res) {
+                if (!res.ok) throw new Error("Mode switch failed: " + res.status);
+                return res.json();
+            })
+            .then(function () {
+                closeModeDropdown();
+            })
+            .catch(function (err) {
+                var badge = document.getElementById("sb-mode");
+                if (badge) {
+                    badge.style.outline = "2px solid red";
+                    setTimeout(function () { badge.style.outline = ""; }, 1500);
+                }
+            })
+            .finally(function () {
+                modeSwitching = false;
+                var opts2 = document.querySelectorAll(".sb-mode-option");
+                for (var j = 0; j < opts2.length; j++) opts2[j].classList.remove("switching");
+            });
+    }
+
     // -- Panic button (MUTE / ABORT) --
 
     function updatePanicButton() {
@@ -540,6 +612,28 @@
         if (panicBtn) {
             panicBtn.addEventListener("click", onPanicClick);
         }
+
+        // F-161: Mode switcher — click badge to open dropdown
+        var modeBadge = document.getElementById("sb-mode");
+        if (modeBadge) {
+            modeBadge.addEventListener("click", onModeBadgeClick);
+        }
+        var modeDropdown = document.getElementById("sb-mode-dropdown");
+        if (modeDropdown) {
+            var modeOpts = modeDropdown.querySelectorAll(".sb-mode-option");
+            for (var mi = 0; mi < modeOpts.length; mi++) {
+                modeOpts[mi].addEventListener("click", onModeOptionClick);
+            }
+        }
+        // Close dropdown on outside click
+        document.addEventListener("click", function (e) {
+            var dropdown = document.getElementById("sb-mode-dropdown");
+            if (!dropdown || dropdown.classList.contains("hidden")) return;
+            var anchor = document.querySelector(".sb-anchor");
+            if (anchor && !anchor.contains(e.target)) {
+                closeModeDropdown();
+            }
+        });
 
         // F-129: Listen for clip clear events from dashboard meters
         document.addEventListener("clipclear", function (e) {

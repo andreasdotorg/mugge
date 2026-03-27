@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>mugge</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-    <link rel="stylesheet" href="/static/style.css?v=50">
+    <link rel="stylesheet" href="/static/style.css?v=51">
 </head>
 <body>
 
@@ -124,7 +124,13 @@
     <!-- Anchor: panic button + mode badge -->
     <div class="sb-anchor">
         <button class="sb-panic-btn" id="sb-panic-btn" data-testid="panic-button">MUTE</button>
-        <span class="sb-mode-badge c-grey" id="sb-mode">--</span>
+        <span class="sb-mode-badge c-grey" id="sb-mode" title="Click to switch mode">--</span>
+        <!-- F-161: Mode switcher dropdown -->
+        <div class="sb-mode-dropdown hidden" id="sb-mode-dropdown">
+            <button class="sb-mode-option" data-mode="dj">DJ</button>
+            <button class="sb-mode-option" data-mode="live">Live</button>
+            <button class="sb-mode-option" data-mode="monitoring">Monitoring</button>
+        </div>
     </div>
 </div>
 
@@ -1207,7 +1213,7 @@
 </div>
 
 <script src="/static/js/app.js?v=49"></script>
-<script src="/static/js/statusbar.js?v=49"></script>
+<script src="/static/js/statusbar.js?v=50"></script>
 <script src="/static/js/fft-pipeline.js?v=49"></script>
 <script src="/static/js/spectrum-renderer.js?v=49"></script>
 <script src="/static/js/spectrum.js?v=49"></script>
