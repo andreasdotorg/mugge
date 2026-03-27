@@ -140,11 +140,12 @@
     }
 
     // Track preflight results for summary computation.
-    var preflightResults = { mic: null, gm: null, profile: null };
+    var preflightResults = { pw: null, convolver: null, usb: null, mic: null, gm: null, profile: null };
 
     function runPreflightChecks() {
-        preflightResults = { mic: null, gm: null, profile: null };
+        preflightResults = { pw: null, convolver: null, usb: null, mic: null, gm: null, profile: null };
 
+        checkPipeWireState();
         checkUmik1();
         checkGmMode();
         checkAmps();
@@ -167,10 +168,16 @@
         var statusEl = $("mw-preflight-status");
         if (!statusEl) return;
 
-        var hasFail = (preflightResults.mic === false ||
+        var hasFail = (preflightResults.pw === false ||
+                       preflightResults.convolver === false ||
+                       preflightResults.usb === false ||
+                       preflightResults.mic === false ||
                        preflightResults.gm === false ||
                        preflightResults.profile === false);
-        var allPass = (preflightResults.mic === true &&
+        var allPass = (preflightResults.pw === true &&
+                       preflightResults.convolver === true &&
+                       preflightResults.usb === true &&
+                       preflightResults.mic === true &&
                        preflightResults.gm === true &&
                        preflightResults.profile === true);
 
@@ -184,6 +191,74 @@
             statusEl.textContent = "Checking...";
             statusEl.className = "mw-preflight-status c-warning";
         }
+    }
+
+    function checkPipeWireState() {
+        setIndicator("#rc-pf-pw", "...", "c-warning");
+        setIndicator("#rc-pf-convolver", "...", "c-warning");
+        setIndicator("#rc-pf-usb", "...", "c-warning");
+        fetch("/api/v1/graph/topology")
+            .then(function (r) {
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return r.json();
+            })
+            .then(function (data) {
+                var nodes = data.nodes || [];
+
+                // PipeWire running: topology endpoint returned nodes
+                if (nodes.length > 0) {
+                    setIndicator("#rc-pf-pw", "OK", "c-safe");
+                    setIndicatorTooltip("#rc-pf-pw", nodes.length + " nodes active");
+                    preflightResults.pw = true;
+                } else {
+                    setIndicator("#rc-pf-pw", "NO NODES", "c-danger");
+                    setIndicatorTooltip("#rc-pf-pw", "PipeWire returned no nodes");
+                    preflightResults.pw = false;
+                }
+
+                // Convolver loaded: look for pi4audio-convolver node
+                var convolverFound = false;
+                var usbFound = false;
+                for (var i = 0; i < nodes.length; i++) {
+                    var name = nodes[i].name || "";
+                    if (name === "pi4audio-convolver") convolverFound = true;
+                    if (name.indexOf("USBStreamer") !== -1) usbFound = true;
+                }
+
+                if (convolverFound) {
+                    setIndicator("#rc-pf-convolver", "OK", "c-safe");
+                    setIndicatorTooltip("#rc-pf-convolver", "pi4audio-convolver node active");
+                    preflightResults.convolver = true;
+                } else {
+                    setIndicator("#rc-pf-convolver", "MISSING", "c-danger");
+                    setIndicatorTooltip("#rc-pf-convolver", "Convolver node not found in PipeWire graph");
+                    preflightResults.convolver = false;
+                }
+
+                if (usbFound) {
+                    setIndicator("#rc-pf-usb", "OK", "c-safe");
+                    setIndicatorTooltip("#rc-pf-usb", "USBStreamer detected in PipeWire graph");
+                    preflightResults.usb = true;
+                } else {
+                    setIndicator("#rc-pf-usb", "MISSING", "c-danger");
+                    setIndicatorTooltip("#rc-pf-usb", "USBStreamer not found -- check USB connection");
+                    preflightResults.usb = false;
+                }
+
+                updatePreflightSummary();
+            })
+            .catch(function () {
+                setIndicator("#rc-pf-pw", "OFFLINE", "c-danger");
+                setIndicatorTooltip("#rc-pf-pw", "Cannot reach graph topology endpoint");
+                preflightResults.pw = false;
+                setIndicator("#rc-pf-convolver", "UNKNOWN", "c-warning");
+                setIndicatorTooltip("#rc-pf-convolver", "Cannot check -- PipeWire unreachable");
+                preflightResults.convolver = false;
+                setIndicator("#rc-pf-usb", "UNKNOWN", "c-warning");
+                setIndicatorTooltip("#rc-pf-usb", "Cannot check -- PipeWire unreachable");
+                preflightResults.usb = false;
+                updatePreflightSummary();
+            });
     }
 
     function checkUmik1() {
