@@ -100,6 +100,7 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 | US-095 | **TEST** | **TBD** | Graph Visualization — Truthful PW Topology. Committed (`ef61896`). **TEST phase entered 2026-03-27.** QE + advisory reviews in progress. |
 | US-096 | **TEST** | **TBD** | UMIK-1 Full Calibration Pipeline. Committed (`4b3bad0`). A-weighting, cal management, SPL accuracy, verification. **TEST phase entered 2026-03-27.** QE + advisory reviews in progress. |
 | US-097 | **TEST** | **TBD** | Room Compensation — Web UI Workflow. Committed. Filter-gen + deploy endpoints wired. **TEST phase entered 2026-03-27.** QE + advisory reviews in progress. |
+| US-098 | **IMPLEMENT** | **TBD** | Room Correction Pipeline Correctness Verification. **CRITICAL — event demo confidence.** P0 in progress: #125 round-trip (worker-1), #126 D-009 property (worker-2), #127 min-phase (worker-3). All 3 parallel, pure Python tests. P1/P2 after P0 done. Selected 2026-03-27 (URGENT). |
 | US-062 | done | **7/7** | **done** (owner-accepted 2026-03-20). Boot-to-DJ Mode. Pi boots into DJ mode: Mixxx auto-launches, routing established via pw-link script, audio plays through convolver at correct attenuation. Delivered: q1024 static config (D-042), Mult persistence (C-009), Mixxx systemd service (`0df1e56`), DJ routing service (`0df1e56`+`ff40766`), WirePlumber unmasked with auto-link suppression, JACK bypass cleanup, CamillaDSP system service disabled, reboot test PASS (D-001, 6 iterations, 12 links, zero bypass, ERR=0). D-039 amendment needed (WirePlumber auto-link suppression). |
 
 ## In Progress
@@ -215,13 +216,15 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 **Pi deployment (task #53):** Pending — owner left for event. **60 commits** ready for tonight's deployment session. US-088 DEPLOY/VERIFY + owner acceptance deferred to post-event.
 
 **Current worker assignments:**
-- worker-1 → launching `nix run .#local-demo` for owner UI review
-- worker-2 → **idle**
-- worker-3 → **idle**
+- worker-1 → **#125** T-QA-1: Round-trip correction test — 42Hz mode attenuation (US-098 P0)
+- worker-2 → **#126** T-QA-2: D-009 property-based verification across all paths (US-098 P0)
+- worker-3 → **#127** T-QA-3: Minimum-phase verification on correction + combined output (US-098 P0)
 
-**Active tasks:** Owner UI review via local-demo (worker-1).
+**Active tasks:** All 3 workers on US-098 P0 (demo-critical QA). Running in parallel, no dependencies between them.
 
-**Session total: 70 commits pushed.** Doc updates pending commit (status.md, defects.md, user-stories.md).
+**Session total: 70 commits pushed.** Doc updates pending commit.
+
+**US-067 PAUSED** — tasks #117 (speaker sim) and #120 (room sim) completed; #124 (sim config gen) unblocked but deferred until US-098 P0 done.
 
 **MILESTONE: ALL 9 stories entered TEST phase (2026-03-27).** Implementation sprint complete.
 

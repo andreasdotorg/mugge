@@ -6904,6 +6904,46 @@ All phases developable locally without Pi. Only actual measurement run (sweep + 
 
 ---
 
+## US-098: Room Correction Pipeline Correctness Verification
+
+**As** the system operator demoing the room correction pipeline,
+**I want** verified confidence that the correction pipeline actually corrects room problems, maintains safety invariants (D-009), and preserves signal integrity end-to-end,
+**so that** I can trust the system on stage knowing that corrections improve the response, never make it worse, and never damage speakers.
+
+**Status:** selected (URGENT — demo tomorrow, 2026-03-27)
+**Depends on:** US-010, US-011, US-090, US-097
+**Blocks:** none
+**Priority:** CRITICAL — event demo confidence
+**Tier:** 12
+
+### Acceptance criteria
+
+**P0 — Demo blockers:**
+- [ ] Correction round-trip test: synthetic 42Hz mode +12dB -> correct -> verify attenuated to +/-3dB of target
+- [ ] D-009 across ALL paths: correction.py, combine.py, generate_profile_filters.py, measurement session — all gain <= -0.5dB
+- [ ] Minimum-phase on correction output
+- [ ] Golden reference files for 3 scenarios (2-way 80Hz, 3-way 200Hz/2kHz, correction with 42Hz mode)
+
+**P1 — High confidence:**
+- [ ] Channel identity (no cross-contamination)
+- [ ] Smoothing bandwidth verification (1/6 oct < 200Hz, 1/3 oct 200-1k, 1/2 oct > 1k)
+- [ ] Combine module tests (length, D-009, min-phase, crossover preservation)
+
+**P2 — Full confidence:**
+- [ ] Transient fidelity (psytrance kick, no pre-ringing)
+- [ ] Null correction test (flat room -> near-dirac)
+- [ ] Multi-position averaging quality
+
+### Definition of Done
+
+- [ ] All P0 tests passing
+- [ ] Golden reference files committed
+- [ ] AE sign-off: correction methodology, target curve application, smoothing bands
+- [ ] AD sign-off: safety invariants (D-009 compliance, no boost paths)
+- [ ] QE sign-off: test coverage, golden reference validation
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the
