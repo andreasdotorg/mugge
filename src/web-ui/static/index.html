@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pi Audio Workstation</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-    <link rel="stylesheet" href="/static/style.css?v=38">
+    <link rel="stylesheet" href="/static/style.css?v=39">
 </head>
 <body>
 
@@ -359,6 +359,119 @@
                         <span class="cfg-kv-label">Description</span>
                         <span class="cfg-kv-value" id="cfg-fc-desc">--</span>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FIR Filter Generation (US-090) -->
+    <div class="cfg-layout cfg-fir-layout" id="cfg-fir-gen">
+        <div class="cfg-column">
+            <div class="cfg-section">
+                <div class="cfg-section-title">FIR FILTER GENERATION</div>
+                <div class="fir-form">
+                    <div class="fir-form-row">
+                        <label class="fir-form-label" for="fir-profile">Profile</label>
+                        <select class="fir-form-select" id="fir-profile">
+                            <option value="">Loading...</option>
+                        </select>
+                    </div>
+                    <div class="fir-form-row">
+                        <label class="fir-form-label" for="fir-n-taps">Filter Taps</label>
+                        <select class="fir-form-select" id="fir-n-taps">
+                            <option value="4096">4096 (light)</option>
+                            <option value="8192">8192 (standard)</option>
+                            <option value="16384" selected>16384 (full)</option>
+                            <option value="32768">32768 (maximum)</option>
+                        </select>
+                    </div>
+                    <div class="fir-form-row">
+                        <label class="fir-form-label" for="fir-sample-rate">Sample Rate</label>
+                        <select class="fir-form-select" id="fir-sample-rate">
+                            <option value="44100">44100 Hz</option>
+                            <option value="48000" selected>48000 Hz</option>
+                            <option value="96000">96000 Hz</option>
+                        </select>
+                    </div>
+                    <div class="fir-form-row">
+                        <label class="fir-form-label" for="fir-target-phon">Loudness (phon)</label>
+                        <input class="fir-form-input" id="fir-target-phon" type="number"
+                               min="20" max="90" step="1" placeholder="optional (e.g. 70)">
+                    </div>
+                </div>
+                <div class="fir-actions">
+                    <button class="cfg-apply-btn fir-generate-btn" id="fir-generate-btn" type="button">
+                        GENERATE FILTERS
+                    </button>
+                </div>
+                <div class="fir-status" id="fir-status"></div>
+            </div>
+        </div>
+
+        <div class="cfg-column">
+            <div class="cfg-section" id="fir-results-panel">
+                <div class="cfg-section-title">GENERATION RESULTS</div>
+                <div class="fir-results-empty" id="fir-results-empty">
+                    Select a profile and click Generate to create FIR filters.
+                </div>
+                <div class="fir-results-content hidden" id="fir-results-content">
+                    <div class="fir-results-summary" id="fir-results-summary"></div>
+                    <div class="fir-results-channels" id="fir-results-channels"></div>
+                    <div class="fir-results-verification" id="fir-results-verification"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Speaker configuration (US-089) -->
+    <div class="cfg-layout cfg-speakers-layout" id="cfg-speakers">
+        <!-- Left column: lists -->
+        <div class="cfg-column">
+            <div class="cfg-section">
+                <div class="cfg-section-title">SPEAKER PROFILES</div>
+                <div class="spk-list" id="spk-profile-list">
+                    <div class="spk-loading">Loading...</div>
+                </div>
+                <div class="spk-list-actions">
+                    <button class="spk-add-btn" id="spk-add-profile" type="button">+ NEW PROFILE</button>
+                </div>
+            </div>
+            <div class="cfg-section">
+                <div class="cfg-section-title">SPEAKER IDENTITIES</div>
+                <div class="spk-list" id="spk-identity-list">
+                    <div class="spk-loading">Loading...</div>
+                </div>
+                <div class="spk-list-actions">
+                    <button class="spk-add-btn" id="spk-add-identity" type="button">+ NEW IDENTITY</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right column: detail / edit form -->
+        <div class="cfg-column">
+            <div class="cfg-section" id="spk-detail-panel">
+                <div class="spk-detail-empty" id="spk-detail-empty">
+                    Select a profile or identity to view details.
+                </div>
+                <div class="spk-detail-content hidden" id="spk-detail-content">
+                    <div class="spk-detail-header">
+                        <span class="spk-detail-title" id="spk-detail-title">--</span>
+                        <span class="spk-detail-type-badge" id="spk-detail-badge">--</span>
+                    </div>
+                    <div class="spk-detail-body" id="spk-detail-body"></div>
+                    <div class="spk-detail-actions" id="spk-detail-actions">
+                        <button class="spk-edit-btn" id="spk-edit-btn" type="button">EDIT</button>
+                        <button class="spk-delete-btn" id="spk-delete-btn" type="button">DELETE</button>
+                    </div>
+                </div>
+                <div class="spk-form-content hidden" id="spk-form-content">
+                    <div class="spk-form-title" id="spk-form-title">New Profile</div>
+                    <div class="spk-form-body" id="spk-form-body"></div>
+                    <div class="spk-form-actions">
+                        <button class="cfg-apply-btn spk-save-btn" id="spk-save-btn" type="button">SAVE</button>
+                        <button class="cfg-reset-btn spk-cancel-btn" id="spk-cancel-btn" type="button">CANCEL</button>
+                    </div>
+                    <div class="spk-form-status" id="spk-form-status"></div>
                 </div>
             </div>
         </div>
@@ -744,17 +857,19 @@
     <div class="reconnect-detail" id="reconnect-detail">Reconnecting...</div>
 </div>
 
-<script src="/static/js/app.js?v=38"></script>
-<script src="/static/js/statusbar.js?v=38"></script>
-<script src="/static/js/fft-pipeline.js?v=38"></script>
-<script src="/static/js/spectrum-renderer.js?v=38"></script>
-<script src="/static/js/spectrum.js?v=38"></script>
-<script src="/static/js/dashboard.js?v=38"></script>
-<script src="/static/js/system.js?v=38"></script>
-<script src="/static/js/graph.js?v=38"></script>
-<script src="/static/js/config.js?v=38"></script>
-<script src="/static/js/measure.js?v=38"></script>
-<script src="/static/js/test.js?v=38"></script>
-<script src="/static/js/midi.js?v=38"></script>
+<script src="/static/js/app.js?v=39"></script>
+<script src="/static/js/statusbar.js?v=39"></script>
+<script src="/static/js/fft-pipeline.js?v=39"></script>
+<script src="/static/js/spectrum-renderer.js?v=39"></script>
+<script src="/static/js/spectrum.js?v=39"></script>
+<script src="/static/js/dashboard.js?v=39"></script>
+<script src="/static/js/system.js?v=39"></script>
+<script src="/static/js/graph.js?v=39"></script>
+<script src="/static/js/config.js?v=39"></script>
+<script src="/static/js/speaker-config.js?v=39"></script>
+<script src="/static/js/filter-gen.js?v=39"></script>
+<script src="/static/js/measure.js?v=39"></script>
+<script src="/static/js/test.js?v=39"></script>
+<script src="/static/js/midi.js?v=39"></script>
 </body>
 </html>

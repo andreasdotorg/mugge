@@ -2648,6 +2648,10 @@ html, body {
    VIEW: Config — Gain, quantum, filter-chain settings
    ═══════════════════════════════════════════════════════════════════ */
 
+#view-config {
+    overflow-y: auto;
+}
+
 .cfg-layout {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -2937,6 +2941,558 @@ html, body {
 
     .cfg-quantum-btns {
         flex-wrap: wrap;
+    }
+}
+
+/* ===================================================================
+   VIEW: Config — Speaker configuration (US-089)
+   =================================================================== */
+
+/* -- FIR Filter Generation (US-090) -- */
+
+.cfg-fir-layout {
+    border-top: 1px solid var(--border);
+    margin-top: 0;
+    padding-top: 16px;
+}
+
+.fir-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.fir-form-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.fir-form-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    min-width: 110px;
+    flex-shrink: 0;
+}
+
+.fir-form-select,
+.fir-form-input {
+    flex: 1;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 8px;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.fir-form-select:focus,
+.fir-form-input:focus {
+    border-color: var(--primary);
+    outline: none;
+}
+
+.fir-actions {
+    margin-top: 12px;
+}
+
+.fir-generate-btn {
+    width: 100%;
+}
+
+.fir-status {
+    font-size: 11px;
+    margin-top: 8px;
+    min-height: 16px;
+}
+
+.fir-results-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-align: center;
+    padding: 24px 16px;
+}
+
+.fir-summary-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.fir-summary-row:last-child {
+    border-bottom: none;
+}
+
+.fir-summary-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.fir-summary-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: var(--font-numeric);
+}
+
+.fir-result-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.fir-badge--pass {
+    background: rgba(76, 175, 80, 0.15);
+    color: var(--safe);
+}
+
+.fir-badge--fail {
+    background: rgba(255, 82, 82, 0.15);
+    color: var(--danger);
+}
+
+.fir-channels-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 16px 0 8px;
+}
+
+.fir-channel-row {
+    display: flex;
+    gap: 12px;
+    padding: 3px 0;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border);
+}
+
+.fir-channel-row:last-child {
+    border-bottom: none;
+}
+
+.fir-channel-name {
+    font-weight: 700;
+    color: var(--text-dim);
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.fir-channel-path {
+    font-family: var(--font-numeric);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.fir-verify-header,
+.fir-verify-row {
+    display: flex;
+    gap: 4px;
+    padding: 4px 0;
+    font-size: 11px;
+}
+
+.fir-verify-header {
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+}
+
+.fir-verify-row {
+    border-bottom: 1px solid var(--border);
+}
+
+.fir-verify-row:last-child {
+    border-bottom: none;
+}
+
+.fir-verify-col-ch {
+    flex: 2;
+    font-weight: 600;
+}
+
+.fir-verify-col {
+    flex: 1;
+    text-align: center;
+    font-weight: 600;
+    font-family: var(--font-numeric);
+}
+
+.cfg-speakers-layout {
+    border-top: 1px solid var(--border);
+    margin-top: 0;
+    padding-top: 16px;
+}
+
+/* -- Speaker list -- */
+
+.spk-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.spk-list-item {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 12px;
+    background: var(--bg-bar);
+    border-radius: 3px;
+    color: var(--text);
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.spk-list-item:hover {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+
+.spk-list-item--active {
+    background: rgba(179, 157, 219, 0.12);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.spk-list-empty,
+.spk-loading {
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 8px 12px;
+    font-style: italic;
+}
+
+.spk-list-actions {
+    margin-top: 8px;
+}
+
+.spk-add-btn {
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 6px 12px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.spk-add-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+/* -- Detail panel -- */
+
+.spk-detail-empty {
+    font-size: 12px;
+    color: var(--text-dim);
+    padding: 24px;
+    text-align: center;
+    font-style: italic;
+}
+
+.spk-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.spk-detail-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.spk-detail-type-badge {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 8px;
+}
+
+.spk-badge--profile {
+    background: rgba(179, 157, 219, 0.15);
+    color: var(--primary);
+}
+
+.spk-badge--identity {
+    background: rgba(121, 226, 91, 0.12);
+    color: var(--safe);
+}
+
+.spk-detail-sub-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-top: 12px;
+    margin-bottom: 6px;
+}
+
+.spk-detail-body .cfg-kv-grid {
+    margin-bottom: 4px;
+}
+
+.spk-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.spk-edit-btn,
+.spk-delete-btn {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 8px 16px;
+    min-height: 36px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.spk-edit-btn {
+    flex: 2;
+    background: rgba(0, 188, 212, 0.12);
+    border: 1px solid rgba(0, 188, 212, 0.5);
+    color: var(--primary);
+}
+
+.spk-edit-btn:hover {
+    background: rgba(0, 188, 212, 0.25);
+}
+
+.spk-delete-btn {
+    flex: 1;
+    background: rgba(229, 69, 58, 0.1);
+    border: 1px solid rgba(229, 69, 58, 0.3);
+    color: var(--danger);
+}
+
+.spk-delete-btn:hover {
+    background: rgba(229, 69, 58, 0.25);
+}
+
+/* -- Speaker chips (detail view) -- */
+
+.spk-speaker-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-bar);
+    border-radius: 3px;
+    margin-bottom: 4px;
+    font-size: 11px;
+}
+
+.spk-chip-name {
+    font-weight: 700;
+    color: var(--text);
+    min-width: 72px;
+}
+
+.spk-chip-info {
+    color: var(--text-dim);
+}
+
+/* -- Form panel -- */
+
+.spk-form-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+}
+
+.spk-form-sub-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-top: 12px;
+    margin-bottom: 6px;
+}
+
+.spk-form-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.spk-form-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 120px;
+    flex-shrink: 0;
+}
+
+.spk-form-input {
+    font-family: var(--font-numeric);
+    font-size: 12px;
+    padding: 6px 10px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    flex: 1;
+    min-width: 0;
+}
+
+.spk-form-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.spk-form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.spk-form-status {
+    font-size: 11px;
+    margin-top: 8px;
+    min-height: 16px;
+}
+
+/* -- Speaker form rows (profile form) -- */
+
+.spk-speaker-form-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+    flex-wrap: wrap;
+}
+
+.spk-speaker-form-row input,
+.spk-speaker-form-row select {
+    font-family: var(--font-numeric);
+    font-size: 11px;
+    padding: 4px 6px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+}
+
+.spk-speaker-form-row input:focus,
+.spk-speaker-form-row select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.spk-f-spk-key {
+    width: 80px;
+}
+
+.spk-f-spk-identity {
+    width: 120px;
+}
+
+.spk-f-spk-role,
+.spk-f-spk-filter,
+.spk-f-spk-polarity {
+    width: 90px;
+}
+
+.spk-f-spk-channel {
+    width: 48px;
+    text-align: center;
+}
+
+.spk-remove-speaker-btn {
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 8px;
+    background: rgba(229, 69, 58, 0.1);
+    border: 1px solid rgba(229, 69, 58, 0.3);
+    border-radius: 2px;
+    color: var(--danger);
+    cursor: pointer;
+}
+
+.spk-remove-speaker-btn:hover {
+    background: rgba(229, 69, 58, 0.25);
+}
+
+.spk-add-speaker-btn {
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 6px 12px;
+    margin-top: 6px;
+    background: var(--bg-bar);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.spk-add-speaker-btn:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+}
+
+/* -- Speaker config responsive -- */
+
+@media (max-width: 899px) {
+    .cfg-speakers-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 599px) {
+    .spk-speaker-form-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .spk-f-spk-key,
+    .spk-f-spk-identity,
+    .spk-f-spk-role,
+    .spk-f-spk-filter,
+    .spk-f-spk-polarity {
+        width: 100%;
     }
 }
 
