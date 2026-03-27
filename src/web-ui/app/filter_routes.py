@@ -152,7 +152,12 @@ def _load_correction_filters(session_dir: str, speakers: dict, n_taps: int) -> d
 
     corrections = {}
     for spk_key in speakers:
+        # Check flat session_dir first, then impulse_responses/ subdirectory
+        # (measurement session saves speaker-key IRs there via GAP-6).
         ir_path = os.path.join(session_dir, f"ir_{spk_key}.wav")
+        if not os.path.isfile(ir_path):
+            ir_path = os.path.join(
+                session_dir, "impulse_responses", f"ir_{spk_key}.wav")
         if os.path.isfile(ir_path):
             data, _sr = sf.read(ir_path, dtype="float64")
             if data.ndim > 1:

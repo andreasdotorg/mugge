@@ -913,6 +913,16 @@ class MeasurementSession:
         if correction_filters:
             log.info("Using %d correction filters from sweep recordings",
                      len(correction_filters))
+            # GAP-6: Save IRs with speaker-key naming so filter_routes
+            # _load_correction_filters() can find them for later re-generation.
+            from room_correction.export import export_filter as _export_ir
+            ir_out = os.path.join(self._config.output_dir, "impulse_responses")
+            os.makedirs(ir_out, exist_ok=True)
+            for spk_key, ir_data in correction_filters.items():
+                spk_path = os.path.join(ir_out, f"ir_{spk_key}.wav")
+                _export_ir(ir_data, spk_path,
+                           n_taps=len(ir_data), sr=sr)
+                log.info("Saved speaker-key IR: %s", spk_path)
         else:
             log.info("No correction filters — crossover-only generation")
 
