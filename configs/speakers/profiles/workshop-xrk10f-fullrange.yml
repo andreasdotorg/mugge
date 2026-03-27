@@ -1,0 +1,58 @@
+# Workshop venue — XRK-10F monitors FULL-RANGE (no sub available)
+# No active crossover — mugge applies room correction FIR + subsonic HPF only.
+# The internal 2kHz passive crossover within each XRK-10F cabinet is untouched.
+#
+# AMP CONSTRAINT: Only 2 of 4 amp channels used on owner's 4ch Class D (4x450W).
+# Channel mapping (USBStreamer AUX0-AUX7):
+#   AUX0 = Left XRK-10F   (full-range, HPF at 40 Hz + room correction)
+#   AUX1 = Right XRK-10F  (full-range, HPF at 40 Hz + room correction)
+#   AUX2 = unused
+#   AUX3 = unused
+#   AUX4 = HP Left         (monitoring)
+#   AUX5 = HP Right        (monitoring)
+#   AUX6 = IEM Left        (singer IEM — available in this topology)
+#   AUX7 = IEM Right       (singer IEM — available in this topology)
+#
+# LIMITATION: No sub-bass below ~50 Hz. The 22W/8534G00 woofer in a ~15L
+# sealed box has F3 around 50 Hz. Psytrance kick/bass will lack foundation.
+# Adequate for workshop/monitoring but not for a dance event.
+#
+# SAFETY: 10F driver rated 10W only! Thermal protection (US-092) mandatory.
+# The 450W amp channel MUST be gain-limited. power_limit_db is set
+# conservatively to keep amp output below 10W into 8 ohms.
+
+name: "Workshop XRK-10F Full-Range (No Sub)"
+description: "XRK-10F monitors full-range for workshop venue (~70 sqm). No sub. Room correction via mugge FIR. HPF at 40 Hz for excursion protection."
+topology: 2way  # No "fullrange" topology in schema. 2way with satellites only, no subs.
+
+# No crossover section — full-range operation.
+# The mandatory_hpf_hz (40 Hz) from the xrk10f-monitor identity provides
+# subsonic protection. The FIR filter applies this as part of the combined filter.
+
+speakers:
+  main_left:
+    identity: xrk10f-monitor
+    role: fullrange
+    channel: 0
+    filter_type: fullrange
+    polarity: normal
+  main_right:
+    identity: xrk10f-monitor
+    role: fullrange
+    channel: 1
+    filter_type: fullrange
+    polarity: normal
+
+monitoring:
+  hp_left: 4
+  hp_right: 5
+  hp2_left: 6
+  hp2_right: 7
+
+gain_staging:
+  satellite:
+    headroom_db: -10.0
+    power_limit_db: -18.0  # CRITICAL: 10F rated 10W. 450W amp at -18dB ~ 7W. Do not increase.
+
+target_curve: flat
+filter_taps: 16384
