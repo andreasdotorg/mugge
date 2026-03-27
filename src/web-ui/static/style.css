@@ -4091,8 +4091,24 @@ html, body {
 .spk-form-label {
     font-size: 11px;
     color: var(--text-dim);
-    width: 120px;
+    width: 140px;
     flex-shrink: 0;
+}
+
+.spk-help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--text);
+    cursor: help;
+    margin-left: 4px;
+    vertical-align: middle;
 }
 
 .spk-form-input {

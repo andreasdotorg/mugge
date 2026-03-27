@@ -219,6 +219,7 @@
         if (data.model) html += kvRow("Model", data.model);
         if (data.sensitivity_db_spl != null) html += kvRow("Sensitivity", data.sensitivity_db_spl + " dB SPL");
         if (data.max_power_watts != null) html += kvRow("Max Power", data.max_power_watts + " W");
+        if (data.port_tuning_hz != null) html += kvRow("Port Tuning", data.port_tuning_hz + " Hz");
         html += '</div>';
         body.innerHTML = html;
     }
@@ -353,9 +354,24 @@
         var html = '';
         html += formInput("spk-f-name", "Name", "text", d.name || "");
         html += formSelect("spk-f-type", "Type", VALID_TYPES, d.type || "sealed");
-        html += formInput("spk-f-impedance", "Impedance (Ohm)", "number", d.impedance_ohm != null ? d.impedance_ohm : 8);
-        html += formInput("spk-f-max-boost", "Max Boost (dB)", "number", d.max_boost_db != null ? d.max_boost_db : 0);
-        html += formInput("spk-f-hpf", "Mandatory HPF (Hz)", "number", d.mandatory_hpf_hz != null ? d.mandatory_hpf_hz : 20);
+        html += formInput("spk-f-sensitivity", "Sensitivity (dB SPL)", "number",
+            d.sensitivity_db_spl != null ? d.sensitivity_db_spl : "",
+            "SPL output at 1W/1m. Used for gain staging and thermal ceiling calculation. Required \u2014 measure near-field if unknown.");
+        html += formInput("spk-f-impedance", "Impedance (Ohm)", "number",
+            d.impedance_ohm != null ? d.impedance_ohm : 8,
+            "Nominal impedance. Used for power and thermal calculations. Required \u2014 check driver label or measure.");
+        html += formInput("spk-f-max-boost", "Max Boost (dB)", "number",
+            d.max_boost_db != null ? d.max_boost_db : 0,
+            "Maximum safe boost for this driver. D-009 safety: correction filters are cut-only, so this limits target curve boost. Default 0 (no boost allowed).");
+        html += formInput("spk-f-hpf", "Mandatory HPF (Hz)", "number",
+            d.mandatory_hpf_hz != null ? d.mandatory_hpf_hz : 20,
+            "Minimum safe frequency. A highpass protection filter is applied below this. For ported: use port tuning frequency. For sealed: use Fs. Critical for driver safety.");
+        html += formInput("spk-f-max-power", "Max Power (W)", "number",
+            d.max_power_watts != null ? d.max_power_watts : "",
+            "Continuous power handling (RMS watts). Used for thermal ceiling calculation. Optional \u2014 thermal protection uses conservative defaults if unknown.");
+        html += formInput("spk-f-port-tuning", "Port Tuning (Hz)", "number",
+            d.port_tuning_hz != null ? d.port_tuning_hz : "",
+            "Port resonance frequency (ported enclosures only). Below this frequency, cone excursion increases rapidly. Sets mandatory HPF if not overridden. Leave blank for sealed enclosures.");
         html += formInput("spk-f-manufacturer", "Manufacturer", "text", d.manufacturer || "");
         html += formInput("spk-f-model", "Model", "text", d.model || "");
         body.innerHTML = html;
@@ -369,6 +385,7 @@
                 var payload = {
                     name: $("spk-f-name").value.trim(),
                     type: $("spk-f-type").value,
+                    sensitivity_db_spl: parseFloat($("spk-f-sensitivity").value),
                     impedance_ohm: parseFloat($("spk-f-impedance").value),
                     max_boost_db: parseFloat($("spk-f-max-boost").value),
                     mandatory_hpf_hz: parseFloat($("spk-f-hpf").value)
@@ -377,6 +394,10 @@
                 var model = $("spk-f-model").value.trim();
                 if (mfr) payload.manufacturer = mfr;
                 if (model) payload.model = model;
+                var maxPow = $("spk-f-max-power").value.trim();
+                if (maxPow) payload.max_power_watts = parseFloat(maxPow);
+                var portTune = $("spk-f-port-tuning").value.trim();
+                if (portTune) payload.port_tuning_hz = parseFloat(portTune);
 
                 saveBtn.disabled = true;
                 setStatus("Saving...", "c-warning");
@@ -447,8 +468,10 @@
 
         // Filter settings
         html += '<div class="spk-form-sub-title">Filter Settings</div>';
-        html += formInput("spk-f-taps", "Filter Taps", "number", d.filter_taps || 16384);
-        html += formInput("spk-f-target", "Target Curve", "text", d.target_curve || "flat");
+        html += formInput("spk-f-taps", "Filter Taps", "number", d.filter_taps || 16384,
+            "FIR filter length in samples. 16384 taps = 341ms at 48kHz, giving 2.9Hz frequency resolution. Lower values (8192) save CPU but reduce low-frequency correction quality.");
+        html += formInput("spk-f-target", "Target Curve", "text", d.target_curve || "flat",
+            "Target frequency response for room correction. Options: flat, harman. ISO 226 loudness compensation can be added via the SPL target setting.");
 
         body.innerHTML = html;
 
@@ -850,9 +873,12 @@
 
     // -- Form helpers --
 
-    function formInput(id, label, type, value) {
+    function formInput(id, label, type, value, tooltip) {
+        var helpHtml = tooltip
+            ? ' <span class="spk-help" title="' + escapeHtml(tooltip) + '">?</span>'
+            : '';
         return '<div class="spk-form-row">' +
-            '<label class="spk-form-label" for="' + id + '">' + escapeHtml(label) + '</label>' +
+            '<label class="spk-form-label" for="' + id + '">' + escapeHtml(label) + helpHtml + '</label>' +
             '<input class="spk-form-input" id="' + id + '" type="' + type + '" value="' +
             escapeHtml(String(value != null ? value : "")) + '">' +
             '</div>';
