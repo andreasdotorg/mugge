@@ -49,13 +49,13 @@ class AudioMuteManager:
             if node_id is None:
                 errors.append(f"convolver node not found")
                 break
-            # F-057: If pw-dump didn't expose this gain param (0.0),
+            # F-057: If pw-dump didn't expose this gain param (None),
             # fall back to pw-cli enum-params.
-            if current_mult == 0.0:
+            if current_mult is None:
                 live_mult = await read_mult(node_id, name)
                 if live_mult is not None:
                     current_mult = live_mult
-            pre_mute[name] = current_mult
+            pre_mute[name] = current_mult if current_mult is not None else 0.0
             ok = await set_mult(node_id, name, 0.0)
             if not ok:
                 errors.append(f"pw-cli failed for '{name}'")

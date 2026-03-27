@@ -142,24 +142,24 @@ def _extract_gain_params(info: dict) -> dict:
     return result
 
 
-def find_gain_node(pw_data: list, node_name: str) -> tuple[int | None, float]:
+def find_gain_node(pw_data: list, node_name: str) -> tuple[int | None, float | None]:
     """Find a gain node's convolver parent ID and current Mult value.
 
     The gain nodes are params on the convolver capture node, not separate
     PipeWire nodes. This function finds the convolver node and extracts
     the Mult value for the named gain node from its params.
 
-    Returns (convolver_node_id, current_mult).
-    If not found, returns (None, 0.0).
+    Returns:
+        (convolver_node_id, mult) — mult is the float value if found.
+        (convolver_node_id, None)  — convolver exists but gain not in params.
+        (None, None)               — convolver not found at all.
     """
     convolver_id, gain_params = find_convolver_node(pw_data)
     if convolver_id is None:
-        return None, 0.0
+        return None, None
     if node_name not in gain_params:
-        # Convolver exists but this gain node isn't in its params.
-        # Return convolver ID but 0.0 mult to indicate not found.
         log.warning("Gain node '%s' not found in convolver params", node_name)
-        return convolver_id, 0.0
+        return convolver_id, None
     return convolver_id, gain_params[node_name]
 
 

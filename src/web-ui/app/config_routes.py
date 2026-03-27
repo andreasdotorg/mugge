@@ -114,16 +114,16 @@ async def get_config():
     gains = {}
     for name in GAIN_NODE_NAMES:
         node_id, mult = find_gain_node(pw_data, name)
-        # F-057: If pw-dump found the convolver but Mult is 0.0 (param
-        # not found in convolver params), fall back to pw-cli enum-params.
-        if node_id is not None and mult == 0.0:
+        # F-057: If pw-dump found the convolver but Mult is not in params,
+        # fall back to pw-cli enum-params for a live reading.
+        if node_id is not None and mult is None:
             live_mult = await read_mult(node_id, name)
             if live_mult is not None:
                 mult = live_mult
         gains[name] = {
-            "mult": mult,
+            "mult": mult if mult is not None else 0.0,
             "label": GAIN_LABELS.get(name, name),
-            "found": node_id is not None and mult > 0.0,
+            "found": mult is not None,
         }
 
     quantum = find_quantum(pw_data)
