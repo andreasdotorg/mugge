@@ -1,0 +1,42 @@
+# Small club scenario: 8x6x3m room with strong low-frequency modes.
+#
+# Represents a typical small psytrance venue with concrete walls, a wooden
+# floor, and a suspended tile ceiling. The hard parallel walls create strong
+# axial modes, especially a dominant 42 Hz resonance from the 8m length
+# dimension: f = 343 / (2 * 8.0) = 21.4 Hz (fundamental), 42.9 Hz (2nd).
+#
+# Per-wall absorption varies: floor (wood) is more absorptive than concrete
+# walls, ceiling tiles absorb mid/high frequencies. Frequency-dependent
+# absorption uses octave-band coefficients at [63, 125, 250, 500, 1k, 2k, 4k, 8k] Hz.
+
+room:
+  dimensions: [8.0, 6.0, 3.0]       # L x W x H meters (48 m^2 floor < 50 m^2 threshold)
+  wall_absorption:
+    x0: [0.05, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18]  # concrete back wall
+    x1: [0.05, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18]  # concrete front wall
+    y0: [0.05, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18]  # concrete side wall
+    y1: [0.05, 0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18]  # concrete side wall
+    z0: [0.10, 0.12, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40]  # wooden floor
+    z1: [0.15, 0.20, 0.40, 0.60, 0.70, 0.75, 0.80, 0.80]  # suspended tile ceiling
+  temperature: 24.0                  # warm venue
+
+speakers:
+  main_left:
+    position: [1.0, 5.0, 1.5]
+  main_right:
+    position: [7.0, 5.0, 1.5]
+  sub1:
+    position: [2.0, 5.5, 0.3]
+  sub2:
+    position: [6.0, 5.5, 0.3]
+
+microphone:
+  position: [4.0, 3.0, 1.2]
+
+# Explicit room modes — strong 42 Hz from 8m length dimension.
+room_modes:
+  - { frequency: 42.9, q: 8.0, gain: 14.0 }   # dominant 2nd axial (length)
+  - { frequency: 21.4, q: 5.0, gain: 10.0 }   # 1st axial (length)
+  - { frequency: 28.6, q: 6.0, gain: 9.0 }    # 1st axial (width: 343/(2*6))
+  - { frequency: 57.2, q: 7.0, gain: 8.0 }    # 2nd axial (width)
+  - { frequency: 64.3, q: 6.5, gain: 7.0 }    # 3rd axial (length)

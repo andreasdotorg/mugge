@@ -1,0 +1,38 @@
+# Outdoor tent scenario: minimal reflections.
+#
+# Represents an open-air stage with a fabric canopy overhead and no side walls.
+# The ground provides some reflection but fabric and open sides absorb or
+# transmit most energy. This produces a very short RT60 (nearly anechoic above
+# a few hundred Hz) and essentially no room modes — the correction pipeline
+# should find very little to correct.
+#
+# Modeled as a 12x10x4m enclosure with very high absorption on all surfaces
+# (fabric walls at 0.8-0.95, ground at 0.4-0.6). In reality the "walls" are
+# open air, but high absorption is a reasonable proxy for sound escaping.
+
+room:
+  dimensions: [12.0, 10.0, 4.0]     # L x W x H meters (tent footprint)
+  wall_absorption:
+    x0: 0.90                         # open side (almost no reflection)
+    x1: 0.85                         # stage backdrop (some fabric reflection)
+    y0: 0.90                         # open side
+    y1: 0.90                         # open side
+    z0: 0.40                         # grass/ground (some reflection)
+    z1: 0.80                         # fabric canopy
+  temperature: 28.0                  # outdoor summer event
+
+speakers:
+  main_left:
+    position: [2.0, 9.0, 2.0]
+  main_right:
+    position: [10.0, 9.0, 2.0]
+  sub1:
+    position: [4.0, 9.5, 0.3]
+  sub2:
+    position: [8.0, 9.5, 0.3]
+
+microphone:
+  position: [6.0, 5.0, 1.5]
+
+# No explicit room modes — outdoor venues have negligible modal behavior.
+room_modes: []

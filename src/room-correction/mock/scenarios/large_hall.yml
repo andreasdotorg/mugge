@@ -1,0 +1,39 @@
+# Large hall scenario: 20x15x5m room with long RT60.
+#
+# Represents a medium-sized concert hall or event space with plaster walls,
+# a polished concrete floor, and a high plaster ceiling. The large volume
+# (1500 m^3) and relatively low absorption produce a long reverberation time.
+# At these dimensions, room modes are densely spaced below 30 Hz but the
+# modal density is high enough that individual modes are less problematic
+# than in smaller rooms.
+#
+# RT60 estimate (Sabine): V=1500m^3, S=2*(20*15+20*5+15*5)=850m^2,
+# mean alpha ~0.12 => RT60 = 0.161*V/(S*alpha) = 0.161*1500/(850*0.12) = 2.37s
+
+room:
+  dimensions: [20.0, 15.0, 5.0]     # L x W x H meters (300 m^2 floor >> 50 m^2 threshold)
+  wall_absorption:
+    x0: 0.10                         # plaster back wall
+    x1: 0.10                         # plaster front wall
+    y0: 0.10                         # plaster side wall
+    y1: 0.10                         # plaster side wall
+    z0: 0.08                         # polished concrete floor
+    z1: 0.12                         # plaster ceiling (slightly more absorptive)
+  temperature: 20.0
+
+speakers:
+  main_left:
+    position: [3.0, 14.0, 2.5]
+  main_right:
+    position: [17.0, 14.0, 2.5]
+  sub1:
+    position: [7.0, 14.5, 0.5]
+  sub2:
+    position: [13.0, 14.5, 0.5]
+
+microphone:
+  position: [10.0, 7.0, 1.5]        # center of audience area
+
+room_modes:
+  - { frequency: 34.3, q: 4.0, gain: 5.0 }    # 2nd axial (length: 343/(2*20)*2)
+  - { frequency: 22.9, q: 3.5, gain: 4.0 }    # 2nd axial (width: 343/(2*15)*2)
