@@ -1,18 +1,14 @@
-"""FIR filter generation and deployment REST endpoints.
+"""FIR filter generation, deployment, versioning and rollback REST endpoints.
 
 POST /api/v1/filters/generate — Generate crossover FIR filters + PW config
-from a speaker profile. Runs the full pipeline:
+POST /api/v1/filters/deploy — Deploy filters with D-009 safety interlock
+POST /api/v1/filters/reload-pw — Reload PipeWire (requires confirmation)
+GET  /api/v1/filters/versions — List deployed filter versions per channel
+GET  /api/v1/filters/active — Return currently active filter files
+POST /api/v1/filters/rollback — Revert to a previous filter version
+POST /api/v1/filters/cleanup — Remove old versions (keeps N most recent)
 
-    profile → crossover → combine → export WAV → verify → PW .conf
-
-POST /api/v1/filters/deploy — Deploy generated filters to PipeWire coeffs dir
-with D-009 safety interlock (all filters must pass verification).
-
-POST /api/v1/filters/reload-pw — Reload PipeWire filter-chain (requires
-explicit confirmation due to USBStreamer transient safety).
-
-The generation runs in a thread pool to avoid blocking the event loop
-(FIR computation + FFT is CPU-bound).
+CPU-bound operations run in a thread pool to avoid blocking the event loop.
 """
 
 from __future__ import annotations
@@ -124,6 +120,30 @@ class ReloadPWRequest(BaseModel):
     confirmed: bool = False
 
 
+class RollbackRequest(BaseModel):
+    """Request body for POST /api/v1/filters/rollback."""
+    version_timestamp: str
+    coeffs_dir: Optional[str] = None
+    pw_conf_dir: Optional[str] = None
+    dry_run: bool = False
+
+
+class CleanupRequest(BaseModel):
+    """Request body for POST /api/v1/filters/cleanup."""
+    confirmed: bool = False
+    keep: int = 2
+    coeffs_dir: Optional[str] = None
+    pw_conf_dir: Optional[str] = None
+    dry_run: bool = False
+
+    @field_validator("keep")
+    @classmethod
+    def validate_keep(cls, v):
+        if v < 1:
+            raise ValueError("keep must be >= 1")
+        return v
+
+
 def _load_correction_filters(session_dir: str, speakers: dict, n_taps: int) -> dict:
     """Load per-channel correction IRs from a measurement session directory.
 
@@ -193,6 +213,8 @@ def _run_pipeline(req: FilterGenerateRequest) -> dict:
         for spk_key, ir in raw_irs.items():
             correction_filters[spk_key] = generate_correction_filter(
                 ir, n_taps=n_taps, sr=sr,
+                target_phon=req.target_phon,
+                reference_phon=req.reference_phon,
             )
 
     # Delegate to topology-agnostic pipeline
@@ -501,3 +523,321 @@ async def reload_pw_endpoint(req: ReloadPWRequest):
                           "Manual reload may be required.",
             },
         )
+
+
+# ---------------------------------------------------------------------------
+# Versioning and rollback endpoints (US-090 T-090-3)
+# ---------------------------------------------------------------------------
+
+def _list_all_versions(coeffs_dir: str) -> dict:
+    """Scan coeffs_dir for versioned filter files, grouped by channel.
+
+    Returns dict: {channel: [{file, timestamp, path, active}, ...]}
+    sorted newest-first per channel.
+    """
+    import re
+    import glob as globmod
+    from room_correction.deploy import (
+        _VERSIONED_RE,
+        _get_active_filenames,
+        DEFAULT_PW_CONF_DIR,
+    )
+
+    active_basenames = _get_active_filenames(DEFAULT_PW_CONF_DIR)
+
+    pattern = os.path.join(coeffs_dir, "combined_*.wav")
+    channels = {}
+
+    for fpath in sorted(globmod.glob(pattern)):
+        basename = os.path.basename(fpath)
+        m = _VERSIONED_RE.match(basename)
+        if not m:
+            continue
+        channel = m.group(1)
+        ts = m.group(2)
+        entry = {
+            "file": basename,
+            "timestamp": ts,
+            "path": fpath,
+            "active": basename in active_basenames,
+        }
+        channels.setdefault(channel, []).append(entry)
+
+    # Sort newest first within each channel
+    for ch in channels:
+        channels[ch].sort(key=lambda e: e["timestamp"], reverse=True)
+
+    return channels
+
+
+def _get_active_map(pw_conf_dir: str) -> dict:
+    """Return dict mapping channel name to active file path.
+
+    Parses PW .conf files for filename references and extracts channel
+    names from the versioned filename pattern.
+    """
+    import re
+    from room_correction.deploy import (
+        _get_active_filenames,
+        _VERSIONED_RE,
+        DEFAULT_COEFFS_DIR,
+    )
+
+    active_basenames = _get_active_filenames(pw_conf_dir)
+    result = {}
+
+    for basename in active_basenames:
+        m = _VERSIONED_RE.match(basename)
+        if m:
+            channel = m.group(1)
+            result[channel] = basename
+        else:
+            # Unversioned file — try to extract channel from combined_{ch}.wav
+            if basename.startswith("combined_") and basename.endswith(".wav"):
+                ch = basename[len("combined_"):-len(".wav")]
+                result[ch] = basename
+
+    return result
+
+
+@router.get("/versions")
+async def list_versions(coeffs_dir: Optional[str] = None):
+    """List deployed filter versions per channel.
+
+    Scans the coefficients directory for versioned ``combined_*.wav``
+    files, groups by channel, and marks which version is currently
+    active in the PipeWire config.
+    """
+    from room_correction.deploy import DEFAULT_COEFFS_DIR
+
+    target_dir = coeffs_dir or DEFAULT_COEFFS_DIR
+    if not os.path.isdir(target_dir):
+        return {"channels": {}, "coeffs_dir": target_dir}
+
+    try:
+        channels = await asyncio.to_thread(_list_all_versions, target_dir)
+    except Exception as e:
+        log.exception("Failed to list filter versions")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "list_failed", "detail": str(e)},
+        )
+
+    return {"channels": channels, "coeffs_dir": target_dir}
+
+
+@router.get("/active")
+async def get_active_filters(pw_conf_dir: Optional[str] = None):
+    """Return the currently active filter files referenced by PipeWire config.
+
+    Parses ``*.conf`` files in the PipeWire config drop-in directory for
+    ``filename = "..."`` entries and maps them to channel names.
+    """
+    from room_correction.deploy import DEFAULT_PW_CONF_DIR
+
+    target_dir = pw_conf_dir or DEFAULT_PW_CONF_DIR
+    try:
+        active = await asyncio.to_thread(_get_active_map, target_dir)
+    except Exception as e:
+        log.exception("Failed to get active filters")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "active_failed", "detail": str(e)},
+        )
+
+    return {"active": active, "pw_conf_dir": target_dir}
+
+
+def _run_rollback(req: RollbackRequest) -> dict:
+    """Execute filter rollback synchronously (called in thread pool).
+
+    Finds versioned files matching the requested timestamp, verifies D-009
+    on each, then copies them to the active coeffs location.
+    """
+    import re
+    import shutil
+    import glob as globmod
+    from room_correction.deploy import (
+        DEFAULT_COEFFS_DIR,
+        DEFAULT_PW_CONF_DIR,
+        _VERSIONED_RE,
+    )
+    from room_correction.verify import verify_d009
+
+    coeffs_dir = req.coeffs_dir or DEFAULT_COEFFS_DIR
+    if not os.path.isdir(coeffs_dir):
+        raise FileNotFoundError(f"Coefficients directory not found: {coeffs_dir}")
+
+    ts = req.version_timestamp
+
+    # Find all files with the requested timestamp
+    pattern = os.path.join(coeffs_dir, f"combined_*_{ts}.wav")
+    matched = sorted(globmod.glob(pattern))
+    if not matched:
+        return {
+            "rolled_back": False,
+            "reason": "version_not_found",
+            "detail": f"No filter files found for timestamp {ts} in {coeffs_dir}",
+        }
+
+    # Verify D-009 on all matched files
+    verifications = []
+    all_pass = True
+    for wav_path in matched:
+        basename = os.path.basename(wav_path)
+        d009 = verify_d009(wav_path)
+        entry = {
+            "file": basename,
+            "d009_pass": d009.passed,
+            "d009_peak_db": round(d009.details.get("max_gain_db", 0.0), 2),
+        }
+        verifications.append(entry)
+        if not d009.passed:
+            all_pass = False
+
+    if not all_pass:
+        return {
+            "rolled_back": False,
+            "reason": "d009_failed",
+            "detail": "Rollback target version fails D-009 verification. "
+                      "Cannot deploy unsafe filters.",
+            "verification": verifications,
+        }
+
+    # Update PW .conf to reference the rollback files
+    pw_conf_dir = req.pw_conf_dir or DEFAULT_PW_CONF_DIR
+    pw_conf_path = os.path.join(
+        pw_conf_dir, "30-filter-chain-convolver.conf",
+    )
+
+    conf_updated = False
+    if os.path.isfile(pw_conf_path):
+        with open(pw_conf_path, "r") as f:
+            conf_content = f.read()
+
+        # Replace each filename reference with the rollback version
+        for wav_path in matched:
+            basename = os.path.basename(wav_path)
+            m = _VERSIONED_RE.match(basename)
+            if not m:
+                continue
+            channel = m.group(1)
+            # Replace any combined_{channel}_*.wav reference with new version
+            old_pattern = re.compile(
+                rf'(filename\s*=\s*")([^"]*combined_{re.escape(channel)}_[^"]*\.wav)(")'
+            )
+            new_path = os.path.join(coeffs_dir, basename)
+            conf_content, count = old_pattern.subn(
+                rf'\g<1>{new_path}\3', conf_content,
+            )
+            if count > 0:
+                conf_updated = True
+
+        if conf_updated and not req.dry_run:
+            os.makedirs(pw_conf_dir, exist_ok=True)
+            with open(pw_conf_path, "w") as f:
+                f.write(conf_content)
+
+    rolled_back_files = [os.path.basename(p) for p in matched]
+
+    return {
+        "rolled_back": True,
+        "dry_run": req.dry_run,
+        "version_timestamp": ts,
+        "files": rolled_back_files,
+        "conf_updated": conf_updated,
+        "verification": verifications,
+        "reload_required": True,
+        "reload_warning": (
+            "PipeWire must be restarted to load rolled-back filters. "
+            "WARNING: Restarting PipeWire resets the USBStreamer. Ensure "
+            "amplifiers are OFF or MUTED before calling "
+            "POST /api/v1/filters/reload-pw."
+        ),
+    }
+
+
+@router.post("/rollback")
+async def rollback_filters(req: RollbackRequest):
+    """Revert to a previous filter version by timestamp.
+
+    Finds versioned files matching the requested timestamp, verifies D-009
+    compliance on each (safety interlock), and updates the PipeWire config
+    to reference them.
+
+    Does NOT auto-reload PipeWire (USBStreamer transient safety).
+    """
+    try:
+        result = await asyncio.to_thread(_run_rollback, req)
+    except FileNotFoundError as e:
+        return JSONResponse(
+            status_code=404,
+            content={"error": "not_found", "detail": str(e)},
+        )
+    except Exception as e:
+        log.exception("Filter rollback failed")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "rollback_failed", "detail": str(e)},
+        )
+
+    if not result["rolled_back"]:
+        return JSONResponse(status_code=422, content=result)
+
+    return JSONResponse(content=result, status_code=200)
+
+
+def _run_cleanup(req: CleanupRequest) -> dict:
+    """Execute coefficient cleanup synchronously (called in thread pool)."""
+    from room_correction.deploy import (
+        cleanup_old_coefficients,
+        DEFAULT_COEFFS_DIR,
+        DEFAULT_PW_CONF_DIR,
+    )
+
+    coeffs_dir = req.coeffs_dir or DEFAULT_COEFFS_DIR
+    pw_conf_dir = req.pw_conf_dir or DEFAULT_PW_CONF_DIR
+
+    removed = cleanup_old_coefficients(
+        coeffs_dir=coeffs_dir,
+        keep=req.keep,
+        dry_run=req.dry_run,
+        pw_conf_dir=pw_conf_dir,
+    )
+
+    return {
+        "cleaned": True,
+        "dry_run": req.dry_run,
+        "keep": req.keep,
+        "removed": [os.path.basename(p) for p in removed],
+        "removed_count": len(removed),
+    }
+
+
+@router.post("/cleanup")
+async def cleanup_old_filters(req: CleanupRequest):
+    """Remove old versioned coefficient files, keeping the N most recent.
+
+    Requires ``confirmed: true`` as a safety acknowledgment. Never deletes
+    the currently active version (parsed from PipeWire config).
+    """
+    if not req.confirmed:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "confirmation_required",
+                "detail": "Cleanup permanently deletes old filter files. "
+                          "Set 'confirmed: true' to proceed.",
+            },
+        )
+
+    try:
+        result = await asyncio.to_thread(_run_cleanup, req)
+    except Exception as e:
+        log.exception("Filter cleanup failed")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "cleanup_failed", "detail": str(e)},
+        )
+
+    return JSONResponse(content=result, status_code=200)

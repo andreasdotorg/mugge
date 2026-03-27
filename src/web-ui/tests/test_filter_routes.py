@@ -1,4 +1,4 @@
-"""Tests for US-090: FIR generation and deployment API endpoints.
+"""Tests for US-090: FIR generation, deployment, versioning and rollback API.
 
 Covers:
     - Request validation (n_taps, sample_rate)
@@ -6,6 +6,10 @@ Covers:
     - GET /api/v1/filters/profiles lists available profiles
     - POST /api/v1/filters/deploy with D-009 safety interlock
     - POST /api/v1/filters/reload-pw with confirmation requirement
+    - GET /api/v1/filters/versions — versioned filter listing
+    - GET /api/v1/filters/active — active filter detection
+    - POST /api/v1/filters/rollback — version rollback with D-009 check
+    - POST /api/v1/filters/cleanup — old version cleanup
     - Error handling (profile not found, pipeline failure)
     - VerificationResult serialization
 """
@@ -22,6 +26,8 @@ try:
         FilterGenerateRequest,
         FilterDeployRequest,
         ReloadPWRequest,
+        RollbackRequest,
+        CleanupRequest,
         VerificationResult,
         _PROFILES_DIR,
     )
@@ -627,3 +633,344 @@ class TestReloadPWEndpoint:
         )
         assert resp.status_code == 500
         assert resp.json()["error"] == "reload_failed"
+
+
+# -- Request model validation (rollback, cleanup) ---------------------------
+
+class TestRollbackRequest:
+    def test_valid(self):
+        req = RollbackRequest(version_timestamp="20260327_120000")
+        assert req.version_timestamp == "20260327_120000"
+        assert req.dry_run is False
+        assert req.coeffs_dir is None
+
+    def test_with_options(self):
+        req = RollbackRequest(
+            version_timestamp="20260327_120000",
+            coeffs_dir="/tmp/coeffs",
+            pw_conf_dir="/tmp/pw",
+            dry_run=True,
+        )
+        assert req.coeffs_dir == "/tmp/coeffs"
+        assert req.dry_run is True
+
+
+class TestCleanupRequest:
+    def test_defaults(self):
+        req = CleanupRequest()
+        assert req.confirmed is False
+        assert req.keep == 2
+        assert req.dry_run is False
+
+    def test_custom(self):
+        req = CleanupRequest(confirmed=True, keep=3, dry_run=True)
+        assert req.confirmed is True
+        assert req.keep == 3
+
+    def test_invalid_keep_zero(self):
+        with pytest.raises(Exception):
+            CleanupRequest(keep=0)
+
+    def test_invalid_keep_negative(self):
+        with pytest.raises(Exception):
+            CleanupRequest(keep=-1)
+
+
+# -- GET /api/v1/filters/versions ------------------------------------------
+
+class TestVersionsEndpoint:
+    @patch("app.filter_routes._list_all_versions")
+    @patch("app.filter_routes.os.path.isdir", return_value=True)
+    def test_versions_returns_channels(self, mock_isdir, mock_list, client):
+        mock_list.return_value = {
+            "left_hp": [
+                {"file": "combined_left_hp_20260327_120000.wav",
+                 "timestamp": "20260327_120000", "path": "/coeffs/combined_left_hp_20260327_120000.wav",
+                 "active": True},
+                {"file": "combined_left_hp_20260326_100000.wav",
+                 "timestamp": "20260326_100000", "path": "/coeffs/combined_left_hp_20260326_100000.wav",
+                 "active": False},
+            ],
+            "sub1_lp": [
+                {"file": "combined_sub1_lp_20260327_120000.wav",
+                 "timestamp": "20260327_120000", "path": "/coeffs/combined_sub1_lp_20260327_120000.wav",
+                 "active": True},
+            ],
+        }
+        resp = client.get("/api/v1/filters/versions")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "channels" in data
+        assert len(data["channels"]["left_hp"]) == 2
+        # Newest first
+        assert data["channels"]["left_hp"][0]["timestamp"] == "20260327_120000"
+        assert data["channels"]["left_hp"][0]["active"] is True
+        assert data["channels"]["left_hp"][1]["active"] is False
+
+    @patch("app.filter_routes._list_all_versions")
+    @patch("app.filter_routes.os.path.isdir", return_value=True)
+    def test_versions_empty_dir(self, mock_isdir, mock_list, client):
+        mock_list.return_value = {}
+        resp = client.get("/api/v1/filters/versions")
+        assert resp.status_code == 200
+        assert resp.json()["channels"] == {}
+
+    @patch("app.filter_routes.os.path.isdir", return_value=False)
+    def test_versions_missing_dir(self, mock_isdir, client):
+        resp = client.get("/api/v1/filters/versions?coeffs_dir=/nonexistent")
+        assert resp.status_code == 200
+        assert resp.json()["channels"] == {}
+
+
+# -- GET /api/v1/filters/active --------------------------------------------
+
+class TestActiveEndpoint:
+    @patch("app.filter_routes._get_active_map")
+    def test_active_returns_map(self, mock_active, client):
+        mock_active.return_value = {
+            "left_hp": "combined_left_hp_20260327_120000.wav",
+            "sub1_lp": "combined_sub1_lp_20260327_120000.wav",
+        }
+        resp = client.get("/api/v1/filters/active")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["active"]["left_hp"] == "combined_left_hp_20260327_120000.wav"
+        assert data["active"]["sub1_lp"] == "combined_sub1_lp_20260327_120000.wav"
+
+    @patch("app.filter_routes._get_active_map")
+    def test_active_empty(self, mock_active, client):
+        mock_active.return_value = {}
+        resp = client.get("/api/v1/filters/active")
+        assert resp.status_code == 200
+        assert resp.json()["active"] == {}
+
+    @patch("app.filter_routes._get_active_map")
+    def test_active_error(self, mock_active, client):
+        mock_active.side_effect = RuntimeError("Parse error")
+        resp = client.get("/api/v1/filters/active")
+        assert resp.status_code == 500
+        assert resp.json()["error"] == "active_failed"
+
+
+# -- POST /api/v1/filters/rollback -----------------------------------------
+
+class TestRollbackEndpoint:
+    @patch("app.filter_routes._run_rollback")
+    def test_rollback_success(self, mock_rollback, client):
+        mock_rollback.return_value = {
+            "rolled_back": True,
+            "dry_run": False,
+            "version_timestamp": "20260326_100000",
+            "files": ["combined_left_hp_20260326_100000.wav",
+                       "combined_sub1_lp_20260326_100000.wav"],
+            "conf_updated": True,
+            "verification": [
+                {"file": "combined_left_hp_20260326_100000.wav",
+                 "d009_pass": True, "d009_peak_db": -1.2},
+            ],
+            "reload_required": True,
+            "reload_warning": "PipeWire must be restarted...",
+        }
+        resp = client.post(
+            "/api/v1/filters/rollback",
+            json={"version_timestamp": "20260326_100000"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["rolled_back"] is True
+        assert data["version_timestamp"] == "20260326_100000"
+        assert data["conf_updated"] is True
+        assert data["reload_required"] is True
+
+    @patch("app.filter_routes._run_rollback")
+    def test_rollback_version_not_found(self, mock_rollback, client):
+        mock_rollback.return_value = {
+            "rolled_back": False,
+            "reason": "version_not_found",
+            "detail": "No filter files found for timestamp 99999999_999999",
+        }
+        resp = client.post(
+            "/api/v1/filters/rollback",
+            json={"version_timestamp": "99999999_999999"},
+        )
+        assert resp.status_code == 422
+        data = resp.json()
+        assert data["reason"] == "version_not_found"
+
+    @patch("app.filter_routes._run_rollback")
+    def test_rollback_d009_rejected(self, mock_rollback, client):
+        """Rollback to version failing D-009 must be rejected."""
+        mock_rollback.return_value = {
+            "rolled_back": False,
+            "reason": "d009_failed",
+            "detail": "Rollback target version fails D-009 verification.",
+            "verification": [
+                {"file": "combined_left_hp_20260326_100000.wav",
+                 "d009_pass": False, "d009_peak_db": 0.5},
+            ],
+        }
+        resp = client.post(
+            "/api/v1/filters/rollback",
+            json={"version_timestamp": "20260326_100000"},
+        )
+        assert resp.status_code == 422
+        data = resp.json()
+        assert data["reason"] == "d009_failed"
+        assert data["verification"][0]["d009_pass"] is False
+
+    @patch("app.filter_routes._run_rollback")
+    def test_rollback_coeffs_dir_not_found(self, mock_rollback, client):
+        mock_rollback.side_effect = FileNotFoundError("Coefficients directory not found")
+        resp = client.post(
+            "/api/v1/filters/rollback",
+            json={"version_timestamp": "20260326_100000"},
+        )
+        assert resp.status_code == 404
+        assert resp.json()["error"] == "not_found"
+
+    @patch("app.filter_routes._run_rollback")
+    def test_rollback_internal_error(self, mock_rollback, client):
+        mock_rollback.side_effect = RuntimeError("I/O error")
+        resp = client.post(
+            "/api/v1/filters/rollback",
+            json={"version_timestamp": "20260326_100000"},
+        )
+        assert resp.status_code == 500
+        assert resp.json()["error"] == "rollback_failed"
+
+    @patch("app.filter_routes._run_rollback")
+    def test_rollback_dry_run(self, mock_rollback, client):
+        mock_rollback.return_value = {
+            "rolled_back": True,
+            "dry_run": True,
+            "version_timestamp": "20260326_100000",
+            "files": ["combined_left_hp_20260326_100000.wav"],
+            "conf_updated": False,
+            "verification": [
+                {"file": "combined_left_hp_20260326_100000.wav",
+                 "d009_pass": True, "d009_peak_db": -1.5},
+            ],
+            "reload_required": True,
+            "reload_warning": "...",
+        }
+        resp = client.post(
+            "/api/v1/filters/rollback",
+            json={"version_timestamp": "20260326_100000", "dry_run": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["dry_run"] is True
+
+    def test_rollback_missing_timestamp(self, client):
+        resp = client.post(
+            "/api/v1/filters/rollback",
+            json={},
+        )
+        assert resp.status_code == 422
+
+
+# -- POST /api/v1/filters/cleanup ------------------------------------------
+
+class TestCleanupEndpoint:
+    def test_cleanup_without_confirmation(self, client):
+        resp = client.post(
+            "/api/v1/filters/cleanup",
+            json={},
+        )
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["error"] == "confirmation_required"
+
+    def test_cleanup_confirmed_false(self, client):
+        resp = client.post(
+            "/api/v1/filters/cleanup",
+            json={"confirmed": False},
+        )
+        assert resp.status_code == 400
+
+    @patch("app.filter_routes._run_cleanup")
+    def test_cleanup_success(self, mock_cleanup, client):
+        mock_cleanup.return_value = {
+            "cleaned": True,
+            "dry_run": False,
+            "keep": 2,
+            "removed": [
+                "combined_left_hp_20260320_100000.wav",
+                "combined_sub1_lp_20260320_100000.wav",
+            ],
+            "removed_count": 2,
+        }
+        resp = client.post(
+            "/api/v1/filters/cleanup",
+            json={"confirmed": True},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["cleaned"] is True
+        assert data["removed_count"] == 2
+        assert len(data["removed"]) == 2
+
+    @patch("app.filter_routes._run_cleanup")
+    def test_cleanup_nothing_to_remove(self, mock_cleanup, client):
+        mock_cleanup.return_value = {
+            "cleaned": True,
+            "dry_run": False,
+            "keep": 2,
+            "removed": [],
+            "removed_count": 0,
+        }
+        resp = client.post(
+            "/api/v1/filters/cleanup",
+            json={"confirmed": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["removed_count"] == 0
+
+    @patch("app.filter_routes._run_cleanup")
+    def test_cleanup_custom_keep(self, mock_cleanup, client):
+        mock_cleanup.return_value = {
+            "cleaned": True,
+            "dry_run": False,
+            "keep": 5,
+            "removed": [],
+            "removed_count": 0,
+        }
+        resp = client.post(
+            "/api/v1/filters/cleanup",
+            json={"confirmed": True, "keep": 5},
+        )
+        assert resp.status_code == 200
+        call_args = mock_cleanup.call_args[0][0]
+        assert call_args.keep == 5
+
+    @patch("app.filter_routes._run_cleanup")
+    def test_cleanup_dry_run(self, mock_cleanup, client):
+        mock_cleanup.return_value = {
+            "cleaned": True,
+            "dry_run": True,
+            "keep": 2,
+            "removed": ["combined_left_hp_20260320_100000.wav"],
+            "removed_count": 1,
+        }
+        resp = client.post(
+            "/api/v1/filters/cleanup",
+            json={"confirmed": True, "dry_run": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["dry_run"] is True
+
+    @patch("app.filter_routes._run_cleanup")
+    def test_cleanup_error(self, mock_cleanup, client):
+        mock_cleanup.side_effect = RuntimeError("Permission denied")
+        resp = client.post(
+            "/api/v1/filters/cleanup",
+            json={"confirmed": True},
+        )
+        assert resp.status_code == 500
+        assert resp.json()["error"] == "cleanup_failed"
+
+    def test_cleanup_invalid_keep(self, client):
+        resp = client.post(
+            "/api/v1/filters/cleanup",
+            json={"confirmed": True, "keep": 0},
+        )
+        assert resp.status_code == 422
