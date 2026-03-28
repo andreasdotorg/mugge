@@ -103,7 +103,7 @@ class MockPlayBurst:
         self.levels_played = []
 
     def __call__(self, noise_signal, channel_index, output_device,
-                 input_device, sr=SAMPLE_RATE):
+                 input_device, sr=SAMPLE_RATE, **kwargs):
         self.call_count += 1
         # Compute the RMS level of the played signal
         rms = np.sqrt(np.mean(noise_signal ** 2))
@@ -584,7 +584,7 @@ class TestAmbientNoiseBaseline(unittest.TestCase):
         call_count = [0]
 
         def side_effect(noise_signal, channel_index, output_device,
-                        input_device, sr=SAMPLE_RATE):
+                        input_device, sr=SAMPLE_RATE, **kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
                 return ambient_recording
