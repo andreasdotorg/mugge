@@ -51,7 +51,8 @@ def load_profile(profile_path):
     with open(profile_path, "r") as f:
         profile = yaml.safe_load(f)
 
-    crossover_freq = profile["crossover"]["frequency_hz"]
+    freq_raw = profile["crossover"]["frequency_hz"]
+    crossover_freq = min(freq_raw) if isinstance(freq_raw, list) else freq_raw
     slope = profile["crossover"]["slope_db_per_oct"]
     n_taps = profile.get("filter_taps", N_TAPS)
 

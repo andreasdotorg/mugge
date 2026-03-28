@@ -191,7 +191,8 @@ def generate_filter_chain_conf(
     for spk_key, spk_cfg in all_speakers:
         suffix = _channel_suffix(spk_key)
         role = spk_cfg.get("role", "satellite")
-        role_gs = gain_staging.get(role, {})
+        gs_key = "subwoofer" if role == "subwoofer" else role
+        role_gs = gain_staging.get(gs_key, gain_staging.get("satellite", {}))
 
         # Gain: explicit override > profile power_limit_db > default -60dB
         if spk_key in gains_db:
