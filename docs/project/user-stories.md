@@ -6182,6 +6182,7 @@ Spawned via GM `start_tap`/`stop_tap` RPC when spectrum view is active.
 - [ ] signal-gen mono output (F-097) — 1 channel, GM routes to convolver inputs
 - [ ] Local-demo environment updated with 3 level-bridge instances
 - [ ] `nix run .#test-level-bridge` unit tests (LevelTracker, self-linking, JSON format)
+- [ ] **UMIK-1 dedicated capture bridge (added 2026-03-28, resolves F-188 venue blocker):** Dedicated `pcm-bridge-umik` instance on port 9093, GM-managed. Always 1 channel (UMIK-1 mono), topology-independent. Self-links to UMIK-1 capture port (no GM link management needed for this instance). Serves measurement pipeline (US-097) and dashboard SPL (spl-global.js). Separate from speaker output monitoring bridge (which has variable channel count per active topology). This AC was added to decouple UMIK-1 capture from speaker monitoring — coupling these caused F-188 (4ch pcm-bridge breaking on 6ch 3-way topology at venue).
 
 ### Definition of Done
 
@@ -6594,7 +6595,7 @@ initial US-088 delivery.
 **I want** the crossover engine and speaker configuration to support 3-way (tweeter + midrange + woofer/sub) and 4-way (tweeter + upper-mid + lower-mid + sub) topologies,
 **so that** I can use multi-way speaker systems at events and generate appropriate per-driver FIR crossover filters.
 
-**Status:** in-review (2026-03-27: all consultation items resolved. Ready for advisory review.)
+**Status:** in-review — CONDITIONAL PASS, NOT OWNER-ACCEPTED. Venue testing (2026-03-28) exposed 4 AC failures blocking acceptance: F-188 (pcm-bridge 4ch mismatch), F-189 (graph tab 4ch), F-190 (meters 4ch), F-191 (GM routing 4ch). All are hardcoded 4ch assumptions that break on 3-way (6ch) topology. Workers fixing: #213 (worker-2), #214/#215 (worker-3).
 **Depends on:** US-011 (crossover integration — currently 2-way only), US-011b (speaker profile schema — 3-way mentioned as Phase 2), US-089 (web UI for config management)
 **Blocks:** none
 **Priority:** MEDIUM — event use case, but 2-way covers most setups

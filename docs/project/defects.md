@@ -6283,11 +6283,11 @@ The speaker config needs two additional fields for FIR filter generation:
 **Related:** F-175 (target curve dropdown), F-178 (spectrum overlay offset),
 task #60 (ISO 226 module), task #107 (target_phon wiring)
 
-## F-183: Remove IIR HPF biquad nodes from config generator — defeats all-FIR design (OPEN)
+## F-183: Remove IIR HPF biquad nodes from config generator — defeats all-FIR design (RESOLVED)
 
 **Filed:** 2026-03-28
 **Severity:** High (design violation — owner directive)
-**Status:** OPEN
+**Status:** RESOLVED — commit 147 (D-055). IIR biquad HPF removed from PW config. Crossover protection now baked into FIR filters.
 **Affects:** Config generator (`config_generator.py`), PW filter-chain configs, D-031
 **Found by:** Owner (directive, 2026-03-28)
 
@@ -6336,3 +6336,306 @@ or a startup warning if dirac placeholders are detected without HPF protection).
 
 **Related:** D-031 (mandatory subsonic protection), task #83 (T-092-6: mandatory
 HPF enforcement), Design Decision #1 (combined minimum-phase FIR)
+
+## F-186: 3-way config generator produces only 2 convolvers instead of 6 (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** High (blocks 3-way speaker operation at venue)
+**Status:** RESOLVED — commit 146
+**Affects:** Config generator, PW filter-chain config for 3-way topologies
+**Found by:** Venue testing (2026-03-28)
+
+### Description
+
+When activating a 3-way speaker profile, the config generator only produced 2
+convolver nodes instead of the required 6 (L/R mains + L/R mid + sub1 + sub2).
+Additionally, the UMIK-1 was being routed to the mains output instead of being
+kept on its dedicated monitoring path. This blocked all 3-way speaker operation
+at the venue.
+
+### Resolution
+
+Fixed in commit 146 (#211). Config generator now correctly produces all 6
+convolver nodes for 3-way topologies.
+
+## F-187: Noise on 4 channels + broken spectrum after multiple PW restarts (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Critical (VENUE BLOCKER — prevents speaker testing)
+**Status:** OPEN — worker-2 diagnosing
+**Affects:** PipeWire audio graph, all output channels, spectrum display
+**Found by:** Owner (venue testing, 2026-03-28)
+
+### Description
+
+After multiple PipeWire restarts and manual `pw-link` operations during UMIK-1
+debugging at the venue, noise appeared on 4 output channels and the spectrum
+display is broken. The noise persists even with the UMIK-1 physically unplugged.
+
+### Probable Cause
+
+Accumulated PW graph damage from repeated restarts and manual link operations.
+Stale or duplicate links, orphaned nodes, or corrupted graph state. The manual
+pw-link workarounds (pre-US-106 reconciler fix) create fragile state that
+degrades with each restart cycle.
+
+### Impact
+
+- **VENUE BLOCKER** — cannot test big speakers with noise on outputs
+- Testing window at venue is closing
+- All 4 main output channels affected
+
+### Fix
+
+Worker-2 is diagnosing. Likely resolution: clean PW graph restart (kill all
+PW processes, clear runtime state, restart fresh). If that fails, may need
+to reboot the Pi (SAFETY: warn owner — USBStreamer transient risk, amps must
+be off).
+
+**Related:** US-106 (reconciler fix would prevent this class of accumulated
+graph damage), F-181 (UMIK port mismatch that triggered the debugging cycle)
+
+## F-188: pcm-bridge 4ch mismatch with 6ch convolver output (RECLASSIFIED)
+
+**Filed:** 2026-03-28
+**Severity:** High (breaks web UI monitoring for 3-way speaker configs)
+**Status:** RECLASSIFIED — US-091 test finding (PO directive). Not an independent defect; pcm-bridge channel count must be topology-aware per US-091 N-way AC. Worker-2 (Task #213).
+**Affects:** pcm-bridge, web UI meters, spectrum display
+**Found by:** Venue testing (2026-03-28)
+
+### Description
+
+The pcm-bridge was changed to 4 channels to add UMIK-1 support, but a 3-way
+speaker config produces a 6-channel convolver output (L/R mains + L/R mid +
+sub1 + sub2). The 4-channel pcm-bridge cannot tap all 6 convolver outputs,
+resulting in broken monitoring — meters and spectrum display show incomplete
+or incorrect data.
+
+### Root cause
+
+pcm-bridge channel count was increased from 2 to 4 to accommodate UMIK-1 as
+channel 3 (ch index 2), but this conflates two separate concerns: speaker
+output monitoring (variable channel count, depends on topology) and UMIK-1
+capture (always 1 channel, independent of speaker topology). Adding UMIK-1
+to the same bridge as speaker monitoring creates a coupling that breaks
+whenever the speaker topology changes.
+
+### Impact
+
+- Web UI meters show data for only 4 of 6 speaker channels
+- Spectrum display broken — data mismatch between bridge and renderer
+- Operator cannot monitor mid-range driver levels in 3-way config
+- Direct cause of F-187 venue noise (graph confusion from mismatched topology)
+
+### Fix
+
+Advisory consensus (Architect + AE): Option A — dedicated pcm-bridge-umik
+instance on port 9093, separate from speaker monitoring bridge. Speaker
+monitoring bridge channel count derived from active speaker profile topology.
+Waiting for AD challenge before implementation.
+
+**Related:** F-187 (venue noise), F-186 (3-way config gen), US-084 (level-bridge
+extraction), F-189, F-190, F-191
+
+## F-189: Graph tab hardcoded for 4 channels — AUX4-5 not rendered (RECLASSIFIED)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (display incomplete for 3-way topology)
+**Status:** RECLASSIFIED — US-091 test finding (PO directive). Graph renderer must adapt to N-way topology per US-091 AC. Worker-3 (Task #215).
+**Affects:** Web UI Graph tab topology renderer
+**Found by:** Venue testing (2026-03-28)
+
+### Description
+
+The Graph tab topology renderer hardcodes 4 output channels. When a 3-way
+speaker config is active (6 channels: L/R mains, L/R mid, sub1, sub2), the
+additional channels (AUX4 and AUX5 in PipeWire terms) are not rendered in
+the graph visualization.
+
+### Impact
+
+- Graph tab gives incomplete picture of 3-way signal chain
+- Operator cannot verify mid-range driver routing visually
+- Topology view misleadingly shows only 4 of 6 active channels
+
+### Fix
+
+Graph renderer must derive channel count from the active speaker profile
+topology rather than hardcoding 4. The convolver node count in the PW graph
+already reflects the correct topology — renderer should enumerate actual
+nodes.
+
+**Related:** F-190 (meters hardcoded), F-191 (routing hardcoded), F-188
+
+## F-190: Web UI meters/spectrum hardcoded for 4 channels (RECLASSIFIED)
+
+**Filed:** 2026-03-28
+**Severity:** High (monitoring incomplete for 3-way topology)
+**Status:** RECLASSIFIED — US-091 test finding (PO directive). Meters/spectrum must adapt to N-way topology per US-091 AC. Worker-3 (Task #215).
+**Affects:** Web UI Dashboard meters, spectrum display, level rendering
+**Found by:** Venue testing (2026-03-28)
+
+### Description
+
+The web UI meter rendering and spectrum display are hardcoded for 4 channels.
+With a 3-way speaker config active (6 output channels), the UI cannot display
+meters for the mid-range driver channels (AUX4-5). This makes it impossible
+to monitor levels on all speaker drivers from the web interface.
+
+### Impact
+
+- Cannot monitor mid-range driver levels in 3-way config
+- Dashboard meter layout assumes 4 channels — no slots for channels 5-6
+- Spectrum source selector does not list channels beyond 4
+- Operator flying blind on mid-range drivers
+
+### Fix
+
+Web UI must derive channel count from active speaker profile (via status API
+or profile data). Meter layout, spectrum source selector, and level rendering
+must all adapt dynamically to the topology channel count (4 for 2-way, 6 for
+3-way, 8 for 4-way).
+
+**Related:** F-189 (graph tab hardcoded), F-188 (pcm-bridge mismatch)
+
+## F-191: GM routing.rs hardcoded for 4 channels — cannot manage 3-way (RECLASSIFIED)
+
+**Filed:** 2026-03-28
+**Severity:** High (blocks automated routing for 3-way topologies)
+**Status:** RECLASSIFIED — US-091 test finding (PO directive). GM routing must support N-way topology per US-091 AC (dynamic config gen per D-051). Worker-3 (Task #214).
+**Affects:** GraphManager routing engine, PipeWire link management
+**Found by:** Venue testing (2026-03-28)
+
+### Description
+
+The GraphManager routing engine (`routing.rs`) hardcodes 4-channel link
+topology. When a 3-way speaker config is active (6 convolver outputs), GM
+cannot create links for the mid-range channels (AUX4-5). This forces manual
+`pw-link` workarounds for any topology beyond 2-way + dual sub, which is
+fragile and leads to accumulated graph damage (F-187).
+
+### Impact
+
+- GM cannot manage 6-channel 3-way routing automatically
+- Manual pw-link required for mid-range channels — fragile, error-prone
+- Accumulated manual links cause graph damage on PW restart (F-187)
+- Blocks any topology beyond 4 channels from working with automated routing
+
+### Fix
+
+`routing.rs` must derive channel count and link topology from the active
+speaker profile. The routing table should enumerate convolver output ports
+dynamically based on the profile's driver count and channel assignment,
+rather than hardcoding 4 channels.
+
+**Related:** F-188 (pcm-bridge mismatch), F-189 (graph hardcoded), US-106
+(reconciler fix), F-187 (venue noise from manual pw-link)
+
+## F-192: pcm-bridge taps convolver output instead of Mixxx stereo (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (wrong signal tapped for spectrum/monitoring)
+**Status:** OPEN — US-084 gap (monitoring architecture tap point). Worker-2 (Task #213).
+**Affects:** pcm-bridge signal tap point, spectrum display accuracy
+**Found by:** Venue testing / advisory discussion (2026-03-28)
+
+### Description
+
+The pcm-bridge is tapping the convolver output (post-DSP, multi-channel)
+instead of the Mixxx stereo output (pre-DSP). For spectrum analysis and
+monitoring purposes, the operator typically wants to see either: (a) the
+source signal (Mixxx stereo), or (b) individual per-channel post-DSP signals.
+Tapping convolver-out as a mixed signal conflates these and produces confusing
+spectrum data that doesn't clearly represent either the source or the
+per-channel output.
+
+### Impact
+
+- Spectrum display shows post-DSP mixed signal — not useful for source
+  monitoring or per-channel analysis
+- Cannot verify source signal quality independent of DSP processing
+- Mono sum of multi-channel convolver output may show comb filtering
+  artifacts that don't exist in the actual per-channel outputs
+
+### Fix
+
+Advisory discussion in progress. The tap point should be configurable or
+follow the US-084 level-bridge architecture: separate bridge instances for
+pre-DSP (APP>DSP group) and post-DSP (DSP>OUT group) monitoring. The UMIK-1
+capture should be on its own dedicated bridge (Option A).
+
+**Related:** F-188 (pcm-bridge channel mismatch), US-084 (level-bridge
+extraction — defines correct tap points per meter group)
+
+## F-193: UMIK-1 channel index hardcoded in spl-global.js (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (breaks SPL display when channel layout changes)
+**Status:** OPEN
+**Affects:** Web UI Dashboard SPL hero display (spl-global.js)
+**Found by:** AD challenge (AD-MON-3, 2026-03-28)
+
+### Description
+
+The `spl-global.js` module hardcodes the UMIK-1 channel index (ch 3, index 2)
+for the Dashboard SPL hero display. This already broke when pcm-bridge was
+changed from 2ch to 4ch for UMIK-1 support, and will break again on any
+future channel layout change (e.g., 6ch for 3-way, or dedicated pcm-bridge-umik
+on port 9093 where UMIK-1 would be ch 1 index 0).
+
+### Root cause
+
+Channel index is a magic number in JS rather than being derived from the
+bridge configuration or API response metadata.
+
+### Impact
+
+- SPL display shows wrong channel data or NaN after any channel layout change
+- Already broke once (4ch change), will break again with Option A separation
+- Fragile coupling between JS frontend and bridge channel assignment
+
+### Fix
+
+Derive UMIK-1 channel index from the bridge endpoint metadata or active
+speaker profile, not hardcoded. With Option A (dedicated pcm-bridge-umik on
+port 9093), the UMIK-1 would always be ch 0 on its own bridge, eliminating
+the index ambiguity entirely.
+
+**Related:** F-188 (pcm-bridge 4ch mismatch), F-190 (meters hardcoded),
+US-084 (level-bridge architecture)
+
+## F-194: No UI distinction between bridge disconnected and channel silent (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (operator confusion during diagnostics)
+**Status:** OPEN
+**Affects:** Web UI meters, Dashboard
+**Found by:** AD challenge (AD-MON-2, 2026-03-28)
+
+### Description
+
+The web UI meters display the same visual state (zero / empty) for two
+fundamentally different conditions: (a) the bridge WebSocket is disconnected
+(no data flowing), and (b) the channel is genuinely silent (data flowing,
+level is -inf). The operator cannot distinguish "bridge down" from "no audio"
+without checking browser console or bridge process status separately.
+
+### Impact
+
+- During venue debugging (like F-187), operator cannot quickly determine
+  whether the problem is bridge connectivity or audio signal absence
+- Wastes debugging time — operator may troubleshoot audio routing when the
+  real problem is a crashed bridge process, or vice versa
+- Particularly confusing with multiple bridge instances (US-084 architecture)
+
+### Fix
+
+Add distinct visual states:
+- **Connected + silent:** Meter at minimum, normal appearance (green dot or
+  similar connectivity indicator)
+- **Disconnected:** Meter greyed out or with warning indicator, tooltip
+  showing "Bridge disconnected" with endpoint URL
+- **Error:** Red indicator if bridge reports errors
+
+**Related:** US-084 (multiple bridge instances make this more important),
+F-188 (bridge mismatch caused debugging confusion at venue)

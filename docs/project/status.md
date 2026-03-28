@@ -273,10 +273,25 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **Audio Engineer:** ALL 5 stories APPROVED. No rework.
 - **Security Specialist:** S-001/S-002 HIGH RESOLVED (#109 + #115 committed). No open security findings.
 - **Architect:** 3 rework items ALL RESOLVED (#110, #112, #111). 5 warnings noted (not blocking). 9 GOOD.
-**Current worker assignments (2026-03-28 afternoon):**
-- worker-1 → **#178 (Track D)** — Fixed UMIK case mismatch in 5 more GM files (loopback config, routing.rs tests, lifecycle.rs, reconcile.rs, rpc.rs). 229/229 GM tests passing. Restarting local-demo to run E2E measurement test. Critical path item.
-- worker-2 → **DEPLOY-004** — Rust `cargo build --release` running on Pi after SSH env fix. ~6-7 min build.
-- worker-3 → **#199 (Dashboard SPL)** — F-175 DONE, F-176 DONE (#193 completed), F-171 DONE. Now wiring UMIK-1 ch3 RMS data to Dashboard hero SPL display (currently shows "--").
+**VENUE SESSION (2026-03-28 evening) — Pi at 172.17.78.246:**
+- worker-2 → **ACTIVE — Task #213: F-188 (pcm-bridge 4ch/6ch mismatch) + F-192 (wrong tap point)** (venue-immediate)
+- worker-3 → **ACTIVE — Task #214: F-191 (GM routing 4ch hardcode) + Task #215: F-189/F-190 (web UI 4ch hardcode)**
+- worker-1 → status unknown — JS mono sum work (needs F-number assignment when details arrive)
+- **ADVISORY CONSENSUS REACHED:** Architect + AE + AD all agree on D-049 architecture with Option A (dedicated pcm-bridge-umik on port 9093). Process gate CLEARED — workers may commit.
+- **AD challenge findings (5):**
+  - AD-MON-1 (HIGH): Level-bridge never deployed to Pi — task #9 priority elevated
+  - AD-MON-2 (MEDIUM): No UI bridge-disconnected vs channel-silent distinction → F-194
+  - AD-MON-3 (MEDIUM): UMIK-1 ch index hardcoded in spl-global.js → F-193
+  - AD-MON-4 (LOW): SPL hero could use level-bridge RMS for Z-weighted SPL (enhancement)
+  - AD-MON-5 (HIGH): Level-bridge MUST use `--managed` not `--self-link` (GM/WP conflict) → constraint on task #9 + US-084
+- **Root cause of F-187 noise:** pcm-bridge was changed to 4ch for UMIK-1 support, which broke monitoring for 3-way setup. Owner frustrated with manual patches making things worse.
+- **PO RECLASSIFICATION (2026-03-28):** F-188/F-189/F-190/F-191 are NOT independent defects — reclassified as **US-091 test findings** (N-way AC failures). US-091 status changed to conditional pass, NOT owner-accepted. F-192 remains as independent defect (US-084 monitoring architecture gap, not N-way). F-193/F-194 remain as independent defects (AD findings).
+- **PO DECISION on UMIK-1 (REVISED):** Extend US-084 with new AC for dedicated pcm-bridge-umik (port 9093). PO agreed with PM recommendation — same architecture pattern, one additional instance. AC added to user-stories.md. Existing US-084 ACs unchanged. Monitoring architecture (non-UMIK) covered by US-084 + existing docs (TW gap only).
+- **Task #9 priority elevated:** Level-bridge Pi deployment — zero production validation of the architecture all venue fixes depend on.
+- **Open independent defects:** F-192 (wrong tap point, MEDIUM, US-084 gap), F-193 (UMIK ch index, MEDIUM), F-194 (bridge disconnect UX, MEDIUM).
+- **Venue fixes committed:** commit 145 (UMIK ch index JS fix), commit 146 (F-186 3-way config gen fix), commit 147 (D-055 IIR HPF removal)
+- **6 crossover-only FIR filters generated + deployed to Pi**
+- **PROCESS GATE CLEARED:** Advisory consensus reached (Architect + AE + AD). Workers may commit. Key constraint from AD: level-bridge instances must use `--managed` flag (AD-MON-5).
 - **F-162 through F-165 — ALL RESOLVED** (previous batch).
 - **F-166** RESOLVED (committed f4ebaea). F-167 NOT A DEFECT. F-168 CANNOT REPRODUCE.
 - **Pi UI observations (2026-03-28 event prep):**
@@ -304,8 +319,10 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
   - **Status: PLANNED — owner said file and plan only, no implementation yet.**
 - **PROCESS ISSUE:** QE switched branches while workers had uncommitted changes on shared working tree. Owner flagged as "massive process breakdown." Under investigation.
 - DEPLOY-002 (#179) COMPLETED. 129 commits deployed to Pi.
-- **US-067 Track D:** Worker-1 fixed UMIK case mismatch in 5 additional GM files. 229/229 GM tests passing. Running E2E measurement test against local-demo — if this passes, E2E pipeline is working.
-- US-067: Tracks A/B/C COMPLETED. Track D under review.
+- **US-067: ALL 4 TRACKS COMPLETED.** Track D (#178) done. E2E measurement pipeline working.
+- **DEPLOY-005 (#201) COMPLETED.** Commits 134-138 deployed to Pi (GM rebuild + web UI rsync).
+- **#202 (FIR snapshot) COMPLETED.** Production FIR filters snapshotted as history entry.
+- **#203 (Comprehensive tooltips) COMPLETED.** ~150 tooltip items across all tabs.
 - US-105: Nix-only build path revision applied to user-stories.md. Awaiting CM commit.
 
 **US-067 Implementation Plan (Architect-approved capture separation, 2026-03-27):**
