@@ -273,18 +273,37 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **Audio Engineer:** ALL 5 stories APPROVED. No rework.
 - **Security Specialist:** S-001/S-002 HIGH RESOLVED (#109 + #115 committed). No open security findings.
 - **Architect:** 3 rework items ALL RESOLVED (#110, #112, #111). 5 warnings noted (not blocking). 9 GOOD.
-**Current worker assignments (2026-03-28 morning):**
-- worker-1 → **idle** — Track D (#178) submitted, awaiting review verdict + commit.
-- worker-2 → **F-166** (#184) — UMIK-1 case mismatch fix. MEASUREMENT BLOCKER. CHANGE-004 granted. Applying fix now.
-- worker-3 → **idle**
+**Current worker assignments (2026-03-28 afternoon):**
+- worker-1 → **#178 (Track D)** — Fixed UMIK case mismatch in 5 more GM files (loopback config, routing.rs tests, lifecycle.rs, reconcile.rs, rpc.rs). 229/229 GM tests passing. Restarting local-demo to run E2E measurement test. Critical path item.
+- worker-2 → **DEPLOY-004** — Rust `cargo build --release` running on Pi after SSH env fix. ~6-7 min build.
+- worker-3 → **#199 (Dashboard SPL)** — F-175 DONE, F-176 DONE (#193 completed), F-171 DONE. Now wiring UMIK-1 ch3 RMS data to Dashboard hero SPL display (currently shows "--").
 - **F-162 through F-165 — ALL RESOLVED** (previous batch).
-- **3 DEFECTS from event prep (2026-03-28):**
-  - **F-166** (HIGH, BLOCKER): UMIK-1 prefix case mismatch (`UMIK-1` vs `Umik-1`). Root cause of -134 dB measurement signal. Worker-2 applying fix. (#184)
-  - **F-167**: NOT A DEFECT — browser confusion. Closed.
-  - **F-168**: CANNOT REPRODUCE — transient, working now. Closed.
+- **F-166** RESOLVED (committed f4ebaea). F-167 NOT A DEFECT. F-168 CANNOT REPRODUCE.
+- **Pi UI observations (2026-03-28 event prep):**
+  - **F-169** (MEDIUM): Graph tab links 0/0 — expected until reconciler fix deployed (pre-existing)
+  - **F-170** (HIGH): RESOLVED (#190 completed — profiles path fix + mode switch guard)
+  - **F-171** (MEDIUM): RESOLVED (#191 + #189 completed — activate button added)
+  - **F-172** (MEDIUM): RESOLVED (#190 completed — profiles path fix)
+  - **F-173** (LOW): THM value missing in status bar
+  - **F-175** (MEDIUM): RESOLVED (#192 completed — dropdown replacing text box)
+  - **F-176** (MEDIUM): RESOLVED (#193 completed)
+  - **F-177** (MEDIUM): UMIK-1 spectrum 0Hz/20kHz flutter — root cause: F-181 (port name mismatch). Fix in Rule 13 review.
+  - **F-181** (HIGH): UMIK-1 port name mismatch — `capture_MONO` vs Pi `capture_FL`. Worker-2 fix ready, Rule 13 review.
+  - **F-178** (MEDIUM): Target curve overlay drawn at 0dB instead of target SPL level
+  - **F-179** (MEDIUM): DSP status shows "Idle" while Mixxx playing — wrong node or D-040 stale logic
+  - F-174: NOT A DEFECT — quantum preselection confirmed working
+- **Note:** Reconciler fix is NOT in current deployment (DEPLOY-004 = F-166 + Track D only). 0/0 links expected.
+- **US-106 GM RECONCILER FIX — HIGH PRIORITY (owner directive).** Root cause identified: production WirePlumber config has `policy.standard = disabled` in `90-no-auto-link.conf`, preventing adapter nodes from activating (zero ports → nothing to link). NOT a code bug — config fix only. Task #150 fixed local-demo but production config was never updated.
+  - Tasks filed (PO-approved decomposition):
+    - #194 (T-106-1: WP config fix) — no blockers, critical path starter
+    - #195 (T-106-2: local-demo verify) — blocked by #194
+    - #198 (T-106-3: remove pw-link workarounds) — blocked by #194, PARALLEL with #195
+    - #197 (T-106-4: Pi deploy + verify) — blocked by #195 + #198
+    - #196 (T-106-5: stability soak + acceptance) — blocked by #197
+  - **Status: PLANNED — owner said file and plan only, no implementation yet.**
 - **PROCESS ISSUE:** QE switched branches while workers had uncommitted changes on shared working tree. Owner flagged as "massive process breakdown." Under investigation.
 - DEPLOY-002 (#179) COMPLETED. 129 commits deployed to Pi.
-- **US-067 Track D:** Submitted by worker-1. Open issue: pw-record captures silence in E2E browser test. Review team evaluating.
+- **US-067 Track D:** Worker-1 fixed UMIK case mismatch in 5 additional GM files. 229/229 GM tests passing. Running E2E measurement test against local-demo — if this passes, E2E pipeline is working.
 - US-067: Tracks A/B/C COMPLETED. Track D under review.
 - US-105: Nix-only build path revision applied to user-stories.md. Awaiting CM commit.
 

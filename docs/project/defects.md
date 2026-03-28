@@ -5800,11 +5800,11 @@ response instead of reading it as a single line.
 **Related:** F-061 (pw-dump hangs — may share root cause), US-087 (Direct WebSocket
 from Rust — architectural fix for pw-dump dependency)
 
-## F-166: UMIK-1 prefix case mismatch — routing.rs and pw_capture.py use wrong case (OPEN)
+## F-166: UMIK-1 prefix case mismatch — routing.rs and pw_capture.py use wrong case (RESOLVED)
 
 **Filed:** 2026-03-28
 **Severity:** High (BLOCKER — root cause of -134 dB measurement signal on Pi)
-**Status:** OPEN (worker-2 has fix, CHANGE-004 granted)
+**Status:** RESOLVED (worker-2, committed f4ebaea, 2026-03-28). Awaiting push + Pi deploy (Rust rebuild needed).
 **Affects:** GraphManager routing (routing.rs), measurement capture (pw_capture.py)
 **Found by:** Owner (Pi event prep, 2026-03-28)
 
@@ -5886,3 +5886,399 @@ Check for race conditions in the mode switch RPC handler. May need retry logic o
 better error reporting in the mode switcher UI.
 
 **Related:** F-160 (mode restore bug), F-164 (mode dropdown rendering)
+
+## F-169: Graph tab links shown as 0/0 (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (display issue — link counts not populating)
+**Status:** OPEN
+**Affects:** Web UI Graph tab, link count display
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+The Graph tab shows link counts as 0/0 instead of the actual number of PipeWire
+links. The topology renderer is not receiving or displaying link count data from
+the backend.
+
+### Impact
+
+- Graph tab gives incomplete picture of PipeWire topology
+- Operator cannot verify link state at a glance
+
+### Fix
+
+Expected behavior until reconciler fix is deployed — reconciler bugs are pre-existing
+and not in DEPLOY-004 (which only includes F-166 + Track D). Links show 0/0 because
+the reconciler is not creating them. Not a new regression.
+
+**Related:** US-095 (Graph visualization), F-085 (Graph tab rendering issues), reconciler bugs (pre-existing)
+
+## F-170: Mode switch popup visible but cannot switch to DJ mode (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** High (mode switching non-functional despite UI being visible)
+**Status:** RESOLVED — #190 completed (profiles path fix + mode switch measurement guard)
+**Affects:** Web UI mode switcher, GraphManager mode transitions
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+The mode switch popup/dropdown is now visible (F-164 CSS fix working), but clicking
+the DJ mode button does not actually switch modes. DJing still works from the
+current mode, so this is not blocking audio playback, but the mode cannot be
+changed through the UI.
+
+### Impact
+
+- Cannot switch GM modes from the web UI despite popup being visible
+- DJ playback still works (non-blocking for tonight's event)
+- Mode switching requires CLI fallback
+
+### Fix
+
+Investigate: (a) Is the mode switch RPC call being sent? (b) Is GM receiving it?
+(c) Is GM responding with success but not actually transitioning? Check browser
+console for errors and GM logs for mode transition attempts.
+
+**Related:** F-168 (transient mode stuck), F-164 (mode dropdown rendering)
+
+## F-171: Config tab missing venue amp hardware entry (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (hardware config incomplete for venue workflow)
+**Status:** RESOLVED — #191 completed (Activate button added), #189 completed (investigation)
+**Affects:** Web UI Config tab, hardware config API
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+The Config tab does not show the venue amplifier hardware entry. The amp YAML
+files were deployed (part of the venue profile batch), but the hardware config
+section in the Config tab does not display them.
+
+### Impact
+
+- Cannot verify or edit amp hardware configuration through the UI
+- Thermal ceiling calculations depend on amp data — if amp config is missing,
+  thermal protection may not be calibrated correctly
+
+### Fix
+
+Investigate: (a) Are amp YAML files deployed to the correct directory on Pi?
+(b) Does the hardware config API scan the right path? Same class of issue as
+F-163 (deploy path mismatch) — may need the same fix for hardware configs.
+
+**Related:** F-163 (speaker profile path mismatch), US-093 (hardware config)
+
+## F-172: FIR filter generation profile dropdown empty (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (blocks filter generation workflow from UI)
+**Status:** RESOLVED — #190 completed (profiles path fix)
+**Affects:** Web UI Config tab, FIR filter generation panel
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+The FIR filter generation panel's profile dropdown is empty — no speaker profiles
+are listed for selection. This may be downstream of F-163 (speaker profiles not
+found due to deploy path mismatch). If F-163 fix has been deployed, the dropdown
+should populate; if not, this is the same root cause.
+
+### Impact
+
+- Cannot generate FIR correction filters from the UI
+- Blocks the filter generation → deployment workflow
+
+### Fix
+
+Verify F-163 fix has been deployed to Pi. If yes, check whether the filter
+generation endpoint's profile lookup uses the same path as the speaker config API.
+May need a hard refresh to pick up new data.
+
+**Related:** F-163 (speaker profile path mismatch), US-090 (filter generation)
+
+## F-173: THM value missing in status bar (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Low (display issue — thermal metric not populated)
+**Status:** OPEN
+**Affects:** Web UI status bar, thermal display (US-092)
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+The status bar shows a "THM" field but the value is missing/empty. Owner asked
+"what even is THM?" — this is the thermal headroom display from US-092. The
+thermal monitor likely requires an active speaker profile with amp hardware
+data to compute thermal headroom. Without amp data (see F-171), the thermal
+module has no power rating to compute against.
+
+### Impact
+
+- Thermal headroom not visible to operator
+- Confusing label with no value — worse than not showing it at all
+
+### Fix
+
+(a) If no amp hardware data is available, hide the THM field entirely rather
+than showing an empty value. (b) Verify thermal monitor is wired to the
+active speaker profile's amp data. (c) Consider showing "THM: N/A" when no
+amp data is configured.
+
+**Related:** US-092 (thermal protection), F-171 (missing amp hardware entry)
+
+## F-175: Target curve selection in speaker edit is a text box instead of dropdown (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (usability — operator must type curve name instead of selecting)
+**Status:** RESOLVED — #192 completed (dropdown replacing text box)
+**Affects:** Web UI Config tab, speaker profile edit form
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+The target curve field in the speaker profile edit form is a plain text input
+instead of a dropdown. The backend knows the available target curves via the
+`target_curves.py` module (ISO 226 equal-loudness contours + custom curves),
+but the frontend does not query or present them as selectable options.
+
+### Impact
+
+- Operator must know and type the exact curve name
+- Error-prone — typo in curve name would silently produce incorrect filters
+- Poor UX for a field with a known, finite set of valid values
+
+### Fix
+
+Add an API endpoint (or use existing one) to list available target curves from
+`target_curves.py`. Change the frontend form field from text input to a dropdown
+populated by this list.
+
+**Related:** US-094 (target curve overlay), T-094-wire (target_phon wiring)
+
+## F-176: Tooltip question marks don't show popups (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (usability — help icons non-functional)
+**Status:** RESOLVED — #193 completed
+**Affects:** Web UI Config tab, speaker config form, inline help tooltips
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+Help question mark icons appear next to speaker config form fields (added in
+task #148), but clicking or hovering shows nothing — no popup, no tooltip text.
+Owner wants every field to have working tooltips in both view and edit mode.
+
+### Impact
+
+- Help system appears broken — icons present but non-functional
+- Owner cannot learn what fields mean without external documentation
+- Defeats the purpose of inline help
+
+### Fix
+
+Investigate: (a) Are tooltip elements in the DOM? (b) Is JS handler attached?
+(c) CSS issue hiding the tooltip popup? The tooltips were added in task #148
+(committed) — check if the tooltip JS/CSS was deployed correctly or if a
+cache-busting issue is preventing the latest version from loading.
+
+**Related:** Task #148 (inline help tooltips)
+
+**Update 2026-03-28:** RESOLVED (#193 completed by worker-3).
+
+## F-177: UMIK-1 spectrum shows only 0Hz and 20kHz flutter (OPEN — root cause: F-181)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (measurement display — not broadband as expected)
+**Status:** OPEN — root cause identified as F-181 (UMIK-1 port name mismatch). Fix in Rule 13 review.
+**Affects:** Web UI Test tab, UMIK-1 spectrum display
+**Found by:** Owner (Pi Test tab observation, 2026-03-28)
+
+### Description
+
+UMIK-1 spectrum in the Test tab shows signal activity only at the frequency
+extremes (0 Hz and 20 kHz) — not the broadband ambient noise pattern expected
+from a live microphone. Some signal is arriving from the UMIK but the display
+suggests a DC offset or aliasing artifact rather than real audio content.
+
+### Possible Causes
+
+1. **DEPLOY-004 not yet complete** — UMIK-1 links may not be fully established
+   if the Rust rebuild / service restart hasn't finished
+2. **DC offset** — UMIK-1 input has a DC component that dominates the spectrum
+3. **Aliasing artifact** — sample rate mismatch or incorrect PCM format in the
+   UMIK-1 capture path
+4. **pcm-bridge channel mapping** — UMIK-1 data arriving on wrong channel or
+   with wrong format
+
+### Fix
+
+Investigate after DEPLOY-004 completes. If the issue persists with fresh
+deployment, check: (a) `pw-top` for UMIK-1 node format/rate, (b) pcm-bridge
+channel 3 data via raw dump, (c) spectrum renderer frequency bin mapping.
+
+## F-178: Target curve overlay drawn at 0dB instead of target SPL (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (display calibration — curve position misleading)
+**Status:** OPEN
+**Affects:** Web UI Test tab, spectrum renderer target curve overlay
+**Found by:** Owner (Pi Test tab observation, 2026-03-28)
+
+### Description
+
+The target curve overlay in the spectrum display is drawn at 0 dB. It should be
+positioned at the selected target SPL level to serve as a meaningful visual
+reference during measurement. Currently the curve shape is correct but its
+vertical position makes it useless for comparing against the measured spectrum.
+
+### Impact
+
+- Target curve cannot be used as a visual measurement reference
+- Operator must mentally offset the curve position, defeating the purpose
+- Affects measurement workflow usability
+
+### Fix (updated per owner clarification 2026-03-28)
+
+The target curve's vertical offset should be driven by the active speaker
+config's `target_spl` value plus `phon_override` (if set) — NOT by manual
+input. The spectrum renderer should read these values from the active profile
+and compute the display offset automatically.
+
+Check `spectrum-renderer.js` target curve drawing code — needs to fetch
+`target_spl` + `phon_override` from the active speaker config and apply as
+the dB offset when rendering the curve.
+
+**Related:** Task #108 (T-094-AC10: target curve visual overlay)
+
+## F-179: DSP status shows "Idle" while music is playing (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (misleading status display)
+**Status:** OPEN
+**Affects:** Web UI status bar, DSP state indicator
+**Found by:** Owner (Pi observation during Mixxx playback, 2026-03-28)
+
+### Description
+
+The status bar DSP indicator shows "Idle" even though Mixxx is actively playing
+audio through the PipeWire filter-chain convolver. The convolver is processing
+audio (sound is coming out of the speakers), but the status bar reports it as
+idle.
+
+### Possible Causes
+
+1. **Wrong node queried** — Status bar may be reading the state of the stopped
+   CamillaDSP service (D-040) instead of the PW filter-chain convolver
+2. **State detection logic** — The convolver runs as part of the PipeWire graph,
+   not as a separate node with its own Running/Idle state. The status bar may
+   be looking for a node state that doesn't apply to filter-chain modules.
+3. **pcm-bridge reporting** — If status comes from pcm-bridge, it may not track
+   filter-chain activity
+
+### Fix
+
+Check the status bar's DSP state source in `statusbar.js` and the backend
+endpoint it queries. Post-D-040, the DSP engine is the PW filter-chain convolver
+— not CamillaDSP. The status detection needs to reflect the active architecture.
+
+## F-180: Events display should be newest-first with no autoscroll (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Low (usability enhancement — owner request)
+**Status:** OPEN
+**Affects:** Web UI events display
+**Found by:** Owner (backlog request, 2026-03-28)
+
+### Description
+
+Owner requests two changes to the events display in the web UI:
+1. Events should be sorted newest-first (currently oldest-first)
+2. Autoscroll should be disabled — the view should not jump when new events arrive
+
+### Impact
+
+- Current oldest-first ordering forces the operator to scroll down to see recent events
+- Autoscroll is disruptive when trying to read older entries — the view jumps away
+
+### Fix
+
+In the events rendering code: (a) reverse the sort order so newest events appear at the
+top, (b) remove or disable any `scrollIntoView` / `scrollTop` autoscroll behavior on
+new event arrival.
+
+## F-181: UMIK-1 port name mismatch — routing.rs uses capture_MONO, Pi has capture_FL (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** High (blocks UMIK-1 data path — root cause of F-177)
+**Status:** OPEN — fix ready, in Rule 13 review
+**Affects:** GraphManager UMIK-1 routing, measurement pipeline, Test tab spectrum
+**Found by:** Worker-2 during DEPLOY-004 verification
+
+### Description
+
+`routing.rs` matches the UMIK-1 capture port as `capture_MONO`, but the Pi
+hardware presents the UMIK-1 as a stereo ALSA device with port name `capture_FL`.
+This mismatch means the GM reconciler cannot find the correct UMIK-1 port to
+link to pcm-bridge, resulting in no real audio data flowing from the microphone.
+
+This is the root cause of F-177 (UMIK-1 spectrum showing only 0Hz/20kHz flutter
+instead of broadband ambient noise).
+
+### Impact
+
+- UMIK-1 audio data not reaching pcm-bridge or web UI
+- Measurement pipeline cannot capture real microphone signal
+- Test tab spectrum shows flutter artifacts instead of real audio
+
+### Fix
+
+Update port name matching in `routing.rs` from `capture_MONO` to `capture_FL`
+(or make the match flexible to handle both mono and stereo ALSA presentations).
+Worker-2 has fix ready, currently in Rule 13 review.
+
+**Related:** F-177 (symptom), F-166 (previous UMIK-1 case mismatch — `UMIK-1` vs `Umik-1`)
+
+## F-182: Speaker config needs target curve selection + ISO 226 toggle for FIR generation (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (enhancement — owner requirement for FIR generation workflow)
+**Status:** OPEN
+**Affects:** Speaker config schema, Config tab speaker edit form, FIR generation pipeline
+**Found by:** Owner (requirement clarification, 2026-03-28)
+
+### Description
+
+The speaker config needs two additional fields for FIR filter generation:
+
+1. **Target curve selection** — which target curve to use (e.g., Harman, flat,
+   custom). Currently F-175 added a dropdown for curve names, but this needs to
+   be wired through to the FIR generation pipeline so the selected curve is
+   actually used when generating correction filters.
+
+2. **ISO 226 toggle** — on/off toggle for ISO 226 equal-loudness compensation
+   during FIR generation. When enabled, the target curve is adjusted based on
+   the `target_spl` / `phon_override` values using the ISO 226 equal-loudness
+   contours (module already exists: `target_curves.py` / task #60).
+
+### Impact
+
+- Without target curve selection wired to generation, all FIR filters use the
+  same default curve regardless of config
+- Without ISO 226 toggle, operator cannot control equal-loudness compensation
+  per speaker profile
+
+### Fix
+
+1. Add `iso_226_enabled` boolean field to speaker profile YAML schema
+2. Ensure `target_curve` field in profile is used by `generate_profile_filters.py`
+3. When `iso_226_enabled` is true, apply ISO 226 adjustment at `target_spl` phon
+   level during FIR generation
+4. Add ISO 226 toggle to Config tab speaker edit form (alongside existing target
+   curve dropdown from F-175/#192)
+
+**Related:** F-175 (target curve dropdown), F-178 (spectrum overlay offset),
+task #60 (ISO 226 module), task #107 (target_phon wiring)

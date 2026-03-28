@@ -7314,6 +7314,82 @@ needs to run on the Pi at all.
 
 ---
 
+## US-106: GraphManager Reconciler — Automated Link Topology
+
+**As** the owner,
+**I want** the GraphManager reconciler to automatically create and maintain all PipeWire links for every operating mode,
+**so that** mode switching works, the Graph tab shows correct link counts, and manual `pw-link` workarounds are eliminated.
+
+**Status:** draft (2026-03-28)
+**Priority:** P0 (owner directive — blocks automated routing, mode switching, Graph tab link display)
+**Depends on:** US-059 (GraphManager Core — DONE, owner-accepted 2026-03-21)
+**Related defects:** F-169 (Graph tab 0/0 links), F-170 (mode switch stuck)
+**Related findings:** AD W-1 (reconciler root cause: PW null-sink nodes suspended with zero ports — NOT a code bug)
+
+### Background
+
+The GraphManager reconciler was implemented in US-059 and owner-accepted. However, in production on the Pi, the reconciler fails to create links because PipeWire null-sink/null-source nodes remain in Suspended state with zero ports. The reconciler code is correct (architect confirmed) — it correctly matches port names and creates links — but it never finds ports to link because the nodes never expose them.
+
+**Root cause (AD W-1):** PipeWire null-sink nodes require specific properties (`node.always-process = true` and `node.pause-on-idle = false`) to expose ports when no clients are connected. Without these properties, nodes stay suspended and the reconciler's port-matching loop finds nothing.
+
+Task #150 committed a fix (`494c90d`) adding these properties and triggering reconciliation on port-added events (not just node-added). However, the fix has NOT been verified on the Pi in production conditions with the full audio graph.
+
+**Current workaround:** Manual `pw-link` commands after every boot/mode-switch. The Graph tab shows 0/0 links because the reconciler reports what it manages (zero).
+
+### Acceptance Criteria
+
+**AC1: Null-sink/null-source nodes expose ports**
+- [ ] All null-sink and null-source nodes in the production PW filter-chain config have `node.always-process = true` and `node.pause-on-idle = false`
+- [ ] Nodes transition from Suspended to Idle/Running within 2 seconds of PipeWire startup
+- [ ] All expected ports visible in `pw-cli list-ports` immediately after boot
+
+**AC2: Reconciler creates all production links automatically**
+- [ ] After PipeWire + GM startup: all links for the default mode (Monitoring) are created without manual intervention
+- [ ] Link count matches the expected topology (16 links for 2-way Monitoring mode)
+- [ ] Graph tab shows correct link count (not 0/0)
+- [ ] `pw-link -l` output matches GM's routing table
+
+**AC3: Mode switching creates/destroys correct links**
+- [ ] Switching from Monitoring to DJ mode: GM destroys Monitoring links, creates DJ links (adds Mixxx routing)
+- [ ] Switching from DJ to Measurement mode: correct topology swap
+- [ ] No stale links remain after mode transition
+- [ ] Mode switch completes within 2 seconds
+- [ ] Web UI mode switcher (F-161) triggers GM mode transition successfully
+
+**AC4: Resilience — links survive and recover**
+- [ ] Links survive component restart (e.g., pcm-bridge crash + restart by GM)
+- [ ] Links re-created after USBStreamer disconnect/reconnect (USB hotplug)
+- [ ] If a managed component dies and is restarted, its links are re-established automatically
+
+**AC5: No manual pw-link workarounds**
+- [ ] Remove all `pw-link` workaround commands from `local-demo.sh` and any startup scripts
+- [ ] Remove `2>/dev/null` suppression of link errors (these were hiding the root cause)
+- [ ] If GM fails to create a link, it logs a clear error (not silently succeeds)
+
+**AC6: Pi production verification**
+- [ ] Full test on Pi with USBStreamer + ADA8200 connected
+- [ ] Audio path verified: Mixxx → convolver → USBStreamer (DJ mode)
+- [ ] Monitoring path verified: pcm-bridge taps all expected nodes
+- [ ] UMIK-1 measurement path verified: signal-gen → speaker → UMIK-1 → pcm-bridge
+- [ ] 10-minute stability soak: no link drops, no reconciler errors
+
+### Definition of Done
+
+- [ ] AC1-AC5 verified in local-demo environment
+- [ ] AC6 verified on Pi with real hardware
+- [ ] Architect confirms fix is correct
+- [ ] No manual `pw-link` commands needed anywhere in the workflow
+- [ ] F-169 closed (Graph tab shows real link count)
+- [ ] status.md updated
+
+### Out of scope
+
+- New reconciler features (multi-way topology, new modes) — separate stories
+- GraphManager RPC API changes
+- Web UI Graph tab rendering improvements beyond link count accuracy
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the

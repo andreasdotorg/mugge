@@ -212,6 +212,11 @@ sed "s|COEFFS_DIR|$COEFFS_DIR|g" \
     > "$PW_CONF_DIR/30-convolver.conf"
 echo "[local-demo] Convolver config installed (coefficients: $COEFFS_DIR)"
 
+# Remove stale deploy-generated convolver config from previous measurement sessions.
+# The deploy step writes 30-filter-chain-convolver.conf to PI4AUDIO_PW_CONF_DIR,
+# which creates a duplicate convolver node that shadows the local-demo's 30-convolver.conf.
+rm -f "$PW_CONF_DIR/30-filter-chain-convolver.conf"
+
 # F-159: Install UMIK-1 loopback config for measurement E2E testing.
 # Replaces the null-audio-sink UMIK-1 (which outputs silence) with a PW
 # loopback module that echoes its sink input to its source output. This lets
@@ -420,9 +425,11 @@ export PI4AUDIO_LEVELS_HW_OUT_PORT=9101
 export PI4AUDIO_LEVELS_HW_IN_PORT=9102
 export PI4AUDIO_SKIP_GM_RECOVERY=1
 export PI4AUDIO_SIGGEN=1
-# Local-demo PW graph has no measurement attenuation gain node (production
-# has -20 dB on the measurement channel for speaker protection).
-export PI4AUDIO_MEASUREMENT_ATTENUATION_DB=0
+# Simulate production measurement attenuation (-20 dB) so the gain cal
+# algorithm starts at -40 dBFS digitally (matching the production ramp).
+# Without this, the algorithm starts at -60 dBFS which produces all-zero
+# captures in the local-demo PW loopback chain (null-sink quantization).
+export PI4AUDIO_MEASUREMENT_ATTENUATION_DB=-20
 # Room-sim convolver produces supra-unity peaks (+5 to +15 dBFS) from
 # multi-reflection summation.  Raise recording integrity ceiling and
 # mic clipping threshold (no real ADC in digital loopback path).
@@ -430,9 +437,9 @@ export PI4AUDIO_RECORDING_PEAK_CEILING_DBFS=20
 export PI4AUDIO_MIC_CLIP_THRESHOLD_DBFS=0
 # Room-sim convolver's low-frequency modes can produce DC in recordings.
 export PI4AUDIO_RECORDING_DC_CEILING=0.1
-# Room-sim convolver adds ~+16 dB gain.  Starting at -60 dBFS already
-# produces ~77 dB "SPL" — above the production 75 dB target.  Raise
-# target and hard limit so gain cal can converge.
+# Room-sim convolver adds ~+16 dB gain.  With ATTENUATION_DB=-20 the
+# ramp starts at -40 dBFS → ~-24 dBFS at loopback → ~97 dB "SPL" with
+# sensitivity 121.4.  Raise target and hard limit so gain cal converges.
 export PI4AUDIO_TARGET_SPL_DB=90
 export PI4AUDIO_HARD_LIMIT_SPL_DB=100
 # Writable temp paths for all config/data dirs. Nix store is read-only,
@@ -483,7 +490,7 @@ echo "  pcm-bridge:      tcp://127.0.0.1:9090 (PCM, managed mode)"
 echo ""
 echo "  PW nodes:     alsa_output.usb-MiniDSP_USBStreamer (null sink)"
 echo "                alsa_input.usb-MiniDSP_USBStreamer (null source)"
-echo "                alsa_input.usb-miniDSP_UMIK-1 (loopback source, mono)"
+echo "                alsa_input.usb-miniDSP_Umik-1 (loopback source, mono)"
 echo "                umik1-loopback-sink (loopback sink, mono)"
 echo "                ada8200-in (null source, 8ch ADC capture)"
 echo "                pi4audio-convolver (filter-chain, dirac passthrough)"
