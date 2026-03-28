@@ -187,30 +187,22 @@ EOF
     # from 8ch (AUX0..7) to stereo (FL/FR), breaking GraphManager routing.
     mkdir -p "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d"
 
-    # 90-no-auto-link: disable WP linking policies only (GM is sole link
-    # manager per D-039). Keep policy.node enabled — it configures adapter
-    # nodes' PortConfig to DSP mode, which creates ports. Without this,
-    # null-audio-sink adapter nodes stay in "suspended" state with zero
-    # ports and GraphManager cannot create any links.
+    # 90-local-demo-policy: WP policy.standard enabled so pw-record streams
+    # get auto-linked to the default source (F-164). Our static nodes all
+    # have node.autoconnect=false, so WP's linking policy ignores them —
+    # GM remains the sole link manager for static topology (D-039).
     #
-    # WP 0.5's main profile requires policy.standard, which is a virtual
-    # component that transitively requires policy.linking.standard. We
-    # cannot just disable the linking sub-components — that breaks the
-    # dependency chain. Instead, disable the entire policy.standard bundle
-    # and re-enable every sub-component EXCEPT the two linking ones.
+    # pw-record capture uses the default audio source (set via pw-metadata
+    # by pw_capture.py before starting pw-record). WP auto-links the stream
+    # to the default source without needing --target.
     #
-    # pw-record capture works because the UMIK-1 loopback source clears
-    # node.link-group (F-163), allowing pw-link to create external links.
-    # pw_capture.py creates the link manually after starting pw-record.
-    cat > "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d/90-no-auto-link.conf" << 'EOF'
+    # The UMIK-1 loopback source clears node.link-group (F-163) so WP can
+    # link pw-record to it without the loopback feedback-prevention logic
+    # blocking the connection.
+    cat > "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d/90-local-demo-policy.conf" << 'EOF'
 wireplumber.profiles = {
   main = {
-    policy.standard = disabled
-    policy.client.access = required
-    policy.device.profile = required
-    policy.device.routes = required
-    policy.default-nodes = required
-    policy.node = required
+    policy.standard = required
     support.standard-event-source = required
   }
 }

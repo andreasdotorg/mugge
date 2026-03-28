@@ -5685,3 +5685,204 @@ Monitoring modes. Should include confirmation dialog for safety (mode switch
 involves audio mute → topology change → unmute).
 
 **Related:** US-097 (Measurement Backend), US-067 (E2E Simulator)
+
+## F-162: Config tab quantum shows 256 preselected but actual quantum is 1024 (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** Low (cosmetic — confusing but not blocking)
+**Status:** RESOLVED (worker-2, 2026-03-28)
+**Affects:** Web UI Config tab, quantum selector
+**Found by:** Owner (Pi testing after DEPLOY-002, 2026-03-28)
+
+### Description
+
+After DEPLOY-002 deployment, the Config tab quantum selector shows 256 preselected,
+but the status bar correctly shows 1024. The UI is not reading the actual PipeWire
+quantum value to set the initial selection state. The quantum selector appears to
+default to 256 regardless of the actual runtime quantum.
+
+### Impact
+
+- Confusing: operator may think quantum is 256 when it is actually 1024
+- Not blocking: status bar shows correct value, and changing quantum via the selector works
+
+### Fix
+
+Config tab quantum selector should read the actual quantum from PipeWire metadata
+(via the status/system collector) and preselect accordingly on page load.
+
+## F-163: Speaker/venue config empty — profiles not loaded despite YAML files deployed (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** High (blocks venue workflow on Pi)
+**Status:** RESOLVED (worker-3 deploy.sh path fix, 2026-03-28). Root cause: deploy.sh rsynced to ~/speakers/ but API expects /etc/pi4audio/speakers/.
+**Affects:** Web UI Config tab, speaker profile API, venue workflow
+**Found by:** Owner (Pi testing after DEPLOY-002, 2026-03-28)
+
+### Description
+
+After DEPLOY-002 deployed 6 venue speaker profile YAMLs and identity files to the
+Pi, the web UI Config tab shows no speaker profiles or venue data. The YAML files
+are committed and deployed via rsync, but the API returns empty lists.
+
+### Impact
+
+- Cannot select a speaker profile for the venue
+- Venue workflow (speaker config → filter generation → measurement) is blocked
+- Profiles must exist for the measurement wizard pre-flight checks to pass
+
+### Fix
+
+Investigate: (a) Are the YAML files in the correct directory on Pi? (b) Does the
+speaker config API scan the right path? (c) Is there a file permission or path
+mismatch between deployed location and API's configured data directory?
+
+**Related:** US-089 (Speaker Config), #176 (venue YAML creation task)
+
+## F-164: Mode dropdown renders partially off-screen — unusable (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** High (BLOCKER for tonight's event — mode switching unusable)
+**Status:** RESOLVED (worker-2, 2026-03-28)
+**Affects:** Web UI status bar, F-161 mode switcher dropdown
+**Found by:** Owner (Pi testing after DEPLOY-002, 2026-03-28)
+
+### Description
+
+The mode switcher dropdown (F-161) partially renders outside the visible screen
+area, making it unusable. The dropdown likely overflows the viewport when opened
+from its position in the status bar. This is a CSS/positioning issue introduced
+by F-161.
+
+### Impact
+
+- Cannot switch GM modes from the web UI
+- At event, phone/tablet is the only interface — no CLI fallback
+- Blocks mode switching for DJ setup
+
+### Fix
+
+Fix CSS positioning of the mode dropdown — use `position: fixed` or viewport-aware
+positioning to ensure the dropdown stays within the visible area. Test on mobile
+viewport sizes (phone/tablet).
+
+**Related:** F-161 (mode switcher implementation)
+
+## F-165: Measurement dies with "response exceeds max line length" (RESOLVED)
+
+**Filed:** 2026-03-28
+**Severity:** High (BLOCKER for tonight's event — measurement unusable)
+**Status:** RESOLVED (worker-2, 2026-03-28)
+**Affects:** Measurement pipeline, likely pw-dump response parsing
+**Found by:** Owner (Pi testing after DEPLOY-002, 2026-03-28)
+
+### Description
+
+Starting a measurement session fails with an error about "response exceeds max line
+length." This is likely F-061 (pw-dump produces very large JSON responses) hitting
+the measurement path. The measurement session pre-flight or graph inspection step
+calls pw-dump and the response exceeds a hardcoded line length limit in the Python
+subprocess or HTTP parsing code.
+
+### Impact
+
+- Cannot run measurements on the Pi
+- Blocks room correction workflow for venue setup
+- The measurement wizard cannot complete its pre-flight checks
+
+### Fix
+
+Investigate the line length limit: (a) Is this in the GraphManager RPC client?
+(b) Is this in the subprocess stdout reading code? (c) Is this in the HTTP/WebSocket
+response parsing? Increase or remove the limit. Consider streaming the pw-dump
+response instead of reading it as a single line.
+
+**Related:** F-061 (pw-dump hangs — may share root cause), US-087 (Direct WebSocket
+from Rust — architectural fix for pw-dump dependency)
+
+## F-166: UMIK-1 prefix case mismatch — routing.rs and pw_capture.py use wrong case (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** High (BLOCKER — root cause of -134 dB measurement signal on Pi)
+**Status:** OPEN (worker-2 has fix, CHANGE-004 granted)
+**Affects:** GraphManager routing (routing.rs), measurement capture (pw_capture.py)
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+`routing.rs` and `pw_capture.py` use `UMIK-1` as the PipeWire node name prefix,
+but the actual hardware node on the Pi presents as `Umik-1` (mixed case). This
+case mismatch means the GraphManager cannot find the UMIK-1 node for measurement
+routing, and pw_capture.py cannot target it for recording. Result: measurement
+captures silence or near-silence (-134 dB signal level).
+
+### Impact
+
+- All measurement on the Pi is broken — captures silence
+- Room correction workflow completely blocked
+- Event prep measurement impossible
+
+### Fix
+
+Fix case in `routing.rs` and `pw_capture.py` to match actual hardware node name
+(`Umik-1` not `UMIK-1`). Worker-2 has fix, CHANGE-004 session granted by CM.
+
+## F-167: Room simulator node visible in Pi Graph tab (NOT A DEFECT)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (unexpected node in production — should only exist in local-demo)
+**Status:** NOT A DEFECT (owner confirmed browser confusion, 2026-03-28)
+**Affects:** PipeWire filter-chain config, Graph tab display
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+The owner sees a room-sim convolver node in the Graph tab on the production Pi.
+Room simulator nodes should only exist in the local-demo PipeWire configuration,
+not on the production Pi. Either the room-sim config was accidentally deployed,
+or the Graph tab is showing stale/cached data.
+
+### Impact
+
+- Confusing: owner sees unexpected nodes in production graph
+- Potential: if the room-sim node is actually loaded in PW, it could be in the
+  audio path and affecting sound quality
+- Needs investigation to determine if this is a display issue or a real config issue
+
+### Fix
+
+Investigate: (a) Is the room-sim node actually loaded in PipeWire on the Pi
+(`pw-dump | grep room-sim`)? (b) Was a local-demo config accidentally deployed?
+(c) Is the Graph tab showing cached data? Remove the room-sim config from Pi if
+present, or fix the Graph tab display if it's a caching issue.
+
+**Related:** US-067 Track C (room-sim convolver for local-demo)
+
+## F-168: Mode switch stuck in Measurement — cannot return to DJ mode (CANNOT REPRODUCE)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (transient — resolved itself, but could recur at event)
+**Status:** CANNOT REPRODUCE (owner confirmed working now, transient, 2026-03-28)
+**Affects:** GraphManager mode transitions, web UI mode switcher
+**Found by:** Owner (Pi event prep, 2026-03-28)
+
+### Description
+
+After entering Measurement mode, the owner could not switch back to DJ mode.
+The issue appeared transient and resolved itself without intervention. No specific
+error message captured. Could be a race condition in GraphManager mode transition
+logic, a link cleanup issue, or a timing problem with the mode switcher UI.
+
+### Impact
+
+- At event: if mode gets stuck, owner cannot switch to DJ mode without CLI access
+- Transient nature makes it hard to reproduce and debug
+- Related to F-164 (mode dropdown rendering) but distinct issue (functionality vs display)
+
+### Fix
+
+Investigate GraphManager mode transition logs for any errors during the stuck period.
+Check for race conditions in the mode switch RPC handler. May need retry logic or
+better error reporting in the mode switcher UI.
+
+**Related:** F-160 (mode restore bug), F-164 (mode dropdown rendering)

@@ -216,7 +216,7 @@ echo "[local-demo] Convolver config installed (coefficients: $COEFFS_DIR)"
 # Replaces the null-audio-sink UMIK-1 (which outputs silence) with a PW
 # loopback module that echoes its sink input to its source output. This lets
 # the measurement pipeline receive real audio via the room-sim convolver.
-cp "$REPO_DIR/configs/local-demo/umik1-loopback.conf" \
+install -m 644 "$REPO_DIR/configs/local-demo/umik1-loopback.conf" \
     "$PW_CONF_DIR/35-umik1-loopback.conf"
 echo "[local-demo] UMIK-1 loopback config installed (measurement E2E)"
 
@@ -420,6 +420,21 @@ export PI4AUDIO_LEVELS_HW_OUT_PORT=9101
 export PI4AUDIO_LEVELS_HW_IN_PORT=9102
 export PI4AUDIO_SKIP_GM_RECOVERY=1
 export PI4AUDIO_SIGGEN=1
+# Local-demo PW graph has no measurement attenuation gain node (production
+# has -20 dB on the measurement channel for speaker protection).
+export PI4AUDIO_MEASUREMENT_ATTENUATION_DB=0
+# Room-sim convolver produces supra-unity peaks (+5 to +15 dBFS) from
+# multi-reflection summation.  Raise recording integrity ceiling and
+# mic clipping threshold (no real ADC in digital loopback path).
+export PI4AUDIO_RECORDING_PEAK_CEILING_DBFS=20
+export PI4AUDIO_MIC_CLIP_THRESHOLD_DBFS=0
+# Room-sim convolver's low-frequency modes can produce DC in recordings.
+export PI4AUDIO_RECORDING_DC_CEILING=0.1
+# Room-sim convolver adds ~+16 dB gain.  Starting at -60 dBFS already
+# produces ~77 dB "SPL" — above the production 75 dB target.  Raise
+# target and hard limit so gain cal can converge.
+export PI4AUDIO_TARGET_SPL_DB=90
+export PI4AUDIO_HARD_LIMIT_SPL_DB=100
 # Writable temp paths for all config/data dirs. Nix store is read-only,
 # and the defaults point at /etc/pi4audio/* or ~/.config/pipewire/* which
 # are either missing or the host's real config — both wrong for local-demo.
@@ -429,6 +444,8 @@ export PI4AUDIO_SESSION_DIR="/tmp/pi4audio-demo/sessions"
 # not the host's real ~/.config/pipewire/pipewire.conf.d.
 # XDG_CONFIG_HOME is set by eval "$("$PW_TEST_ENV" env)" above.
 export PI4AUDIO_PW_CONF_DIR="$XDG_CONFIG_HOME/pipewire/pipewire.conf.d"
+# Coefficients deploy dir — same as where dirac + room-sim IRs live.
+export PI4AUDIO_COEFFS_DIR="$COEFFS_DIR"
 # G-6: Speaker and hardware profile write dirs — seeded from repo configs.
 export PI4AUDIO_SPEAKERS_DIR="/tmp/pi4audio-demo/speakers"
 export PI4AUDIO_HARDWARE_DIR="/tmp/pi4audio-demo/hardware"

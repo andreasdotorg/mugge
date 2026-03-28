@@ -3789,6 +3789,7 @@ signal-gen (PW stream) → production convolver (filter-chain, FIR crossover+cor
 - [ ] Filter-chain config generation from room scenario YAML
 - [ ] At least 5 E2E test scenarios passing via `nix run .#test-room-sim-e2e` (T-067-1 through T-067-5)
 - [ ] 3 pre-defined room scenarios committed and AE-validated
+- [ ] **Playwright E2E validation (Track D):** Playwright tests exercise the FULL measurement pipeline against local-demo where the room simulator (PW filter-chain convolver with generated IR) replaces the physical ADA8200→room→UMIK-1 path. The test must: (a) run a complete measurement session through the simulated room, (b) generate correction filters from the measured response, (c) apply those filters, (d) run a verification measurement proving the correction works (response flattens). ZERO special code paths — measurement code runs identically to production, only PW topology differs (room-sim nodes instead of physical devices). Rule 13 applies: QE + Architect must approve before CM commits.
 - [ ] Audio engineer sign-off: acoustic models are physically plausible and the correction pipeline produces reasonable results against them
 - [ ] Architect sign-off: PipeWire sandbox integration is robust (no leaked processes, no race conditions, deterministic cleanup)
 - [ ] Advocatus Diaboli review: simulation is accurate enough that tests passing against it provide meaningful confidence for real-venue deployment (i.e., the simulation doesn't "cheat" by being too easy to correct)
@@ -7231,68 +7232,85 @@ All preceding stories (US-089 through US-103) can be developed and tested locall
 
 ---
 
-## US-105: Nix-Based Deployment Pipeline
+## US-105: Single-Command Deployment Pipeline
 
 **As** the owner,
-**I want** a reproducible, Nix-based deployment pipeline that builds and deploys all components to the Pi from a single command,
-**so that** deployments are deterministic, rollback-capable, and independent of ad-hoc build environments.
+**I want** a single command (`deploy.sh`) that builds, deploys, and verifies all components on the Pi without manual SSH or improvisation,
+**so that** deployments are repeatable, safe, and impossible to get wrong.
 
-**Status:** draft (2026-03-27)
-**Depends on:** F-157 (deploy.sh rewrite — immediate fix), F-158 (Rust binary deploy — immediate fix)
-**Priority:** P1 (blocks reliable gig operations long-term)
+**Status:** draft (2026-03-27, revised from "Nix-Based Deployment Pipeline")
+**Depends on:** F-157 (RESOLVED), F-158 (RESOLVED)
+**Priority:** P1 (blocks reliable gig operations — every deployment currently requires improvisation)
 **Tier:** 14
 **Related:** F-094 (rsync --delete wiped TLS certs), F-082 (deployment dir mismatch)
 
 ### Background
 
-The immediate deployment gaps are addressed by two defect fixes:
-- **F-157:** Mechanical rewrite of `deploy.sh` — remove CamillaDSP references, add
-  PW filter-chain config/service/speaker/hardware config deployment, update `--mode`
-  to set PW quantum. No design decisions needed.
-- **F-158:** Document the rsync-based Rust binary procedure that worked in #53, add
-  Rust binary section to deploy.sh with rsync + version check.
+The deploy.sh rewrite (F-157) and Rust binary documentation (F-158) addressed the
+immediate gaps, but the fundamental problem persists: workers bypass deploy.sh, SSH
+to the Pi, try to build Rust binaries there, and hit `cargo: command not found`
+because they don't source `.cargo/env`. This has happened on every deployment.
 
-This story provides the **proper solution** that replaces the manual rsync approach
-with a reproducible Nix-based path. It also adds service lifecycle management with
-USBStreamer safety gates, deploy logging, and rollback capability.
+**Key architectural insight (architect):** The dev machine is aarch64-linux — the
+same architecture as the Pi. There is no cross-compilation problem. Binaries built
+on the dev machine run directly on the Pi. The solution: build on the dev machine
+(which has cargo, Nix, and all dependencies), rsync binaries to Pi. Cargo never
+needs to run on the Pi at all.
 
 ### Acceptance Criteria
 
-**AC1: Nix cross-compilation for ARM binaries**
-- [ ] `nix build .#graph-manager` / `.#pcm-bridge` / `.#signal-gen` / `.#level-bridge` produces aarch64 binaries from dev machine
-- [ ] Cross-compilation target added to `flake.nix` (aarch64-linux)
-- [ ] Build time documented (baseline for CI)
+**AC1: Integrated Nix build step in deploy.sh**
+- [ ] deploy.sh builds all Rust binaries via `nix build .#graph-manager .#pcm-bridge .#signal-gen .#level-bridge` on the dev machine before deploying
+- [ ] No `--build` flag needed — Nix is the only build path, always runs
+- [ ] `--skip-build` flag available to deploy pre-built binaries without rebuilding (for rapid iteration when only configs/Python changed)
+- [ ] Cargo is an implementation detail inside the Nix derivation — never invoked directly by deploy.sh or by workers
+- [ ] Build output copied from `result/bin/` to staging area, then rsynced to Pi
+- [ ] Build failure = deploy abort (no deploying stale binaries after a failed build)
 
-**AC2: Nix-based deployment workflow**
-- [ ] `nix copy --to ssh://ela@192.168.178.185` workflow documented and tested
-- [ ] Alternative: deploy script uses `nix build` outputs for rsync-based deploy
-- [ ] Binary version verification after deploy (`--version` check)
-- [ ] Rollback: previous binaries preserved as `.bak` before overwrite
+**AC2: Single-command end-to-end deployment**
+- [ ] `deploy.sh --mode dj` is the canonical deployment command (no build flag needed)
+- [ ] Sequence: D-023 clean check -> nix build on dev machine -> SSH check -> rsync configs -> rsync binaries -> rsync Python code (web-ui, room-correction) -> service management -> health checks
+- [ ] Workers NEVER need to SSH to Pi for builds. Cargo never runs on the Pi.
+- [ ] `--mode dj|live` sets PW quantum (1024 vs 256) via pw-metadata command on Pi
+- [ ] Python code (web-ui, room-correction) deployed via rsync (already implemented)
 
-**AC3: Service lifecycle management**
-- [ ] deploy.sh handles service restart sequence with safety warnings
-- [ ] Explicit USBStreamer transient warning before PipeWire-affecting restarts
-- [ ] User confirmation gate before service restarts (interactive) or `--yes` flag for CI
-- [ ] Restart order: stop services -> deploy -> start services
-- [ ] Verification: service status check after restart
+**AC3: Safe service restart sequence**
+- [ ] Before any PipeWire-affecting restart: explicit USBStreamer transient warning with interactive confirmation prompt
+- [ ] `--yes` flag bypasses confirmation (for CI/automated use)
+- [ ] Restart order: mute audio (pw-cli gain nodes to 0) -> stop services (GM, pcm-bridge, signal-gen, web-ui) -> deploy binaries/configs -> systemd daemon-reload -> start services -> verify health -> restore gain
+- [ ] If health check fails after restart: warn operator, do NOT auto-rollback (operator decides)
 
-**AC4: Room correction module deployment**
-- [ ] `src/room-correction/` deployed as standalone Python module to Pi
-- [ ] Separate from web-ui deployment (it's a dependency, not part of web-ui)
-- [ ] Include driver database sync option (`--include-drivers` flag, default off due to size)
+**AC4: Post-deploy health verification**
+- [ ] Each Rust binary: `--version` check (confirms correct binary deployed)
+- [ ] Each systemd service: `systemctl --user is-active` check
+- [ ] GM responds on port 4002 (TCP connect test)
+- [ ] pcm-bridge responds on port 9100 (TCP connect test)
+- [ ] Web UI responds on port 8080 (HTTPS connect test)
+- [ ] PipeWire running: `pw-cli info 0` succeeds
+- [ ] Summary report: GREEN (all pass) / YELLOW (partial) / RED (critical failure)
 
-**AC5: Dry-run, logging, and verification**
-- [ ] `--dry-run` shows complete manifest of what would be deployed
-- [ ] Post-deploy verification: PW config syntax, service health, binary versions
-- [ ] Deploy log written to `~/deploy-log/<timestamp>.log` on Pi
+**AC5: Dry-run and deploy logging**
+- [ ] `--dry-run` shows complete manifest: what would be built, what files would be deployed, what services would be restarted
+- [ ] Deploy log appended to `~/deploy-log/<timestamp>-<commit>.log` on Pi
+- [ ] Log includes: commit hash, build strategy, file manifest, service actions, health check results
 
 ### Definition of Done
 
-- [ ] AC1-AC3 implemented and tested
-- [ ] AC4-AC5 documented or implemented
-- [ ] Architect review of Nix cross-compilation design
-- [ ] QE: deploy + rollback tested on Pi
-- [ ] `docs/guide/howto/development.md` updated with Nix build/deploy procedure
+- [ ] AC1-AC5 implemented and tested with a real Pi deployment
+- [ ] The command `deploy.sh --mode dj` successfully deploys from clean git state to running system
+- [ ] No SSH to Pi required at any step (deploy.sh handles everything)
+- [ ] `docs/guide/howto/development.md` updated: "How to deploy to Pi" section points to deploy.sh as the only path
+- [ ] Old manual deployment instructions removed or marked as superseded
+- [ ] Architect review of build integration
+- [ ] QE: deploy + health check tested on Pi
+
+### Out of scope
+
+- NixOS migration (separate story)
+- Building on the Pi (Nix builds on the dev machine, rsync results to Pi)
+- Rust toolchain on Pi (explicitly removed from the workflow)
+- Direct cargo invocations (cargo is internal to Nix derivations only)
+- CI/CD automation (future, after this story proves the manual single-command path)
 
 ---
 

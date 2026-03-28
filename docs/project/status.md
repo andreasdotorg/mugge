@@ -273,18 +273,20 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **Audio Engineer:** ALL 5 stories APPROVED. No rework.
 - **Security Specialist:** S-001/S-002 HIGH RESOLVED (#109 + #115 committed). No open security findings.
 - **Architect:** 3 rework items ALL RESOLVED (#110, #112, #111). 5 warnings noted (not blocking). 9 GOOD.
-**Current worker assignments (2026-03-27 late evening):**
-- **ALL THREE WORKERS → US-067** — PipeWire Speaker-Room-Microphone Simulator for E2E Testing. Owner #1 priority. F-159 RESOLVED (prerequisite).
-- **Architect design received + owner-approved.** Capture separation: signal-gen play-only, capture via pw-record subprocess, zero special code paths.
-- worker-1 → **US-067 Track D** (#178) — Playwright E2E test against vanilla local-demo. IN PROGRESS.
-- worker-2 → **idle** — Ready for Pi deployment once CM commits. Track A review fixes applied.
-- worker-3 → **idle** — All venue profiles done incl. final amp gains (sub 42dB, mid 38dB, HF 28dB). Awaiting CM commit.
-- US-067: Tracks A/B/C COMPLETED. Track D IN PROGRESS (worker-1). F-161 COMPLETED.
-- Venue YAMLs: 6 files + amp gains finalized. Awaiting CM commit → Pi deployment.
-- **DEPLOYMENT PENDING:** 18+ commits behind. Rust rebuild needed (signal-gen + GM). Owner must confirm amps off.
-- AE delivered full venue specs: 3-way active via mugge (CVR DSP bypassed). HOQS C3D + ELF + XRK10F.
-- F-049 / F-096 confirmed RESOLVED by worker-3 (45/45 E2E passes, no code changes needed).
-- F-160 COMPLETED by worker-1.
+**Current worker assignments (2026-03-28 morning):**
+- worker-1 → **idle** — Track D (#178) submitted, awaiting review verdict + commit.
+- worker-2 → **F-166** (#184) — UMIK-1 case mismatch fix. MEASUREMENT BLOCKER. CHANGE-004 granted. Applying fix now.
+- worker-3 → **idle**
+- **F-162 through F-165 — ALL RESOLVED** (previous batch).
+- **3 DEFECTS from event prep (2026-03-28):**
+  - **F-166** (HIGH, BLOCKER): UMIK-1 prefix case mismatch (`UMIK-1` vs `Umik-1`). Root cause of -134 dB measurement signal. Worker-2 applying fix. (#184)
+  - **F-167**: NOT A DEFECT — browser confusion. Closed.
+  - **F-168**: CANNOT REPRODUCE — transient, working now. Closed.
+- **PROCESS ISSUE:** QE switched branches while workers had uncommitted changes on shared working tree. Owner flagged as "massive process breakdown." Under investigation.
+- DEPLOY-002 (#179) COMPLETED. 129 commits deployed to Pi.
+- **US-067 Track D:** Submitted by worker-1. Open issue: pw-record captures silence in E2E browser test. Review team evaluating.
+- US-067: Tracks A/B/C COMPLETED. Track D under review.
+- US-105: Nix-only build path revision applied to user-stories.md. Awaiting CM commit.
 
 **US-067 Implementation Plan (Architect-approved capture separation, 2026-03-27):**
 

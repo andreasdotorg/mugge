@@ -31,12 +31,17 @@ import shutil
 from .export import CHANNEL_FILENAMES, TIMESTAMP_FORMAT, versioned_filename
 
 
-# Default PipeWire filter-chain coefficients directory on the Pi (D-040)
-DEFAULT_COEFFS_DIR = "/etc/pi4audio/coeffs"
+# Default PipeWire filter-chain coefficients directory on the Pi (D-040).
+# Overridable via PI4AUDIO_COEFFS_DIR env var (used by local-demo).
+DEFAULT_COEFFS_DIR = os.environ.get(
+    "PI4AUDIO_COEFFS_DIR", "/etc/pi4audio/coeffs"
+)
 
-# Default PipeWire config drop-in directory
-DEFAULT_PW_CONF_DIR = os.path.expanduser(
-    "~/.config/pipewire/pipewire.conf.d"
+# Default PipeWire config drop-in directory.
+# Overridable via PI4AUDIO_PW_CONF_DIR env var (used by local-demo).
+DEFAULT_PW_CONF_DIR = os.environ.get(
+    "PI4AUDIO_PW_CONF_DIR",
+    os.path.expanduser("~/.config/pipewire/pipewire.conf.d"),
 )
 
 # Default name for the filter-chain convolver config drop-in

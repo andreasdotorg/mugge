@@ -76,6 +76,18 @@ fn find_node_port(
     None
 }
 
+/// F-164: Check if a node is a PW stream client (pw-record, pw-play, etc.).
+///
+/// Stream nodes have media.class starting with "Stream/" and are managed
+/// by WirePlumber's linking policy, not by GraphManager. Links involving
+/// stream nodes must not be destroyed by GM's reconciler.
+fn is_stream_node(graph: &GraphState, node_id: u32) -> bool {
+    graph
+        .node(node_id)
+        .map(|n| n.media_class.starts_with("Stream/"))
+        .unwrap_or(false)
+}
+
 /// Check if a node matches any NodeMatch in the routing table (any mode).
 ///
 /// Used to determine link ownership: GraphManager only manages links
@@ -143,15 +155,28 @@ pub fn reconcile(graph: &GraphState, table: &RoutingTable, mode: Mode) -> Vec<Li
     // Phase 2: Identify links to DESTROY.
     // For each existing link that GraphManager owns (at least one endpoint
     // is a known node), check if it's in the desired set. If not, destroy it.
+    // F-164: Skip links where one endpoint is a stream node that is NOT in
+    // the routing table. These are WP-managed stream links (e.g. pw-record
+    // capturing from UMIK-1). GM should not destroy links that WP created
+    // for ephemeral clients. Known stream nodes (like Reaper) are managed
+    // by GM normally.
     for link in graph.links() {
         let pair = (link.output_port, link.input_port);
         if desired_port_pairs.contains(&pair) {
             continue; // This link is desired, keep it.
         }
+        let out_known = is_known_node(graph, link.output_node, table);
+        let in_known = is_known_node(graph, link.input_node, table);
+        // F-164: If one endpoint is a stream node that is NOT in the routing
+        // table, this is a WP-managed external link — skip it.
+        if !out_known && is_stream_node(graph, link.output_node) {
+            continue;
+        }
+        if !in_known && is_stream_node(graph, link.input_node) {
+            continue;
+        }
         // Check ownership: at least one endpoint must be a known node.
-        if is_known_node(graph, link.output_node, table)
-            || is_known_node(graph, link.input_node, table)
-        {
+        if out_known || in_known {
             let desc = format!(
                 "stale link id={} ({}:{} -> {}:{})",
                 link.id, link.output_node, link.output_port,
@@ -1247,7 +1272,9 @@ mod tests {
         let next_id = apply_creates(&mut g, &actions, 1000);
 
         // Add a foreign node and a stale link: some-app → convolver.
-        g.add_node(make_node(999, "some-rogue-app", "Stream/Output/Audio"));
+        // F-164: Use Audio/Source (not Stream/) so GM treats it as a
+        // static node and destroys the link. Stream nodes are WP-managed.
+        g.add_node(make_node(999, "some-rogue-app", "Audio/Source"));
         g.add_port(make_port(99900, 999, "output_0", "out"));
         // Link from rogue app to convolver input port (playback_AUX0).
         g.add_link(make_link(

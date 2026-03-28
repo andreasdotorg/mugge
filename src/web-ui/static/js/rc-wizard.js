@@ -450,47 +450,78 @@
     function onVerifyProgress(msg) {
         if (!msg) return;
 
-        // Update individual check results
-        if (msg.checks) {
-            var checkMap = {
-                "d009": "rc-verify-d009",
-                "minimum_phase": "rc-verify-minphase",
-                "format": "rc-verify-format",
-                "crossover_sum": "rc-verify-xover",
-                "filter_loaded": "rc-verify-loaded"
-            };
-            for (var key in msg.checks) {
-                var elId = checkMap[key];
-                if (!elId) continue;
-                var el = $(elId);
-                if (!el) continue;
-                var result = el.querySelector(".rc-verify-result");
-                if (result) {
-                    var passed = msg.checks[key];
-                    result.textContent = passed ? "PASS" : "FAIL";
-                    result.className = "rc-verify-result " + (passed ? "c-safe" : "c-danger");
+        // Static filter verification: msg.verification is an array of
+        // {channel, d009_pass, d009_peak_db, min_phase_pass, format_pass, all_pass}.
+        // Aggregate across channels — a check passes only if ALL channels pass.
+        if (msg.verification && msg.verification.length > 0) {
+            var allD009 = true, allMinPhase = true, allFormat = true;
+            for (var i = 0; i < msg.verification.length; i++) {
+                var v = msg.verification[i];
+                if (!v.d009_pass) allD009 = false;
+                if (!v.min_phase_pass) allMinPhase = false;
+                if (!v.format_pass) allFormat = false;
+            }
+            setVerifyResult("rc-verify-d009", allD009);
+            setVerifyResult("rc-verify-minphase", allMinPhase);
+            setVerifyResult("rc-verify-format", allFormat);
+        }
+
+        // Per-channel details from static verification + live verification.
+        var container = $("rc-verify-channels");
+        if (container && msg.verification && msg.verification.length > 0) {
+            container.innerHTML = '<div class="rc-verify-ch-title">Per-Channel Results</div>';
+
+            // Build a lookup from live_verification by channel name
+            var liveByChannel = {};
+            if (msg.live_verification) {
+                for (var j = 0; j < msg.live_verification.length; j++) {
+                    var lv = msg.live_verification[j];
+                    liveByChannel[lv.channel] = lv;
                 }
+            }
+
+            for (var k = 0; k < msg.verification.length; k++) {
+                var sv = msg.verification[k];
+                var live = liveByChannel[sv.channel];
+                var row = document.createElement("div");
+                row.className = "rc-verify-ch-row";
+
+                var peakText = sv.d009_peak_db != null ? sv.d009_peak_db + " dB" : "--";
+                var devText = live ? (live.max_deviation_db + " dB dev") : "";
+                var chPass = sv.all_pass && (!live || live.pass);
+
+                row.innerHTML =
+                    '<span class="rc-verify-ch-name">' + escapeHtml(sv.channel) + '</span>' +
+                    '<span class="rc-verify-ch-peak ' + (sv.d009_pass ? 'c-safe' : 'c-danger') + '">' +
+                        peakText + '</span>' +
+                    (devText ?
+                        '<span class="rc-verify-ch-peak ' + (live.pass ? 'c-safe' : 'c-danger') + '">' +
+                            devText + '</span>' : '') +
+                    '<span class="rc-verify-ch-result ' + (chPass ? 'c-safe' : 'c-danger') + '">' +
+                        (chPass ? 'PASS' : 'FAIL') + '</span>';
+                container.appendChild(row);
             }
         }
 
-        // Per-channel D-009 details
-        if (msg.channel_details) {
-            var container = $("rc-verify-channels");
-            if (container) {
-                container.innerHTML = '<div class="rc-verify-ch-title">Per-Channel D-009</div>';
-                for (var ch in msg.channel_details) {
-                    var d = msg.channel_details[ch];
-                    var row = document.createElement("div");
-                    row.className = "rc-verify-ch-row";
-                    row.innerHTML =
-                        '<span class="rc-verify-ch-name">' + escapeHtml(ch) + '</span>' +
-                        '<span class="rc-verify-ch-peak ' + (d.passed ? 'c-safe' : 'c-danger') + '">' +
-                            d.peak_db + ' dB</span>' +
-                        '<span class="rc-verify-ch-result ' + (d.passed ? 'c-safe' : 'c-danger') + '">' +
-                            (d.passed ? 'PASS' : 'FAIL') + '</span>';
-                    container.appendChild(row);
-                }
+        // Live verification overall: if live_verification ran, update crossover/loaded
+        // rows based on overall pass (these checks are implicit in a successful live sweep).
+        if (msg.live_verification && msg.live_verification.length > 0) {
+            var allLivePass = true;
+            for (var m = 0; m < msg.live_verification.length; m++) {
+                if (!msg.live_verification[m].pass) allLivePass = false;
             }
+            setVerifyResult("rc-verify-xover", allLivePass);
+            setVerifyResult("rc-verify-loaded", allLivePass);
+        }
+    }
+
+    function setVerifyResult(elId, passed) {
+        var el = $(elId);
+        if (!el) return;
+        var result = el.querySelector(".rc-verify-result");
+        if (result) {
+            result.textContent = passed ? "PASS" : "FAIL";
+            result.className = "rc-verify-result " + (passed ? "c-safe" : "c-danger");
         }
     }
 

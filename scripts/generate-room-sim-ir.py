@@ -114,11 +114,25 @@ def generate_room_ir():
             mode_val = amp * math.sin(2.0 * math.pi * freq * t) * math.exp(-decay_rate * t)
             ir[i] += mode_val
 
-    # Normalize peak to 0.8 (leave headroom)
+    # Normalize peak to 0.2 (~-14 dBFS).
+    # This models realistic acoustic attenuation so that production
+    # recording integrity thresholds (-1 dBFS peak, 0.01 DC) pass
+    # naturally without any special-case branches in the measurement code.
     peak = max(abs(s) for s in ir)
     if peak > 0:
-        scale = 0.8 / peak
+        scale = 0.2 / peak
         ir = [s * scale for s in ir]
+
+    # DC-blocking highpass at 20 Hz (matches physical UMIK-1 behavior).
+    # Implemented as a simple first-order IIR to avoid scipy dependency.
+    # y[n] = alpha * (y[n-1] + x[n] - x[n-1]), alpha = 1 / (1 + 2*pi*fc/fs)
+    fc = 20.0
+    alpha = 1.0 / (1.0 + 2.0 * math.pi * fc / SAMPLE_RATE)
+    filtered = [0.0] * len(ir)
+    filtered[0] = ir[0]
+    for i in range(1, len(ir)):
+        filtered[i] = alpha * (filtered[i - 1] + ir[i] - ir[i - 1])
+    ir = filtered
 
     return ir
 

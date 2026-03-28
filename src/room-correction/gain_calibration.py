@@ -555,6 +555,7 @@ def calibrate_channel(
     measurement_attenuation_db=0.0,
     signal_gen=None,
     capture_target=None,
+    mic_clip_threshold_dbfs=-3.0,
 ):
     """Ramp from silence to target SPL. Returns calibrated digital level.
 
@@ -670,6 +671,13 @@ def calibrate_channel(
             })
 
     # TK-200: Record ambient noise baseline before ramp loop.
+    # F-165: Ensure signal-gen is silent before measuring ambient noise.
+    # Without this, pw-record's settle time captures residual audio from
+    # any previous signal-gen state (e.g. test tab WebSocket proxy).
+    if signal_gen is not None:
+        signal_gen.stop()
+        time.sleep(0.3)  # Let PW graph settle after stop
+
     print("  Recording ambient noise baseline (2s silence)...", end="", flush=True)
     ambient_silence = np.zeros(int(AMBIENT_RECORD_DURATION_S * sample_rate),
                                dtype=np.float64)
@@ -799,10 +807,11 @@ def calibrate_channel(
 
             # --- Safety gate checks ---
 
-            # Check 1: Mic input near clipping (ADC saturation, -3 dB threshold per AE)
-            if peak_dbfs >= -3.0:
+            # Check 1: Mic input near clipping (ADC saturation)
+            _effective_clip = mic_clip_threshold_dbfs
+            if peak_dbfs >= _effective_clip:
                 reason = "mic input near clipping"
-                print(f"\n  ABORT: {reason} (peak {peak_dbfs:.1f} dBFS >= -3.0 dBFS)")
+                print(f"\n  ABORT: {reason} (peak {peak_dbfs:.1f} dBFS >= {_effective_clip:.1f} dBFS)")
                 _ws_broadcast_gain_cal(step_num, measured_spl, "mic_clipping")
                 return CalibrationResult(
                     passed=False,

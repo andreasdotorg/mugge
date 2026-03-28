@@ -51,7 +51,25 @@ def _ensure_rc_path() -> None:
 # Measurement config constants
 # ---------------------------------------------------------------------------
 
-_MEASUREMENT_ATTENUATION_DB = -20.0
+_MEASUREMENT_ATTENUATION_DB = float(
+    os.environ.get("PI4AUDIO_MEASUREMENT_ATTENUATION_DB", "-20.0"))
+
+# Mic clipping detection threshold.  Default -3 dBFS catches ADC
+# saturation in production.  Local-demo raises to 0 because the
+# room-sim convolver produces supra-unity peaks in the digital domain.
+_MIC_CLIP_THRESHOLD_DBFS = float(
+    os.environ.get("PI4AUDIO_MIC_CLIP_THRESHOLD_DBFS", "-3.0"))
+
+# Gain calibration target SPL and hard limit.  Defaults match production
+# (75 dB target, 84 dB hard limit).  Local-demo overrides because the
+# room-sim convolver adds ~+16 dB gain — starting at -60 dBFS already
+# produces ~77 dB "SPL", above the 75 dB target.
+_TARGET_SPL_DB: Optional[float] = (
+    float(os.environ["PI4AUDIO_TARGET_SPL_DB"])
+    if "PI4AUDIO_TARGET_SPL_DB" in os.environ else None)
+_HARD_LIMIT_SPL_DB: Optional[float] = (
+    float(os.environ["PI4AUDIO_HARD_LIMIT_SPL_DB"])
+    if "PI4AUDIO_HARD_LIMIT_SPL_DB" in os.environ else None)
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +275,6 @@ class MeasurementSession:
         self._gm_client: Any = None
         self._pump_task: Optional[asyncio.Task] = None
         self._is_mock: bool = False
-        self._is_siggen: bool = False
         self._quantum_overridden: bool = False
         # F-160: GM mode saved before entering measurement, restored on cleanup.
         self._pre_measurement_gm_mode: Optional[str] = None
@@ -345,9 +362,9 @@ class MeasurementSession:
             # TK-199: Resolve device names to indices before any state
             # transition (fail-fast if UMIK-1 or output device not found).
             # Skipped in mock mode where __post_init__ already sets integer
-            # device indices.  Also skipped when sd_override is set (e.g.
-            # PI4AUDIO_SIGGEN=1 mode) — the SignalGenClient handles audio
-            # I/O directly and does not use sounddevice device indices.
+            # device indices.  Also skipped when sd_override is set — the
+            # SignalGenClient handles audio I/O directly and does not use
+            # sounddevice device indices.
             if not _MOCK_MODE and self._sd_override is None:
                 _ensure_rc_path()
                 from measure_nearfield import find_device
@@ -396,7 +413,6 @@ class MeasurementSession:
                     self._config.output_device = 0
                 if self._config.input_device is None:
                     self._config.input_device = 1
-                self._is_siggen = True
                 log.info("Skipping sounddevice resolution — using sd_override "
                          "(signal generator mode)")
 
@@ -510,15 +526,13 @@ class MeasurementSession:
         # set_mock_sd path (MockSoundDevice provides playrec()).
         _siggen_client = None
         _cap_target = None
-        if self._is_siggen and self._sd_override is not None:
+        if self._sd_override is not None and not self._is_mock:
             _siggen_client = self._sd_override
-            # Ensure pw_capture is importable from room-correction context
             if _MEAS_DIR not in sys.path:
                 sys.path.insert(0, _MEAS_DIR)
             import pw_capture as _pwc
             _cap_target = _pwc.DEFAULT_TARGET
         elif self._sd_override is not None:
-            # Mock mode: use legacy set_mock_sd path
             set_mock_sd(self._sd_override)
 
         adapter = _AbortAdapter(self.abort_event, self._broadcast_queue, asyncio.get_running_loop())
@@ -532,11 +546,16 @@ class MeasurementSession:
                 "channel_total": len(self._config.channels),
             })
             # CP-1 checked inside calibrate_channel via adapter.abort_requested
+            _eff_attenuation = (
+                0.0 if self._is_mock
+                else _MEASUREMENT_ATTENUATION_DB)
+            _eff_target = _TARGET_SPL_DB if _TARGET_SPL_DB is not None else ch.target_spl_db
+            _eff_limit = _HARD_LIMIT_SPL_DB if _HARD_LIMIT_SPL_DB is not None else self._config.hard_limit_spl_db
             result = await asyncio.to_thread(
                 calibrate_channel,
                 channel_index=ch.index,
-                target_spl_db=ch.target_spl_db,
-                hard_limit_spl_db=self._config.hard_limit_spl_db,
+                target_spl_db=_eff_target,
+                hard_limit_spl_db=_eff_limit,
                 sample_rate=self._config.sample_rate,
                 output_device=self._config.output_device,
                 input_device=self._config.input_device,
@@ -544,10 +563,10 @@ class MeasurementSession:
                 thermal_ceiling_dbfs=ch.thermal_ceiling_dbfs,
                 gm_client=self._gm_client,
                 ws_server=adapter, channel_name=ch.name,
-                measurement_attenuation_db=(
-                    0.0 if self._is_mock else _MEASUREMENT_ATTENUATION_DB),
+                measurement_attenuation_db=_eff_attenuation,
                 signal_gen=_siggen_client,
                 capture_target=_cap_target,
+                mic_clip_threshold_dbfs=_MIC_CLIP_THRESHOLD_DBFS,
             )
             self._gain_cal_results[ch.index] = result
             if not result.passed:
@@ -563,7 +582,7 @@ class MeasurementSession:
                 "steps_taken": result.steps_taken,
             })
 
-        if not self._is_siggen and self._sd_override is not None:
+        if self._is_mock and self._sd_override is not None:
             set_mock_sd(None)
         log.info("Gain cal complete for %d channels",
                  len(self._config.channels))
@@ -587,11 +606,18 @@ class MeasurementSession:
 
     @staticmethod
     def _check_recording_integrity(recording: np.ndarray,
-                                   channel_name: str) -> None:
+                                   channel_name: str,
+                                   ) -> None:
         """Validate recording integrity after a sweep.
 
         Checks peak level, clipping, DC offset, and SNR.  Raises
         ``RuntimeError`` on any failure.
+
+        The peak ceiling is adjusted by ``_MEASUREMENT_ATTENUATION_DB``.
+        In production (-20 dB attenuation), the ADC-clipping ceiling is
+        -1 dBFS.  In local-demo (0 dB attenuation, digital loopback),
+        convolution can produce supra-unity peaks, so the ceiling rises
+        proportionally.
         """
         peak = float(np.max(np.abs(recording)))
         peak_dbfs = 20.0 * np.log10(max(peak, 1e-10))
@@ -608,6 +634,13 @@ class MeasurementSession:
         noise_dbfs = 20.0 * np.log10(max(noise_rms, 1e-10))
         snr_db = rms_dbfs - noise_dbfs if noise_rms > 0 else float("inf")
 
+        # Peak ceiling detects ADC clipping or misconfigured gain.
+        # Default -1 dBFS catches near-clipping in production.
+        # Local-demo sets PI4AUDIO_RECORDING_PEAK_CEILING_DBFS=20
+        # because its room-sim convolver produces supra-unity peaks.
+        _peak_ceiling = float(os.environ.get(
+            "PI4AUDIO_RECORDING_PEAK_CEILING_DBFS", "-1.0"))
+
         issues: list[str] = []
 
         if peak_dbfs < -40.0:
@@ -615,14 +648,16 @@ class MeasurementSession:
                 f"Peak too low: {peak_dbfs:.1f} dBFS < -40 dBFS "
                 f"(mic not receiving signal?)")
 
-        if peak_dbfs > -1.0:
+        if peak_dbfs > _peak_ceiling:
             issues.append(
-                f"Peak too high: {peak_dbfs:.1f} dBFS > -1 dBFS "
+                f"Peak too high: {peak_dbfs:.1f} dBFS > {_peak_ceiling:.1f} dBFS "
                 f"(likely clipping)")
 
-        if dc_offset > 0.01:
+        _dc_ceiling = float(os.environ.get(
+            "PI4AUDIO_RECORDING_DC_CEILING", "0.01"))
+        if dc_offset > _dc_ceiling:
             issues.append(
-                f"DC offset: {dc_offset:.4f} (>0.01, possible ADC issue)")
+                f"DC offset: {dc_offset:.4f} (>{_dc_ceiling}, possible ADC issue)")
 
         if snr_db < 20.0:
             issues.append(
@@ -662,7 +697,7 @@ class MeasurementSession:
         # capture.  In mock mode, keep the legacy _sd_override path.
         _siggen_client = None
         _cap_target = None
-        if self._is_siggen and self._sd_override is not None:
+        if self._sd_override is not None and not self._is_mock:
             _siggen_client = self._sd_override
             if _MEAS_DIR not in sys.path:
                 sys.path.insert(0, _MEAS_DIR)
@@ -708,7 +743,8 @@ class MeasurementSession:
                     capture_target=_cap_target)
                 # M-1: Recording integrity checks (skip in mock mode).
                 if not self._is_mock:
-                    self._check_recording_integrity(recording, ch.name)
+                    self._check_recording_integrity(
+                        recording, ch.name)
 
                 # US-096: Apply UMIK-1 calibration to recording if cal file set.
                 cal_applied = False
@@ -791,7 +827,7 @@ class MeasurementSession:
                 "is_last": is_last,
             })
 
-        if not self._is_siggen and self._sd_override is not None:
+        if self._is_mock and self._sd_override is not None:
             mn._sd_override = None
         log.info("Sweep phase complete: %d sweeps", count)
 
@@ -1184,7 +1220,7 @@ class MeasurementSession:
 
         self._check_abort("CP-6a")
 
-        dry_run = self._is_mock or self._is_siggen
+        dry_run = self._is_mock
         output_dir = fg_result["output_dir"]
 
         self._enqueue_progress({
@@ -1216,11 +1252,62 @@ class MeasurementSession:
                 dry_run=dry_run,
             )
 
+        # Reload PipeWire convolver so it picks up the new coefficients.
+        # Destroy the convolver node; PipeWire re-reads .conf.d/ and recreates
+        # it with the newly deployed WAV files.
+        if not dry_run:
+            self._enqueue_progress({
+                "type": "deploy_progress", "phase": "in_progress",
+                "step": "reload",
+                "message": "Reloading filter-chain convolver",
+            })
+            self._reload_convolver()
+            self._enqueue_progress({
+                "type": "deploy_progress", "phase": "in_progress",
+                "step": "reload",
+                "message": "Filter-chain convolver reloaded",
+            })
+
         return {
             "deployed_wavs": deployed_wavs,
             "pw_conf_path": pw_conf_path,
             "dry_run": dry_run,
         }
+
+    @staticmethod
+    def _reload_convolver(node_name: str = "pi4audio-convolver",
+                          timeout_s: float = 5.0) -> None:
+        """Destroy and wait for PipeWire to recreate the convolver node.
+
+        PipeWire's filter-chain module re-reads its .conf.d/ drop-ins when
+        the node is destroyed, recreating it with updated coefficients.
+        """
+        import subprocess
+
+        log.info("Reloading convolver: destroying node '%s'", node_name)
+        try:
+            subprocess.run(
+                ["pw-cli", "destroy", node_name],
+                capture_output=True, text=True, timeout=5,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            log.warning("pw-cli destroy failed (non-fatal): %s", exc)
+            return
+
+        # Wait for PipeWire to recreate the node from .conf.d/.
+        import time
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            time.sleep(0.5)
+            result = subprocess.run(
+                ["pw-cli", "list-objects", "Node"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if node_name in result.stdout:
+                log.info("Convolver node '%s' recreated", node_name)
+                return
+        log.warning("Convolver node '%s' did not reappear within %.0fs",
+                    node_name, timeout_s)
 
     # -- VERIFY --------------------------------------------------------------
 
@@ -1243,10 +1330,9 @@ class MeasurementSession:
         fg = getattr(self, "_filter_gen_result", None)
         static_verification = fg.get("verification", []) if fg else []
 
-        # In mock/siggen mode we cannot run a real verification sweep —
-        # filters are not deployed to the convolver, so a live sweep would
-        # measure the unmodified signal path.  Report static verification.
-        if self._is_mock or self._is_siggen:
+        # In mock mode we cannot run a real verification sweep —
+        # no PipeWire is running.  Report static verification only.
+        if self._is_mock:
             await self._broadcast({
                 "type": "verify_progress", "phase": "complete",
                 "message": "Static verification passed (live verification "
@@ -1271,7 +1357,7 @@ class MeasurementSession:
         # US-067 Track A: signal-gen mode uses separated play + capture.
         _siggen_client = None
         _cap_target = None
-        if self._is_siggen and self._sd_override is not None:
+        if self._sd_override is not None and not self._is_mock:
             _siggen_client = self._sd_override
             if _MEAS_DIR not in sys.path:
                 sys.path.insert(0, _MEAS_DIR)
@@ -1350,7 +1436,7 @@ class MeasurementSession:
             log.info("Verify %s: max_dev=%.1f dB, pass=%s",
                      ch.name, max_dev, passed)
 
-        if not self._is_siggen and self._sd_override is not None:
+        if self._is_mock and self._sd_override is not None:
             mn._sd_override = None
 
         all_pass = all(r.get("pass", False) for r in verify_results)

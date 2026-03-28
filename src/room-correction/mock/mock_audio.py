@@ -92,15 +92,16 @@ class MockSoundDevice:
     room_config_path : str or None
         Path to room config YAML.  Defaults to ``mock/room_config.yml``.
     measurement_attenuation_db : float
-        Attenuation applied to the recording to model the -20 dB gain that
-        CamillaDSP applies in the production measurement config.  Without
-        this, mock mic levels are ~-6 dBFS (too hot for the calibration
-        safety window of -40 to -10 dBFS).
+        Optional additional attenuation applied to the mock recording.
+        Defaults to -14 dB so that pink noise at -20 dBFS produces
+        recordings within the calibration window (-40 to -10 dBFS).
     """
 
-    # Production measurement attenuation (CamillaDSP Gain filter on the
-    # test channel).  Matches MEASUREMENT_ATTENUATION_DB in measure_nearfield.py.
-    _DEFAULT_MEASUREMENT_ATTENUATION_DB = -20.0
+    # Default attenuation brings mock recording levels into the calibration
+    # window (-40 to -10 dBFS) when playing pink noise at -20 dBFS through
+    # the room simulator (IR peak 1.0).  The web-ui session overrides this
+    # to 0.0 via measurement_attenuation_db= for gain calibration.
+    _DEFAULT_MEASUREMENT_ATTENUATION_DB = -14.0
 
     def __init__(self, room_config_path=None, measurement_attenuation_db=None):
         if room_config_path is None:
@@ -196,9 +197,8 @@ class MockSoundDevice:
         elif len(recording) < n_samples:
             recording = np.pad(recording, (0, n_samples - len(recording)))
 
-        # Apply measurement attenuation (models CamillaDSP -20 dB gain in
-        # the production measurement config).  Without this, mock mic levels
-        # are too hot for the calibration safety check.
+        # Apply measurement attenuation (defaults to -14 dB to keep
+        # mock recordings within the calibration window).
         recording = recording * self._measurement_attenuation
 
         # Add a subtle noise floor for realism (deterministic)
