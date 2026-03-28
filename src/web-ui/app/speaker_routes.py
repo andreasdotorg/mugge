@@ -481,7 +481,10 @@ def _get_crossover_frequencies(profile: dict) -> list[float]:
     if isinstance(xover, list):
         return [x["frequency_hz"] for x in xover]
     if isinstance(xover, dict) and "frequency_hz" in xover:
-        return [xover["frequency_hz"]]
+        freq = xover["frequency_hz"]
+        if isinstance(freq, list):
+            return sorted(freq)
+        return [freq]
     return []
 
 

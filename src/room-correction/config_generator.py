@@ -193,7 +193,12 @@ def validate_profile(profile, identities, identities_dir=None):
             )
 
     # 3. Crossover frequency consistency
-    crossover_freq = profile.get("crossover", {}).get("frequency_hz")
+    crossover_freq_raw = profile.get("crossover", {}).get("frequency_hz")
+    # Normalize to the lowest crossover frequency (multi-way profiles use a list).
+    if isinstance(crossover_freq_raw, list):
+        crossover_freq = min(crossover_freq_raw) if crossover_freq_raw else None
+    else:
+        crossover_freq = crossover_freq_raw
     if crossover_freq:
         for spk_key, spk_cfg in profile["speakers"].items():
             id_name = spk_cfg["identity"]
