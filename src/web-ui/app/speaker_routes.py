@@ -858,12 +858,11 @@ def _compute_target_gains(profile: dict) -> dict[str, float]:
     result = {}
     for spk_key, spk_cfg in speakers.items():
         role = spk_cfg.get("role", "")
-        if role in ("satellite", "midrange", "tweeter", "fullrange"):
-            gs_group = gain_staging.get("satellite", {})
-        elif role == "subwoofer":
+        if role == "subwoofer":
             gs_group = gain_staging.get("subwoofer", {})
         else:
-            gs_group = {}
+            gs_key = role if role else "satellite"
+            gs_group = gain_staging.get(gs_key, gain_staging.get("satellite", {}))
         db = gs_group.get("power_limit_db", -60.0)
         if not isinstance(db, (int, float)):
             db = -60.0
