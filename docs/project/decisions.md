@@ -2037,3 +2037,223 @@ implementation changes from IIR to FIR.
 **Related:** D-001 (minimum-phase FIR, no IIR), D-031 (mandatory
 subsonic protection), D-052 (ISO 226 baked into FIR), US-092 (thermal/
 mechanical protection).
+
+---
+
+## D-056: WirePlumber removal — spike required before decision (2026-03-28)
+
+**Status: PROPOSED.** This decision is not yet binding. A 2-day time-boxed
+spike must complete before the owner can decide. The spike validates
+assumptions that cannot be resolved through code analysis alone.
+
+**Context:** D-043 (2026-03-20) retained WirePlumber for device management
+while disabling its linking policy. The venue session (2026-03-28) exposed
+persistent WP configuration issues: `policy.standard = disabled` prevented
+node activation (US-106 root cause), WP config syntax is fragile and poorly
+documented, and the WP/GM split creates a dual-session-manager debugging
+surface. US-108 was drafted to scope WP removal entirely.
+
+The Advocatus Diaboli challenged US-108 with five findings (AD-WP-1 through
+AD-WP-5). The Architect reviewed each against the codebase. Both the AD and
+Architect recommend converting US-108 from a delivery story to a spike,
+because key feasibility questions can only be answered empirically on Pi
+hardware.
+
+**Question:** Should WirePlumber be removed from the audio stack?
+
+### Options Analyzed
+
+**Option A: Static PW adapter configs only (no session manager)**
+
+Replace WP's device activation with static PipeWire adapter configurations
+for all devices. USBStreamer playback and capture already have static configs
+(`20-usbstreamer.conf`, `21-usbstreamer-playback.conf`). UMIK-1 is the only
+device still requiring WP for port activation.
+
+*Advantages:* Eliminates WP entirely. Zero split-brain risk. Simpler
+debugging (one session manager: GM). Boot-time determinism — no WP startup
+race.
+
+*Risks:*
+- UMIK-1 hot-plug: Static configs for intermittent USB devices are untested.
+  PW might create the adapter at startup, fail because the device is absent,
+  and not retry when it appears later. (AD-WP-3)
+- Cold boot without WP has never been tested. `policy.standard = disabled` is
+  NOT equivalent to `systemctl --user mask wireplumber`. With WP masked, no
+  ObjectManager runs, no `SPA_PARAM_PortConfig` is negotiated, and adapter
+  nodes may have zero ports. This was observed in GM-12 Finding 2. (AD-WP-2)
+- Future device changes: If the hardware set evolves (different interface,
+  additional USB devices), each new device needs a manually written static
+  config. (Owner concern)
+
+**Option B: GM absorbs device activation**
+
+Extend GraphManager to perform `SPA_PARAM_PortConfig` negotiation via
+`pw-cli` or the PipeWire C API. GM would handle both link management and
+device activation.
+
+*Advantages:* Single binary for all PW session management. Full control over
+activation timing and format negotiation. Hot-plug handled via GM's existing
+registry event system.
+
+*Risks:*
+- Significant engineering effort. WP's ALSA monitor is ~3000 lines of
+  battle-tested code handling device enumeration, profile selection, format
+  negotiation, and hot-plug lifecycle. Reimplementing in Rust is 4-6 days
+  minimum. (AD-WP-4)
+- PipeWire's `SPA_PARAM_PortConfig` API is poorly documented outside WP's
+  codebase. Correct negotiation requires understanding SPA format enumeration,
+  which is complex.
+- Risk of introducing new bugs in a safety-critical path (device activation
+  directly affects whether audio reaches the amplifier chain).
+
+**Option C: Keep WP with corrected configuration (status quo + fix)**
+
+Fix the US-106 configuration bug (`policy.standard = required`, not
+`disabled`), complete the remaining US-106 tasks, and retain the D-043
+architecture. WP handles device management; GM handles linking.
+
+*Advantages:* Known architecture. WP's device management is proven. Lowest
+risk and effort.
+
+*Risks:*
+- WP configuration remains a persistent source of subtle bugs. The
+  `policy.standard` semantics are unintuitive and poorly documented.
+- Dual-session-manager debugging surface persists. When something goes wrong
+  with audio routing, the operator must reason about both WP and GM behavior.
+- WP's Lua scripting (deny script, custom policies) adds a third language
+  (Lua) to the stack alongside Rust and Python.
+
+### AD Challenge Findings
+
+| ID | Finding | Severity | Architect Assessment |
+|----|---------|----------|---------------------|
+| AD-WP-1 | WP does 4 things (ALSA enum, format negotiation, port activation, deny script), not just port activation | Valid | All 4 addressed in US-108 AC list (AC-2 through AC-6). No scope gap. |
+| AD-WP-2 | Nobody has booted without WP. `policy.standard = disabled` is NOT equivalent to masking WP. | Valid, HIGH | Critical risk. Must be validated empirically on Pi. This is the primary spike objective. |
+| AD-WP-3 | UMIK-1 hot-plug is a core operational requirement. Static configs for intermittent USB are untested. | Valid, MEDIUM | UMIK-1 is the only device without a static adapter config. PW behavior for absent-at-boot USB devices with static configs is unknown. Must be tested. |
+| AD-WP-4 | Estimate of 2-3 days is optimistic; 4-6 days more realistic. | Partially valid | Risk is front-loaded. If cold boot fails (AD-WP-2), we know within hours and can stop. If it succeeds, remaining work is incremental. Spike de-risks the estimate. |
+| AD-WP-5 | GM reconciler F-164 carve-out allows unknown Stream nodes to link to USBStreamer output, bypassing gain attenuation. Removing the carve-out breaks `pw-record` measurement. | **Strawman for this threat model.** | The WP Lua deny script (`deny-usbstreamer-alsa.lua`) operates at the ALSA device level (`api.alsa.path`), not at the PipeWire link level. It does NOT intercept `pw-play --target <pw-sink>`. The AD's attack vector (`pw-play --target USBStreamer`) is already unprotected today, WITH WirePlumber running. The F-164 carve-out is correctly scoped: the only unknown Stream client in production is `pw-record` (measurement capture from UMIK-1). This is a single-operator workstation with key-only SSH; the threat model is operator error, and `pw-play --target <exact-adapter-name>` is not an accidental command. The safety gap is pre-existing and independent of WP removal. See detailed analysis below. |
+
+### AD-WP-5 Detailed Analysis
+
+The F-164 carve-out (`reconcile.rs:170-177`) skips links where one endpoint
+is a Stream node (`media.class` starting with `"Stream/"`) that is NOT in
+the routing table. This allows `pw-record` to capture from UMIK-1 during
+measurement without GM destroying the link.
+
+The AD raised a concern that `pw-play --target USBStreamer` would create a
+Stream/Output/Audio node linking to the USBStreamer output adapter, and GM
+would not tear it down. This is technically correct in the code path.
+
+However, this is not a realistic safety concern:
+
+1. **The Lua deny script does not protect against this vector either.** The
+   deny script watches for nodes targeting the USBStreamer's raw ALSA device
+   (`api.alsa.path`). `pw-play --target` creates a PipeWire Stream node that
+   links to an existing PW adapter node — a completely different mechanism.
+   The deny script would not intercept it.
+
+2. **PW Stream clients on this system:** Mixxx, Reaper, and signal-gen are
+   all "known" nodes in the routing table (managed by GM normally). The only
+   unknown Stream client is `pw-record` (measurement). `pw-play` is not used
+   in any production workflow.
+
+3. **Threat model:** Single-operator personal workstation. Key-only SSH.
+   No untrusted users, no network-accessible audio clients, no desktop
+   applications. Running `pw-play --target <exact-adapter-name>` requires
+   deliberate intent and knowledge of the PW graph topology.
+
+4. **Existing safety layers:** Gain attenuation in convolver config (Mult
+   params at -60/-64 dB for mains/subs), physical amplifier controls, and
+   operator awareness.
+
+**Conclusion:** The F-164 carve-out is correctly scoped for this deployment
+context. No defect filed. No code change required regardless of WP removal
+decision.
+
+### Owner Concerns
+
+The owner raised two concerns that favor Option B or a hybrid approach over
+pure Option A:
+
+1. **UMIK-1 hot-plug:** The UMIK-1 is plugged in for measurement sessions
+   and removed afterward. This is a core operational workflow, not an edge
+   case. Static configs assume devices are present at boot — behavior for
+   devices that appear later is unverified.
+
+2. **Future flexibility:** The system may not always have the same fixed
+   device set. New USB audio interfaces, additional measurement mics, or
+   different MIDI controllers may be added. Each new device would need a
+   manually written static PW adapter config under Option A, whereas WP
+   handles arbitrary USB audio devices automatically.
+
+### Spike Recommendation (Architect + AD consensus)
+
+Convert US-108 from a delivery story to a **2-day time-boxed spike**:
+
+| Day | Task | Tests |
+|-----|------|-------|
+| 1 | `systemctl --user mask wireplumber`, reboot Pi, verify static adapters have ports and audio flows | AD-WP-2: cold boot without WP |
+| 1 | Plug in UMIK-1 after boot, verify PW creates adapter with ports | AD-WP-3: hot-plug without WP |
+| 2 | If Day 1 succeeds: write static UMIK-1 adapter config, test measurement workflow end-to-end | Full measurement cycle without WP |
+| 2 | Document findings, make GO/NO-GO recommendation | Inform final D-056 decision |
+
+**If spike succeeds (cold boot works, UMIK-1 hot-plug works):**
+- Convert US-108 to a delivery story with a validated estimate
+- This decision (D-056) is updated to ACCEPTED with Option A (or hybrid)
+- D-043 is superseded
+
+**If spike fails on Day 1 (zero ports without WP):**
+- WP removal is blocked until PipeWire provides an alternative port
+  activation mechanism (or until GM absorbs this capability — Option B)
+- This decision (D-056) is updated to DEFERRED
+- D-043 remains in effect; US-106 tasks proceed as planned
+
+### US-106 Interaction
+
+US-106 (GraphManager Reconciler) has 5 remaining tasks. If US-108 proceeds
+after a successful spike:
+
+| US-106 Task | Status if US-108 proceeds |
+|-------------|--------------------------|
+| T-106-1: Fix WP config `policy.standard` | Obsolete (WP removed) |
+| T-106-2: Local-demo verification of WP fix | Obsolete |
+| T-106-3: Remove manual pw-link workarounds | Still needed (GM reconciler must work) |
+| T-106-4: Pi deployment + verification | Absorbed into US-108 deployment |
+| T-106-5: Stability soak + acceptance | Absorbed into US-108 acceptance |
+
+If US-108 does NOT proceed, US-106 tasks resume as planned with the corrected
+WP configuration.
+
+### D-043 Interaction
+
+D-043 retained WP for device management based on GM-12 Finding 2 (zero ports
+without WP). D-056 challenges this finding: GM-12 tested with WP masked
+after it had already activated nodes in a prior session, which is a different
+condition than a clean boot with properly configured static adapters. The
+spike will produce a definitive answer.
+
+If D-056 is accepted, it supersedes D-043 point 1 (WP provides device-level
+services). D-043 points 2-3 (GM sole link manager, three auto-connect
+mechanisms) remain valid regardless.
+
+**Decision:** Pending spike results. No action until spike completes.
+
+**Rationale:** The question cannot be resolved through code analysis alone.
+Empirical testing on Pi hardware is required to determine whether PipeWire's
+static adapter configs provide adequate device activation without WP. A 2-day
+spike is the minimum-cost way to de-risk the decision.
+
+**Impact (if accepted):**
+- WirePlumber service masked and eventually uninstalled
+- All 5 WP config files removed (`50-*.conf`, `51-*.conf`, `52-*.conf`,
+  `53-*.conf`, `90-*.conf`) plus Lua deny script
+- Static UMIK-1 adapter config added to PipeWire configs
+- GM systemd service dependencies updated (remove `Wants=wireplumber`)
+- Nix module `wireplumber.nix` removed or gutted
+- `deploy.sh` updated to skip WP config deployment
+- One fewer process in the audio stack; simpler debugging
+
+**Related:** D-039 (GM sole session manager — original), D-043 (WP retained
+— current), US-106 (reconciler tasks), US-108 (WP removal story draft),
+GM-12 Finding 2 (zero ports without WP).
