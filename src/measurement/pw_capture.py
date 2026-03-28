@@ -36,8 +36,28 @@ import soundfile as sf
 logger = logging.getLogger(__name__)
 
 # Default PipeWire source node for the UMIK-1 microphone.
-DEFAULT_TARGET = "alsa_input.usb-miniDSP_UMIK-1"
+DEFAULT_TARGET = "alsa_input.usb-miniDSP_Umik-1"
 SAMPLE_RATE = 48000
+
+
+def _set_default_source(target: str) -> None:
+    """Set the PipeWire default audio source via pw-metadata.
+
+    WirePlumber's linking policy auto-links capture streams to the default
+    source. Setting this before starting pw-record ensures the stream
+    connects to the correct node without needing ``--target`` (which
+    doesn't work when WP's linking is configured for headless use).
+    """
+    cmd = [
+        "pw-metadata", "-n", "default", "0",
+        "default.audio.source",
+        f'{{"name":"{target}"}}',
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+    if result.returncode != 0:
+        logger.warning("pw-metadata set default source failed: %s", result.stderr)
+    else:
+        logger.info("Set default audio source to %s", target)
 
 
 def start_capture(
@@ -68,10 +88,14 @@ def start_capture(
         The running pw-record process.  Call ``stop_capture()`` to
         terminate it cleanly.
     """
+    # F-164: Set the default audio source so WP auto-links the stream.
+    # pw-record's --target flag doesn't work in headless WP environments
+    # because WP's linking policy needs a default source to match against.
+    _set_default_source(target)
+
     bin_path = pw_record_bin or "pw-record"
     cmd = [
         bin_path,
-        "--target", target,
         "--rate", str(sample_rate),
         "--channels", str(channels),
         "--format", "f32",
@@ -87,8 +111,8 @@ def start_capture(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
-    # Brief settle time for pw-record to connect to the PW node.
-    time.sleep(0.3)
+    # Settle time for pw-record to connect and WP to create the link.
+    time.sleep(1.0)
 
     if proc.poll() is not None:
         stderr = proc.stderr.read().decode(errors="replace") if proc.stderr else ""

@@ -185,7 +185,7 @@ const SIGNAL_GEN: &str = "pi4audio-signal-gen";
 const SIGNAL_GEN_CAPTURE: &str = "pi4audio-signal-gen-capture";
 
 /// UMIK-1 capture node name prefix.
-const UMIK1_PREFIX: &str = "alsa_input.usb-miniDSP_UMIK-1";
+const UMIK1_PREFIX: &str = "alsa_input.usb-miniDSP_Umik-1";
 
 /// pcm-bridge node name (level metering tap).
 /// D-043: GraphManager creates the links from the convolver's output
