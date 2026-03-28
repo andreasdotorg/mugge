@@ -5,13 +5,15 @@
 //! The reconciler manages desired links and destroys stale ones on known
 //! nodes. The link audit enforces a stricter invariant: **only the
 //! convolver output node may link to USBStreamer speaker channels
-//! (playback_AUX0..AUX3).** Any other source linking to those ports is
-//! an unauthorized bypass of the convolver/gain chain.
+//! (playback_AUX0..AUX{N-1}, where N = num_speaker_channels).** Any
+//! other source linking to those ports is an unauthorized bypass of
+//! the convolver/gain chain.
 //!
 //! ## Safety rule
 //!
-//! USBStreamer playback ports AUX0..AUX3 drive the amplifier chain
-//! (2 wideband speakers + 2 subwoofers). All audio reaching these ports
+//! USBStreamer playback ports AUX0..AUX{N-1} drive the amplifier chain
+//! (speaker channels as defined by the active speaker layout). All audio
+//! reaching these ports
 //! MUST pass through the convolver (which includes the gain nodes with
 //! safety attenuation). A bypass link could send unattenuated audio
 //! directly to the amplifiers.
@@ -42,14 +44,15 @@ const USBSTREAMER_OUT_PREFIX: &str = "alsa_output.usb-MiniDSP_USBStreamer";
 /// Convolver output node name (the only authorized source for speaker ports).
 const CONVOLVER_OUT: &str = "pi4audio-convolver-out";
 
-/// Speaker port names on the USBStreamer (channels 1-4, zero-based AUX).
-/// These are the protected ports — only convolver-out may link to them.
-const SPEAKER_PORTS: &[&str] = &[
-    "playback_AUX0",
-    "playback_AUX1",
-    "playback_AUX2",
-    "playback_AUX3",
-];
+/// Default number of speaker channels (2-way layout).
+const DEFAULT_SPEAKER_CHANNELS: u32 = 4;
+
+/// Generate the list of protected speaker port names for N speaker channels.
+fn speaker_ports(num_speaker_channels: u32) -> Vec<String> {
+    (0..num_speaker_channels)
+        .map(|ch| format!("playback_AUX{}", ch))
+        .collect()
+}
 
 /// Result of a link audit: a violating link that bypasses the convolver.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,15 +67,27 @@ pub struct AuditViolation {
     pub target_port: String,
 }
 
+/// Audit all links in the graph for convolver bypass violations,
+/// using the default 4-channel speaker layout.
+///
+/// Convenience wrapper around `audit_links_for()`.
+pub fn audit_links(graph: &GraphState) -> Vec<AuditViolation> {
+    audit_links_for(graph, DEFAULT_SPEAKER_CHANNELS)
+}
+
 /// Audit all links in the graph for convolver bypass violations.
 ///
 /// Returns a list of violating links: any link where the input (sink)
-/// port is a USBStreamer speaker port (AUX0..AUX3) and the output
+/// port is a USBStreamer speaker port (AUX0..AUX{N-1}) and the output
 /// (source) node is NOT `pi4audio-convolver-out`.
 ///
+/// `num_speaker_channels` determines which USBStreamer ports are protected.
+/// For 2-way: 4 (AUX0..AUX3). For 3-way: 6 (AUX0..AUX5).
+///
 /// This is a pure function — no PW API calls.
-pub fn audit_links(graph: &GraphState) -> Vec<AuditViolation> {
+pub fn audit_links_for(graph: &GraphState, num_speaker_channels: u32) -> Vec<AuditViolation> {
     let usb_matcher = NodeMatch::Prefix(USBSTREAMER_OUT_PREFIX.to_string());
+    let protected_ports = speaker_ports(num_speaker_channels);
 
     let mut violations = Vec::new();
 
@@ -87,13 +102,13 @@ pub fn audit_links(graph: &GraphState) -> Vec<AuditViolation> {
             continue;
         }
 
-        // Check if the input port is a speaker port (AUX0..AUX3).
+        // Check if the input port is a speaker port (AUX0..AUX{N-1}).
         let input_port = match graph.port(link.input_port) {
             Some(p) => p,
             None => continue,
         };
 
-        if !SPEAKER_PORTS.contains(&input_port.name.as_str()) {
+        if !protected_ports.iter().any(|p| p == &input_port.name) {
             continue; // Headphone/IEM port — not protected.
         }
 
@@ -369,7 +384,8 @@ mod tests {
 
     #[test]
     fn aux4_through_aux7_not_protected() {
-        // Verify headphone/IEM ports (AUX4..7) do NOT trigger violations.
+        // Verify headphone/IEM ports (AUX4..7) do NOT trigger violations
+        // under the default 4-channel audit.
         for ch in 4..8u32 {
             let mut g = graph_with_legitimate_links();
 
@@ -382,6 +398,53 @@ mod tests {
             assert!(
                 violations.is_empty(),
                 "AUX{} should not be protected, got {:?}",
+                ch,
+                violations,
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 6-channel (3-way) audit
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn six_channel_audit_protects_aux0_through_aux5() {
+        // With 6 speaker channels, AUX0..AUX5 should be protected.
+        for ch in 0..6u32 {
+            let mut g = graph_with_legitimate_links();
+
+            g.add_node(make_node(999, "rogue", "Stream/Output/Audio"));
+            g.add_port(make_port(99900, 999, "output_0", "out"));
+
+            g.add_link(make_link(2000, 999, 99900, 300, 30000 + ch));
+
+            let violations = audit_links_for(&g, 6);
+            assert_eq!(
+                violations.len(),
+                1,
+                "AUX{} should be protected with 6-channel audit, got {:?}",
+                ch,
+                violations,
+            );
+        }
+    }
+
+    #[test]
+    fn six_channel_audit_does_not_protect_aux6_through_aux7() {
+        // With 6 speaker channels, AUX6..AUX7 (headphones) should NOT be protected.
+        for ch in 6..8u32 {
+            let mut g = graph_with_legitimate_links();
+
+            g.add_node(make_node(999, "rogue", "Stream/Output/Audio"));
+            g.add_port(make_port(99900, 999, "output_0", "out"));
+
+            g.add_link(make_link(2000, 999, 99900, 300, 30000 + ch));
+
+            let violations = audit_links_for(&g, 6);
+            assert!(
+                violations.is_empty(),
+                "AUX{} should not be protected with 6-channel audit, got {:?}",
                 ch,
                 violations,
             );

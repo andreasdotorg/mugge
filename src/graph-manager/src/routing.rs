@@ -155,6 +155,74 @@ impl fmt::Display for DesiredLink {
     }
 }
 
+/// Speaker topology for routing parameterization.
+///
+/// Captures the number of speaker channels processed by the convolver
+/// (and routed to USBStreamer) plus the subset of those channels that
+/// receive L+R mono sum fan-out (subwoofers).
+///
+/// ## Examples
+///
+/// 2-way (4ch): mains L/R on ch 1-2, subs on ch 3-4.
+/// ```
+/// SpeakerLayout { num_speaker_channels: 4, sub_channels: vec![3, 4], stereo_main_channels: vec![1, 2] }
+/// ```
+///
+/// 3-way (6ch): subs L/R on ch 1-2, mids L/R on ch 3-4, HF L/R on ch 5-6.
+/// ```
+/// SpeakerLayout { num_speaker_channels: 6, sub_channels: vec![1, 2], stereo_main_channels: vec![3, 4, 5, 6] }
+/// ```
+#[derive(Debug, Clone)]
+pub struct SpeakerLayout {
+    /// Total speaker channels handled by the convolver (e.g., 4 for 2-way, 6 for 3-way).
+    pub num_speaker_channels: u32,
+    /// One-based channel numbers that receive L+R mono sum fan-out (subwoofer channels).
+    /// These channels get 2 links each (Master L + Master R → convolver input).
+    pub sub_channels: Vec<u32>,
+    /// One-based channel numbers that receive 1:1 mapping from stereo master.
+    /// For 2-way: [1, 2] (mains). For 3-way: all non-sub channels [3, 4, 5, 6].
+    /// Each channel is mapped from Master L (ch 1) or Master R (ch 2) based on
+    /// odd=L, even=R pairing.
+    pub stereo_main_channels: Vec<u32>,
+}
+
+impl SpeakerLayout {
+    /// Default 2-way layout: 4 speaker channels, subs on ch 3-4, mains on ch 1-2.
+    pub fn two_way() -> Self {
+        Self {
+            num_speaker_channels: 4,
+            sub_channels: vec![3, 4],
+            stereo_main_channels: vec![1, 2],
+        }
+    }
+
+    /// 3-way layout from workshop-c3d-elf-3way profile:
+    /// Subs L/R on ch 1-2, Mids L/R on ch 3-4, HF L/R on ch 5-6.
+    pub fn three_way_stereo() -> Self {
+        Self {
+            num_speaker_channels: 6,
+            sub_channels: vec![1, 2],
+            stereo_main_channels: vec![3, 4, 5, 6],
+        }
+    }
+
+    /// Build layout from speaker profile channel assignments.
+    ///
+    /// `sub_channels`: 1-based channel numbers assigned to subwoofer role.
+    /// `all_channels`: total speaker channel count (excludes monitoring/HP/IEM).
+    /// Non-sub channels are treated as stereo main channels with 1:1 mapping.
+    pub fn from_profile(num_speaker_channels: u32, sub_channels: Vec<u32>) -> Self {
+        let stereo_main_channels: Vec<u32> = (1..=num_speaker_channels)
+            .filter(|ch| !sub_channels.contains(ch))
+            .collect();
+        Self {
+            num_speaker_channels,
+            sub_channels,
+            stereo_main_channels,
+        }
+    }
+}
+
 /// The complete routing table: all modes and their desired link sets.
 pub struct RoutingTable {
     table: HashMap<Mode, Vec<DesiredLink>>,
@@ -338,18 +406,29 @@ impl AppPortNaming {
 }
 
 impl RoutingTable {
-    /// Build the production routing table.
+    /// Build the production routing table for the default 2-way (4ch) layout.
     ///
     /// This is the single source of truth for all application routing.
     /// Node names and port names are compiled in because they are fixed
     /// by our component configurations.
     pub fn production() -> Self {
+        Self::production_for(SpeakerLayout::two_way())
+    }
+
+    /// Build the production routing table for a given speaker layout.
+    ///
+    /// The layout determines:
+    /// - How many convolver→USBStreamer links are created (num_speaker_channels)
+    /// - Which convolver inputs get L+R mono sum fan-out (sub_channels)
+    /// - Which convolver inputs get 1:1 stereo mapping (stereo_main_channels)
+    /// - How many measurement fan-out links are created
+    pub fn production_for(layout: SpeakerLayout) -> Self {
         let mut table = HashMap::new();
 
-        table.insert(Mode::Monitoring, Self::monitoring_links());
-        table.insert(Mode::Dj, Self::dj_links());
-        table.insert(Mode::Live, Self::live_links());
-        table.insert(Mode::Measurement, Self::measurement_links());
+        table.insert(Mode::Monitoring, Self::monitoring_links(&layout));
+        table.insert(Mode::Dj, Self::dj_links(&layout));
+        table.insert(Mode::Live, Self::live_links(&layout));
+        table.insert(Mode::Measurement, Self::measurement_links(&layout));
 
         Self { table }
     }
@@ -379,13 +458,13 @@ impl RoutingTable {
     /// No application is linked. The convolver processes whatever is in
     /// its input buffers (silence if nothing is linked to it).
     ///
-    /// Links: convolver-out ch 0-3 → USBStreamer playback ch 0-3.
+    /// Links: convolver-out ch 0..N → USBStreamer playback ch 0..N.
     /// F-131: No pcm-bridge links — no app to tap (spectrum would show
     /// post-gain signal at -100 dBFS, which is below display floor).
-    fn monitoring_links() -> Vec<DesiredLink> {
+    fn monitoring_links(layout: &SpeakerLayout) -> Vec<DesiredLink> {
         // TODO: AE-F6 USBStreamer volume lock — when USBStreamer is first
         // detected, set volume to unity to prevent post-DSP clipping.
-        let mut links = Self::convolver_to_usbstreamer_links();
+        let mut links = Self::convolver_to_usbstreamer_links(layout);
         // F-124: No level-bridge-sw in monitoring — no app to tap.
         // F-131: No pcm-bridge app tap in monitoring — no app to tap.
         // Always-on UMIK-1 capture for SPL metering (ch3, optional).
@@ -401,27 +480,28 @@ impl RoutingTable {
     ///   ch 3-4 = unused (channel offset gap),
     ///   ch 5 = Headphone L, ch 6 = Headphone R.
     ///
-    /// Master L/R go 1:1 to convolver mains (ch 1-2) AND fan-out to
-    /// both sub convolver inputs (ch 3-4) for mono-sum (TK-239). PipeWire
-    /// mixes multiple links to the same input port additively. The -6 dB
-    /// mono sum compensation is baked into the sub FIR WAV coefficients
-    /// (architect guidance).
+    /// Stereo main channels (mains, mids, HF) get 1:1 mapping from Master L/R
+    /// based on odd=L, even=R pairing. Sub channels get L+R mono sum fan-out
+    /// (TK-239). PipeWire mixes multiple links to the same input port
+    /// additively. The -6 dB mono sum compensation is baked into the sub FIR
+    /// WAV coefficients (architect guidance).
     ///
-    /// Headphone L/R bypass the convolver and go directly to USBStreamer
-    /// ch 5-6.
-    fn dj_links() -> Vec<DesiredLink> {
+    /// Headphone channels follow the speaker channels on the USBStreamer.
+    /// For 2-way (4 speaker ch): HP on USBStreamer ch 5-6.
+    /// For 3-way (6 speaker ch): HP on USBStreamer ch 7-8.
+    fn dj_links(layout: &SpeakerLayout) -> Vec<DesiredLink> {
         let mut links = Vec::new();
         let mx = AppPortNaming::MixxxOutput;
         let cv_in = AppPortNaming::ConvolverInput;
         let usb = AppPortNaming::UsbStreamerPlayback;
 
-        // Mixxx master → convolver mains (1:1).
-        // Ch 1 (Master L) → convolver ch 1 (left wideband)
-        // Ch 2 (Master R) → convolver ch 2 (right wideband)
-        for ch in 1..=2 {
+        // Mixxx master → convolver stereo main channels (1:1 mapping).
+        // Odd channel numbers map to Master L (ch 1), even to Master R (ch 2).
+        for &ch in &layout.stereo_main_channels {
+            let master_ch = if ch % 2 == 1 { 1 } else { 2 };
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
-                output_port: mx.port_name(ch),
+                output_port: mx.port_name(master_ch),
                 input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
                 input_port: cv_in.port_name(ch),
                 optional: false,
@@ -431,7 +511,7 @@ impl RoutingTable {
         // Mixxx master → convolver subs (explicit L+R mono sum, TK-239).
         // Both Master L (ch 1) and Master R (ch 2) feed each sub input.
         // PipeWire sums the two links at the input port.
-        for sub_ch in [3, 4] {
+        for &sub_ch in &layout.sub_channels {
             for master_ch in [1, 2] {
                 links.push(DesiredLink {
                     output_node: NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
@@ -443,8 +523,8 @@ impl RoutingTable {
             }
         }
 
-        // Convolver → USBStreamer (ch 1-4: processed speakers).
-        links.extend(Self::convolver_to_usbstreamer_links());
+        // Convolver → USBStreamer (all speaker channels: processed audio).
+        links.extend(Self::convolver_to_usbstreamer_links(layout));
 
         // F-131: pcm-bridge taps Mixxx master L/R for spectrum display.
         links.extend(Self::pcm_bridge_app_tap_links(
@@ -454,10 +534,13 @@ impl RoutingTable {
         ));
 
         // Mixxx headphones → USBStreamer direct (bypass convolver).
-        // Ch 5 (Headphone L) → USBStreamer ch 5
-        // Ch 6 (Headphone R) → USBStreamer ch 6
-        // Mixxx soundconfig.xml: channel offset 4, so HP is out_4/out_5.
-        for (mx_ch, usb_ch) in [(5, 5), (6, 6)] {
+        // HP channels start at num_speaker_channels + 1.
+        let hp_l = layout.num_speaker_channels + 1;
+        let hp_r = layout.num_speaker_channels + 2;
+        // Mixxx soundconfig.xml: channel offset places HP after speaker channels.
+        // For 2-way: Mixxx ch 5-6 (out_4/out_5) → USBStreamer ch 5-6.
+        // For 3-way: Mixxx ch 7-8 (out_6/out_7) → USBStreamer ch 7-8.
+        for (mx_ch, usb_ch) in [(hp_l, hp_l), (hp_r, hp_r)] {
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(MIXXX_PREFIX.to_string()),
                 output_port: mx.port_name(mx_ch),
@@ -486,22 +569,16 @@ impl RoutingTable {
     /// Live mode: Reaper → convolver → USBStreamer (speakers + HP + IEM)
     /// + ADA8200 capture → Reaper inputs (TK-239).
     ///
-    /// Reaper outputs 8 channels via pw-jack (verified on Pi, C-005):
-    ///   ch 1 = Master L, ch 2 = Master R,
-    ///   ch 3-4 = unused (available but not routed),
-    ///   ch 5 = HP L, ch 6 = HP R,
-    ///   ch 7 = IEM L, ch 8 = IEM R.
-    ///
-    /// Master L/R go 1:1 to convolver mains (ch 1-2) AND fan-out to
-    /// both sub convolver inputs (ch 3-4) for mono-sum (TK-239), same
-    /// pattern as DJ mode. The -6 dB mono sum compensation is baked
-    /// into the sub FIR WAV coefficients (architect guidance).
+    /// Stereo main channels get 1:1 mapping from Master L/R (odd=L, even=R).
+    /// Sub channels get L+R mono sum fan-out (TK-239). The -6 dB mono sum
+    /// compensation is baked into the sub FIR WAV coefficients.
     ///
     /// HP and IEM bypass the convolver and go directly to USBStreamer.
+    /// HP channels follow the speaker channels. IEM follows HP.
     ///
     /// ADA8200 8-channel capture feeds Reaper inputs for vocal mic,
     /// spare mic/line, and additional inputs (C-005 verified).
-    fn live_links() -> Vec<DesiredLink> {
+    fn live_links(layout: &SpeakerLayout) -> Vec<DesiredLink> {
         let mut links = Vec::new();
         let rp_out = AppPortNaming::ReaperOutput;
         let rp_in = AppPortNaming::ReaperInput;
@@ -509,13 +586,13 @@ impl RoutingTable {
         let usb = AppPortNaming::UsbStreamerPlayback;
         let ada = AppPortNaming::Ada8200Capture;
 
-        // Reaper master → convolver mains (1:1).
-        // Ch 1 (Master L) → convolver ch 1 (left wideband)
-        // Ch 2 (Master R) → convolver ch 2 (right wideband)
-        for ch in 1..=2 {
+        // Reaper master → convolver stereo main channels (1:1 mapping).
+        // Odd channel numbers map to Master L (ch 1), even to Master R (ch 2).
+        for &ch in &layout.stereo_main_channels {
+            let master_ch = if ch % 2 == 1 { 1 } else { 2 };
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
-                output_port: rp_out.port_name(ch),
+                output_port: rp_out.port_name(master_ch),
                 input_node: NodeMatch::Exact(CONVOLVER_IN.to_string()),
                 input_port: cv_in.port_name(ch),
                 optional: false,
@@ -525,7 +602,7 @@ impl RoutingTable {
         // Reaper master → convolver subs (explicit L+R mono sum, TK-239).
         // Both Master L (ch 1) and Master R (ch 2) feed each sub input.
         // PipeWire sums the two links at the input port.
-        for sub_ch in [3, 4] {
+        for &sub_ch in &layout.sub_channels {
             for master_ch in [1, 2] {
                 links.push(DesiredLink {
                     output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
@@ -537,8 +614,8 @@ impl RoutingTable {
             }
         }
 
-        // Convolver → USBStreamer (ch 1-4: processed speakers).
-        links.extend(Self::convolver_to_usbstreamer_links());
+        // Convolver → USBStreamer (all speaker channels: processed audio).
+        links.extend(Self::convolver_to_usbstreamer_links(layout));
 
         // F-131: pcm-bridge taps Reaper master L/R for spectrum display.
         links.extend(Self::pcm_bridge_app_tap_links(
@@ -548,9 +625,10 @@ impl RoutingTable {
         ));
 
         // Reaper headphones → USBStreamer direct (bypass convolver).
-        // Ch 5 (HP L) → USBStreamer ch 5
-        // Ch 6 (HP R) → USBStreamer ch 6
-        for ch in 5..=6 {
+        // HP channels start at num_speaker_channels + 1.
+        let hp_l = layout.num_speaker_channels + 1;
+        let hp_r = layout.num_speaker_channels + 2;
+        for ch in hp_l..=hp_r {
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
                 output_port: rp_out.port_name(ch),
@@ -561,9 +639,10 @@ impl RoutingTable {
         }
 
         // Reaper singer IEM → USBStreamer direct (passthrough per D-011).
-        // Ch 7 (IEM L) → USBStreamer ch 7
-        // Ch 8 (IEM R) → USBStreamer ch 8
-        for ch in 7..=8 {
+        // IEM channels start at num_speaker_channels + 3.
+        let iem_l = layout.num_speaker_channels + 3;
+        let iem_r = layout.num_speaker_channels + 4;
+        for ch in iem_l..=iem_r {
             links.push(DesiredLink {
                 output_node: NodeMatch::Prefix(REAPER_PREFIX.to_string()),
                 output_port: rp_out.port_name(ch),
@@ -604,22 +683,22 @@ impl RoutingTable {
     /// Measurement mode: signal-gen → convolver, UMIK-1 → signal-gen capture.
     ///
     /// F-097: Signal-gen is mono (1 output channel, output_AUX0). Its single
-    /// output fans out to all 4 convolver inputs — PW duplicates the signal.
+    /// output fans out to all N convolver inputs — PW duplicates the signal.
     /// The RPC `channels` bitmask selects which convolver inputs are active
     /// (e.g., play through left main only for per-speaker measurement).
     ///
     /// UMIK-1 captures the room response back to signal-gen for analysis.
     /// pcm-bridge taps the UMIK-1 capture for room-response metering (US-088).
-    fn measurement_links() -> Vec<DesiredLink> {
+    fn measurement_links(layout: &SpeakerLayout) -> Vec<DesiredLink> {
         let mut links = Vec::new();
         let sg = AppPortNaming::SignalGenOutput;
         let cv_in = AppPortNaming::ConvolverInput;
         let umik = AppPortNaming::Umik1Capture;
         let sg_cap = AppPortNaming::SignalGenCaptureInput;
 
-        // F-097: Mono signal-gen output_AUX0 → all 4 convolver inputs.
+        // F-097: Mono signal-gen output_AUX0 → all N convolver inputs.
         // PW fans out: each convolver input gets a copy of the same signal.
-        for ch in 1..=4 {
+        for ch in 1..=layout.num_speaker_channels {
             links.push(DesiredLink {
                 output_node: NodeMatch::Exact(SIGNAL_GEN.to_string()),
                 output_port: sg.port_name(1), // always ch 1 (mono)
@@ -629,8 +708,8 @@ impl RoutingTable {
             });
         }
 
-        // Convolver → USBStreamer (ch 1-4: measurement signal to speakers).
-        links.extend(Self::convolver_to_usbstreamer_links());
+        // Convolver → USBStreamer (all speaker channels: measurement signal to speakers).
+        links.extend(Self::convolver_to_usbstreamer_links(layout));
 
         // Always-on UMIK-1 capture for SPL metering (ch3, optional).
         links.push(Self::pcm_bridge_umik_link());
@@ -733,15 +812,15 @@ impl RoutingTable {
             .collect()
     }
 
-    /// Convolver output → USBStreamer playback (ch 1-4).
+    /// Convolver output → USBStreamer playback (ch 1..N speaker channels).
     /// Used by all modes (speakers always go through the convolver).
     ///
     /// Verified on Pi (C-005): filter-chain playback node uses
-    /// `output_AUX0..output_AUX3` port names.
-    fn convolver_to_usbstreamer_links() -> Vec<DesiredLink> {
+    /// `output_AUX0..output_AUXN` port names.
+    fn convolver_to_usbstreamer_links(layout: &SpeakerLayout) -> Vec<DesiredLink> {
         let cv_out = AppPortNaming::ConvolverOutput;
         let usb = AppPortNaming::UsbStreamerPlayback;
-        (1..=4)
+        (1..=layout.num_speaker_channels)
             .map(|ch| DesiredLink {
                 output_node: NodeMatch::Exact(CONVOLVER_OUT.to_string()),
                 output_port: cv_out.port_name(ch),
@@ -1758,6 +1837,248 @@ mod tests {
                 "Monitoring should not have application output links, got: {}",
                 link,
             );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // SpeakerLayout constructors
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn two_way_layout() {
+        let layout = SpeakerLayout::two_way();
+        assert_eq!(layout.num_speaker_channels, 4);
+        assert_eq!(layout.sub_channels, vec![3, 4]);
+        assert_eq!(layout.stereo_main_channels, vec![1, 2]);
+    }
+
+    #[test]
+    fn three_way_stereo_layout() {
+        let layout = SpeakerLayout::three_way_stereo();
+        assert_eq!(layout.num_speaker_channels, 6);
+        assert_eq!(layout.sub_channels, vec![1, 2]);
+        assert_eq!(layout.stereo_main_channels, vec![3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn from_profile_layout() {
+        // workshop-c3d-elf-3way: subs on ch 1-2, everything else is stereo main.
+        let layout = SpeakerLayout::from_profile(6, vec![1, 2]);
+        assert_eq!(layout.num_speaker_channels, 6);
+        assert_eq!(layout.sub_channels, vec![1, 2]);
+        assert_eq!(layout.stereo_main_channels, vec![3, 4, 5, 6]);
+    }
+
+    #[test]
+    fn from_profile_2way_matches_two_way() {
+        let layout = SpeakerLayout::from_profile(4, vec![3, 4]);
+        assert_eq!(layout.num_speaker_channels, 4);
+        assert_eq!(layout.sub_channels, vec![3, 4]);
+        assert_eq!(layout.stereo_main_channels, vec![1, 2]);
+    }
+
+    // -----------------------------------------------------------------------
+    // 3-way stereo routing (6 speaker channels)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn three_way_monitoring_has_23_links() {
+        // convolver-out → USBStreamer ch 0-5 (6)
+        // + UMIK-1 → pcm-bridge ch3 (1, always-on)
+        // + level-bridge-hw-out (8) + level-bridge-hw-in (8) = 23.
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        assert_eq!(table.links_for(Mode::Monitoring).len(), 23);
+    }
+
+    #[test]
+    fn three_way_dj_has_43_links() {
+        // Stereo main channels (3,4,5,6): 4 links (1:1 from Master L/R)
+        // + Sub mono sum fan-out (ch 1,2): 2 subs * 2 master channels = 4
+        // + convolver → USBStreamer (6)
+        // + pcm-bridge stereo (2)
+        // + HP (2, ch 7-8 on USBStreamer)
+        // + UMIK-1 → pcm-bridge ch3 (1)
+        // + level-bridge-hw-out (8) + level-bridge-hw-in (8)
+        // + level-bridge-sw (8) = 43.
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        assert_eq!(table.links_for(Mode::Dj).len(), 43);
+    }
+
+    #[test]
+    fn three_way_live_has_53_links() {
+        // Stereo main channels (3,4,5,6): 4 links (1:1 from Master L/R)
+        // + Sub mono sum fan-out (ch 1,2): 2 subs * 2 master channels = 4
+        // + convolver → USBStreamer (6)
+        // + pcm-bridge stereo (2)
+        // + HP (2, ch 7-8 on USBStreamer)
+        // + IEM (2, ch 9-10 on USBStreamer, optional)
+        // + ADA8200 capture (8)
+        // + UMIK-1 → pcm-bridge ch3 (1)
+        // + level-bridge-hw-out (8) + level-bridge-hw-in (8)
+        // + level-bridge-sw (8) = 53.
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        assert_eq!(table.links_for(Mode::Live).len(), 53);
+    }
+
+    #[test]
+    fn three_way_measurement_has_33_links() {
+        // signal-gen mono fan-out → convolver (6) + convolver → USBStreamer (6)
+        // + UMIK-1 → pcm-bridge (1) + UMIK-1 → signal-gen-capture (1)
+        // + level-bridge-hw-out (8) + level-bridge-hw-in (8)
+        // + level-bridge-sw (1)
+        // + room-sim hops (2) = 33.
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        assert_eq!(table.links_for(Mode::Measurement).len(), 33);
+    }
+
+    #[test]
+    fn three_way_has_6_convolver_to_usbstreamer() {
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        for mode in Mode::ALL {
+            let links = table.links_for(mode);
+            let conv_to_usb: Vec<_> = links
+                .iter()
+                .filter(|l| {
+                    matches!(&l.output_node, NodeMatch::Exact(n) if n == "pi4audio-convolver-out")
+                        && matches!(&l.input_node, NodeMatch::Prefix(p) if p.starts_with("alsa_output.usb-MiniDSP_USBStreamer"))
+                })
+                .collect();
+            assert_eq!(
+                conv_to_usb.len(),
+                6,
+                "Mode {} should have 6 convolver→USBStreamer links for 3-way",
+                mode
+            );
+        }
+    }
+
+    #[test]
+    fn three_way_dj_sub_mono_sum_fan_out() {
+        // 3-way: subs on ch 1-2 (AUX0, AUX1). Each gets L+R mono sum.
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        let dj_links = table.links_for(Mode::Dj);
+
+        for sub_aux in ["AUX0", "AUX1"] {
+            let sub_links: Vec<_> = dj_links
+                .iter()
+                .filter(|l| {
+                    matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-convolver")
+                        && l.input_port == format!("playback_{}", sub_aux)
+                })
+                .collect();
+            assert_eq!(
+                sub_links.len(),
+                2,
+                "Sub input {} should have 2 fan-out links (L+R mono sum)",
+                sub_aux,
+            );
+            let ports: Vec<&str> = sub_links.iter().map(|l| l.output_port.as_str()).collect();
+            assert!(ports.contains(&"out_0"), "Missing Master L for {}", sub_aux);
+            assert!(ports.contains(&"out_1"), "Missing Master R for {}", sub_aux);
+        }
+    }
+
+    #[test]
+    fn three_way_dj_stereo_main_mapping() {
+        // 3-way: mids on ch 3-4, HF on ch 5-6.
+        // ch 3 (odd) → Master L (out_0), ch 4 (even) → Master R (out_1),
+        // ch 5 (odd) → Master L (out_0), ch 6 (even) → Master R (out_1).
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        let dj_links = table.links_for(Mode::Dj);
+
+        for (ch, expected_master_port) in [(3, "out_0"), (4, "out_1"), (5, "out_0"), (6, "out_1")] {
+            let target_port = format!("playback_AUX{}", ch - 1);
+            let main_links: Vec<_> = dj_links
+                .iter()
+                .filter(|l| {
+                    matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-convolver")
+                        && l.input_port == target_port
+                })
+                .collect();
+            assert_eq!(
+                main_links.len(),
+                1,
+                "Convolver ch {} should have exactly 1 link (1:1 from master)",
+                ch,
+            );
+            assert_eq!(
+                main_links[0].output_port, expected_master_port,
+                "Convolver ch {} should be fed by {}, got {}",
+                ch, expected_master_port, main_links[0].output_port,
+            );
+        }
+    }
+
+    #[test]
+    fn three_way_dj_hp_on_ch7_8() {
+        // 3-way: HP channels at num_speaker_channels+1 and +2 = USBStreamer ch 7-8.
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        let dj_links = table.links_for(Mode::Dj);
+
+        let hp_links: Vec<_> = dj_links
+            .iter()
+            .filter(|l| {
+                matches!(&l.output_node, NodeMatch::Prefix(p) if p == "Mixxx")
+                    && matches!(&l.input_node, NodeMatch::Prefix(p) if p.starts_with("alsa_output"))
+                    && (l.input_port == "playback_AUX6" || l.input_port == "playback_AUX7")
+            })
+            .collect();
+        assert_eq!(hp_links.len(), 2, "3-way DJ should have 2 HP links on ch 7-8");
+        assert!(!hp_links[0].optional);
+        assert!(!hp_links[1].optional);
+    }
+
+    #[test]
+    fn three_way_live_hp_on_ch7_8_iem_on_ch9_10() {
+        // 3-way live: HP on ch 7-8, IEM on ch 9-10.
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        let live_links = table.links_for(Mode::Live);
+
+        // HP links (ch 7-8).
+        let hp_links: Vec<_> = live_links
+            .iter()
+            .filter(|l| {
+                matches!(&l.output_node, NodeMatch::Prefix(p) if p == "REAPER")
+                    && matches!(&l.input_node, NodeMatch::Prefix(p) if p.starts_with("alsa_output"))
+                    && (l.input_port == "playback_AUX6" || l.input_port == "playback_AUX7")
+            })
+            .collect();
+        assert_eq!(hp_links.len(), 2, "3-way Live HP should be on ch 7-8");
+        assert!(hp_links.iter().all(|l| !l.optional));
+
+        // IEM links (ch 9-10).
+        let iem_links: Vec<_> = live_links
+            .iter()
+            .filter(|l| {
+                matches!(&l.output_node, NodeMatch::Prefix(p) if p == "REAPER")
+                    && matches!(&l.input_node, NodeMatch::Prefix(p) if p.starts_with("alsa_output"))
+                    && (l.input_port == "playback_AUX8" || l.input_port == "playback_AUX9")
+            })
+            .collect();
+        assert_eq!(iem_links.len(), 2, "3-way Live IEM should be on ch 9-10");
+        assert!(iem_links.iter().all(|l| l.optional));
+    }
+
+    #[test]
+    fn three_way_measurement_fans_out_to_6_channels() {
+        // Signal-gen mono → 6 convolver inputs.
+        let table = RoutingTable::production_for(SpeakerLayout::three_way_stereo());
+        let meas_links = table.links_for(Mode::Measurement);
+        let fanout: Vec<_> = meas_links
+            .iter()
+            .filter(|l| {
+                matches!(&l.output_node, NodeMatch::Exact(n) if n == "pi4audio-signal-gen")
+                    && matches!(&l.input_node, NodeMatch::Exact(n) if n == "pi4audio-convolver")
+            })
+            .collect();
+        assert_eq!(fanout.len(), 6);
+        // All should use output_AUX0 (mono).
+        assert!(fanout.iter().all(|l| l.output_port == "output_AUX0"));
+        // Should cover AUX0..AUX5.
+        let target_ports: Vec<&str> = fanout.iter().map(|l| l.input_port.as_str()).collect();
+        for ch in 0..6 {
+            let port = format!("playback_AUX{}", ch);
+            assert!(target_ports.contains(&port.as_str()), "Missing {}", port);
         }
     }
 }
