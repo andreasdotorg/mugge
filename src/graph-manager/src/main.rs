@@ -51,7 +51,7 @@ use std::sync::Arc;
 use clap::Parser;
 use log::info;
 
-use routing::Mode;
+use routing::{Mode, SpeakerLayout};
 
 // ---------------------------------------------------------------------------
 // CLI
@@ -77,6 +77,14 @@ struct Args {
     /// Log level (RUST_LOG format).
     #[arg(long, default_value = "info")]
     log_level: String,
+
+    /// Number of speaker output channels (e.g. 4 for 2-way, 6 for 3-way stereo).
+    #[arg(long, default_value = "4")]
+    speaker_channels: u32,
+
+    /// Comma-separated list of 1-based sub channel numbers (e.g. "3,4" or "1,2").
+    #[arg(long, default_value = "3,4")]
+    sub_channels: String,
 }
 
 
@@ -127,6 +135,7 @@ fn parse_listen_addr(addr: &str) -> Result<String, String> {
 #[cfg(feature = "pipewire-backend")]
 fn run_pipewire(
     initial_mode: Mode,
+    speaker_layout: SpeakerLayout,
     cmd_rx: std::sync::mpsc::Receiver<rpc::RpcCommand>,
     event_tx: std::sync::mpsc::Sender<rpc::GraphEvent>,
     shutdown: Arc<AtomicBool>,
@@ -155,8 +164,12 @@ fn run_pipewire(
     // Both closures run on the PW main loop thread, so Rc<RefCell<>> is safe.
     let graph = Rc::new(RefCell::new(GraphState::new()));
 
-    // Build the routing table.
-    let routing_table = Rc::new(RoutingTable::production());
+    // Build the routing table from the speaker layout.
+    info!(
+        "Speaker layout: {} channels, subs {:?}, stereo mains {:?}",
+        speaker_layout.num_speaker_channels, speaker_layout.sub_channels, speaker_layout.stereo_main_channels,
+    );
+    let routing_table = Rc::new(RoutingTable::production_for(speaker_layout));
     info!("Routing table loaded ({} modes)", Mode::ALL.len());
 
     // Current mode — shared so RPC can update it for mode transitions.
@@ -886,9 +899,19 @@ fn main() {
         std::process::exit(1);
     });
 
+    // Parse speaker layout from CLI args.
+    let sub_ch: Vec<u32> = args.sub_channels.split(',')
+        .map(|s| s.trim().parse().expect("invalid sub channel number"))
+        .collect();
+    let speaker_layout = SpeakerLayout::from_profile(args.speaker_channels, sub_ch);
+
     info!("pi4audio-graph-manager starting");
     info!("RPC listen address: {}", listen_addr);
     info!("Initial mode: {}", initial_mode);
+    info!(
+        "Speaker layout: {} channels, subs {:?}",
+        speaker_layout.num_speaker_channels, speaker_layout.sub_channels,
+    );
 
     // Shutdown flag — set by SIGINT/SIGTERM handler.
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -920,7 +943,7 @@ fn main() {
 
     // Run PipeWire main loop (blocks until shutdown). The PW thread
     // owns cmd_rx (receives commands) and event_tx (emits events).
-    run_pipewire(initial_mode, cmd_rx, event_tx, shutdown);
+    run_pipewire(initial_mode, speaker_layout, cmd_rx, event_tx, shutdown);
 
     info!("pi4audio-graph-manager exited");
 }
