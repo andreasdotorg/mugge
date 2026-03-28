@@ -343,10 +343,10 @@ def _classify_speakers(profile):
     satellites = []
     subwoofers = []
     for spk_key, spk_cfg in profile["speakers"].items():
-        if spk_cfg["role"] == "satellite":
-            satellites.append((spk_key, spk_cfg))
-        elif spk_cfg["role"] == "subwoofer":
+        if spk_cfg["role"] == "subwoofer":
             subwoofers.append((spk_key, spk_cfg))
+        else:
+            satellites.append((spk_key, spk_cfg))
     return satellites, subwoofers
 
 
