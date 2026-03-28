@@ -257,7 +257,10 @@
         if (data.crossover) {
             html += '<div class="spk-detail-sub-title">Crossover</div>';
             html += '<div class="cfg-kv-grid">';
-            html += kvRow("Frequency", data.crossover.frequency_hz + " Hz");
+            var freqDisplay = Array.isArray(data.crossover.frequency_hz)
+                ? data.crossover.frequency_hz.join(" / ") + " Hz"
+                : data.crossover.frequency_hz + " Hz";
+            html += kvRow("Frequency", freqDisplay);
             html += kvRow("Slope", data.crossover.slope_db_per_oct + " dB/oct");
             html += kvRow("Type", data.crossover.type);
             html += '</div>';
@@ -580,7 +583,10 @@
 
         var template = TOPOLOGY_TEMPLATES[topo];
         var freqs = (template && template.crossovers) || [80];
-        var existingFreq = xover.frequency_hz;
+        var existingFreqs = xover.frequency_hz;
+        if (existingFreqs != null && !Array.isArray(existingFreqs)) {
+            existingFreqs = [existingFreqs];
+        }
 
         // For 2-way: single crossover. For 3-way: 2 crossovers. For 4-way: 3.
         var labels;
@@ -596,7 +602,7 @@
         }
 
         for (var j = 0; j < freqs.length; j++) {
-            var val = j === 0 && existingFreq ? existingFreq : freqs[j];
+            var val = existingFreqs && existingFreqs[j] ? existingFreqs[j] : freqs[j];
             var row = document.createElement("div");
             row.className = "spk-form-row";
             row.innerHTML =
@@ -868,17 +874,12 @@
             name: name,
             topology: $("spk-f-topology").value,
             crossover: {
-                frequency_hz: freqs[0] || 80,
+                frequency_hz: freqs.length === 1 ? (freqs[0] || 80) : freqs.sort(function(a, b) { return a - b; }),
                 slope_db_per_oct: parseInt($("spk-f-xslope").value, 10),
                 type: $("spk-f-xtype").value.trim()
             },
             speakers: speakers
         };
-
-        // Store additional crossover frequencies if multi-way.
-        if (freqs.length > 1) {
-            payload.crossover.additional_frequencies_hz = freqs.slice(1);
-        }
 
         var desc = $("spk-f-desc").value.trim();
         if (desc) payload.description = desc;

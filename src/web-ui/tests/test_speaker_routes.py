@@ -324,6 +324,24 @@ class TestValidateProfile:
         body = {**_VALID_PROFILE, "speakers": bad_speakers}
         assert _validate_profile(body) is not None
 
+    def test_frequency_hz_list_valid(self):
+        body = {**_VALID_PROFILE, "crossover": {
+            "frequency_hz": [100, 1000],
+            "slope_db_per_oct": 48,
+            "type": "linkwitz-riley",
+        }}
+        assert _validate_profile(body) is None
+
+    def test_frequency_hz_list_unsorted_rejected(self):
+        body = {**_VALID_PROFILE, "crossover": {
+            "frequency_hz": [1000, 100],
+            "slope_db_per_oct": 48,
+            "type": "linkwitz-riley",
+        }}
+        err = _validate_profile(body)
+        assert err is not None
+        assert "sorted ascending" in err
+
 
 class TestSlugify:
     def test_simple(self):
@@ -463,6 +481,23 @@ class TestCreateProfile:
         resp = write_client.get("/api/v1/speakers/profiles/readable-prof")
         assert resp.status_code == 200
         assert resp.json()["topology"] == "2way"
+
+    def test_frequency_hz_list_roundtrip(self, write_client):
+        """QE F-198: POST a profile with frequency_hz as list, GET returns list intact."""
+        body = {
+            **_VALID_PROFILE,
+            "slug": "freq-list-prof",
+            "crossover": {
+                "frequency_hz": [100, 1000],
+                "slope_db_per_oct": 48,
+                "type": "linkwitz-riley",
+            },
+        }
+        resp = write_client.post("/api/v1/speakers/profiles", json=body)
+        assert resp.status_code == 201
+        resp = write_client.get("/api/v1/speakers/profiles/freq-list-prof")
+        assert resp.status_code == 200
+        assert resp.json()["crossover"]["frequency_hz"] == [100, 1000]
 
 
 class TestUpdateProfile:

@@ -227,8 +227,16 @@ def _validate_crossover(xover: Any, label: str = "crossover") -> str | None:
     xover_missing = _CROSSOVER_REQUIRED - xover.keys()
     if xover_missing:
         return f"{label} missing fields: {', '.join(sorted(xover_missing))}"
-    if not isinstance(xover["frequency_hz"], (int, float)):
-        return f"'{label}.frequency_hz' must be a number"
+    freq = xover["frequency_hz"]
+    if isinstance(freq, list):
+        if not all(isinstance(f, (int, float)) for f in freq):
+            return f"'{label}.frequency_hz' list entries must be numbers"
+        if len(freq) < 1 or len(freq) > 3:
+            return f"'{label}.frequency_hz' list must have 1-3 entries"
+        if freq != sorted(freq):
+            return f"'{label}.frequency_hz' must be sorted ascending"
+    elif not isinstance(freq, (int, float)):
+        return f"'{label}.frequency_hz' must be a number or list of numbers"
     return None
 
 
