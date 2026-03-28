@@ -7452,6 +7452,72 @@ The web UI's activate endpoint (`POST /api/v1/speakers/profiles/{name}/activate`
 
 ---
 
+## US-108: Remove WirePlumber — GraphManager Absorbs Device Activation
+
+**As** the owner,
+**I want** WirePlumber removed from the audio stack entirely,
+**so that** the system has one fewer moving part, eliminates a category of configuration bugs (WP config syntax, policy.standard failures, F-169), and the GraphManager is the sole PipeWire session manager in fact — not just for linking.
+
+**Status:** DRAFT (scoping only, NOT scheduled for delivery. Owner review required before proceeding.)
+**Priority:** TBD (owner decision)
+**Depends on:** US-106 (reconciler) completion or abandonment
+**Related:** D-039 (GM sole session manager), D-043 (WP retained for device management — would be superseded)
+**Architect recommendation:** Option A (static PW adapter configs, no new Rust code in GM for device activation)
+
+### Background
+
+D-043 originally retained WirePlumber for device management (ALSA adapter activation, ACP policy) while GM handled linking. The venue session exposed that WP configuration is a persistent source of bugs: `policy.standard = disabled` prevented node activation (US-106 root cause), config syntax is fragile and poorly documented, and WP/GM interactions create a split-brain session management problem.
+
+Option A: Static PipeWire adapter configs. We already have static adapters for USBStreamer output and capture. Only UMIK-1 needs a new static config. No new Rust code in GM for device activation. The Lua deny script (defense-in-depth) is either absorbed into GM's graph observer (~100 lines) or accepted as lost (GM reconciler already handles the primary threat).
+
+### Acceptance Criteria
+
+1. `wireplumber.service` is masked/stopped on the Pi; PipeWire runs without a session manager
+2. All ALSA adapter nodes (USBStreamer playback, USBStreamer capture / ada8200-in, UMIK-1) have activated ports via static PW configs
+3. GM starts, creates all links for current mode, reconciler converges within 5 seconds
+4. All 4 operating modes (Monitoring, DJ, Live, Measurement) work without WP
+5. UMIK-1 measurement flow works end-to-end (pre-flight, sweep, capture, deconvolution)
+6. 30-minute stability soak without xruns in DJ mode
+7. USB disconnect/reconnect of UMIK-1 handled gracefully (node reappears with ports)
+8. All 5 WP config files and the Lua script removed from the repo (`50-usbstreamer-disable-acp.conf`, `51-loopback-disable-acp.conf`, `52-umik1-low-priority.conf`, `53-deny-usbstreamer-alsa.conf`, `90-no-auto-link.conf`, `scripts/deny-usbstreamer-alsa.lua`)
+9. `nix/nixos/audio/wireplumber.nix` removed from NixOS config
+10. systemd unit dependencies updated — no WP references in GM or signal-gen service files
+11. Documentation updated: SETUP-MANUAL, safety.md, rt-audio-stack.md, graph-manager.md
+12. D-043 superseded by new decision document (D-TBD)
+
+### US-106 Interaction
+
+If US-108 proceeds, the following US-106 tasks are affected:
+
+| US-106 Task | Status if US-108 proceeds |
+|-------------|--------------------------|
+| T-106-1 (#194): Fix WP config `policy.standard` | OBSOLETE — WP removed entirely |
+| T-106-2 (#195): Local-demo verification of WP fix | OBSOLETE — WP removed entirely |
+| T-106-3 (#198): Remove manual pw-link workarounds | STILL NEEDED — absorb into US-108 |
+| T-106-4 (#197): Pi deployment + verification | OBSOLETE — replaced by US-108 deployment |
+| T-106-5 (#196): Stability soak + acceptance | REPLACED by US-108 AC #6 |
+
+### Scope Estimate
+
+2-3 days. Code changes are small (1-2 PW configs added, 5+1 WP configs removed, systemd edits, optional ~100 lines GM Rust for graph observer). Testing and documentation are the bulk.
+
+### Definition of Done
+
+- [ ] All acceptance criteria met
+- [ ] Architect review (static adapter config correctness, GM graph observer if implemented)
+- [ ] AE review (audio path integrity without WP, USB hotplug behavior)
+- [ ] AD challenge (failure modes without session manager, edge cases)
+- [ ] Security review (loss of Lua deny script mitigation)
+- [ ] Owner acceptance on Pi with real hardware
+
+### Out of scope
+
+- GM runtime layout reconfiguration (US-107 — separate story)
+- Level-bridge deployment (US-084 — separate story)
+- New GM features beyond absorbing WP's role
+
+---
+
 ## Process Gate: Measurement UI Development Cycle (owner directive 2026-03-14)
 
 **GATE:** US-047, US-048, and US-049 implementation is blocked until the

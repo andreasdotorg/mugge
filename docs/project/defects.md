@@ -6737,3 +6737,139 @@ the mapping to include all N-way driver roles.
 **Related:** F-195 (same bug in pw_config_generator.py — fix ready),
 US-091 (N-way crossover support), task #69 (T-089-8: activate + D-043
 safety flow)
+
+## F-198: Profile crossover data model mismatch — UI save vs pipeline load for N-way (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Medium (3-way profiles created via UI may be treated as 2-way by pipeline)
+**Status:** OPEN
+**Affects:** `speaker-config.js:860-881` (frontend save), `generate_profile_filters.py:48` (pipeline load)
+**Found by:** Worker-3 feature audit (2026-03-28)
+**Related story:** US-089 (Speaker Config), US-091 (N-way crossover)
+
+### Description
+
+Data model mismatch between UI save and pipeline load for N-way crossover
+frequencies. The frontend `speaker-config.js` (lines 860-881) splits
+multi-way crossover frequencies into two fields when saving:
+
+- `crossover.frequency_hz`: first frequency only (scalar, line 871)
+- `crossover.additional_frequencies_hz`: remaining frequencies (array, line 880)
+
+But `generate_profile_filters.py` (line 48) reads only
+`crossover.frequency_hz` and expects it to be either a scalar (2-way) or
+a list (N-way). The `additional_frequencies_hz` field is never read by
+the pipeline — the backend `speaker_routes.py` has no handling for this
+field either (grep confirms zero references in `src/web-ui/app/`).
+
+### Impact
+
+- 3-way profiles created or edited via the web UI store only the first
+  crossover frequency in `frequency_hz`. The second crossover point is
+  stored in `additional_frequencies_hz` which the pipeline ignores.
+- The filter generation pipeline treats these profiles as 2-way, generating
+  only highpass + lowpass filters instead of highpass + bandpass + lowpass.
+- Manually authored YAML profiles (like `workshop-c3d-elf-3way.yml`) are
+  unaffected because they use `frequency_hz: [100, 1000]` (list format).
+
+### Fix
+
+Either:
+1. Change the frontend to save `frequency_hz` as a list (matching YAML
+   convention): `frequency_hz: [freq1, freq2, ...]`, or
+2. Add backend merge logic in the profile write handler to combine
+   `frequency_hz` + `additional_frequencies_hz` into a single list.
+
+Option 1 is simpler and aligns with the YAML schema convention.
+
+**Related:** US-089 (speaker config CRUD), US-091 (N-way crossover),
+F-195/F-196 (other N-way data model bugs)
+
+## F-199: No E2E test for 3-way (bandpass) filter generation pipeline (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Low (test coverage gap — no functional regression observed)
+**Status:** OPEN
+**Affects:** `generate_profile_filters.py:116-126`, `_generate_channel_crossover()` bandpass path
+**Found by:** Worker-3 feature audit (2026-03-28)
+**Related story:** US-091 (N-way crossover), US-067 (room correction E2E)
+
+### Description
+
+All existing E2E tests for the filter generation pipeline use 2-way
+speaker profiles. The bandpass code path in
+`_generate_channel_crossover()` (lines 116-126 of
+`generate_profile_filters.py`) has never been exercised in an E2E test.
+
+The bandpass path calls `_resolve_bandpass_edges()` to determine low/high
+crossover frequencies, then `generate_bandpass_filter()`. While
+`generate_bandpass_filter()` has dedicated unit tests in
+`test_crossover.py` (`TestGenerateBandpassFilter`, `TestBandpassPassband`,
+`TestBandpassRolloff`, `TestBandpassIndependentSlopes`), the integration
+of bandpass into the full pipeline (profile load -> crossover generation
+-> combine -> export -> verify) is untested.
+
+### Impact
+
+- Bandpass filter bugs in the integration path would not be caught
+  automatically
+- The venue's 3-way system was set up with manually generated crossover
+  FIR files, not via the automated pipeline — the pipeline path was
+  effectively untested in practice
+
+### Fix
+
+Add an E2E test using the `workshop-c3d-elf-3way` profile (or the
+`meh-3way-template` profile) through the filter generation pipeline.
+Verify that 6 WAV files are produced with correct crossover
+characteristics (lowpass, bandpass, highpass) and D-009 compliance.
+
+**Related:** US-067 (room correction E2E), US-091 (N-way crossover),
+task #90 (T-091-1: bandpass FIR generation), F-198 (UI data model mismatch)
+
+## F-200: No E2E test for profile activation (PW config write + target gains) (OPEN)
+
+**Filed:** 2026-03-28
+**Severity:** Low (test coverage gap — no functional regression observed)
+**Status:** OPEN
+**Affects:** `speaker_routes.py:989-1093`, `POST /api/v1/speakers/profiles/{name}/activate`
+**Found by:** Worker-3 feature audit (2026-03-28)
+**Related story:** US-089 (Speaker Config), D-043 (safety ramp-up flow)
+
+### Description
+
+The profile activation endpoint
+`POST /api/v1/speakers/profiles/{name}/activate` has no automated E2E
+test verifying the complete activation flow:
+
+1. PW filter-chain `.conf` file written correctly to the deploy path
+2. Target gains computed correctly from the profile's gain_staging
+3. Thermal protection configured for the activated profile
+4. Active profile marker file updated
+
+Existing tests in `test_speaker_routes.py` cover `_compute_target_gains()`
+as a unit test (4 tests) and `_activate_profile_impl()` in isolation with
+mocked PW config generation. The `test_e2e_speaker_lifecycle.py` tests
+also mock the PW config generator. No test verifies the actual generated
+PW `.conf` content matches the expected filter-chain topology.
+
+### Impact
+
+- A broken PW config generation path (e.g., wrong node count, wrong
+  gain values, missing channels) would not be caught by automated tests
+- The activation safety flow (D-043: mute -> switch -> ramp-up) relies on
+  correct target gains — a bug here could apply wrong gain levels during
+  ramp-up
+
+### Fix
+
+Add an E2E test that:
+1. Creates a speaker profile (2-way and 3-way variants)
+2. Activates it via the API
+3. Reads the generated `.conf` file and verifies it contains the correct
+   number of convolver/gain nodes, correct audio.position, and correct
+   Mult values
+4. Verifies the target_gains in the response match expected values
+
+**Related:** US-089 (speaker config), D-043 (safety ramp-up),
+task #69 (T-089-8: activate + D-043), F-197 (target gains bug)

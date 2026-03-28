@@ -314,6 +314,7 @@ Owner assessment: venue exposed that features were declared done without proper 
 - Advisory consensus on D-049 + Option A (dedicated pcm-bridge-umik port 9093)
 - US-084 extended with UMIK-1 bridge AC
 - US-107 filed (GM runtime layout RPC, draft)
+- US-108 filed (Remove WirePlumber — GM absorbs device activation, DRAFT, not scheduled)
 - PO reclassification: F-188-191 are US-091 test findings, not independent defects
 - AD challenge: 5 findings incorporated (AD-MON-1 through AD-MON-5)
 - Pi left at venue in broken state (#217 stopped — GM crash-looping, stashes not dropped)
