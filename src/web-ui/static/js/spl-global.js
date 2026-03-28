@@ -18,7 +18,7 @@
     var FFT_SIZE = 4096;
     var SAMPLE_RATE = 48000;
     var NUM_CHANNELS = 4;
-    var UMIK_CHANNEL = 3; // UMIK-1 is ch3 in pcm-bridge monitor source
+    var UMIK_CHANNEL = 2; // UMIK-1 is pcm-bridge input_3 = port.id 2 (0-based)
     var UPDATE_EVERY = 6; // Throttle DOM writes to ~10 Hz (every 6th rAF at 60fps)
 
     var pipeline = null;

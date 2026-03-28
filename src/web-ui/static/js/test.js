@@ -932,15 +932,15 @@
         }
     }
 
-    // -- SPL readout (Z-weighted broadband, always from ch3 = UMIK-1) --
+    // -- SPL readout (Z-weighted broadband, always from UMIK-1 = input_3 = ch idx 2) --
 
     var UMIK_SENSITIVITY = 121.4; // dBFS-to-dBSPL offset for UMIK-1
     var splPeakDb = -Infinity;
     var splUpdateCounter = 0;
     // Throttle DOM writes to ~10 Hz (every 6th rAF at 60fps).
     var SPL_UPDATE_INTERVAL = 6;
-    // Dedicated ch3 pipeline: always extracts UMIK-1 (ch3) for SPL,
-    // independent of which channel the spectrum display is showing.
+    // Dedicated UMIK-1 pipeline: pcm-bridge input_3 = port.id 2 (0-based).
+    // Independent of which channel the spectrum display is showing.
     var splPipeline = null;
 
     function splCreatePipeline() {
@@ -951,7 +951,7 @@
             dbMin: -90,
             dbMax: 0,
             smoothing: 0,
-            channelIndex: 3
+            channelIndex: 2
         });
     }
 
@@ -1081,7 +1081,7 @@
         // Task #52: "umik1" is a virtual source — use monitor WebSocket,
         // extract ch3. Otherwise default to L+R average (ch -1).
         var wsSource = source === "umik1" ? "monitor" : source;
-        var chIdx = source === "umik1" ? 3 : -1;
+        var chIdx = source === "umik1" ? 2 : -1;
         if (specPipeline) specPipeline.setChannelIndex(chIdx);
 
         var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
