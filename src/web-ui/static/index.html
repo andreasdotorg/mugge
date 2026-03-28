@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>mugge</title>
     <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-    <link rel="stylesheet" href="/static/style.css?v=52">
+    <link rel="stylesheet" href="/static/style.css?v=53">
 </head>
 <body>
 
@@ -16,16 +16,16 @@
         <span class="nav-title">mugge</span>
     </div>
     <div class="nav-tabs">
-        <button class="nav-tab active" data-view="dashboard">Dashboard</button>
-        <button class="nav-tab" data-view="system">System</button>
-        <button class="nav-tab" data-view="graph">Graph</button>
-        <button class="nav-tab" data-view="config">Config</button>
-        <button class="nav-tab" data-view="measure">Measure</button>
-        <button class="nav-tab" data-view="test">Test</button>
-        <button class="nav-tab" data-view="midi">MIDI</button>
+        <button class="nav-tab active" data-view="dashboard" title="Level meters, SPL, LUFS, spectrum — engineer overview">Dashboard</button>
+        <button class="nav-tab" data-view="system" title="CPU, memory, processes, scheduling, event log">System</button>
+        <button class="nav-tab" data-view="graph" title="PipeWire node topology — live link map">Graph</button>
+        <button class="nav-tab" data-view="config" title="Gains, quantum, filters, speakers, hardware">Config</button>
+        <button class="nav-tab" data-view="measure" title="Room measurement wizard — sweep, correct, deploy">Measure</button>
+        <button class="nav-tab" data-view="test" title="Signal generator + spectrum analyzer with UMIK-1">Test</button>
+        <button class="nav-tab" data-view="midi" title="MIDI controller mapping (Stage 2)">MIDI</button>
     </div>
     <div class="nav-right">
-        <span class="connection-dot" id="conn-dot"></span>
+        <span class="connection-dot" id="conn-dot" title="WebSocket connection status"></span>
     </div>
 </nav>
 
@@ -46,29 +46,29 @@
             <canvas class="sb-meter-canvas" id="sb-mini-physin"
                     width="47" height="24" title="PHYS IN (Mic-P8)"></canvas>
         </div>
-        <span class="sb-item">
+        <span class="sb-item" title="Filter-chain DSP state: Run = healthy, Deg = degraded">
             <span class="sb-label">DSP</span><span class="sb-value c-grey" id="sb-dsp-state">--</span>
         </span>
-        <span class="sb-item">
+        <span class="sb-item" title="Clipped channels (click to clear)">
             <span class="sb-label">Clip</span><span class="sb-value c-grey" id="sb-clip">--</span>
         </span>
-        <span class="sb-item">
+        <span class="sb-item" title="PipeWire xrun count — buffer underruns">
             <span class="sb-label">Xr</span><span class="sb-value c-grey" id="sb-xruns">--</span>
         </span>
     </div>
 
     <!-- Pipeline group: Quantum + Links + FIFO -->
     <div class="sb-group sb-group-pipeline">
-        <span class="sb-item">
+        <span class="sb-item" title="PipeWire quantum (buffer size) — DJ: 1024, Live: 256">
             <span class="sb-label">Q</span><span class="sb-value c-grey" id="sb-quantum">--</span>
         </span>
-        <span class="sb-item sb-collapse-narrow">
+        <span class="sb-item sb-collapse-narrow" title="Audio sample rate">
             <span class="sb-label">Rate</span><span class="sb-value c-grey" id="sb-rate">--</span>
         </span>
-        <span class="sb-item sb-collapse-narrow">
+        <span class="sb-item sb-collapse-narrow" title="PipeWire links: actual / desired">
             <span class="sb-label">Links</span><span class="sb-value c-grey" id="sb-buf">--</span>
         </span>
-        <span class="sb-item sb-collapse-narrow">
+        <span class="sb-item sb-collapse-narrow" title="RT scheduling: PipeWire priority / GraphManager priority">
             <span class="sb-label">FIFO</span><span class="sb-value c-grey" id="sb-fifo">--</span>
         </span>
     </div>
@@ -80,7 +80,7 @@
     </span>
 
     <!-- Thermal protection (T-092-4) -->
-    <span class="sb-item sb-collapse-narrow" id="sb-thermal-item">
+    <span class="sb-item sb-collapse-narrow" id="sb-thermal-item" title="Thermal headroom — driver protection status">
         <span class="sb-label">THM</span><span class="sb-value c-grey" id="sb-thermal">--</span>
     </span>
 
@@ -95,41 +95,41 @@
 
     <!-- System group: CPU + Temp + Mem + Uptime -->
     <div class="sb-group sb-group-system">
-        <span class="sb-item">
+        <span class="sb-item" title="CPU usage (per-core average)">
             <span class="sb-label">CPU</span>
             <span class="sb-gauge" id="sb-cpu-gauge">
                 <span class="sb-gauge-fill" id="sb-cpu-gauge-fill"></span>
                 <span class="sb-gauge-text c-grey" id="sb-cpu-gauge-text">--</span>
             </span>
         </span>
-        <span class="sb-item">
+        <span class="sb-item" title="SoC temperature — throttles at 80 C">
             <span class="sb-label">Temp</span>
             <span class="sb-gauge" id="sb-temp-gauge">
                 <span class="sb-gauge-fill" id="sb-temp-gauge-fill"></span>
                 <span class="sb-gauge-text c-grey" id="sb-temp-gauge-text">--</span>
             </span>
         </span>
-        <span class="sb-item sb-collapse-narrow">
+        <span class="sb-item sb-collapse-narrow" title="RAM usage percentage">
             <span class="sb-label">Mem</span>
             <span class="sb-gauge" id="sb-mem-gauge">
                 <span class="sb-gauge-fill" id="sb-mem-gauge-fill"></span>
                 <span class="sb-gauge-text c-grey" id="sb-mem-gauge-text">--</span>
             </span>
         </span>
-        <span class="sb-item sb-collapse-narrow">
+        <span class="sb-item sb-collapse-narrow" title="System uptime since last boot">
             <span class="sb-label">Up</span><span class="sb-value c-grey" id="sb-uptime">--</span>
         </span>
     </div>
 
     <!-- Anchor: panic button + mode badge -->
     <div class="sb-anchor">
-        <button class="sb-panic-btn" id="sb-panic-btn" data-testid="panic-button">MUTE</button>
+        <button class="sb-panic-btn" id="sb-panic-btn" data-testid="panic-button" title="Emergency mute all outputs (or abort measurement)">MUTE</button>
         <span class="sb-mode-badge c-grey" id="sb-mode" title="Click to switch mode">--</span>
         <!-- F-161: Mode switcher dropdown -->
         <div class="sb-mode-dropdown hidden" id="sb-mode-dropdown">
-            <button class="sb-mode-option" data-mode="dj">DJ</button>
-            <button class="sb-mode-option" data-mode="live">Live</button>
-            <button class="sb-mode-option" data-mode="monitoring">Monitoring</button>
+            <button class="sb-mode-option" data-mode="dj" title="DJ/PA mode — quantum 1024, Mixxx routing">DJ</button>
+            <button class="sb-mode-option" data-mode="live" title="Live vocal mode — quantum 256, Reaper routing">Live</button>
+            <button class="sb-mode-option" data-mode="monitoring" title="Monitoring mode — passthrough, no application routing">Monitoring</button>
         </div>
     </div>
 </div>
@@ -151,25 +151,25 @@
 
                 <!-- MAIN group (capture ch 0-1, program bus) -->
                 <div class="meter-group-section" id="group-main">
-                    <div class="meter-group-label meter-group-label-main">MAIN</div>
+                    <div class="meter-group-label meter-group-label-main" title="Program bus — Mixxx or Reaper master output (capture ch 0-1)">MAIN</div>
                     <div class="meters-row meters-row-main" id="meters-main"></div>
                 </div>
 
                 <!-- APP→CONV group (capture ch 2-7, application routing) -->
                 <div class="meter-group-section" id="group-app">
-                    <div class="meter-group-label meter-group-label-app">APP→CONV</div>
+                    <div class="meter-group-label meter-group-label-app" title="Application to convolver — post-routing, pre-DSP (capture ch 2-7)">APP→CONV</div>
                     <div class="meters-row" id="meters-app"></div>
                 </div>
 
                 <!-- CONV→OUT group (playback ch 0-7, post-convolver to speakers/headphones/IEM) -->
                 <div class="meter-group-section" id="group-dspout">
-                    <div class="meter-group-label meter-group-label-dspout">CONV→OUT</div>
+                    <div class="meter-group-label meter-group-label-dspout" title="Convolver to output — post-DSP to speakers/headphones/IEM (playback ch 0-7)">CONV→OUT</div>
                     <div class="meters-row" id="meters-dspout"></div>
                 </div>
 
                 <!-- PHYS IN group (ADA8200 analog inputs, placeholder) -->
                 <div class="meter-group-section" id="group-physin">
-                    <div class="meter-group-label meter-group-label-physin">PHYS IN</div>
+                    <div class="meter-group-label meter-group-label-physin" title="Physical inputs — ADA8200 analog inputs via USBStreamer ADAT">PHYS IN</div>
                     <div class="meters-row" id="meters-physin"></div>
                 </div>
             </div>
@@ -178,7 +178,7 @@
         <!-- Right column: SPL + LUFS -->
         <div class="right-panel">
             <!-- SPL hero -->
-            <div class="spl-hero" id="spl-hero">
+            <div class="spl-hero" id="spl-hero" title="A-weighted SPL from UMIK-1 microphone — real-time room level">
                 <div class="spl-hero-label">SPL</div>
                 <div class="spl-hero-value" id="spl-value">--</div>
                 <div class="spl-hero-unit">dB SPL</div>
@@ -186,22 +186,22 @@
 
             <!-- LUFS (horizontal row: ST / INT / MOM) -->
             <div class="lufs-panel">
-                <div class="lufs-section">
+                <div class="lufs-section" title="Short-term loudness (3 s window) — EBU R 128">
                     <div class="lufs-label">ST</div>
                     <div class="lufs-value" id="lufs-short">--</div>
                 </div>
-                <div class="lufs-section">
+                <div class="lufs-section" title="Integrated loudness (entire session) — EBU R 128">
                     <div class="lufs-label">INT</div>
                     <div class="lufs-value" id="lufs-integrated">--</div>
                 </div>
-                <div class="lufs-section">
+                <div class="lufs-section" title="Momentary loudness (400 ms window) — EBU R 128">
                     <div class="lufs-label">MOM</div>
                     <div class="lufs-value" id="lufs-momentary">--</div>
                 </div>
             </div>
 
             <!-- Thermal headroom (T-092-4) -->
-            <div class="thermal-panel" id="thermal-panel">
+            <div class="thermal-panel" id="thermal-panel" title="Per-channel thermal headroom — driver protection status">
                 <div class="thermal-panel-header">
                     <div class="thermal-panel-label">THERMAL</div>
                     <div class="thermal-panel-status" id="thermal-status-badge">--</div>
@@ -216,8 +216,8 @@
     <!-- Bottom row: spectrum (full width) -->
     <div class="spectrum-zone" id="spectrum-zone">
         <div class="spectrum-container">
-            <span class="spectrum-title">SPECTRUM</span>
-            <select class="spectrum-fft-select" id="spectrum-fft-size">
+            <span class="spectrum-title" title="Real-time frequency spectrum from program bus (L+R)">SPECTRUM</span>
+            <select class="spectrum-fft-select" id="spectrum-fft-size" title="FFT size — larger = finer frequency resolution, slower update">
                 <option value="2048">Performance (2048)</option>
                 <option value="4096" selected>Balanced (4096)</option>
                 <option value="8192">Analysis (8192)</option>
@@ -235,19 +235,19 @@
 
         <!-- Top strip: mode + audio config -->
         <div class="sys-section sys-header-strip">
-            <div class="sys-header-item">
+            <div class="sys-header-item" title="Current GraphManager routing mode">
                 <span class="sys-header-label">Mode</span>
                 <span class="sys-header-value c-grey" id="sys-mode">--</span>
             </div>
-            <div class="sys-header-item">
+            <div class="sys-header-item" title="PipeWire buffer size in samples">
                 <span class="sys-header-label">Quantum</span>
                 <span class="sys-header-value c-grey" id="sys-quantum">--</span>
             </div>
-            <div class="sys-header-item">
+            <div class="sys-header-item" title="Audio sample rate (Hz)">
                 <span class="sys-header-label">Sample Rate</span>
                 <span class="sys-header-value c-grey" id="sys-rate">--</span>
             </div>
-            <div class="sys-header-item">
+            <div class="sys-header-item" title="SoC temperature — throttles at 80 C">
                 <span class="sys-header-label">Temperature</span>
                 <span class="sys-header-value c-grey" id="sys-temp">--</span>
             </div>
@@ -263,12 +263,12 @@
         <div class="sys-section">
             <div class="sys-section-title">Filter Chain</div>
             <div class="kv-grid">
-                <div class="kv-item"><span class="kv-label">State</span><span class="kv-value c-grey" id="sys-cdsp-state">--</span></div>
-                <div class="kv-item"><span class="kv-label">Links</span><span class="kv-value c-grey" id="sys-cdsp-load">--</span></div>
-                <div class="kv-item"><span class="kv-label">Health</span><span class="kv-value c-grey" id="sys-cdsp-buffer">--</span></div>
-                <div class="kv-item"><span class="kv-label">Convolver</span><span class="kv-value c-grey" id="sys-cdsp-rate-adj">--</span></div>
-                <div class="kv-item"><span class="kv-label">Clipped</span><span class="kv-value c-grey" id="sys-cdsp-clipped">--</span></div>
-                <div class="kv-item"><span class="kv-label">Xruns</span><span class="kv-value c-grey" id="sys-cdsp-xruns">--</span></div>
+                <div class="kv-item" title="Filter-chain DSP state: Running = healthy"><span class="kv-label">State</span><span class="kv-value c-grey" id="sys-cdsp-state">--</span></div>
+                <div class="kv-item" title="Active PipeWire links: actual / desired"><span class="kv-label">Links</span><span class="kv-value c-grey" id="sys-cdsp-load">--</span></div>
+                <div class="kv-item" title="Link health status from GraphManager"><span class="kv-label">Health</span><span class="kv-value c-grey" id="sys-cdsp-buffer">--</span></div>
+                <div class="kv-item" title="PW filter-chain convolver node status"><span class="kv-label">Convolver</span><span class="kv-value c-grey" id="sys-cdsp-rate-adj">--</span></div>
+                <div class="kv-item" title="Number of channels with clipped samples"><span class="kv-label">Clipped</span><span class="kv-value c-grey" id="sys-cdsp-clipped">--</span></div>
+                <div class="kv-item" title="PipeWire buffer underrun count"><span class="kv-label">Xruns</span><span class="kv-value c-grey" id="sys-cdsp-xruns">--</span></div>
             </div>
         </div>
 
@@ -276,9 +276,9 @@
         <div class="sys-section">
             <div class="sys-section-title">Scheduling</div>
             <div class="kv-grid">
-                <div class="kv-item"><span class="kv-label">PipeWire</span><span class="kv-value c-grey" id="sys-sched-pw">--</span></div>
-                <div class="kv-item"><span class="kv-label">GraphMgr</span><span class="kv-value c-grey" id="sys-sched-cdsp">--</span></div>
-                <div class="kv-item"><span class="kv-label">Graph</span><span class="kv-value c-grey" id="sys-sched-graph">--</span></div>
+                <div class="kv-item" title="PipeWire scheduling policy and RT priority"><span class="kv-label">PipeWire</span><span class="kv-value c-grey" id="sys-sched-pw">--</span></div>
+                <div class="kv-item" title="GraphManager scheduling policy and RT priority"><span class="kv-label">GraphMgr</span><span class="kv-value c-grey" id="sys-sched-cdsp">--</span></div>
+                <div class="kv-item" title="PipeWire graph thread scheduling"><span class="kv-label">Graph</span><span class="kv-value c-grey" id="sys-sched-graph">--</span></div>
             </div>
         </div>
 
@@ -286,8 +286,8 @@
         <div class="sys-section">
             <div class="sys-section-title">Memory</div>
             <div class="kv-grid">
-                <div class="kv-item"><span class="kv-label">Used</span><span class="kv-value c-grey" id="sys-mem-used">--</span></div>
-                <div class="kv-item"><span class="kv-label">Available</span><span class="kv-value c-grey" id="sys-mem-avail">--</span></div>
+                <div class="kv-item" title="RAM currently in use"><span class="kv-label">Used</span><span class="kv-value c-grey" id="sys-mem-used">--</span></div>
+                <div class="kv-item" title="RAM available for new allocations"><span class="kv-label">Available</span><span class="kv-value c-grey" id="sys-mem-avail">--</span></div>
             </div>
         </div>
 
@@ -295,11 +295,11 @@
         <div class="sys-section">
             <div class="sys-section-title">Processes</div>
             <div class="proc-grid">
-                <div class="proc-item"><span class="proc-name">Mixxx</span><span class="proc-value" id="sys-proc-mixxx">--</span></div>
-                <div class="proc-item"><span class="proc-name">Reaper</span><span class="proc-value" id="sys-proc-reaper">--</span></div>
-                <div class="proc-item"><span class="proc-name">GraphMgr</span><span class="proc-value" id="sys-proc-camilladsp">--</span></div>
-                <div class="proc-item"><span class="proc-name">PipeWire</span><span class="proc-value" id="sys-proc-pipewire">--</span></div>
-                <div class="proc-item"><span class="proc-name">labwc</span><span class="proc-value" id="sys-proc-labwc">--</span></div>
+                <div class="proc-item" title="DJ software — active in DJ/PA mode"><span class="proc-name">Mixxx</span><span class="proc-value" id="sys-proc-mixxx">--</span></div>
+                <div class="proc-item" title="DAW — active in Live vocal mode"><span class="proc-name">Reaper</span><span class="proc-value" id="sys-proc-reaper">--</span></div>
+                <div class="proc-item" title="PipeWire link topology manager (port 4002)"><span class="proc-name">GraphMgr</span><span class="proc-value" id="sys-proc-camilladsp">--</span></div>
+                <div class="proc-item" title="Audio server — SCHED_FIFO 88 on PREEMPT_RT"><span class="proc-name">PipeWire</span><span class="proc-value" id="sys-proc-pipewire">--</span></div>
+                <div class="proc-item" title="Wayland compositor — hardware V3D GL"><span class="proc-name">labwc</span><span class="proc-value" id="sys-proc-labwc">--</span></div>
             </div>
         </div>
 
@@ -335,13 +335,13 @@
         <!-- Left column: Gain controls -->
         <div class="cfg-column cfg-gains">
             <div class="cfg-section">
-                <div class="cfg-section-title">CHANNEL GAINS</div>
+                <div class="cfg-section-title" title="Per-channel linear gain (Mult) — session-only, reverts on PW restart">CHANNEL GAINS</div>
                 <div class="cfg-gain-list" id="cfg-gain-list">
                     <!-- Populated by config.js -->
                 </div>
                 <div class="cfg-gain-actions">
-                    <button class="cfg-apply-btn" id="cfg-gain-apply" disabled>APPLY</button>
-                    <button class="cfg-reset-btn" id="cfg-gain-reset" disabled>RESET</button>
+                    <button class="cfg-apply-btn" id="cfg-gain-apply" disabled title="Apply gain changes via pw-cli (session-only)">APPLY</button>
+                    <button class="cfg-reset-btn" id="cfg-gain-reset" disabled title="Revert to last applied values">RESET</button>
                 </div>
                 <div class="cfg-gain-status" id="cfg-gain-status"></div>
             </div>
@@ -350,14 +350,14 @@
         <!-- Right column: Engine settings -->
         <div class="cfg-column cfg-engine">
             <div class="cfg-section">
-                <div class="cfg-section-title">QUANTUM</div>
+                <div class="cfg-section-title" title="PipeWire buffer size — controls latency vs CPU trade-off">QUANTUM</div>
                 <div class="cfg-quantum-row">
                     <div class="cfg-quantum-btns" id="cfg-quantum-btns">
-                        <button class="cfg-quantum-btn" data-q="256">256</button>
-                        <button class="cfg-quantum-btn" data-q="512">512</button>
-                        <button class="cfg-quantum-btn" data-q="1024">1024</button>
+                        <button class="cfg-quantum-btn" data-q="256" title="256 samples = ~5.3 ms — Live mode (low latency)">256</button>
+                        <button class="cfg-quantum-btn" data-q="512" title="512 samples = ~10.7 ms — balanced">512</button>
+                        <button class="cfg-quantum-btn" data-q="1024" title="1024 samples = ~21.3 ms — DJ mode (efficient)">1024</button>
                     </div>
-                    <span class="cfg-quantum-latency" id="cfg-quantum-latency">Latency: -- ms</span>
+                    <span class="cfg-quantum-latency" id="cfg-quantum-latency" title="Calculated one-way PA path latency at current sample rate">Latency: -- ms</span>
                 </div>
                 <div class="cfg-quantum-warning" id="cfg-quantum-warning">
                     Changing quantum affects all audio paths.
@@ -390,22 +390,22 @@
     <div class="cfg-layout cfg-fir-layout" id="cfg-fir-gen">
         <div class="cfg-column">
             <div class="cfg-section">
-                <div class="cfg-section-title">FIR FILTER GENERATION</div>
+                <div class="cfg-section-title" title="Generate minimum-phase FIR filters (crossover + room correction)">FIR FILTER GENERATION</div>
                 <div class="fir-form">
                     <div class="fir-form-row">
                         <label class="fir-form-label" for="fir-profile">Profile</label>
-                        <select class="fir-form-select" id="fir-profile">
+                        <select class="fir-form-select" id="fir-profile" title="Speaker profile — defines topology, crossover, and driver assignments">
                             <option value="">Loading...</option>
                         </select>
                     </div>
                     <div class="fir-form-row">
                         <label class="fir-form-label">Mode</label>
                         <div class="fir-mode-toggle">
-                            <label class="fir-mode-option">
+                            <label class="fir-mode-option" title="Generate crossover filters only — no room correction applied">
                                 <input type="radio" name="fir-mode" value="crossover_only" checked>
                                 <span>Crossover Only</span>
                             </label>
-                            <label class="fir-mode-option">
+                            <label class="fir-mode-option" title="Combine crossover with room correction from a measurement session">
                                 <input type="radio" name="fir-mode" value="crossover_plus_correction">
                                 <span>Crossover + Correction</span>
                             </label>
@@ -413,13 +413,13 @@
                     </div>
                     <div class="fir-form-row hidden" id="fir-session-row">
                         <label class="fir-form-label" for="fir-session-dir">Session</label>
-                        <select class="fir-form-select" id="fir-session-dir">
+                        <select class="fir-form-select" id="fir-session-dir" title="Measurement session containing room impulse responses">
                             <option value="">No sessions available</option>
                         </select>
                     </div>
                     <div class="fir-form-row">
                         <label class="fir-form-label" for="fir-n-taps">Filter Taps</label>
-                        <select class="fir-form-select" id="fir-n-taps">
+                        <select class="fir-form-select" id="fir-n-taps" title="FIR length — more taps = finer low-freq resolution, more CPU">
                             <option value="4096">4096 (light)</option>
                             <option value="8192">8192 (standard)</option>
                             <option value="16384" selected>16384 (full)</option>
@@ -428,7 +428,7 @@
                     </div>
                     <div class="fir-form-row">
                         <label class="fir-form-label" for="fir-sample-rate">Sample Rate</label>
-                        <select class="fir-form-select" id="fir-sample-rate">
+                        <select class="fir-form-select" id="fir-sample-rate" title="Must match PipeWire sample rate (usually 48000)">
                             <option value="44100">44100 Hz</option>
                             <option value="48000" selected>48000 Hz</option>
                             <option value="96000">96000 Hz</option>
@@ -437,20 +437,22 @@
                     <div class="fir-form-row">
                         <label class="fir-form-label">Target SPL</label>
                         <div class="fir-phon-presets" id="fir-phon-presets">
-                            <button class="fir-phon-btn" data-phon="70" type="button">Quiet 70</button>
-                            <button class="fir-phon-btn active" data-phon="85" type="button">Normal 85</button>
-                            <button class="fir-phon-btn" data-phon="95" type="button">Loud 95</button>
-                            <button class="fir-phon-btn" data-phon="105" type="button">Full 105</button>
+                            <button class="fir-phon-btn" data-phon="70" type="button" title="70 phon — quiet listening, more bass boost per ISO 226">Quiet 70</button>
+                            <button class="fir-phon-btn active" data-phon="85" type="button" title="85 phon — normal SPL, moderate bass boost">Normal 85</button>
+                            <button class="fir-phon-btn" data-phon="95" type="button" title="95 phon — loud PA, reduced bass boost">Loud 95</button>
+                            <button class="fir-phon-btn" data-phon="105" type="button" title="105 phon — full-power PA, near-flat target">Full 105</button>
                         </div>
                     </div>
                     <div class="fir-form-row fir-advanced-row">
                         <label class="fir-form-label" for="fir-target-phon">Custom phon</label>
                         <input class="fir-form-input" id="fir-target-phon" type="number"
-                               min="20" max="120" step="1" placeholder="override preset" value="85">
+                               min="20" max="120" step="1" placeholder="override preset" value="85"
+                               title="Override preset — ISO 226 equal-loudness target in phon (20-120)">
                     </div>
                 </div>
                 <div class="fir-actions">
-                    <button class="cfg-apply-btn fir-generate-btn" id="fir-generate-btn" type="button">
+                    <button class="cfg-apply-btn fir-generate-btn" id="fir-generate-btn" type="button"
+                            title="Generate minimum-phase FIR WAV files for all channels">
                         GENERATE FILTERS
                     </button>
                     <span class="fir-spinner hidden" id="fir-spinner"></span>
@@ -480,7 +482,8 @@
                     <span class="fir-deploy-active-value c-grey" id="fir-deploy-active-value">--</span>
                 </div>
                 <div class="fir-deploy-actions">
-                    <button class="cfg-apply-btn fir-deploy-btn" id="fir-deploy-btn" type="button" disabled>
+                    <button class="cfg-apply-btn fir-deploy-btn" id="fir-deploy-btn" type="button" disabled
+                            title="Copy generated WAV files to /etc/pi4audio/coeffs/">
                         DEPLOY TO PI
                     </button>
                     <span class="fir-spinner hidden" id="fir-deploy-spinner"></span>
@@ -496,7 +499,8 @@
                         <span>I confirm amps are off / system is muted</span>
                     </label>
                     <div class="fir-deploy-actions">
-                        <button class="cfg-apply-btn fir-reload-btn" id="fir-reload-btn" type="button" disabled>
+                        <button class="cfg-apply-btn fir-reload-btn" id="fir-reload-btn" type="button" disabled
+                                title="Restart PipeWire to load new filters — WARNING: interrupts audio">
                             RELOAD PIPEWIRE
                         </button>
                         <span class="fir-spinner hidden" id="fir-reload-spinner"></span>
@@ -531,7 +535,8 @@
                             <input type="checkbox" id="fv-cleanup-confirm-cb">
                             <span>I confirm deletion of old versions</span>
                         </label>
-                        <button class="cfg-reset-btn fv-cleanup-btn" id="fv-cleanup-btn" type="button" disabled>
+                        <button class="cfg-reset-btn fv-cleanup-btn" id="fv-cleanup-btn" type="button" disabled
+                                title="Delete old versioned filter files, keeping the 2 most recent per channel">
                             CLEAN UP OLD VERSIONS
                         </button>
                     </div>
@@ -565,7 +570,7 @@
                     <div class="spk-loading">Loading...</div>
                 </div>
                 <div class="spk-list-actions">
-                    <button class="spk-add-btn" id="spk-add-profile" type="button">+ NEW PROFILE</button>
+                    <button class="spk-add-btn" id="spk-add-profile" type="button" title="Create a new speaker profile (topology, crossover, driver assignments)">+ NEW PROFILE</button>
                 </div>
             </div>
             <div class="cfg-section">
@@ -574,7 +579,7 @@
                     <div class="spk-loading">Loading...</div>
                 </div>
                 <div class="spk-list-actions">
-                    <button class="spk-add-btn" id="spk-add-identity" type="button">+ NEW IDENTITY</button>
+                    <button class="spk-add-btn" id="spk-add-identity" type="button" title="Create a new speaker identity (driver T/S parameters, power handling)">+ NEW IDENTITY</button>
                 </div>
             </div>
         </div>
@@ -592,9 +597,9 @@
                     </div>
                     <div class="spk-detail-body" id="spk-detail-body"></div>
                     <div class="spk-detail-actions" id="spk-detail-actions">
-                        <button class="cfg-apply-btn spk-activate-btn hidden" id="spk-activate-btn" type="button">ACTIVATE</button>
-                        <button class="spk-edit-btn" id="spk-edit-btn" type="button">EDIT</button>
-                        <button class="spk-delete-btn" id="spk-delete-btn" type="button">DELETE</button>
+                        <button class="cfg-apply-btn spk-activate-btn hidden" id="spk-activate-btn" type="button" title="Activate this profile — sets up filter-chain, thermal monitor, and gain nodes">ACTIVATE</button>
+                        <button class="spk-edit-btn" id="spk-edit-btn" type="button" title="Edit this profile or identity">EDIT</button>
+                        <button class="spk-delete-btn" id="spk-delete-btn" type="button" title="Permanently delete this profile or identity">DELETE</button>
                     </div>
                     <div class="spk-detail-status" id="spk-detail-status"></div>
                 </div>
@@ -621,7 +626,7 @@
                     <div class="hw-loading">Loading...</div>
                 </div>
                 <div class="hw-list-actions">
-                    <button class="hw-add-btn" id="hw-add-amp" type="button">+ NEW AMPLIFIER</button>
+                    <button class="hw-add-btn" id="hw-add-amp" type="button" title="Create a new amplifier profile (power rating, channels, thermal specs)">+ NEW AMPLIFIER</button>
                 </div>
             </div>
             <div class="cfg-section">
@@ -630,7 +635,7 @@
                     <div class="hw-loading">Loading...</div>
                 </div>
                 <div class="hw-list-actions">
-                    <button class="hw-add-btn" id="hw-add-dac" type="button">+ NEW DAC</button>
+                    <button class="hw-add-btn" id="hw-add-dac" type="button" title="Create a new DAC profile (output channels, sample rate)">+ NEW DAC</button>
                 </div>
             </div>
         </div>
@@ -686,7 +691,7 @@
                 <span class="mw-progress-label">POST</span>
             </div>
         </div>
-        <button class="mw-abort-btn hidden" id="mw-abort-btn" data-testid="abort-measurement">ABORT</button>
+        <button class="mw-abort-btn hidden" id="mw-abort-btn" data-testid="abort-measurement" title="Abort the current measurement session">ABORT</button>
     </div>
 
     <!-- Wizard screens (only one visible at a time) -->
@@ -698,7 +703,8 @@
                 <div class="mw-title">ROOM MEASUREMENT</div>
                 <div class="mw-idle-summary hidden" id="mw-idle-summary"></div>
                 <div class="mw-idle-warning hidden c-warning" id="mw-idle-warning"></div>
-                <button class="mw-btn-hero" id="mw-start-btn" data-testid="start-measurement">
+                <button class="mw-btn-hero" id="mw-start-btn" data-testid="start-measurement"
+                        title="Begin room measurement wizard — setup, gain cal, sweep, correction">
                     START NEW MEASUREMENT
                 </button>
             </div>
@@ -711,20 +717,22 @@
                 <div class="mw-setup-form">
                     <div class="mw-form-row">
                         <label class="mw-form-label" for="mw-setup-profile">Speaker Profile</label>
-                        <select class="mw-form-input" id="mw-setup-profile">
+                        <select class="mw-form-input" id="mw-setup-profile" title="Speaker profile to measure — determines channels and crossover">
                             <option value="">Loading profiles...</option>
                         </select>
                     </div>
                     <div class="mw-form-row">
                         <label class="mw-form-label" for="mw-setup-positions">Positions</label>
                         <input class="mw-form-input" id="mw-setup-positions"
-                               type="number" min="1" max="9" value="5">
+                               type="number" min="1" max="9" value="5"
+                               title="Number of mic positions for spatial averaging (1-9)">
                     </div>
                     <div class="mw-form-row">
                         <label class="mw-form-label" for="mw-setup-target-phon">Target Loudness</label>
                         <input class="mw-form-input" id="mw-setup-target-phon"
                                type="number" min="20" max="90" step="1"
-                               placeholder="optional (phon)">
+                               placeholder="optional (phon)"
+                               title="Target SPL for ISO 226 equal-loudness curve (optional, phon)">
                     </div>
                 </div>
             </div>
@@ -969,27 +977,27 @@
 
                 <!-- Verification checks -->
                 <div class="rc-verify-checks" id="rc-verify-checks">
-                    <div class="rc-verify-item" id="rc-verify-d009">
+                    <div class="rc-verify-item" id="rc-verify-d009" title="D-009 safety: no filter may exceed -0.5 dB at any frequency">
                         <span class="rc-verify-name">D-009 Gain Limit</span>
                         <span class="rc-verify-detail">All channels &lt;= -0.5 dB</span>
                         <span class="rc-verify-result">--</span>
                     </div>
-                    <div class="rc-verify-item" id="rc-verify-minphase">
+                    <div class="rc-verify-item" id="rc-verify-minphase" title="Verifies causal minimum-phase impulse response (no pre-ringing)">
                         <span class="rc-verify-name">Minimum Phase</span>
                         <span class="rc-verify-detail">Energy concentrated in first half</span>
                         <span class="rc-verify-result">--</span>
                     </div>
-                    <div class="rc-verify-item" id="rc-verify-format">
+                    <div class="rc-verify-item" id="rc-verify-format" title="Validates WAV file format, tap count, and sample rate">
                         <span class="rc-verify-name">Format Check</span>
                         <span class="rc-verify-detail">Taps, sample rate, WAV format</span>
                         <span class="rc-verify-result">--</span>
                     </div>
-                    <div class="rc-verify-item" id="rc-verify-xover">
+                    <div class="rc-verify-item" id="rc-verify-xover" title="Checks HP + LP sum flatness at crossover frequency">
                         <span class="rc-verify-name">Crossover Sum</span>
                         <span class="rc-verify-detail">HP + LP continuity at crossover</span>
                         <span class="rc-verify-result">--</span>
                     </div>
-                    <div class="rc-verify-item" id="rc-verify-loaded">
+                    <div class="rc-verify-item" id="rc-verify-loaded" title="Confirms PipeWire convolver is running with deployed filters">
                         <span class="rc-verify-name">Filter Loaded</span>
                         <span class="rc-verify-detail">PipeWire convolver active</span>
                         <span class="rc-verify-result">--</span>
@@ -1045,11 +1053,11 @@
             <div class="tt-section">
                 <div class="tt-section-title">SIGNAL TYPE</div>
                 <div class="tt-signal-row">
-                    <button class="tt-signal-btn active" data-signal="sine">Sine</button>
-                    <button class="tt-signal-btn" data-signal="white">White</button>
-                    <button class="tt-signal-btn" data-signal="pink">Pink</button>
-                    <button class="tt-signal-btn" data-signal="sweep">Sweep</button>
-                    <button class="tt-signal-btn" data-signal="file">File</button>
+                    <button class="tt-signal-btn active" data-signal="sine" title="Single frequency sine wave">Sine</button>
+                    <button class="tt-signal-btn" data-signal="white" title="White noise — equal energy per Hz">White</button>
+                    <button class="tt-signal-btn" data-signal="pink" title="Pink noise — equal energy per octave (-3 dB/oct)">Pink</button>
+                    <button class="tt-signal-btn" data-signal="sweep" title="Log sweep from start to end frequency">Sweep</button>
+                    <button class="tt-signal-btn" data-signal="file" title="Play an audio file from the Pi filesystem">File</button>
                 </div>
             </div>
 
@@ -1068,7 +1076,8 @@
                 <div class="tt-section-title" id="tt-freq-title">FREQUENCY</div>
                 <div class="tt-slider-row">
                     <input type="range" class="tt-slider" id="tt-freq-slider"
-                           min="1.301" max="4.301" step="0.001" value="3.0">
+                           min="1.301" max="4.301" step="0.001" value="3.0"
+                           title="Frequency (log scale) — 20 Hz to 20 kHz">
                     <span class="tt-slider-value" id="tt-freq-value">1000 Hz</span>
                 </div>
             </div>
@@ -1077,7 +1086,8 @@
                 <div class="tt-section-title">SWEEP END</div>
                 <div class="tt-slider-row">
                     <input type="range" class="tt-slider" id="tt-sweep-end-slider"
-                           min="1.301" max="4.301" step="0.001" value="4.301">
+                           min="1.301" max="4.301" step="0.001" value="4.301"
+                           title="Sweep end frequency (log scale)">
                     <span class="tt-slider-value" id="tt-sweep-end-value">20000 Hz</span>
                 </div>
             </div>
@@ -1085,17 +1095,17 @@
             <div class="tt-section">
                 <div class="tt-section-title">OUTPUT CHANNEL</div>
                 <div class="tt-channel-grid">
-                    <button class="tt-channel-btn" data-ch="1">1 SatL</button>
-                    <button class="tt-channel-btn" data-ch="2">2 SatR</button>
-                    <button class="tt-channel-btn sub-channel" data-ch="3">3 Sub1</button>
-                    <button class="tt-channel-btn sub-channel" data-ch="4">4 Sub2</button>
-                    <button class="tt-channel-btn" data-ch="5">5 EngL</button>
-                    <button class="tt-channel-btn" data-ch="6">6 EngR</button>
-                    <button class="tt-channel-btn" data-ch="7">7 IEML</button>
-                    <button class="tt-channel-btn" data-ch="8">8 IEMR</button>
+                    <button class="tt-channel-btn" data-ch="1" title="Ch1 — Left satellite / wideband speaker">1 SatL</button>
+                    <button class="tt-channel-btn" data-ch="2" title="Ch2 — Right satellite / wideband speaker">2 SatR</button>
+                    <button class="tt-channel-btn sub-channel" data-ch="3" title="Ch3 — Subwoofer 1">3 Sub1</button>
+                    <button class="tt-channel-btn sub-channel" data-ch="4" title="Ch4 — Subwoofer 2">4 Sub2</button>
+                    <button class="tt-channel-btn" data-ch="5" title="Ch5 — Engineer headphone left">5 EngL</button>
+                    <button class="tt-channel-btn" data-ch="6" title="Ch6 — Engineer headphone right">6 EngR</button>
+                    <button class="tt-channel-btn" data-ch="7" title="Ch7 — Singer IEM left">7 IEML</button>
+                    <button class="tt-channel-btn" data-ch="8" title="Ch8 — Singer IEM right">8 IEMR</button>
                 </div>
                 <label class="tt-multi-toggle">
-                    <input type="checkbox" id="tt-multi-select"> MULTI
+                    <input type="checkbox" id="tt-multi-select" title="Enable multi-channel selection"> MULTI
                 </label>
             </div>
 
@@ -1103,7 +1113,8 @@
                 <div class="tt-section-title">LEVEL</div>
                 <div class="tt-slider-row">
                     <input type="range" class="tt-slider tt-level-slider" id="tt-level-slider"
-                           min="-60" max="0" step="0.1" value="-40">
+                           min="-60" max="0" step="0.1" value="-40"
+                           title="Output level in dBFS — 0 dBFS = digital full scale">
                     <span class="tt-slider-value" id="tt-level-value">-40.0 dBFS</span>
                 </div>
             </div>
@@ -1123,8 +1134,8 @@
             </div>
 
             <div class="tt-action-row">
-                <button class="tt-play-btn" id="tt-play-btn" disabled>PLAY</button>
-                <button class="tt-stop-btn" id="tt-stop-btn" disabled>STOP</button>
+                <button class="tt-play-btn" id="tt-play-btn" disabled title="Start signal generation on selected channel(s)">PLAY</button>
+                <button class="tt-stop-btn" id="tt-stop-btn" disabled title="Stop signal generation">STOP</button>
             </div>
 
             <!-- Signal generator status -->
@@ -1138,28 +1149,29 @@
             <div class="tt-section">
                 <div class="tt-section-title-row">
                     <span class="tt-section-title">SPECTRUM ANALYZER</span>
-                    <button class="tt-peak-toggle" id="tt-peak-hold" type="button">PK HOLD</button>
-                    <button class="tt-peak-reset" id="tt-peak-reset" type="button" style="display:none">RESET</button>
-                    <select class="tt-source-select" id="tt-fft-size">
+                    <button class="tt-peak-toggle" id="tt-peak-hold" type="button" title="Toggle peak hold — shows maximum level per frequency bin">PK HOLD</button>
+                    <button class="tt-peak-reset" id="tt-peak-reset" type="button" style="display:none" title="Reset peak hold trace">RESET</button>
+                    <select class="tt-source-select" id="tt-fft-size" title="FFT size — larger = finer frequency resolution, slower update">
                         <option value="2048">Perf (2048)</option>
                         <option value="4096" selected>Bal (4096)</option>
                         <option value="8192">Anl (8192)</option>
                         <option value="16384">Meas (16384)</option>
                     </select>
-                    <select class="tt-source-select" id="tt-spectrum-source">
+                    <select class="tt-source-select" id="tt-spectrum-source" title="Spectrum input source — Monitor or UMIK-1 microphone">
                         <option value="monitor" selected>Monitor (L+R)</option>
                     </select>
                 </div>
                 <div class="tt-target-curve-row" id="tt-target-curve-row">
-                    <button class="tt-peak-toggle" id="tt-target-toggle" type="button">TARGET</button>
-                    <select class="tt-source-select tt-target-curve-select" id="tt-target-curve">
+                    <button class="tt-peak-toggle" id="tt-target-toggle" type="button" title="Toggle target curve overlay on spectrum">TARGET</button>
+                    <select class="tt-source-select tt-target-curve-select" id="tt-target-curve" title="Target curve shape — Flat, Harman, or PA-style">
                         <option value="flat">Flat</option>
                         <option value="harman" selected>Harman</option>
                         <option value="pa">PA</option>
                     </select>
                     <label class="tt-target-phon-label" id="tt-target-phon-wrap">
                         <input type="number" class="tt-target-phon-input" id="tt-target-phon"
-                               min="20" max="90" step="5" value="" placeholder="phon">
+                               min="20" max="90" step="5" value="" placeholder="phon"
+                               title="ISO 226 equal-loudness level (phon) for target curve">
                     </label>
                 </div>
                 <div class="tt-spectrum-container">
@@ -1175,17 +1187,17 @@
                     SPL UNCALIBRATED — values are approximate
                 </div>
                 <div class="tt-spl-grid">
-                    <div class="tt-spl-row">
+                    <div class="tt-spl-row" title="A-weighted SPL — IEC 61672, de-emphasizes low frequencies">
                         <span class="tt-spl-label">SPL (A)</span>
                         <span class="tt-spl-value" id="tt-spl-a">--</span>
                         <span class="tt-spl-unit">dB</span>
                     </div>
-                    <div class="tt-spl-row">
+                    <div class="tt-spl-row" title="C-weighted SPL — near-flat weighting, includes low frequencies">
                         <span class="tt-spl-label">SPL (C)</span>
                         <span class="tt-spl-value" id="tt-spl-c">--</span>
                         <span class="tt-spl-unit">dB</span>
                     </div>
-                    <div class="tt-spl-row">
+                    <div class="tt-spl-row" title="Peak SPL — maximum instantaneous level (Z-weighted)">
                         <span class="tt-spl-label">SPL peak</span>
                         <span class="tt-spl-value" id="tt-spl-peak">--</span>
                         <span class="tt-spl-unit">dB</span>
