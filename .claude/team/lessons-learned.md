@@ -971,3 +971,231 @@ patience.
 4. **Pre-commit review remains the safety net.** The team lead correctly
    caught the unintended revert during diff review and restored the
    approved code. This is the process working as designed.
+
+---
+
+## L-056: Cutting corners on process creates compounding debt at venue
+
+**Date:** 2026-03-28
+**Context:** Venue session — features deployed without proper E2E tests, manual
+workarounds instead of root cause fixes, tasks bypassing PM/Architect/QE
+
+During the venue session, multiple features were pushed to production without
+going through the full story lifecycle (L-022). Tasks were created directly by
+the orchestrator and assigned to workers, bypassing PM tracking, Architect
+decomposition, and QE review. Features were declared "done" when code was
+committed — phases 4-7 (TEST through REVIEW) were skipped entirely. Manual
+`pw-link` commands replaced fixing the GM reconciler. `--self-link` on
+level-bridges replaced `--managed` mode. Stashed changes on the Pi replaced
+proper commits.
+
+**What happened at venue:**
+- 3-way config generator had 3 bugs (F-195/F-196/F-197) that would have been
+  caught by integration tests with a 3-way profile
+- Config activation button was missing from the UI
+- FIR generation did not work end-to-end
+- Graph tab showed incorrect topology
+- GM crash-looped with stale binary, requiring manual link setup
+- Each manual workaround blocked the next step and added fragility
+
+**Root cause:** Time pressure at venue created the pattern: "ship it, we'll
+fix it later." But "later" never comes at a venue — every workaround becomes
+load-bearing infrastructure for the rest of the session. The manual pw-link
+setup took longer to debug and maintain than fixing the GM would have.
+
+**Structural fix:**
+1. **No code ships to the Pi without passing integration tests for the target
+   profile.** If the target is a 3-way system, there must be a 3-way integration
+   test that passes. Mock tests with 2-way profiles do not count.
+2. **Manual workarounds must be filed as defects immediately.** Not "we'll track
+   it later" — the moment a manual workaround is applied, a defect is filed with
+   the expected automated behavior. This creates the backlog pressure to fix it.
+3. **Pre-venue checklist:** Before leaving for a venue, run the full test suite
+   against the target speaker profile, verify GM starts cleanly, verify all
+   bridges connect in `--managed` mode, verify the web UI renders correctly.
+   Any failure is a blocker — fix it before leaving.
+
+**Recurrence of:** L-017 (don't deploy without DoD), L-022 (story lifecycle
+phases must be tracked).
+
+---
+
+## L-057: Orchestrator micromanagement causes thrash loops and wrong technical decisions
+
+**Date:** 2026-03-28
+**Context:** Venue session — orchestrator told workers HOW to do tasks, made
+wrong technical calls, piled 12+ messages on worker-3
+
+The orchestrator repeatedly violated L-006 (orchestrator is not a technical
+lead) during the venue session:
+
+1. **Wrong technical call on build location.** The orchestrator instructed
+   worker-3 to build the GM binary locally and scp it to the Pi, instead of
+   letting the worker decide the build strategy. The local build completed
+   but scp failed (exit 255) because the Pi's SSH config for linux-builder
+   pointed to the home network IP (192.168.105.1), unreachable from the venue.
+   The worker would have built on the Pi directly if left to their own judgment.
+
+2. **Message piling on worker-3.** The orchestrator sent 12+ messages to
+   worker-3 during a single build/deploy cycle, including mid-execution
+   redirects, contradictory instructions, and status demands. Worker-3's
+   inbox became a queue of conflicting directives, causing confusion and
+   wasted cycles processing outdated messages (L-009, L-040 recurrence).
+
+3. **HOW instead of WHAT.** Instead of "deploy the new GM binary to the Pi,"
+   the orchestrator sent step-by-step SSH commands, specified file paths,
+   and dictated the deployment sequence. Workers are domain experts — they
+   know how to deploy a binary. The orchestrator's job is to say WHAT needs
+   to happen and ensure the right worker is assigned, not to script the
+   implementation.
+
+**Impact:** The owner had to correct the orchestrator repeatedly instead of
+getting work done. Time spent arguing about process exceeded time spent on
+actual fixes.
+
+**Structural fix:**
+1. **Task assignments contain WHAT, never HOW.** "Deploy new GM binary with
+   6ch support" — not "run nix build, then scp result/bin/graph-manager to
+   ela@172.17.78.246:/home/ela/bin/."
+2. **One message per worker per cycle.** After sending a task assignment,
+   WAIT for the worker to report back. No follow-ups, no "just checking,"
+   no mid-execution course corrections.
+3. **Technical decisions belong to workers and advisors.** If the orchestrator
+   disagrees with a worker's technical approach, it connects the worker with
+   the Architect — it does not override the worker's judgment directly.
+
+**Recurrence of:** L-006 (orchestrator is not a technical lead), L-009
+(message piling), L-040 (message piling causes confusion).
+
+---
+
+## L-058: Deployment infrastructure must be validated before leaving the lab
+
+**Date:** 2026-03-28
+**Context:** Venue session — linux-builder unreachable, Pi had stale state,
+no pre-validation of build pipeline
+
+Three deployment infrastructure failures compounded at venue:
+
+1. **linux-builder SSH unreachable.** The Pi's SSH config for the Nix remote
+   builder (`ssh-ng://builder@linux-builder`) hardcodes the home network IP
+   (192.168.105.1). At the venue (172.17.x.x network), the builder was
+   unreachable. `nix build` on the Pi could not delegate to the remote
+   builder, blocking all Rust binary rebuilds.
+
+2. **Pi had local stashes.** The Pi's working tree had stashed changes from
+   previous sessions instead of being a clean checkout. Stashes create hidden
+   state that is easy to forget and hard to audit. The Pi should always be a
+   clean `git pull` of origin/main — all code changes happen on the dev
+   machine, never on the Pi.
+
+3. **No pre-venue validation.** Nobody ran a "can we build and deploy from
+   this network?" check before arriving. The build pipeline was assumed to
+   work because it works at home. Assumptions about network topology are
+   exactly the kind of thing that breaks at venues.
+
+**Structural fix:**
+1. **Pre-venue infrastructure checklist:**
+   - Can the Pi reach the Nix remote builder from the venue network?
+   - Is the Pi's working tree clean (`git status` shows nothing)?
+   - Can we `git pull` on the Pi from the venue network?
+   - Can we `scp` binaries to the Pi from the dev machine?
+   - Is the GM binary current with HEAD?
+   If any check fails, fix it before leaving.
+
+2. **Pi SSH config for linux-builder must support venue networks.** Options:
+   - Tailscale/WireGuard VPN so the builder is always reachable
+   - Build on the dev machine (also aarch64) and scp to Pi
+   - Pre-build all binaries before leaving the lab
+   The current single-IP config is fragile by design.
+
+3. **Pi is a deployment target, not a development machine.** No stashes, no
+   local branches, no uncommitted changes. `git stash list` must be empty.
+   `git status` must show a clean working tree tracking origin/main. Any
+   deviation is a pre-venue blocker.
+
+---
+
+## L-059: Features without integration tests for the target profile will have bugs at venue
+
+**Date:** 2026-03-28
+**Context:** F-195/F-196/F-197 — three bugs in config generators that only
+manifest with 3-way speaker profiles
+
+Three bugs shipped to production that all share the same root cause: the code
+was tested only with 2-way profiles, but the venue uses a 3-way system.
+
+- **F-195:** `pw_config_generator.py` looked up `gain_staging[role]` with raw
+  role names ("midrange", "tweeter"). Profiles only define "satellite" and
+  "subwoofer" groups, so midrange/tweeter got empty dicts, defaulting to -60 dB.
+- **F-196:** `generate_bose_filters.py` treated `crossover.frequency_hz` as a
+  scalar. 3-way profiles use a list (`[300, 2000]`), causing a crash.
+- **F-197:** `speaker_routes.py:_compute_target_gains()` unconditionally mapped
+  all non-subwoofer roles to `gain_staging["satellite"]`, ignoring per-role keys
+  in the profile. Safety-critical: wrong D-043 ramp-up targets.
+
+All three would have been caught by a single integration test that generates a
+PW filter-chain config from the `workshop-c3d-elf-3way` profile and validates
+the output.
+
+**Root cause:** The test suite's speaker profiles are all 2-way. The 3-way
+profile was created for the venue but no corresponding test fixtures were
+added. Code paths that only activate for N > 2 ways were untested.
+
+**Structural fix:**
+1. **Every speaker profile in `data/speaker-profiles/` must have a
+   corresponding integration test.** If a profile exists, a test must exercise
+   the full pipeline: profile load, config generation, filter generation, and
+   gain staging resolution.
+2. **New speaker roles require test coverage.** When adding a role like
+   "midrange" or "tweeter," add test cases that exercise gain_staging lookup,
+   channel suffix mapping, and config generation for that role.
+3. **The QE non-blocking test gap flagged during F-195/F-196 review (no
+   integration test for `workshop-c3d-elf-3way` in `test_pw_config_generator.py`)
+   should be promoted to a blocking requirement** before the next venue session.
+
+---
+
+## L-060: Manual workarounds accumulate into an unmanageable debt stack
+
+**Date:** 2026-03-28
+**Context:** Venue session — each manual workaround blocked or complicated
+the next step
+
+The venue session accumulated a stack of manual workarounds, each building
+on the previous:
+
+1. GM reconciler bugs → manual `pw-link` for audio routing (12 links)
+2. `--managed` mode requires GM → switched to `--self-link` on level-bridges
+3. `--self-link` relies on WirePlumber auto-linking → WP doesn't create
+   monitor tap links → manual `pw-link` for level-bridges too
+4. GM binary stale → service crash-loops → GM stopped entirely
+5. GM stopped → FilterChainCollector reports "Disconnected" → DSP status
+   shows disconnected in UI → owner reports bug
+6. nftables rule too narrow → owner can't access UI from venue IP →
+   emergency firewall change
+
+Each workaround was individually reasonable ("we need audio NOW"), but
+collectively they created a system that nobody fully understood. When
+something broke, debugging required tracing through layers of manual state
+that existed only in the operator's memory and chat logs.
+
+**Root cause:** The pressure to have working audio at the venue overrides
+the discipline to fix root causes. But manual workarounds are more fragile
+than automated solutions — they break silently (a missed pw-link), they
+don't survive reboots, and they can't be reproduced from git.
+
+**Structural fix:**
+1. **If a manual workaround is needed at a venue, document it as a script
+   immediately.** Not "we'll script it later" — write the script now, even
+   if it's just the pw-link commands in a .sh file. A script is reproducible;
+   chat-log commands are not.
+2. **Every manual workaround is a defect.** File it. Track it. The backlog
+   pressure to automate it comes from the defect count, not from memory.
+3. **Post-venue retrospective is mandatory.** Before the next coding session,
+   review all manual workarounds from the venue and convert them to proper
+   fixes or automation. The venue session is a stress test that reveals
+   gaps — those gaps must be closed before the next venue.
+4. **The GM reconciler is the single biggest source of manual workarounds.**
+   Fixing US-106 (GM production readiness) eliminates the entire manual
+   pw-link stack. This should be the highest priority post-venue work.

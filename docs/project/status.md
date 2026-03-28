@@ -273,23 +273,62 @@ stability tests (T3d, T4) and DJ controller integration (US-005/US-006).
 - **Audio Engineer:** ALL 5 stories APPROVED. No rework.
 - **Security Specialist:** S-001/S-002 HIGH RESOLVED (#109 + #115 committed). No open security findings.
 - **Architect:** 3 rework items ALL RESOLVED (#110, #112, #111). 5 warnings noted (not blocking). 9 GOOD.
-**VENUE SESSION (2026-03-28 evening) — Pi at 172.17.78.246:**
-- worker-2 → **IDLE** — #213, #216 completed. 2 untracked local fixes awaiting Architect review + CM commit (`pw_config_generator.py:194` gain-staging, `generate_bose_filters.py:54` frequency_hz list). 1122+823 tests pass.
-- worker-3 → **IDLE** — #214, #215, #218 completed. #217 (GM deploy to Pi) **STOPPED by owner**. Pi in broken state (GM crash-looping, stashes not dropped, orphaned Nix builds).
-- worker-1 → **UNKNOWN** — never responded this session. JS mono sum work mentioned but no details received.
-- **ADVISORY CONSENSUS REACHED:** Architect + AE + AD all agree on D-049 architecture with Option A (dedicated pcm-bridge-umik on port 9093). Process gate CLEARED — workers may commit.
-- **AD challenge findings (5):**
-  - AD-MON-1 (HIGH): Level-bridge never deployed to Pi — task #9 priority elevated
-  - AD-MON-2 (MEDIUM): No UI bridge-disconnected vs channel-silent distinction → F-194
-  - AD-MON-3 (MEDIUM): UMIK-1 ch index hardcoded in spl-global.js → F-193
-  - AD-MON-4 (LOW): SPL hero could use level-bridge RMS for Z-weighted SPL (enhancement)
-  - AD-MON-5 (HIGH): Level-bridge MUST use `--managed` not `--self-link` (GM/WP conflict) → constraint on task #9 + US-084
-- **Root cause of F-187 noise:** pcm-bridge was changed to 4ch for UMIK-1 support, which broke monitoring for 3-way setup. Owner frustrated with manual patches making things worse.
-- **PO RECLASSIFICATION (2026-03-28):** F-188/F-189/F-190/F-191 are NOT independent defects — reclassified as **US-091 test findings** (N-way AC failures). US-091 status changed to conditional pass, NOT owner-accepted. F-192 remains as independent defect (US-084 monitoring architecture gap, not N-way). F-193/F-194 remain as independent defects (AD findings).
-- **PO DECISION on UMIK-1 (REVISED):** Extend US-084 with new AC for dedicated pcm-bridge-umik (port 9093). PO agreed with PM recommendation — same architecture pattern, one additional instance. AC added to user-stories.md. Existing US-084 ACs unchanged. Monitoring architecture (non-UMIK) covered by US-084 + existing docs (TW gap only).
-- **Task #9 priority elevated:** Level-bridge Pi deployment — zero production validation of the architecture all venue fixes depend on.
-- **Open independent defects:** F-192 (wrong tap point, MEDIUM, US-084 gap), F-193 (UMIK ch index, MEDIUM), F-194 (bridge disconnect UX, MEDIUM).
-- **US-107 filed:** GM Runtime Layout Reconfiguration via RPC. MEDIUM priority. Activate endpoint sends new layout to GM via RPC (port 4002), GM reconciles links in-place without restart. Avoids USBStreamer transient risk. Depends on US-059, US-106, US-091. Draft status, needs Architect + AE + AD spec.
+**POST-VENUE PRIORITIES (owner directive, 2026-03-28 — Pi unavailable, local work only):**
+
+Owner assessment: venue exposed that features were declared done without proper tests, manual workarounds substituted for root cause fixes, process was bypassed. All future work requires proper Architect decomposition before implementation.
+
+**Priority 1: Venue lessons learned (L-056+)** — Task #223
+- Phase: PENDING — needs writing
+- Owner reflection on process failures, cutting corners, untested "done" features
+- Must be recorded before moving forward
+
+**Priority 2: US-106 — Fix reconciler / WirePlumber** — Tasks #194-198
+- Phase: PLANNED (5 tasks filed, owner said plan only, no impl yet)
+- Root cause: `policy.standard = disabled` in production WP config
+- GM must actually manage links — eliminates manual pw-link workarounds
+- Critical path: #194 → (#195 || #198) → #197 → #196
+- **Awaiting owner authorization to begin implementation**
+
+**Priority 3: F-183 — Remove IIR HPF from config generator (D-055)**
+- Phase: RESOLVED in PW config (commit 147), but config_generator.py code still generates IIR nodes
+- Needs Architect review: ensure config generator no longer emits IIR biquad HPF
+- Safety gap: drivers unprotected during dirac placeholder phase until FIR HPF embedded
+
+**Priority 4: Test gaps — features "done" that don't work:**
+- **FIR generation E2E:** "I still can't compute an FIR" — needs Architect audit of the full pipeline (US-090 + US-097 + US-098)
+- **Room simulator correctness:** Unverified — simulation produces output but accuracy never validated against known references (US-067)
+- **Graph tab truthfulness:** "The graph is a lie" — shows topology that doesn't match PW reality (US-095, F-169 0/0 links)
+- **Config activation flow:** Profile activate → GM layout → filter deploy → ramp-up chain needs E2E verification (US-089 + D-043)
+- Phase: NEEDS ARCHITECT DECOMPOSITION — no implementation tasks until gaps are properly scoped
+- Task #224 filed: audit and plan for all 4 test gaps
+
+**Worker assignments:**
+- worker-2 → **IDLE** — F-195/F-196 fixes committed (#219 completed). F-197 fix committed (#222 completed).
+- worker-3 → **IDLE** — #214, #215, #218 completed. #217 stopped by owner (Pi broken state).
+- worker-1 → **UNKNOWN** — never responded this session.
+
+**Venue session summary (completed work):**
+- Commits 145-155 pushed (UMIK ch index, 3-way config gen, IIR HPF removal, N-way routing, web UI 6ch, config_generator fixes, target gains fix)
+- F-186, F-195, F-196, F-197 RESOLVED
+- F-183 RESOLVED in PW config (D-055)
+- Advisory consensus on D-049 + Option A (dedicated pcm-bridge-umik port 9093)
+- US-084 extended with UMIK-1 bridge AC
+- US-107 filed (GM runtime layout RPC, draft)
+- PO reclassification: F-188-191 are US-091 test findings, not independent defects
+- AD challenge: 5 findings incorporated (AD-MON-1 through AD-MON-5)
+- Pi left at venue in broken state (#217 stopped — GM crash-looping, stashes not dropped)
+
+**Open defects:**
+- F-169 (MEDIUM): Graph tab 0/0 links — blocked by US-106
+- F-173 (LOW): THM missing — needs active profile
+- F-178 (MEDIUM): Target curve offset — config-driven fix needed
+- F-179 (MEDIUM): DSP shows Idle while playing
+- F-180 (LOW): Events newest-first
+- F-182 (MEDIUM): Target curve selection + ISO 226 toggle
+- F-187 (CRITICAL): Venue noise — likely resolved by bridge reconfig
+- F-192 (MEDIUM): Wrong tap point — US-084 gap
+- F-193 (MEDIUM): UMIK ch index hardcoded in spl-global.js
+- F-194 (MEDIUM): No bridge-disconnected vs silent UI distinction
 - **Venue fixes committed:** commit 145 (UMIK ch index JS fix), commit 146 (F-186 3-way config gen fix), commit 147 (D-055 IIR HPF removal)
 - **6 crossover-only FIR filters generated + deployed to Pi**
 - **PROCESS GATE CLEARED:** Advisory consensus reached (Architect + AE + AD). Workers may commit. Key constraint from AD: level-bridge instances must use `--managed` flag (AD-MON-5).
