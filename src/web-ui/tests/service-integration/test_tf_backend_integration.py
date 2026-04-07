@@ -163,11 +163,11 @@ class TestTfDataProcessing:
     """The TF engine must process data and produce plausible results."""
 
     @pytest.mark.xfail(
-        reason="F-270: blocks_accumulated requires active audio stimulus; "
-        "local-demo has no source playing by default",
+        reason="F-270: TF engine blocks_accumulated stays 0 despite audio "
+        "stimulus — room-sim capture-usb path may not propagate signal",
         strict=False,
     )
-    def test_blocks_accumulated_increments(self, ws_url):
+    def test_blocks_accumulated_increments(self, ws_url, audio_stimulus):
         """blocks_accumulated increases across frames, proving the engine runs."""
         frames = _collect_frames_sync(ws_url, count=FRAME_COUNT)
         first_blocks = frames[0]["blocks_accumulated"]

@@ -134,11 +134,11 @@ class TestTfDataFlow:
             )
 
     @pytest.mark.xfail(
-        reason="F-270: blocks_accumulated requires active audio stimulus; "
-        "local-demo has no source playing by default",
+        reason="F-270: TF engine blocks_accumulated stays 0 despite audio "
+        "stimulus — room-sim capture-usb path may not propagate signal",
         strict=False,
     )
-    def test_blocks_counter_increments(self, tf_page):
+    def test_blocks_counter_increments(self, tf_page, audio_stimulus):
         """The blocks-accumulated counter shows a positive number.
 
         This proves the TF engine is processing data, not just that
