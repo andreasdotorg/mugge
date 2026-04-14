@@ -216,6 +216,21 @@ for this project. Everything below derives from those principles.
 **Commits and pushes have no test gate.** Commit and push whenever you have
 a meaningful quantum of work done. CI runs on PRs, not on every push.
 
+### Sprint branch workflow (lighter gate)
+
+When working on a sprint branch (see orchestration.md Rule 9), the testing
+gate for merging your branch into the sprint branch is lighter than for a
+PR to main:
+
+- **Worker branch to sprint branch:** T0 + relevant T1 suites must pass.
+  Full E2E (T2) is not required. Sprint lead reviews before merge.
+- **Sprint branch to main (aggregate PR):** Full T0 + T1 + T2 + Rule 13.
+  This is where the full ceremony happens.
+
+The per-change PR workflow below remains the default for standalone changes.
+
+### Per-change PR workflow (default)
+
 **Before opening a PR (T0+T1+T2) — ALL of these must pass locally:**
 ```
 nix eval .#nixosConfigurations.mugge.config.system.build.toplevel.drvPath
