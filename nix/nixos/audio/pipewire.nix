@@ -52,25 +52,18 @@ in
   };
 
   # F-020 workaround: Force PipeWire to SCHED_FIFO/88 via systemd.
-  # PipeWire's RT module fails to self-promote on PREEMPT_RT kernels.
+  # PipeWire's RT module (mod.rt) fails to self-promote on PREEMPT_RT kernels.
   # systemd sets the scheduling policy at exec time, before PipeWire starts.
   #
-  # F-291 fix: The base PipeWire unit has multiple hardening directives that
-  # each independently force NoNewPrivileges=yes at the kernel level:
-  #   - SystemCallFilter=@system-service  (seccomp → NNP)
-  #   - SystemCallArchitectures=native    (seccomp → NNP)
-  #   - LockPersonality=yes               (implies NNP)
-  #   - MemoryDenyWriteExecute=yes         (implies NNP)
-  # ALL of these must be cleared for CPUSchedulingPolicy=fifo to take effect.
-  # Acceptable for PipeWire — a trusted, upstream audio daemon on a
-  # single-user workstation already granted SCHED_FIFO/88 and unlimited memlock.
+  # NNP is intentionally LEFT ENABLED (base unit default). With NNP=1, the
+  # kernel blocks mod.rt's sched_setscheduler() call, so it cannot interfere
+  # with systemd's pre-exec FIFO/88. Without NNP, mod.rt's setnice(-11) fails
+  # (no PAM nice limit on NixOS), triggering a scheduling reset to SCHED_OTHER.
+  # NNP also preserves the base unit's security hardening (seccomp, personality
+  # lock, W^X). CPUSchedulingPolicy is applied by systemd at exec time and is
+  # exempt from NNP restrictions (PID 1 is privileged).
   systemd.user.services.pipewire = {
     serviceConfig = {
-      NoNewPrivileges = false;
-      SystemCallFilter = lib.mkForce [""];
-      SystemCallArchitectures = lib.mkForce "";
-      LockPersonality = false;
-      MemoryDenyWriteExecute = false;
       CPUSchedulingPolicy = "fifo";
       CPUSchedulingPriority = 88;
     };
