@@ -25,6 +25,8 @@ let
     # PipeWire main config fragments
     mkdir -p $out/share/pipewire/pipewire.conf.d
     cp ${../../../configs/pipewire/10-audio-settings.conf}     $out/share/pipewire/pipewire.conf.d/
+    # F-291 Fix C: disable mod.rt nice level to prevent SCHED_OTHER reset.
+    cp ${../../../configs/pipewire/11-rt-module.conf}          $out/share/pipewire/pipewire.conf.d/
     # F-295: 20-usbstreamer.conf (ada8200-in capture adapter) NOT deployed.
     # PipeWire promotes the node to driver=true at runtime despite config
     # saying false, adding a dormant driver node to the graph. Live mode
