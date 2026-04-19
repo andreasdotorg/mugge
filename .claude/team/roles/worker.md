@@ -463,6 +463,25 @@ This rule exists because a worker declared a custom image builder "done"
 without ever building the image. All 7 reviewers then approved code that
 had never been built. The build failed. This must never happen again.
 
+## Large Document Writing (Owner Directive)
+
+**Never attempt to write a large document in a single tool call.** LLM thinking
+processes can fail to terminate when generating very large outputs all at once.
+
+**HARD RULE: Write any nontrivial document section by section.**
+
+1. **Plan the structure first.** Write the skeleton (title, section headers,
+   table of contents) as the first tool call.
+2. **Write one section per tool call.** Use the Edit tool to fill in each
+   section incrementally. Each section should be a self-contained addition.
+3. **"Nontrivial" means more than ~100 lines.** If the final document will
+   exceed ~100 lines, you MUST use the incremental approach.
+4. **This applies to all document types:** lab notes, audit reports, design
+   docs, test plans, reference documents, any markdown or text output.
+
+This rule exists because a worker attempted to write a 500+ line audit report
+in a single Write call, causing the thinking process to hang indefinitely.
+
 ## Output
 
 - Modified/created files
