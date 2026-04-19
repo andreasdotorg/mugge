@@ -1,7 +1,7 @@
 # Ubuntu/Debian Pi Baseline Audit
 
 **Date:** 2026-04-19
-**Session:** S-013 (OBSERVE, worker-1) + Mixxx config capture (worker-2)
+**Session:** S-013 (OBSERVE, worker-1) + S-017 (OBSERVE, worker-3, Mixxx config capture)
 **Host:** mugge (Raspberry Pi 4B), Debian GNU/Linux 13 (trixie)
 **Kernel:** 6.12.62+rpt-rpi-v8-rt
 **Purpose:** Comprehensive read-only audit of the Debian Trixie Pi configuration
@@ -659,26 +659,167 @@ The high load average (>4.0 on 4 CPUs) is notable. Contributing factors:
 
 ## R. Mixxx Configuration
 
-**NOT CAPTURED — Pi unreachable at audit time.**
+**Captured:** OBSERVE session S-017, 2026-04-19.
 
-SSH connection to `ela@192.168.178.185` timed out. The Pi appears to be
-offline or the network path is unavailable. The Mixxx configuration capture
-(~/.mixxx/mixxx.cfg, controller mappings, audio settings) will need to be
-performed in a future OBSERVE session when the Pi is available.
+### Directory Structure
 
-### Expected Files (to capture when Pi is back online)
+```
+~/.mixxx/
+├── mixxx.cfg              # Main configuration
+├── soundconfig.xml        # Audio device routing (current)
+├── soundconfig.xml.jack-known-good  # Backup audio config (CamillaDSP era)
+├── sandbox.cfg            # (empty)
+├── effects.xml            # Effects state (5.6KB)
+├── samplers.xml           # Sampler state (555B)
+├── mixxx.log.2            # Log file
+├── analysis/              # Waveform/BPM analysis cache
+├── broadcast_profiles/    # (empty)
+├── controllers/           # MIDI controller mappings
+│   ├── Hercules DJControl MIX Ultra.midi.xml  (54.5KB)
+│   └── Hercules-DJControl-MIX-Ultra-scripts.js (6.8KB)
+└── effects/
+    ├── chains/            # 18 effect chain presets
+    └── defaults/          # 24 effect default configs
+```
 
-| Path | Contents |
-|------|----------|
-| `~/.mixxx/mixxx.cfg` | Main settings (audio backend, sample rate, buffer, skin) |
-| `~/.mixxx/controllers/` | Controller mapping files |
-| `~/.local/share/mixxx/` | Alternate config/data location |
-| Audio backend settings | PipeWire/JACK configuration within Mixxx |
+No files found in `~/.local/share/mixxx/` or `~/.config/mixxx/`.
 
-### Known from Section B
+### Sound Configuration (soundconfig.xml)
 
-From the PipeWire audit data, we know:
+**Current config — routes to USBStreamer directly:**
+
+```xml
+<SoundManagerConfig api="JACK Audio Connection Kit" deck_count="4"
+    force_network_clock="0" latency="5" samplerate="48000" sync_buffers="2">
+  <SoundDevice name="USBStreamer 8ch Output" portAudioIndex="14">
+    <output channel="0" channel_count="2" index="0" type="Master"/>
+    <output channel="4" channel_count="2" index="0" type="Headphones"/>
+  </SoundDevice>
+</SoundManagerConfig>
+```
+
+**Known-good backup (soundconfig.xml.jack-known-good) — CamillaDSP era:**
+
+```xml
+<SoundManagerConfig api="JACK Audio Connection Kit" deck_count="4"
+    force_network_clock="0" latency="5" samplerate="48000" sync_buffers="2">
+  <SoundDevice name="CamillaDSP 8ch Input" portAudioIndex="11">
+    <output channel="4" channel_count="2" index="0" type="Headphones"/>
+    <output channel="0" channel_count="2" index="0" type="Master"/>
+  </SoundDevice>
+</SoundManagerConfig>
+```
+
+**Key observations:**
+- API: JACK Audio Connection Kit (via `pw-jack`)
+- Sample rate: 48000 Hz
+- Latency setting: 5 (Mixxx internal — maps to JACK buffer size)
+- Sync buffers: 2
+- 4 decks configured
+- **Current:** Master on USBStreamer ch 0-1, headphones on ch 4-5
+- **Backup:** Same routing but targeted CamillaDSP's ALSA loopback input
+  (from before D-040 abandoned CamillaDSP)
+- `force_network_clock=0` — Mixxx does NOT drive the JACK transport clock
+- PipeWire's `pw-jack` bridge translates JACK API calls to PipeWire graph
+  ports — the "USBStreamer 8ch Output" JACK device name maps to PipeWire's
+  JACK client ports (out_0..out_3), which are then linked by
+  `pi4audio-dj-routing.service` or manual `pw-link`
+
+### Key Settings (mixxx.cfg)
+
+**Audio / Performance:**
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| `[Soundcard] Samplerate` | 48000 | Matches PipeWire graph rate |
+| `[Waveform] WaveformType` | 17 | |
+| `[Waveform] FrameRate` | 60 | 60 FPS waveform rendering |
+| `[Waveform] VSync` | 0 | VSync disabled |
+| `[Waveform] DefaultZoom` | 3 | |
+| `[Config] InhibitScreensaver` | 1 | Prevents screen blanking during sets |
+| `[Config] StartInFullscreen` | 0 | Windowed mode |
+| `[Preferences] multi_sampling` | 0 | No MSAA — saves GPU load |
+
+**Skin / UI:**
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| `[Config] ResizableSkin` | LateNight | Dark skin |
+| `[Config] Scheme` | PaleMoon | LateNight color scheme |
+| `[Config] ScaleFactor` | 1 | No UI scaling |
+| `[Config] hide_menubar` | 1 | Menu bar hidden |
+| `[Skin] show_4decks` | 0 | 2-deck layout |
+| `[Skin] show_waveforms` | 1 | Waveforms visible |
+| `[Skin] show_spinnies` | 1 | Vinyl spinners visible |
+| `[Skin] show_samplers` | 0 | Samplers hidden |
+| `[Skin] show_microphones` | 0 | Mic section hidden |
+| `[Skin] show_preview_decks` | 0 | Preview deck hidden |
+
+**DJ / Mixing:**
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| `[InternalClock] bpm` | 138.026 | Last session BPM (psytrance range) |
+| `[Mixer Profile] xFaderCurve` | 1 | Linear crossfader |
+| `[Mixer Profile] xFaderMode` | 0 | Normal (not hamster) |
+| `[Mixer Profile] HiEQFrequencyPrecise` | 2499.925 | High EQ crossover |
+| `[Mixer Profile] LoEQFrequencyPrecise` | 250.004 | Low EQ crossover |
+| `[Mixer Profile] EQsOnly` | 1 | |
+| `[Controls] CueDefault` | 0 | CDJ-style cue |
+| `[Controls] RateRangePercent` | 8 | +/-8% pitch range |
+| `[ReplayGain] InitialDefaultBoost` | -6 | -6 dB default gain |
+| `[ReplayGain] ReplayGainEnabled` | 1 | ReplayGain active |
+| `[Master] mono_mixdown` | 0 | Stereo output |
+| `[Master] keylock_engine` | 1 | |
+
+**Channel routing (orientation = crossfader assignment):**
+
+| Channel | Orientation | Meaning |
+|---------|-------------|---------|
+| Channel1 | 0 | Left (A) |
+| Channel2 | 2 | Right (B) |
+| Channel3 | 0 | Left (A) |
+| Channel4 | 2 | Right (B) |
+
+**Effect routing:** Each EffectUnit is assigned to its corresponding channel
+(Unit1->Ch1, Unit2->Ch2, Unit3->Ch3, Unit4->Ch4). No master or headphone
+effect routing.
+
+### Controller Mapping
+
+**Hercules DJControl MIX Ultra** — custom MIDI mapping.
+
+| File | Size | Date |
+|------|------|------|
+| `Hercules DJControl MIX Ultra.midi.xml` | 54,501 bytes | 2026-03-10 |
+| `Hercules-DJControl-MIX-Ultra-scripts.js` | 6,843 bytes | 2026-03-10 |
+
+```xml
+<MixxxMIDIPreset mixxxVersion="2.2" schemaVersion="1">
+  <info>
+    <name>Hercules DJControl MIX Ultra</name>
+    <author>Based on DJ Phatso / Kerrick Staley MIX mapping,
+            Ultra adaptation by pi4-audio project</author>
+    <description>MIDI Mapping for Hercules DJControl MIX Ultra
+                 (USB-MIDI mode)</description>
+  </info>
+```
+
+- Custom adaptation of the DJControl MIX mapping for the Ultra variant
+- Uses `lodash.mixxx.js` and `midi-components-0.0.js` helper libraries
+- Deck A on MIDI channel 2 (0x91), Deck B on MIDI channel 3 (0x92)
+- Mapped controls include: Play, Cue, Sync, Shift, browse encoder
+- Configured in `[ControllerPreset]` section of mixxx.cfg:
+  `DJControl_Mix_Ultra_MIDI_1 /home/ela/.mixxx/controllers/Hercules DJControl MIX Ultra.midi.xml`
+
+### Comparison with PipeWire Audit Data (Section B)
+
+From the PipeWire audit:
 - Mixxx connects via `pw-jack` (client.api=jack)
 - Mixxx node id 188, category=Duplex, role=DSP
-- 4 output ports: out_0/out_1 (main L/R to convolver), out_2/out_3 (headphone to USBStreamer ch5/ch6)
+- 4 output ports: out_0/out_1 (main L/R -> convolver), out_2/out_3 (headphone -> USBStreamer ch5/ch6)
 - Version: 2.5.0+dfsg-3+b1 (Debian arm64 package)
+
+The soundconfig.xml confirms this: Master on channels 0-1 (JACK out_0/out_1)
+and Headphones on channels 4-5 (JACK out_2/out_3). The pw-link topology in
+Section B shows how these JACK ports are connected through the PipeWire graph.
