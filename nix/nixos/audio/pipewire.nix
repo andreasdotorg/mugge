@@ -75,7 +75,14 @@ in
   security.rtkit.enable = true;
 
   # RT limits for the audio user (ela).
+  # F-291 Fix B: nice limit required because PipeWire's mod.rt calls
+  # setpriority(nice=-11) at startup. Without this limit, the call fails
+  # with EPERM, and mod.rt's error handler resets scheduling to SCHED_OTHER
+  # — undoing systemd's pre-exec FIFO/88. With NNP=1 (base unit default),
+  # mod.rt cannot call sched_setscheduler(), so FIFO/88 is safe; the nice
+  # limit only prevents mod.rt's error cascade.
   security.pam.loginLimits = [
+    { domain = "ela"; type = "-"; item = "nice";    value = "-19"; }
     { domain = "ela"; type = "-"; item = "rtprio";  value = "95"; }
     { domain = "ela"; type = "-"; item = "memlock"; value = "unlimited"; }
   ];
