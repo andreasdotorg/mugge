@@ -18,7 +18,7 @@ let
     attempt=0
     max=10
     while [ "$attempt" -lt "$max" ]; do
-      if ${pkgs.pipewire}/bin/pw-jack ${pkgs.jack2}/bin/jack_lsp > /dev/null 2>&1; then
+      if ${pkgs.pipewire.jack}/bin/pw-jack ${pkgs.jack2}/bin/jack_lsp > /dev/null 2>&1; then
         exit 0
       fi
       attempt=$((attempt + 1))
@@ -57,7 +57,7 @@ in
       serviceConfig = {
         Type = "simple";
         ExecStartPre = jackProbe;
-        ExecStart = "${pkgs.pipewire}/bin/pw-jack ${pkgs.mixxx}/bin/mixxx";
+        ExecStart = "${pkgs.pipewire.jack}/bin/pw-jack ${pkgs.mixxx}/bin/mixxx";
         Restart = "on-failure";
         RestartSec = 5;
 
