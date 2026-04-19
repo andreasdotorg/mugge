@@ -43,7 +43,7 @@ in
       "d /home/ela/.mixxx/controllers 0755 ela users - -"
       "C /home/ela/.mixxx/mixxx.cfg                                          0644 ela users - ${mixxxConfigs}/mixxx.cfg"
       "C /home/ela/.mixxx/soundconfig.xml                                    0644 ela users - ${mixxxConfigs}/soundconfig.xml"
-      "C /home/ela/.mixxx/controllers/Hercules DJControl MIX Ultra.midi.xml  0644 ela users - ${mixxxConfigs}/controllers/Hercules DJControl MIX Ultra.midi.xml"
+      ''C "/home/ela/.mixxx/controllers/Hercules DJControl MIX Ultra.midi.xml" 0644 ela users - ${mixxxConfigs}/controllers/Hercules DJControl MIX Ultra.midi.xml''
       "C /home/ela/.mixxx/controllers/Hercules-DJControl-MIX-Ultra-scripts.js 0644 ela users - ${mixxxConfigs}/controllers/Hercules-DJControl-MIX-Ultra-scripts.js"
     ];
 
