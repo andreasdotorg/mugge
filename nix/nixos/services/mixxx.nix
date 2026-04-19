@@ -12,19 +12,21 @@ let
   # Config files to seed into ~/.mixxx/ (copy-if-absent).
   mixxxConfigs = ../../../configs/mixxx;
 
-  # PipeWire JACK bridge readiness probe before launching Mixxx.
-  # Mirrors scripts/launch/start-mixxx.sh but as a systemd ExecStartPre.
+  # PipeWire readiness probe before launching Mixxx.
+  # Waits until pw-cli can connect to the PipeWire daemon. The JACK bridge
+  # (pw-jack) is always available once PipeWire is running — it just
+  # LD_PRELOADs the JACK compatibility shim.
   jackProbe = pkgs.writeShellScript "mixxx-jack-probe" ''
     attempt=0
     max=10
     while [ "$attempt" -lt "$max" ]; do
-      if ${pkgs.pipewire.jack}/bin/pw-jack ${pkgs.jack2}/bin/jack_lsp > /dev/null 2>&1; then
+      if ${pkgs.pipewire}/bin/pw-cli info 0 > /dev/null 2>&1; then
         exit 0
       fi
       attempt=$((attempt + 1))
       sleep 1
     done
-    echo "PipeWire JACK bridge not ready after $max attempts" >&2
+    echo "PipeWire not ready after $max attempts" >&2
     exit 1
   '';
 in
