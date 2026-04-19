@@ -1,7 +1,14 @@
 <!DOCTYPE SoundManagerConfig>
+<!-- Mixxx audio routing for PipeWire JACK bridge (D-040: CamillaDSP abandoned).
+     Mixxx creates 4 JACK output ports via pw-jack:
+       out_0/out_1 (Master L/R)     — linked to convolver by GraphManager/pw-link
+       out_2/out_3 (Headphones L/R) — linked to USBStreamer ch5/ch6 by GraphManager/pw-link
+     The device name "USBStreamer 8ch Output" is what PipeWire exposes through
+     the JACK bridge. portAudioIndex may vary between systems — Mixxx resolves
+     by name first. -->
 <SoundManagerConfig api="JACK Audio Connection Kit" deck_count="4" force_network_clock="0" latency="5" samplerate="48000" sync_buffers="2">
- <SoundDevice name="CamillaDSP 8ch Input" portAudioIndex="11">
-  <output channel="2" channel_count="2" index="0" type="Headphones"/>
+ <SoundDevice name="USBStreamer 8ch Output" portAudioIndex="-1">
   <output channel="0" channel_count="2" index="0" type="Master"/>
+  <output channel="4" channel_count="2" index="0" type="Headphones"/>
  </SoundDevice>
 </SoundManagerConfig>
