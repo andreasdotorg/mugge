@@ -221,7 +221,8 @@ deterministically. Verified empirically on the Pi
 
 ```
 FIFO/88  PipeWire (graph clock + filter-chain convolver)
-FIFO/83  Mixxx audio callback (data-loop.0), pipewire-pulse, WirePlumber
+FIFO/83  pipewire-pulse, WirePlumber
+FIFO/70  Mixxx audio callback (data-loop.0) — rt.prio=70 via 80-jack-no-autoconnect.conf
 FIFO/50  Kernel IRQ threads
 OTHER    Mixxx GUI, PipeWire client threads, system services
 BATCH    Mixxx disk I/O
@@ -230,8 +231,8 @@ BATCH    Mixxx disk I/O
 | Priority | Scheduler | Process / Thread | Rationale |
 |----------|-----------|------------------|-----------|
 | 88 | SCHED_FIFO | PipeWire (main) | Audio server drives the graph clock AND runs the filter-chain convolver. Post-D-040, all DSP processing happens inside the PipeWire process at this priority. |
-| 83 | SCHED_FIFO | Mixxx audio callback (`data-loop.0`) | PipeWire data loop thread inside Mixxx process. Runs Mixxx's JACK process callback (decode, mix, effects). |
-| 83 | SCHED_FIFO | pipewire-pulse, WirePlumber | PipeWire ecosystem threads. WirePlumber provides device management only (D-043): ALSA enumeration, format negotiation, port activation. Linking policies disabled via `90-no-auto-link.conf`. |
+| 70 | SCHED_FIFO | Mixxx audio callback (`data-loop.0`) | PipeWire data loop thread inside Mixxx process. Runs Mixxx's JACK process callback (decode, mix, effects). Priority set by `rt.prio = 70` in `80-jack-no-autoconnect.conf` (F-295). |
+| 83 | SCHED_FIFO | pipewire-pulse, WirePlumber | PipeWire ecosystem threads. WirePlumber provides device management only (D-043, D-065): ALSA enumeration, format negotiation, port activation. Linking prevented by per-node `node.autoconnect = false`. |
 | 50 | SCHED_FIFO | IRQ threads | Kernel default on PREEMPT_RT. Hardware interrupt handlers. |
 | 0 | SCHED_OTHER | Mixxx GUI, `pw-Mixxx` threads | GUI rendering and PipeWire client housekeeping. Not audio-critical. |
 | 0 | SCHED_BATCH | Mixxx disk I/O (`mixxx:disk$0`) | Track loading. Lowest priority (nice 19). |
@@ -250,12 +251,13 @@ threads span multiple scheduling classes:
 | main | SCHED_OTHER | nice 0 | `mixxx` | Main/GUI thread (Qt event loop, V3D GL rendering) |
 | -- | SCHED_BATCH | nice 19 | `mixxx:disk$0` | Disk I/O (track loading, lowest priority) |
 | -- | SCHED_OTHER | nice 0 | `pw-Mixxx` | PipeWire client housekeeping (2 threads) |
-| -- | **SCHED_FIFO** | **83** | **`data-loop.0`** | **Audio callback (PipeWire data loop)** |
+| -- | **SCHED_FIFO** | **70** | **`data-loop.0`** | **Audio callback (PipeWire data loop, F-295)** |
 
 When Mixxx connects to PipeWire via `pw-jack`, PipeWire creates a
 `data-loop.0` thread inside the Mixxx process. PipeWire's RT module
-elevates this thread to SCHED_FIFO/83. Mixxx's JACK process callback --
-audio decode, mixing, and effects processing -- runs inside this FIFO/83
+elevates this thread to SCHED_FIFO/70 (set by `rt.prio = 70` in
+`80-jack-no-autoconnect.conf`, F-295). Mixxx's JACK process callback --
+audio decode, mixing, and effects processing -- runs inside this FIFO/70
 thread. Mixxx does not need `chrt` or any external RT wrapper; PipeWire
 handles RT scheduling for the audio path automatically.
 
@@ -270,12 +272,12 @@ the V3D GPU driver. Elevating it to SCHED_FIFO would allow the GUI thread
 to hold the CPU while waiting for GPU operations, potentially starving the
 audio threads. The GUI thread runs at SCHED_OTHER and is preempted by the
 audio stack as needed. This is the correct design: the audio-critical work
-runs in the `data-loop.0` thread at FIFO/83, while the GUI runs at normal
+runs in the `data-loop.0` thread at FIFO/70, while the GUI runs at normal
 priority.
 
 ### Quantum 256 Is Not Viable for DJ Mode
 
-Even with FIFO/83 audio threads, quantum 256 is not viable for DJ mode.
+Even with FIFO/70 audio threads, quantum 256 is not viable for DJ mode.
 Testing showed Mixxx at 175% CPU with ~24 xruns/min at quantum 256
 ([S-003](../lab-notes/change-S-003-dj-mode-quantum.md)). The
 bottleneck is CPU throughput at the 5.3ms callback period, not scheduling
@@ -464,15 +466,15 @@ graph cycle, adding no additional buffering latency.
 |-----------|-----------|-----------|
 | PipeWire quantum | 1024 (21.3ms) | 256 (5.3ms) |
 | USBStreamer ALSA period-size | 1024 | 256 |
-| USBStreamer ALSA period-num | 3 | 3 |
-| USBStreamer ALSA buffer total | 3072 samples (64ms) | 768 samples (16ms) |
+| USBStreamer ALSA period-num | 4 (F-295) | 3 |
+| USBStreamer ALSA buffer total | 4096 samples (85ms) | 768 samples (16ms) |
 
 All values assume a 48kHz sample rate. Latency values are computed as
 samples / sample_rate (e.g., 1024 / 48000 = 21.3ms).
 
 **Critical rule (GM-12 Finding 1):** The USBStreamer ALSA period-size MUST
 match the PipeWire quantum. A period-size smaller than the quantum causes
-guaranteed underruns every audio cycle. Triple-buffering (period-num=3)
+guaranteed underruns every audio cycle. Quad-buffering (period-num=4, F-295)
 provides margin for scheduling jitter on PREEMPT_RT.
 
 ### PipeWire Quantum
@@ -515,10 +517,11 @@ buffer parameters must be coordinated with the PipeWire quantum.
 For DJ mode (quantum 1024):
 ```
 api.alsa.period-size   = 1024
-api.alsa.period-num    = 3
+api.alsa.period-num    = 4
 ```
 
-Total buffer: 1024 x 3 = 3072 samples (64ms).
+Total buffer: 1024 x 4 = 4096 samples (85ms). F-295 increased from 3 to 4
+for additional ALSA jitter margin (50% more headroom, no latency change).
 
 **The USBStreamer Buffer Discovery (GM-12 Finding 1):** The original config
 had `period-size=256, period-num=2` (buffer=512 samples). This was correct
@@ -527,7 +530,8 @@ for live mode (quantum 256) but caused guaranteed underruns in DJ mode
 logged `XRun! rate:1024/48000` with USBStreamer ERR count growing ~24/sec.
 
 **Fix:** Updated period-size to match the quantum (1024) and increased
-period-num to 3 for scheduling margin. USBStreamer ERR dropped to 0.
+period-num to 3 for scheduling margin (later increased to 4 by F-295).
+USBStreamer ERR dropped to 0.
 
 **Design rule:** The USBStreamer ALSA period-size MUST match the PipeWire
 quantum. When the system switches between DJ mode (quantum 1024) and live
@@ -581,11 +585,10 @@ pipewire.service
 - **GM must start before Mixxx/signal-gen.** GM must be listening when
   app nodes appear so the reconciler can immediately create the desired
   links and destroy any JACK bypass links.
-- **WP linking is disabled.** `90-no-auto-link.conf` ensures WP does not
-  create links during the window between WP start and GM start.
-- **JACK autoconnect is disabled.** `80-jack-no-autoconnect.conf` prevents
-  `pw-jack` applications from calling `jack_connect()` to physical ports
-  on activation. GM's reconciler handles any bypass links that still appear.
+- **WP auto-linking is prevented** by per-node `node.autoconnect = false`
+  properties on managed nodes (D-065). `80-jack-no-autoconnect.conf`
+  additionally disables JACK client autoconnect. GM's reconciler handles
+  any bypass links that still appear.
 
 **Verification:**
 
@@ -597,10 +600,6 @@ systemctl --user list-dependencies pi4audio-graph-manager.service
 # Check boot sequence worked:
 systemctl --user status wireplumber pi4audio-graph-manager mixxx
 # All three should be active (running)
-
-# Check WP config deployed:
-cat ~/.config/wireplumber/wireplumber.conf.d/90-no-auto-link.conf
-# Expected: policy.standard = disabled, policy.linking.* = disabled
 
 # Check JACK config deployed:
 cat ~/.config/pipewire/jack.conf.d/80-jack-no-autoconnect.conf
@@ -616,7 +615,7 @@ cat ~/.config/pipewire/jack.conf.d/80-jack-no-autoconnect.conf
 The complete audio signal path with RT scheduling context:
 
 ```
-Mixxx (SCHED_OTHER main thread, SCHED_FIFO/83 data-loop.0)
+Mixxx (SCHED_OTHER main thread, SCHED_FIFO/70 data-loop.0)
   |
   | pw-jack JACK bridge (via LD_PRELOAD, D-027)
   v
@@ -631,7 +630,7 @@ filter-chain convolver (runs inside PipeWire process)
   |  - ch 2: sub1 LP (crossover + room correction, L+R mono sum input)
   |  - ch 3: sub2 LP (crossover + room correction, L+R mono sum, phase-inverted)
   v
-USBStreamer hw:USBStreamer,0  (ALSA playback, period-size=1024, period-num=3)
+USBStreamer hw:USBStreamer,0  (ALSA playback, period-size=1024, period-num=4)
   |
   | USB -> ADAT
   v
@@ -655,18 +654,17 @@ three sessions (S-005, S-006, S-007) demonstrated that
 `update-alternatives` is fundamentally incompatible with `ldconfig` soname
 management for shared libraries.
 
-**WirePlumber role (D-043, amends D-039):** WirePlumber is retained for
+**WirePlumber role (D-043, D-065):** WirePlumber is retained for
 device-level services only: ALSA device enumeration, format negotiation,
 `SPA_PARAM_PortConfig` port activation (pro-audio 8-channel mode for
-USBStreamer), and USB hot-plug lifecycle. Its auto-linking policies are
-disabled. Three layers prevent bypass links:
+USBStreamer), and USB hot-plug lifecycle. Two layers prevent bypass links
+(D-065 reduced from three -- `90-no-auto-link.conf` removed because
+`policy.standard = disabled` also blocked WP format negotiation):
 
-1. **WP linking disabled:** `90-no-auto-link.conf` disables `policy.standard`,
-   `policy.linking.standard`, and `policy.linking.role-based` profiles.
-2. **JACK autoconnect disabled:** `80-jack-no-autoconnect.conf` sets
-   `node.autoconnect = false` for all JACK clients, suppressing the PW
-   stream `AUTOCONNECT` flag.
-3. **GraphManager reconciler cleanup:** GM's Phase 2 reconciliation
+1. **Autoconnect disabled:** Per-node `node.autoconnect = false` on managed
+   nodes + `80-jack-no-autoconnect.conf` for all JACK clients. Suppresses
+   both PW stream `AUTOCONNECT` flag and JACK client autoconnect.
+2. **GraphManager reconciler cleanup:** GM's Phase 2 reconciliation
    actively destroys links not in the desired set for the current mode.
    This handles JACK client `jack_connect()` bypass links that cannot be
    suppressed at the source (they originate inside PW's `libjack-pw.so`).
@@ -809,14 +807,14 @@ aplay -l | grep USBStreamer
 cat /proc/asound/USBStreamer/pcm0p/sub0/hw_params
 # Expected (DJ mode):
 #   period_size: 1024
-#   buffer_size: 3072
+#   buffer_size: 4096
 #   rate: 48000
 
 # Check PipeWire USBStreamer config:
 cat ~/.config/pipewire/pipewire.conf.d/21-usbstreamer-playback.conf | grep period
 # Expected (DJ mode):
 #   api.alsa.period-size   = 1024
-#   api.alsa.period-num    = 3
+#   api.alsa.period-num    = 4
 
 # Check USBStreamer ERR count (should be 0):
 pw-top
@@ -841,9 +839,9 @@ pw-link -l
 # Check for unwanted bypass links (should NOT exist):
 pw-link -l | grep -E "Mixxx.*USBStreamer.*AUX[0-3]"
 # Expected: empty (no direct Mixxx->USBStreamer links on speaker channels)
-# D-043: three layers prevent these (WP linking disabled, JACK autoconnect
-# disabled, GM reconciler cleanup). If present despite this, check that
-# 90-no-auto-link.conf and 80-jack-no-autoconnect.conf are deployed.
+# D-043/D-065: two layers prevent these (node.autoconnect=false + JACK
+# autoconnect disabled, GM reconciler cleanup). If present, check that
+# 80-jack-no-autoconnect.conf is deployed and node properties are set.
 ```
 
 ### Full Priority Check
@@ -873,11 +871,11 @@ ps -eLo pid,tid,cls,rtprio,ni,comm -p $(pgrep -x mixxx)
 #   mixxx        TS   -   0   mixxx           (GUI, SCHED_OTHER)
 #   mixxx:disk$0 BT   -  19   mixxx           (disk I/O, SCHED_BATCH)
 #   pw-Mixxx     TS   -   0   mixxx           (PipeWire housekeeping x2)
-#   data-loop.0  FF  83   -   mixxx           (audio callback, SCHED_FIFO)
+#   data-loop.0  FF  70   -   mixxx           (audio callback, SCHED_FIFO, F-295)
 
 # Or check just the FIFO thread:
 ps -eLo pid,tid,cls,rtprio,comm -p $(pgrep -x mixxx) | grep FF
-# Expected: data-loop.0 at FF/83
+# Expected: data-loop.0 at FF/70
 ```
 
 ---
@@ -905,8 +903,7 @@ ps -eLo pid,tid,cls,rtprio,comm -p $(pgrep -x mixxx) | grep FF
 | `10-audio-settings.conf` | `configs/pipewire/` | PipeWire quantum settings |
 | `30-filter-chain-convolver.conf` | On Pi: `~/.config/pipewire/pipewire.conf.d/` | PW filter-chain convolver config |
 | `21-usbstreamer-playback.conf` | On Pi: `~/.config/pipewire/pipewire.conf.d/` | USBStreamer ALSA buffer config |
-| `80-jack-no-autoconnect.conf` | On Pi: `~/.config/pipewire/jack.conf.d/` | Disable JACK client autoconnect (D-043) |
-| `90-no-auto-link.conf` | On Pi: `~/.config/wireplumber/wireplumber.conf.d/` | Disable WP linking policies (D-043) |
+| `80-jack-no-autoconnect.conf` | On Pi: `~/.config/pipewire/jack.conf.d/` | Disable JACK client autoconnect + set rt.prio=70 (D-043, F-295) |
 | `combined_*.wav` | On Pi: `/etc/pi4audio/coeffs/` | FIR coefficient files (4 channels) |
 
 ### Lab Notes (evidence for quoted numbers)

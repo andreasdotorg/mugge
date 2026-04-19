@@ -660,16 +660,20 @@ Pi, loaded as drop-in files in lexicographic order:
 | File | Purpose |
 |------|---------|
 | `10-audio-settings.conf` | Global clock: 48kHz, quantum range 256-1024 |
-| `20-usbstreamer.conf` | ADA8200 capture adapter (8ch input via ADAT) |
+| `20-usbstreamer.conf` | ADA8200 capture adapter (8ch input via ADAT). **Not deployed in DJ-only mode** (F-295: removing ada8200-in reduced xrun pressure). Needed for Live mode. |
 | `21-usbstreamer-playback.conf` | USBStreamer playback adapter (8ch output, graph driver) |
 | `30-filter-chain-convolver.conf` | FIR convolver + gain nodes (8ch, D-063) |
 
 These files are version-controlled in this repository under `configs/pipewire/`.
 
-#### Deploy Configuration to Pi
+**NixOS deployment:** On the NixOS Pi, these configs are managed by the flake
+(`nix run nixpkgs#nixos-rebuild -- switch --flake .#mugge-deploy`). Manual
+`scp` is not needed for NixOS.
+
+#### Deploy Configuration to Pi (Debian/manual)
 
 ```bash
-# Copy config files to the Pi
+# Copy config files to the Pi (omit 20-usbstreamer.conf for DJ-only mode)
 scp configs/pipewire/10-audio-settings.conf \
     configs/pipewire/20-usbstreamer.conf \
     configs/pipewire/21-usbstreamer-playback.conf \
@@ -2019,7 +2023,7 @@ sudo apt install -y \
 
 ~/.config/pipewire/pipewire.conf.d/
 ├── 10-audio-settings.conf             — Global clock: 48kHz, quantum range 256-1024
-├── 20-usbstreamer.conf                — ADA8200 capture adapter (8ch input via ADAT)
+├── 20-usbstreamer.conf                — ADA8200 capture adapter (Live mode only, F-295)
 ├── 21-usbstreamer-playback.conf       — USBStreamer playback adapter (8ch output, graph driver)
 └── 30-filter-chain-convolver.conf     — FIR convolver + gain nodes (8ch, D-063)
 
