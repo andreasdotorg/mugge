@@ -60,12 +60,8 @@
     };
 
     # hw-in: captures ADA8200 input (ADC, 8ch via ADAT)
-    # DISABLED: ada8200-in was removed from deployment (F-295, commit f62ce637).
-    # This instance targets a non-existent node and enters a reconnect loop,
-    # contributing to graph scheduling pressure. Re-enable when US-158
-    # (GraphManager manages ada8200-in lifecycle per mode) is implemented.
     hw-in = {
-      enable = false;
+      enable = true;
       mode = "capture";
       target = "ada8200-in";
       nodeName = "pi4audio-level-bridge-hw-in";
@@ -92,11 +88,8 @@
     };
 
     # capture-usb: reads from USBStreamer ALSA input
-    # DISABLED: worst ERR offender (122 ERR / 11 min). No input audio in DJ
-    # mode — this node self-promotes to driver and adds scheduling pressure
-    # to the graph cycle. Re-enable for Live mode (vocal mic input).
     capture-usb = {
-      enable = false;
+      enable = true;
       mode = "capture";
       target = "alsa_input.usb-MiniDSP_USBStreamer-00.pro-input-0";
       port = 9091;
