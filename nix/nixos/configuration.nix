@@ -36,6 +36,7 @@
     ./services/pcm-bridge.nix
     ./services/signal-gen.nix
     ./services/web-ui.nix
+    ./services/mixxx.nix
     # Production defaults: enables all services with correct parameters
     ./production.nix
   ];

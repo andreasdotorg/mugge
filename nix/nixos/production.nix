@@ -99,6 +99,9 @@
     };
   };
 
+  # ── Mixxx DJ ────────────────────────────────────────────────────
+  services.pi4audio.mixxx.enable = true;
+
   # ── Web UI ───────────────────────────────────────────────────────
   services.pi4audio.web-ui = {
     enable = true;
