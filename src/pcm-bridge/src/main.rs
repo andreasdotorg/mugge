@@ -242,6 +242,7 @@ fn build_stream_props(args: &Args) -> pipewire::properties::Properties {
                 "media.class" => "Stream/Input/Audio",
                 "node.name" => "pi4audio-pcm-bridge-capture",
                 "node.description" => "PCM Bridge Capture",
+                "node.passive" => "true",
                 "audio.channels" => &*channels_str,
                 "target.object" => target,
             }
@@ -679,6 +680,14 @@ mod tests {
             let args = make_args(Mode::Capture, "loopback-8ch-sink", Some("usb-input"), 8);
             let props = build_stream_props(&args);
             assert_eq!(props.get("node.name"), Some("pi4audio-pcm-bridge-capture"));
+        }
+
+        #[test]
+        fn props_capture_is_passive() {
+            ensure_pw_init();
+            let args = make_args(Mode::Capture, "loopback-8ch-sink", Some("usb-input"), 8);
+            let props = build_stream_props(&args);
+            assert_eq!(props.get("node.passive"), Some("true"));
         }
 
         #[test]

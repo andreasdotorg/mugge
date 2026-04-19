@@ -96,6 +96,7 @@
       channels = 8;
       rate = 48000;
       quantum = 256;
+      managed = true;
     };
   };
 
