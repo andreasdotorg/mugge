@@ -25,10 +25,13 @@ let
     # PipeWire main config fragments
     mkdir -p $out/share/pipewire/pipewire.conf.d
     cp ${../../../configs/pipewire/10-audio-settings.conf}     $out/share/pipewire/pipewire.conf.d/
-    # F-295: 20-usbstreamer.conf (ada8200-in capture adapter) NOT deployed.
-    # PipeWire promotes the node to driver=true at runtime despite config
-    # saying false, adding a dormant driver node to the graph. Live mode
-    # will re-enable this via GraphManager when mic input is needed.
+    # F-291 Fix C: disable mod.rt nice level to prevent SCHED_OTHER reset.
+    cp ${../../../configs/pipewire/11-rt-module.conf}          $out/share/pipewire/pipewire.conf.d/
+    # US-163: ada8200-in capture adapter re-enabled with node.passive=true.
+    # Previously removed during F-295 investigation because PipeWire promoted
+    # the capture node to driver. node.passive=true prevents this (same fix
+    # as pcm-bridge node.passive bug). period-num=5 matches playback adapter.
+    cp ${../../../configs/pipewire/20-usbstreamer.conf}        $out/share/pipewire/pipewire.conf.d/
     cp ${../../../configs/pipewire/21-usbstreamer-playback.conf} $out/share/pipewire/pipewire.conf.d/
     # D-040: 25-loopback-8ch.conf REMOVED — CamillaDSP abandoned, no ALSA
     # Loopback needed.  PW filter-chain convolver handles all DSP natively.
@@ -52,25 +55,18 @@ in
   };
 
   # F-020 workaround: Force PipeWire to SCHED_FIFO/88 via systemd.
-  # PipeWire's RT module fails to self-promote on PREEMPT_RT kernels.
+  # PipeWire's RT module (mod.rt) fails to self-promote on PREEMPT_RT kernels.
   # systemd sets the scheduling policy at exec time, before PipeWire starts.
   #
-  # F-291 fix: The base PipeWire unit has multiple hardening directives that
-  # each independently force NoNewPrivileges=yes at the kernel level:
-  #   - SystemCallFilter=@system-service  (seccomp → NNP)
-  #   - SystemCallArchitectures=native    (seccomp → NNP)
-  #   - LockPersonality=yes               (implies NNP)
-  #   - MemoryDenyWriteExecute=yes         (implies NNP)
-  # ALL of these must be cleared for CPUSchedulingPolicy=fifo to take effect.
-  # Acceptable for PipeWire — a trusted, upstream audio daemon on a
-  # single-user workstation already granted SCHED_FIFO/88 and unlimited memlock.
+  # NNP is intentionally LEFT ENABLED (base unit default). With NNP=1, the
+  # kernel blocks mod.rt's sched_setscheduler() call, so it cannot interfere
+  # with systemd's pre-exec FIFO/88. Without NNP, mod.rt's setnice(-11) fails
+  # (no PAM nice limit on NixOS), triggering a scheduling reset to SCHED_OTHER.
+  # NNP also preserves the base unit's security hardening (seccomp, personality
+  # lock, W^X). CPUSchedulingPolicy is applied by systemd at exec time and is
+  # exempt from NNP restrictions (PID 1 is privileged).
   systemd.user.services.pipewire = {
     serviceConfig = {
-      NoNewPrivileges = false;
-      SystemCallFilter = lib.mkForce [""];
-      SystemCallArchitectures = lib.mkForce "";
-      LockPersonality = false;
-      MemoryDenyWriteExecute = false;
       CPUSchedulingPolicy = "fifo";
       CPUSchedulingPriority = 88;
     };
@@ -80,7 +76,14 @@ in
   security.rtkit.enable = true;
 
   # RT limits for the audio user (ela).
+  # F-291 Fix B: nice limit required because PipeWire's mod.rt calls
+  # setpriority(nice=-11) at startup. Without this limit, the call fails
+  # with EPERM, and mod.rt's error handler resets scheduling to SCHED_OTHER
+  # — undoing systemd's pre-exec FIFO/88. With NNP=1 (base unit default),
+  # mod.rt cannot call sched_setscheduler(), so FIFO/88 is safe; the nice
+  # limit only prevents mod.rt's error cascade.
   security.pam.loginLimits = [
+    { domain = "ela"; type = "-"; item = "nice";    value = "-19"; }
     { domain = "ela"; type = "-"; item = "rtprio";  value = "95"; }
     { domain = "ela"; type = "-"; item = "memlock"; value = "unlimited"; }
   ];

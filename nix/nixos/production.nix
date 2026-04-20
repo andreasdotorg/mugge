@@ -96,8 +96,16 @@
       channels = 8;
       rate = 48000;
       quantum = 256;
+      managed = true;
     };
   };
+
+  # ── Mixxx DJ ────────────────────────────────────────────────────
+  services.pi4audio.mixxx.enable = true;
+
+  # ── Reaper DAW (Live mode) ─────────────────────────────────────
+  # Enabled but NOT auto-started — manual: systemctl --user start pi4audio-reaper
+  services.pi4audio.reaper.enable = true;
 
   # ── Web UI ───────────────────────────────────────────────────────
   services.pi4audio.web-ui = {

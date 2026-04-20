@@ -132,9 +132,9 @@ in
     # the NixOS generation (firmware packages may update across rebuilds).
     system.activationScripts.pi4audio-firmware = lib.stringAfter [ "specialfs" ] ''
       FWDIR="/boot/firmware"
-      # F-273: /boot/firmware is declared with nofail,noauto (not needed at
-      # runtime — only the VideoCore bootloader reads it before Linux starts).
-      # Mount on-demand when updating firmware files.
+      # F-289: /boot/firmware is mounted at boot (nofail). The on-demand
+      # mount below is a fallback for edge cases (e.g., activation during
+      # nixos-anywhere chroot before fstab is active).
       if ! mountpoint -q "$FWDIR" && [ -d "$FWDIR" ]; then
         mount /dev/disk/by-label/FIRMWARE "$FWDIR" -t vfat -o nofail 2>/dev/null || true
       fi

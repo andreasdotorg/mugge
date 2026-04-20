@@ -53,7 +53,8 @@ in
         Type = "simple";
         # Graph manager spawns pw-dump as a subprocess for gain integrity
         # checks and xrun monitoring — PipeWire tools must be in PATH.
-        Environment = "PATH=${pkgs.pipewire}/bin";
+        # US-085: systemd bin needed for app_lifecycle (systemctl --user stop/start).
+        Environment = "PATH=${pkgs.pipewire}/bin:${pkgs.systemd}/bin";
         ExecStart = "${pi4audio-packages.graph-manager}/bin/pi4audio-graph-manager --mode ${cfg.mode} --log-level ${cfg.logLevel} --speaker-channels ${toString cfg.speakerChannels} --sub-channels ${cfg.subChannels}";
         Restart = "on-failure";
         RestartSec = 3;

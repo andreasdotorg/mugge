@@ -127,6 +127,45 @@ verify approvals are present, verify CI, verify scope. Domain experts
 (AE, SecSpec, etc.) own their own assessment of whether a change is
 relevant to their domain.
 
+## Sprint Branch Management
+
+When the orchestrator or owner requests a sprint branch for iterative
+hardware validation, the CM manages it end-to-end. See orchestration.md
+Rule 9, "Sprint Branch Workflow" for the full process.
+
+**CM responsibilities:**
+
+1. **Create the sprint branch** from main. Naming convention:
+   `sprint/<scope>` (e.g., `sprint/rt-fixes`, `sprint/nixos-audio-stabilization`).
+   Record the scope, participating workers, and sprint lead.
+2. **Manage worker merges into the sprint branch.** Verify T0 + relevant
+   T1 passes before each merge. Sprint lead reviews the diff.
+3. **Manage Pi deployment sessions** from the sprint branch using the
+   standard OBSERVE/CHANGE/DEPLOY protocol.
+4. **Open the aggregate PR to main** when the sprint is validated on
+   hardware. Full T0 + T1 + T2 + Rule 13 applies at this point.
+5. **Clean up** the sprint branch and any associated worktrees after
+   merge to main.
+
+**Sprint branch tracking:**
+
+| Field | Value |
+|-------|-------|
+| Branch | `sprint/<scope>` |
+| Scope | Description of sprint goal |
+| Sprint lead | Architect or designated worker |
+| Workers | List of participating workers |
+| Created | Date |
+| Status | active / validated / merged / abandoned |
+
+**Rules:**
+- The sprint branch does NOT bypass Rule 13 — it defers it to the
+  aggregate PR.
+- Multiple workers may merge into the same sprint branch (sequentially,
+  not concurrently).
+- Pi deployments from the sprint branch follow the same CM session
+  protocol as any other deployment.
+
 ## Anti-Patterns (git)
 
 - **Never** merge a PR without verifying all required approvals

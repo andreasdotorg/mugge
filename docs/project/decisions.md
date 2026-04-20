@@ -2603,3 +2603,240 @@ elevated this to a blanket project rule.
 constraint. D-059 broadens this to all Rust code project-wide.
 
 **Related:** D-058 (GM threads), D-040 (PW filter-chain architecture).
+
+## D-060: Local CA for TLS — replacing self-signed certificates (2026-03-29)
+
+**Context:** D-032 established HTTPS for the web UI using a self-signed certificate. This was sufficient for AudioWorklet secure context requirements but creates a critical blocker for US-110 (passkey authentication). WebAuthn requires `SecurityLevel::SECURE` in the browser. Self-signed certificates get `DANGEROUS` security level even after the user clicks through the warning. Confirmed from Chromium source: Chrome BLOCKED, Safari BLOCKED, Firefox unreliable. Without a valid certificate chain, passkey registration and login ceremonies fail on the two most common browsers.
+
+**Decision:** Replace self-signed certificates with a **local Certificate Authority (CA)** generated on the Pi. The CA signs the web UI server certificate, and the owner installs the CA certificate on their devices once.
+
+**Implementation:** (1) `mugge-auth init` generates local CA key pair + self-signs CA cert. CA key at `/var/lib/pi4audio/ca/ca.key` (0600). (2) `mugge-auth init` generates server key + cert signed by local CA, with SANs for hostname and IPs. (3) CA cert distributed via dedicated endpoint or invite flow — owner installs once per device. (4) CA cert validity 10 years; server cert 1 year, renewable via `mugge-auth renew` without device reinstall. (5) Per-platform install docs in SETUP-MANUAL.md.
+
+**What this enables:** Browsers see valid cert chain → `SecurityLevel::SECURE` → WebAuthn ceremonies succeed. No browser warnings on trusted devices. HTTPS remains mandatory (D-032 still applies).
+
+**What this does NOT change:** Local-only CA provides no MITM protection if CA key is compromised on Pi (acceptable for venue threat model). Untrusted devices still see browser warnings and cannot use passkeys. Standard pattern for LAN appliances (Home Assistant, Synology, UniFi).
+
+**Amends:** D-032 (self-signed cert approach replaced by local CA-signed certs; HTTPS requirement unchanged).
+
+**Related:** D-032 (HTTPS), US-110 (passkey auth — unblocked), F-037 (web UI no auth), US-000a (platform security).
+
+## D-061: GM manages PipeWire and WirePlumber lifecycle — target architecture amendment (2026-03-30)
+
+**Context:** D-058 established GM as process supervisor for signal-chain services (pcm-bridge, level-bridge, signal-gen) as internal threads. D-058 explicitly listed PipeWire and WirePlumber as systemd-managed singletons. Session 5 discussion challenged this: no fundamental reason PipeWire must be managed by systemd when GM is already the audio session owner (D-050) and service supervisor (D-058). Immediate trigger: F-220/F-221 — filter deploy panel uses `systemctl --user restart pipewire.service`, killing all PW clients. If GM owned PW lifecycle, it could coordinate the entire restart/reload sequence internally.
+
+**Decision:** Amend D-058 — the **target architecture** moves PipeWire and WirePlumber from "systemd-managed" to "GM-managed." GM spawns PW (and WP if needed) as child processes, gaining full lifecycle control.
+
+**What this enables:** (1) Deterministic startup ordering: GM → PW → WP → filter-chain ports → bridges → links. No race conditions. (2) Coordinated restart: GM restarts PW, waits for ports, re-links — all internally. (3) Coordinated coefficient reload: GM destroys convolver node via `pw-cli destroy`, waits for recreate, re-establishes links. (4) Clean shutdown: one SIGTERM to GM tears down everything. (5) Single systemd unit: `graph-manager.service`. (6) Local-demo simplification: `local-demo.sh` reduces to "start GM."
+
+**Updated D-058 table:** PipeWire → GM child process. WirePlumber → GM child process (if needed for port activation on PW 1.6.x). pcm-bridge/level-bridge/signal-gen → GM threads. GraphManager → sole systemd unit. Web UI → systemd unit (no PW dependency).
+
+**PW filter-chain limitation (C-011):** PW filter-chain does NOT support hot-reloading coefficient WAV files. Only path to swap coefficients is destroy-and-recreate (`pw-cli destroy`), breaking all links. GM must re-link after recreation.
+
+**Amends:** D-058 table (PW/WP moved from systemd to GM-managed). Does NOT amend D-043 (WP retained for port activation).
+
+**Related:** D-058, D-050, D-040, D-043, C-011, F-220, F-221.
+
+## D-062: First-Boot / Active Config Architecture — Symlink-Based Coefficient Management (2026-03-30)
+
+**Context:** Previously, coefficient files were generated and placed directly in `/etc/pi4audio/coeffs/`. This created ambiguity about which profile/venue was active, risked desync between config and coefficients, and had no clear first-boot or FoH passthrough story. The local-demo also generated Dirac impulses at startup, violating the mock boundary (US-075 audit).
+
+**Decision:** Two-layer config model with symlink-based activation. Three authoritative sources produce two derived artifacts. No file copying.
+
+**Two config layers:** (1) **Speaker Profile** (hardware layer) — defines speakers, crossover, gain staging limits, protection params. Generates crossover FIR coefficients. (2) **Venue Config** (measurement layer) — room correction, time alignment, per-channel gain trims from measurement data.
+
+**Three authoritative sources:** Speaker profile YAML, venue measurement data, `active.yml` pointer (declares which profile + venue is active).
+
+**Two derived artifacts:** `/etc/pi4audio/coeffs` symlink → active venue's coefficient directory. PW filter-chain `.conf` file generated from active profile topology.
+
+**Activation = `ln -sfn` + regenerate `.conf`.** Symlink ensures coefficients and config cannot desync.
+
+**FoH passthrough as baseline:** Built-in speaker profile using Dirac (identity) coefficients with unity gain. Fresh system defaults to this. **Own speakers add safety:** default gain mute (`Mult=0.0`), explicit gain staging gate before audio flows.
+
+**Rationale:** (1) Symlink activation eliminates desync bugs. (2) FoH passthrough as built-in profile enables immediate audio after deployment. (3) Mute-default for own speakers prevents accidental speaker damage. (4) Two-layer model separates "what speakers" from "what room."
+
+**Amends:** D-010 (speaker profiles include FoH passthrough), D-051 (config generator consumes active.yml), D-053 (profile switching safety incorporates mute-default).
+
+**Related:** D-010, D-040, D-051, D-053, US-089, US-011b, US-075.
+
+## D-063: 8-Channel Filter-Chain Convolver with Universal Audio Gate (2026-03-30)
+
+**Context:** Previous architecture (D-040, D-051) used a 4-channel convolver for speaker outputs; headphone and IEM channels (5-8) bypassed via direct PipeWire links. Three options evaluated: Architect (keep 4ch), AE (2ch FoH — D-031 concern about unprotected full-range on sub channels), Owner (8ch with universal audio gate).
+
+**Decision:** Adopt an 8-channel filter-chain convolver with a mandatory universal audio gate that applies to ALL profiles.
+
+**8ch architecture:** All 8 USBStreamer output channels pass through the convolver. Own-speaker profiles: ch 1-2 HP+correction FIR, ch 3-4 LP+correction FIR, ch 5-8 Dirac. FoH passthrough: all 8 channels Dirac. Eliminates bypass links entirely — GM routing simplifies to a single uniform pattern.
+
+**Universal audio gate:** ALL profiles start with `Mult=0.0` on all gain nodes. No audio until operator explicitly opens. Per-boot safety reset — `audio_enabled` in `active.yml` resets to `false` on every boot. **Cosine ramp-up:** 3 seconds, 30 steps (100ms each), `gain(t) = 0.5 * (1 - cos(pi * t / T))` — smooth derivatives, avoids cone excursion transients. Emergency mute: immediate `Mult=0.0` at any time.
+
+**D-031 implications:** FoH passthrough sends full-range Dirac to sub channels — no HPF in coefficients. Universal audio gate mitigates: operator must explicitly confirm before signal flows. Own-speaker profiles remain fully D-031 compliant.
+
+**Rationale:** (1) Uniform 8ch routing eliminates bypass-link bugs. (2) Universal gate strictly safer than previous split model. (3) Cosine ramp-up avoids transients. (4) Per-boot reset guarantees no accidental audio. (5) Forward-compatible with future channel topology changes.
+
+**Amends:** D-051 (8 convolver nodes for all profiles), D-053 (profile switch triggers re-gate), D-062 (FoH uses 8ch Dirac, Mult=0.0 for all profiles), D-031 (FoH exception documented).
+
+**Related:** D-062, D-051, D-053, D-040, D-031, D-010, US-113.
+
+## D-064: NixOS VM Test Framework for CI Smoke Testing (2026-04-04)
+
+**Status:** DRAFT
+
+**Context:** CI gap between T2 (E2E tests in local-demo) and T3 (SD card image build). Missing verification: "do NixOS modules wire services correctly via systemd?" Currently only caught by manual smoke testing on real Pi hardware (Gate 3).
+
+**Two approaches evaluated:** (1) NixOS VM Test Framework (`pkgs.nixosTest`) — boots QEMU VM with production NixOS modules + hardware overrides. Tests systemd wiring, service health, API responses, user session, file permissions. ~3-5 min runtime, ~1 day implementation. (2) Boot actual SD image in QEMU — requires building QEMU-compatible variant (Pi kernel lacks virtio drivers, DTB mismatch). ~10-15 min, ~3-5 days implementation, same coverage as approach 1.
+
+**Decision:** Adopt Approach 1 — `pkgs.nixosTest`. Approach 2 provides no additional coverage. Both cannot test Pi 4 hardware boot chain (firmware, U-Boot, RT kernel, DTB) — that inherently requires real hardware (Gate 3).
+
+**Test scope:** systemd wiring (all audio-stack units reach `active`), service health (GM port 4002, signal-gen 4001, pcm-bridge 9100), web UI (HTTPS 8080, API endpoints), user session (greetd, labwc, Wayland env), PipeWire (`pw-cli info`, convolver node, 8 gain nodes), filesystem (coefficients, `active.yml`, SSL certs).
+
+**CI integration:** Stage T1.5 (after eval, before E2E). ARM runner with KVM. Hard gate — failure blocks pipeline. Flake output: `checks.aarch64-linux.smoke`.
+
+**Hardware override pattern:** Import production NixOS modules, override Pi-specific settings (kernel, boot loader, hardware config) with VM-compatible equivalents.
+
+**Rationale:** (1) Battle-tested NixOS infrastructure. (2) Same systemd wiring as production. (3) Fast enough for CI. (4) KVM available on GitHub ARM runners. (5) 1-day implementation proportional to value.
+
+**Consequences:** New flake output `checks.aarch64-linux.smoke`. CI gains T1.5 stage. Gate 3 manual test remains for hardware boot chain. NixOS module wiring regressions caught automatically.
+
+**Related:** D-023 (reproducible test protocol), US-070 (CI pipeline), US-072 (NixOS reproducible build).
+
+## D-065: Amend D-043 — Remove `90-no-auto-link.conf`, WP format negotiation restored (2026-04-13)
+
+**Context:** F-292 (Critical: GM fails to create links on startup) root cause
+analysis revealed that `90-no-auto-link.conf` with `policy.standard = disabled`
+was disabling ALL WirePlumber format negotiation — not just linking. This
+prevented WP from activating ALSA adapter nodes (setting `SPA_PARAM_PortConfig`,
+negotiating formats), which left nodes in `suspended` state with zero ports.
+Without ports, the GraphManager reconciler had nothing to link.
+
+This is the same failure mode as GM-12 Finding 2 ("ALL PipeWire nodes went to
+suspended state with 0 ports"), but caused by an overly broad WP config override
+rather than WP being masked entirely.
+
+**Decision:** Amend D-043 point 1. The revised anti-bypass architecture is now
+**two layers** instead of three:
+
+1. **`node.autoconnect = false`** on each managed node + `80-jack-no-autoconnect.conf`
+   — suppresses PipeWire stream autoconnect and JACK client autoconnect at the
+   property level. This is the primary prevention layer.
+
+2. **GraphManager reconciler cleanup** — actively destroys links not in the
+   desired set for the current mode. This catches any bypass links that slip
+   through layer 1 (e.g., JACK `jack_connect()` calls that ignore node
+   properties).
+
+**Removed:** `90-no-auto-link.conf` (`policy.standard = disabled`). This file
+disabled WP's standard policy engine entirely, which is too broad — it prevented
+format negotiation and node activation, not just linking. The two remaining
+layers provide sufficient anti-bypass protection without breaking WP's core
+device management responsibilities.
+
+**Additional change:** Add `node.always-process = true` to the PipeWire
+filter-chain convolver configuration. This ensures the convolver node stays
+active and processing even when no clients are connected, preventing it from
+entering suspended state during mode transitions.
+
+**Rationale:** The three-layer architecture (D-043) was designed to prevent
+auto-linking from three sources: WP policy, PW stream autoconnect, and JACK
+client connects. The WP policy layer (`90-no-auto-link.conf`) was a blunt
+instrument that also disabled WP's device management functions. The remaining
+two layers are sufficient — `node.autoconnect = false` prevents policy-driven
+linking, and GM reconciler cleanup handles JACK bypasses. WP's format
+negotiation and node activation must remain functional.
+
+**Consequences:**
+
+1. `90-no-auto-link.conf` removed from flake (WP configPackages).
+2. `node.always-process = true` added to filter-chain convolver config.
+3. WirePlumber now provides full device management: format negotiation, port
+   activation, profile selection, AND policy-based session management. Only
+   linking is prevented by node-level `autoconnect = false`.
+4. F-292 resolved: nodes activate properly, GM reconciler creates links.
+5. Boot-to-audio restored: GM can establish link topology on startup.
+
+**Amends:** D-043 point 1 (WP linking disabled mechanism). D-043 points 2
+and 3 (GM sole link manager, three auto-connect mechanisms addressed) remain
+in effect with the mechanism change documented here.
+
+**Related:** D-043 (original three-layer architecture), D-039 (WP removal,
+superseded by D-043), F-292 (GM link creation failure — resolved by this
+change), GM-12 Finding 2 (same failure mode from WP masking).
+
+## D-066: Amend D-031 — Sealed enclosure subwoofers exempt from mandatory subsonic HPF (2026-04-19)
+
+**Context:** D-031 mandates a subsonic highpass filter (IIR safety-net HPF) on
+every speaker channel, with the cutoff frequency set by `mandatory_hpf_hz` in
+the speaker identity. This was designed to prevent mechanical over-excursion
+damage to drivers receiving full-bandwidth content — particularly relevant for
+ported (bass-reflex) enclosures where cone excursion rises sharply below the
+port tuning frequency with no mechanical restoring force.
+
+Sealed (acoustic suspension) enclosures have fundamentally different excursion
+behavior. The sealed air volume acts as a pneumatic spring that provides a
+mechanical restoring force at all frequencies. Below resonance (Fs), cone
+excursion in a sealed enclosure is displacement-limited by the air spring —
+it reaches a maximum and does not increase further as frequency decreases.
+This is in contrast to ported enclosures, where excursion below port tuning
+is essentially uncontrolled.
+
+For sealed enclosure subwoofers with adequate mechanical excursion limits
+(Xmax), the subsonic HPF mandated by D-031 is unnecessary for driver
+protection and actively harmful to sub-bass extension. These drivers are
+designed to operate safely at frequencies below the HPF cutoff that D-031
+would impose.
+
+**Decision:** Amend D-031 to add a sealed enclosure exception:
+
+1. **Sealed enclosure subwoofers with mechanical excursion limiting are
+   exempt from the mandatory subsonic HPF** (D-031 point 2, the IIR
+   safety-net HPF). The speaker identity MAY declare `mandatory_hpf_hz: 0`
+   or omit the field to indicate no subsonic protection is required.
+
+2. **The exemption applies ONLY when ALL of the following are true:**
+   - The enclosure is sealed (acoustic suspension), not ported or passive
+     radiator
+   - The driver has adequate Xmax for the intended operating bandwidth
+   - The amplifier power does not exceed the driver's thermal rating at
+     sustained subsonic frequencies
+
+3. **Ported and passive radiator enclosures remain subject to D-031** with
+   no exceptions. The `mandatory_hpf_hz` field remains required for these
+   enclosure types and must be set at or above the port/PR tuning frequency.
+
+4. **The speaker identity schema gains an `enclosure_type` field** with
+   values `sealed`, `ported`, or `passive_radiator`. Config validation uses
+   this field to enforce the correct HPF policy:
+   - `ported` / `passive_radiator`: `mandatory_hpf_hz` required, must be > 0
+   - `sealed`: `mandatory_hpf_hz` optional, may be 0
+
+5. **The combined FIR filter for exempt sealed subs** still includes the
+   crossover lowpass slope — it simply does not include an additional HPF
+   below the crossover frequency. The crossover slope itself provides
+   natural rolloff; the exemption removes only the explicit subsonic
+   protection HPF that D-031 mandated.
+
+**Rationale:**
+- The D-031 HPF was designed for the Bose PS28 III (5.25" isobaric, ported
+  enclosure, 42Hz tuning). Applying the same rule to sealed enclosure
+  subwoofers with 15mm+ Xmax and natural air-spring limiting is
+  over-protective and sacrifices usable sub-bass extension.
+- Psytrance kick drums contain significant energy in the 25-40Hz range.
+  An unnecessary HPF at 40Hz on a sealed sub audibly reduces impact.
+- The air spring in a sealed enclosure provides inherent protection that
+  ported enclosures lack. The physics are different; the safety rule should
+  reflect this.
+
+**Consequences:**
+1. Speaker identity schema updated: `enclosure_type` field added.
+2. Config validation logic updated: HPF requirement conditional on
+   enclosure type.
+3. Existing ported sub identities (e.g., `bose-ps28-iii-sub.yml`)
+   unchanged — `mandatory_hpf_hz` still required and enforced.
+4. Sealed sub identities may set `mandatory_hpf_hz: 0` to opt out of
+   subsonic HPF.
+5. D-031 points 1, 3, and 4 remain in effect for all enclosure types.
+   Only point 2 (mandatory IIR safety-net HPF) is amended with the
+   sealed enclosure exception.
+
+**Amends:** D-031 point 2 (mandatory IIR safety-net HPF per channel).
+
+**Related:** D-031 (original mandatory subsonic protection), D-029
+(boost + HPF requirement), US-011b (config generator + validation).

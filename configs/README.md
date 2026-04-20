@@ -75,7 +75,7 @@ Deployed to the Pi at `~/.config/pipewire/pipewire.conf.d/` (user-level).
 | File | Description |
 |------|-------------|
 | `10-audio-settings.conf` | PipeWire quantum settings (256 for live, 1024 for DJ). |
-| `20-usbstreamer.conf` | PipeWire capture-only adapter for ADA8200 inputs via USBStreamer (`hw:USBStreamer,0`, 8ch S32LE capture). Node name: `ada8200-in`. Rewritten for F-015 split-access fix: `node.driver=false`, `priority.driver=0`, `priority.session=0`. Requires `50-usbstreamer-disable-acp.conf` to suppress WirePlumber auto-detected duplex nodes. |
+| `20-usbstreamer.conf` | PipeWire capture-only adapter for ADA8200 inputs via USBStreamer (`hw:USBStreamer,0`, 8ch S32LE capture). Node name: `ada8200-in`. Rewritten for F-015 split-access fix: `node.driver=false`, `priority.driver=0`, `priority.session=0`. Requires `50-usbstreamer-disable-acp.conf` to suppress WirePlumber auto-detected duplex nodes. **Note:** This file exists in the repo but is **not deployed** on the NixOS Pi in DJ mode (F-295 optimization: removing the `ada8200-in` capture node reduced graph cycle budget pressure by ~30% ERR). It remains needed for Live mode (ADA8200 mic/line capture). |
 | `25-loopback-8ch.conf` | Historical: PipeWire adapter for 8-channel ALSA Loopback sink (pre-D-040, used for CamillaDSP bridge). **May be unused in current PW filter-chain architecture.** |
 
 ### Workarounds (`pipewire/workarounds/`)

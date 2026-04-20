@@ -306,22 +306,22 @@ events that the caller converts to RPC push notifications for the web UI.
 
 ---
 
-## 8. Three-Layer Bypass Link Defense (D-043)
+## 8. Two-Layer Bypass Link Defense (D-043, D-065)
 
-Three auto-connect mechanisms can create undesired links. All three are
-addressed:
+Two auto-connect mechanisms can create undesired links. Both are addressed
+(D-065 reduced from three layers -- `90-no-auto-link.conf` removed because
+`policy.standard = disabled` also blocked WP format negotiation):
 
-1. **WirePlumber session-manager linking** (default sink policy): disabled
-   via `~/.config/wireplumber/wireplumber.conf.d/90-no-auto-link.conf`.
+1. **Autoconnect disabled:** Per-node `node.autoconnect = false` on managed
+   nodes (convolver, USBStreamer) in static PipeWire configs +
+   `80-jack-no-autoconnect.conf` for all JACK clients. Suppresses both PW
+   stream `AUTOCONNECT` flag and JACK client autoconnect.
 
-2. **PipeWire stream `AUTOCONNECT` flag** (native PW clients): suppressed
-   via `node.autoconnect = false` on convolver and USBStreamer nodes in
-   static PipeWire configs.
-
-3. **JACK client `jack_connect()` to physical ports** (Mixxx, Reaper):
-   cannot be suppressed at the source. GM's Phase 2 reconciler detects and
-   destroys these bypass links after they appear, because they are not in
-   the desired link set for any mode.
+2. **GraphManager reconciler cleanup:** GM's Phase 2 reconciler detects and
+   destroys bypass links after they appear, because they are not in the
+   desired link set for any mode. This catches JACK client `jack_connect()`
+   calls to physical ports (Mixxx, Reaper) that cannot be suppressed at the
+   source.
 
 ---
 
@@ -417,6 +417,6 @@ idempotent and missing ports are treated as "skip, retry on next event."
 | **D-039** | GM is sole link manager. No WP auto-linking. AC specify WHAT not HOW. |
 | **D-040** | Pure PW pipeline. No CamillaDSP, no ALSA Loopback. Single audio graph. |
 | **D-041** | One-based channel indexing in routing table. AppPortNaming translates. |
-| **D-043** | WP retained for device management only. Three-layer bypass link defense. |
+| **D-043/D-065** | WP retained for device management only. Two-layer bypass link defense (D-065 removed `90-no-auto-link.conf`). |
 | **D-049 rev** | Level-bridge GM-managed. No self-linking. 24 links in all modes. |
 | **D-050** | GM owns complete session state: links + quantum + app lifecycle + readiness. |

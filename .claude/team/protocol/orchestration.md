@@ -602,6 +602,52 @@ controls branch assignment, PR merges to main, and Pi deployment sessions.
 to the Pi are fundamentally different operations. Branch commits are free.
 Pi access requires a CM session with the same rigor as before.
 
+#### Sprint Branch Workflow
+
+For related changes that need iterative testing and validation, a sprint
+branch provides a lighter-weight path than per-change PRs to main. The
+per-change PR workflow remains the default for standalone changes.
+
+**When to use:** Multiple related fixes/features that benefit from being
+tested together before merging to main (e.g., "RT fixes sprint", "NixOS
+audio stabilization", "E2E test overhaul"). Particularly useful when
+changes need iterative fix-test cycles or hardware validation on the Pi.
+
+**Lifecycle:**
+
+1. **CM creates the sprint branch** from main with a defined scope. The CM
+   tracks which workers are merging into it.
+2. **Workers merge to the sprint branch.** Each worker develops on their own
+   branch as usual, then merges to the sprint branch (not main). Before
+   merging to the sprint branch, the worker must pass T0 (`nix eval`) and
+   the relevant T1 suite for their changes. The sprint lead (architect or
+   designated worker) reviews before merge.
+3. **Deploy from the sprint branch** (if applicable). The sprint branch can
+   be deployed to the Pi for hardware validation via a CM session. No PR to
+   main is required at this stage.
+4. **Iterate.** Fix, retest, validate. Repeat until the sprint goal is met.
+5. **Aggregate PR to main.** When the sprint is validated, open ONE PR from
+   the sprint branch to main. Full T0 + T1 + T2 (E2E) runs at this point.
+   Rule 13 review covers the aggregate diff. This is the full ceremony gate.
+
+**Testing requirements per stage:**
+
+| Merge target | Required tests | Review |
+|--------------|----------------|--------|
+| Worker branch to sprint branch | T0 + relevant T1 suites | Sprint lead review |
+| Sprint branch to Pi (if applicable) | T0 passes | Hardware validation is the test |
+| Sprint branch to main (PR) | T0 + T1 + T2 (full E2E) + CI green | Full Rule 13 (all 7 reviewers + owner acceptance) |
+
+**Key principle:** Testing is proportionate to blast radius. Merging to a
+sprint branch affects only the sprint. Merging to main affects everyone.
+
+**CM responsibilities for sprint branches:**
+- Create and track the sprint branch (scope, participating workers)
+- Manage worker merges into the sprint branch
+- Manage Pi deployment sessions from the sprint branch (if applicable)
+- Open the aggregate PR to main when the sprint is validated
+- Clean up the sprint branch after merge to main
+
 **The only exception:** The orchestrator may commit changes to team configuration
 files (meta-process) directly, since these are not implementation code.
 

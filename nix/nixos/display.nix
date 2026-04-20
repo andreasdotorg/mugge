@@ -57,6 +57,22 @@
     };
   };
 
+  # ── labwc rc.xml: window rules ─────────────────────────────────
+  # Mixxx launches maximized without server-side decoration (SSD).
+  # The identifier matches the Wayland app-id (Qt6 uses the binary name).
+  environment.etc."xdg/labwc/rc.xml" = {
+    text = ''
+      <?xml version="1.0" encoding="UTF-8"?>
+      <labwc_config>
+        <windowRules>
+          <windowRule identifier="mixxx" serverDecoration="no">
+            <action name="Maximize"/>
+          </windowRule>
+        </windowRules>
+      </labwc_config>
+    '';
+  };
+
   # ── labwc autostart: start wayvnc ──────────────────────────────
   # labwc runs the autostart file as a shell script after setting
   # WAYLAND_DISPLAY. We import env vars into the systemd user manager
@@ -67,6 +83,8 @@
     text = ''
       ${pkgs.systemd}/bin/systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_SESSION_TYPE
       ${pkgs.systemd}/bin/systemctl --user start wayvnc.service
+      # US-157: Start Mixxx after compositor is ready and env vars are imported.
+      ${pkgs.systemd}/bin/systemctl --user start pi4audio-mixxx.service
     '';
   };
 

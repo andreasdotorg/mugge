@@ -11,6 +11,32 @@ workstation. All scripts run on the Pi unless noted otherwise.
 
 ---
 
+## Top-level scripts
+
+| Script | Purpose | Requirements |
+|--------|---------|--------------|
+| `generate-crossover-coeffs.py` | Generate crossover-only FIR coefficient WAV files from a speaker profile. Produces minimum-phase FIR filters containing only the crossover slope (no room correction) — the initial coefficients deployed before venue measurement. Uses the `generate_profile_filters` pipeline from `src/room-correction/`. | Python 3, `src/room-correction` deps (scipy, numpy, soundfile) |
+
+**Usage:**
+
+```bash
+python scripts/generate-crossover-coeffs.py \
+    --profile configs/speakers/profiles/2way-200hz-markaudio-ultimax.yml \
+    --output-dir /tmp/coeffs/
+
+# With identity directory override:
+python scripts/generate-crossover-coeffs.py \
+    --profile configs/speakers/profiles/2way-200hz-markaudio-ultimax.yml \
+    --identities-dir configs/speakers/identities/ \
+    --output-dir /tmp/coeffs/
+```
+
+Output filenames follow the convention `combined_<speaker_key>.wav`. For
+deployment, rename to match convolver config expectations (e.g.,
+`combined_sat_left.wav` -> `combined_left_hp.wav`).
+
+---
+
 ## scripts/test/
 
 Test and benchmark scripts for validating audio subsystem performance (US-001),

@@ -36,6 +36,8 @@
     ./services/pcm-bridge.nix
     ./services/signal-gen.nix
     ./services/web-ui.nix
+    ./services/mixxx.nix
+    ./services/reaper.nix
     # Production defaults: enables all services with correct parameters
     ./production.nix
   ];
@@ -63,10 +65,11 @@
   fileSystems."/boot/firmware" = {
     device = "/dev/disk/by-label/FIRMWARE";
     fsType = "vfat";
-    # Not needed at runtime — only the VideoCore bootloader reads this
-    # partition, before Linux starts. Mounted on-demand by the firmware.nix
-    # activation script when updating firmware files.
-    options = [ "nofail" "noauto" ];
+    # F-289: Mounted at boot so firmware.nix activation script can update
+    # VideoCore blobs, U-Boot, config.txt, and DT overlays during
+    # nixos-rebuild switch. nofail ensures boot continues if partition is
+    # missing (e.g., during image builds).
+    options = [ "nofail" ];
   };
 
   # Closure trim — dedicated audio workstation needs none of these.
@@ -208,5 +211,7 @@
   environment.systemPackages = with pkgs; [
     vim
     htop
+    alsa-utils
+    usbutils
   ];
 }
