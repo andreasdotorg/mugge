@@ -210,5 +210,6 @@
     vim
     htop
     alsa-utils
+    usbutils
   ];
 }
