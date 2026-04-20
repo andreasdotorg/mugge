@@ -10,8 +10,11 @@ mode transitions. Automated switching is a future nice-to-have.
 See `docs/operations/pre-flight-checklist.md` Section 2.
 
 **Safety:** Mode switching does NOT restart PipeWire and does NOT cause
-USBStreamer transients. The audio path remains connected throughout — only
-link topology and quantum change. Amplifiers can stay on.
+USBStreamer transients. The audio path remains connected throughout -- only
+link topology and quantum change. Amplifiers can stay on, but should be at
+a safe level during the switch. Gain defaults (0.001 mains, 0.000631 subs)
+prevent transient damage, but operator awareness is important -- there will
+be a brief period with no application producing audio between stop and start.
 
 ---
 
@@ -32,10 +35,10 @@ systemctl --user is-active pi4audio-mixxx.service
 
 ### Step 2: Trigger GM Live Mode
 
-Via web UI mode dropdown, or via RPC:
+Via web UI mode dropdown, or via HTTP RPC:
 
 ```bash
-echo '{"cmd":"set_mode","mode":"live"}' | nc -q1 127.0.0.1 4002
+curl -X POST http://localhost:4002/mode/live
 ```
 
 GraphManager will:
@@ -89,10 +92,10 @@ systemctl --user is-active pi4audio-reaper.service
 
 ### Step 2: Trigger GM DJ Mode
 
-Via web UI mode dropdown, or via RPC:
+Via web UI mode dropdown, or via HTTP RPC:
 
 ```bash
-echo '{"cmd":"set_mode","mode":"dj"}' | nc -q1 127.0.0.1 4002
+curl -X POST http://localhost:4002/mode/dj
 ```
 
 GraphManager will:
