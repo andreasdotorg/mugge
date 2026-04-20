@@ -6,11 +6,6 @@
 
 use crate::routing::Mode;
 
-/// NixOS-stable path to systemctl. The GM service runs with a minimal PATH
-/// (only PipeWire/bin), so bare "systemctl" is not found. This symlink is
-/// managed by NixOS and always resolves to the active systemd package.
-const SYSTEMCTL: &str = "/run/current-system/sw/bin/systemctl";
-
 /// Returns the systemd user services that should be running in a given mode.
 pub fn services_for_mode(mode: Mode) -> &'static [&'static str] {
     match mode {
@@ -35,7 +30,7 @@ pub fn transition_apps(new_mode: Mode) -> Result<(), String> {
     // Stop services that are not needed in the new mode.
     for &svc in all_managed_services() {
         if !wanted.contains(&svc) {
-            let status = std::process::Command::new(SYSTEMCTL)
+            let status = std::process::Command::new("systemctl")
                 .args(["--user", "stop", svc])
                 .status();
             match status {
@@ -48,7 +43,7 @@ pub fn transition_apps(new_mode: Mode) -> Result<(), String> {
 
     // Start services needed for the new mode.
     for &svc in wanted {
-        let status = std::process::Command::new(SYSTEMCTL)
+        let status = std::process::Command::new("systemctl")
             .args(["--user", "start", svc])
             .status();
         match status {
