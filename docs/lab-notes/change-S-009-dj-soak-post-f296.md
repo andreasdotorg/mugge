@@ -80,8 +80,10 @@ No thermal throttling (well under 80C). Load average trending down.
 
 ## Assessment
 
-DJ stack is **gig-ready**. The system ran stable for 52+ minutes of
-observation with Mixxx actively playing audio. Key indicators:
+DJ stack is **gig-ready (pending acoustic validation)**. The system ran
+stable for 52+ minutes of observation with Mixxx actively playing audio,
+but PA was OFF throughout — audibility of residual ERR (~1/min) has not
+been assessed (see US-166). Key indicators:
 
 - Mixxx ERR rate reduced 72% by FIFO/70 promotion
 - USBStreamer ERR rate stable at ~1/min (irreducible USB isochronous jitter on VL805)

@@ -466,16 +466,16 @@ graph cycle, adding no additional buffering latency.
 |-----------|-----------|-----------|
 | PipeWire quantum | 1024 (21.3ms) | 256 (5.3ms) |
 | USBStreamer ALSA period-size | 1024 | 256 |
-| USBStreamer ALSA period-num | 4 (F-295) | 3 |
-| USBStreamer ALSA buffer total | 4096 samples (85ms) | 768 samples (16ms) |
+| USBStreamer ALSA period-num | 5 (F-295) | 3 |
+| USBStreamer ALSA buffer total | 5120 samples (107ms) | 768 samples (16ms) |
 
 All values assume a 48kHz sample rate. Latency values are computed as
 samples / sample_rate (e.g., 1024 / 48000 = 21.3ms).
 
 **Critical rule (GM-12 Finding 1):** The USBStreamer ALSA period-size MUST
 match the PipeWire quantum. A period-size smaller than the quantum causes
-guaranteed underruns every audio cycle. Quad-buffering (period-num=4, F-295)
-provides margin for scheduling jitter on PREEMPT_RT.
+guaranteed underruns every audio cycle. Quint-buffering (period-num=5, F-295)
+provides margin for USB isochronous transfer jitter on the VL805 xHCI.
 
 ### PipeWire Quantum
 
@@ -517,11 +517,11 @@ buffer parameters must be coordinated with the PipeWire quantum.
 For DJ mode (quantum 1024):
 ```
 api.alsa.period-size   = 1024
-api.alsa.period-num    = 4
+api.alsa.period-num    = 5
 ```
 
-Total buffer: 1024 x 4 = 4096 samples (85ms). F-295 increased from 3 to 4
-for additional ALSA jitter margin (50% more headroom, no latency change).
+Total buffer: 1024 x 5 = 5120 samples (107ms). F-295 increased from 3 to 5
+for USB isochronous jitter margin (67% more headroom, no latency change).
 
 **The USBStreamer Buffer Discovery (GM-12 Finding 1):** The original config
 had `period-size=256, period-num=2` (buffer=512 samples). This was correct
@@ -530,7 +530,7 @@ for live mode (quantum 256) but caused guaranteed underruns in DJ mode
 logged `XRun! rate:1024/48000` with USBStreamer ERR count growing ~24/sec.
 
 **Fix:** Updated period-size to match the quantum (1024) and increased
-period-num to 3 for scheduling margin (later increased to 4 by F-295).
+period-num to 3 for scheduling margin (later increased to 5 by F-295).
 USBStreamer ERR dropped to 0.
 
 **Design rule:** The USBStreamer ALSA period-size MUST match the PipeWire
@@ -630,7 +630,7 @@ filter-chain convolver (runs inside PipeWire process)
   |  - ch 2: sub1 LP (crossover + room correction, L+R mono sum input)
   |  - ch 3: sub2 LP (crossover + room correction, L+R mono sum, phase-inverted)
   v
-USBStreamer hw:USBStreamer,0  (ALSA playback, period-size=1024, period-num=4)
+USBStreamer hw:USBStreamer,0  (ALSA playback, period-size=1024, period-num=5)
   |
   | USB -> ADAT
   v
@@ -814,7 +814,7 @@ cat /proc/asound/USBStreamer/pcm0p/sub0/hw_params
 cat ~/.config/pipewire/pipewire.conf.d/21-usbstreamer-playback.conf | grep period
 # Expected (DJ mode):
 #   api.alsa.period-size   = 1024
-#   api.alsa.period-num    = 4
+#   api.alsa.period-num    = 5
 
 # Check USBStreamer ERR count (should be 0):
 pw-top

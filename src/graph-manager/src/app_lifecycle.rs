@@ -24,6 +24,10 @@ pub fn all_managed_services() -> &'static [&'static str] {
 ///
 /// Called from a background thread after graph reconciliation completes.
 /// Errors are logged but not fatal — the PW graph is correct regardless.
+///
+/// NOTE: No concurrency protection — rapid consecutive mode switches may
+/// overlap (e.g. stop from switch 1 racing start from switch 2). Callers
+/// must wait for one transition to complete before triggering another.
 pub fn transition_apps(new_mode: Mode) -> Result<(), String> {
     let wanted = services_for_mode(new_mode);
 

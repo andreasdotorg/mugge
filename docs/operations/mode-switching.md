@@ -13,6 +13,10 @@ link topology and quantum change. D-063: gain gate stays closed during
 transition. The operator opens the gate separately after verifying the
 mode switch completed correctly.
 
+**Important:** Do not trigger rapid consecutive mode switches. The app
+lifecycle runs on a background thread with no concurrency protection —
+wait for one transition to complete before starting another.
+
 ---
 
 ## Quick Reference
