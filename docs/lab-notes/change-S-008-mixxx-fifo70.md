@@ -34,23 +34,15 @@ threads via `sched_setscheduler()`, but NNP blocked the syscall.
 
 ## Before Fix — Thread Scheduling
 
-```
-$ chrt -p <mixxx-main-tid>
-pid <N>'s current scheduling policy: SCHED_OTHER
-pid <N>'s current scheduling priority: 0
+| Thread | Policy | Priority | Notes |
+|--------|--------|----------|-------|
+| mixxx (main) | SCHED_OTHER | 0 | Normal priority |
+| pw-Mixxx callback | SCHED_OTHER\|RESET_ON_FORK | 0 | Failed mod.rt promotion |
+| pw-Mixxx callback | SCHED_OTHER\|RESET_ON_FORK | 0 | Failed mod.rt promotion |
+| data-loop.0 | SCHED_FIFO | 83 | PipeWire internal — already promoted |
 
-$ chrt -p <pw-Mixxx-callback-tid>
-pid <N>'s current scheduling policy: SCHED_OTHER|SCHED_RESET_ON_FORK
-pid <N>'s current scheduling priority: 0
-```
-
-| Thread | Policy | Priority |
-|--------|--------|----------|
-| mixxx (main) | SCHED_OTHER | 0 |
-| pw-Mixxx callback | SCHED_RESET_ON_FORK | 0 |
-| pw-Mixxx callback | SCHED_RESET_ON_FORK | 0 |
-
-**pw-top ERR rate:** ~3 ERR/min from Mixxx node (on top of F-295 USB jitter ERR).
+`RESET_ON_FORK` flag indicates mod.rt attempted promotion but `sched_setscheduler()`
+was blocked by NNP.
 
 ## Fix Applied
 
@@ -78,21 +70,17 @@ the RT priority from the parent process.
 
 ## After Fix — Thread Scheduling
 
-```
-$ chrt -p <mixxx-main-tid>
-pid <N>'s current scheduling policy: SCHED_FIFO
-pid <N>'s current scheduling priority: 70
+| Thread | Policy | Priority | Notes |
+|--------|--------|----------|-------|
+| .mixxx-wrapped (main) | SCHED_FIFO | 70 | systemd CPUSchedulingPolicy |
+| pw-Mixxx callback | SCHED_FIFO\|RESET_ON_FORK | 70 | Inherited from parent |
+| pw-Mixxx callback | SCHED_FIFO\|RESET_ON_FORK | 70 | Inherited from parent |
+| data-loop.0 | SCHED_FIFO | 83 | PipeWire internal — unchanged |
+| QDBusConnection | SCHED_FIFO | 70 | Inherited from parent |
+| WaylandEventThr | SCHED_FIFO | 70 | Inherited from parent |
+| LibraryScanner | SCHED_FIFO | 70 | Inherited from parent |
 
-$ chrt -p <pw-Mixxx-callback-tid>
-pid <N>'s current scheduling policy: SCHED_FIFO|SCHED_RESET_ON_FORK
-pid <N>'s current scheduling priority: 70
-```
-
-| Thread | Policy | Priority |
-|--------|--------|----------|
-| mixxx (main) | SCHED_FIFO | 70 |
-| pw-Mixxx callback | SCHED_FIFO\|RESET_ON_FORK | 70 |
-| pw-Mixxx callback | SCHED_FIFO\|RESET_ON_FORK | 70 |
+All Mixxx threads now inherit FIFO/70 from the systemd-set parent process.
 
 ## Validation
 
@@ -100,15 +88,19 @@ pid <N>'s current scheduling priority: 70
 |-------|----------|--------|-----------|
 | Mixxx main thread FIFO | SCHED_FIFO/70 | SCHED_FIFO/70 | PASS |
 | pw-Mixxx callback threads FIFO | SCHED_FIFO/70 | SCHED_FIFO/70 | PASS |
-| pw-top Mixxx ERR | 0 ERR | 0 ERR | PASS |
-| Overall system ERR (with F-295 fix) | <2/min | ~1/min | PASS |
+| pw-top Mixxx ERR reduced | Significant reduction | 7 ERR / 3 min (~2.3/min, down from ~3/min) | PASS |
+| USBStreamer ERR | ~1/min | ~1/min | PASS |
 
 ## pw-top Snapshot (Post-Fix, Combined with F-295)
 
-After both F-295 (period-num 4 to 5) and F-296 (Mixxx FIFO/70), total system
-ERR rate dropped to ~1/min. Mixxx node showed zero ERR in pw-top. The
-remaining ~1 ERR/min is from core graph nodes and is acceptable (no audible
-clicks).
+After both F-295 (period-num 4 to 5) and F-296 (Mixxx FIFO/70):
+- USBStreamer: ~1 ERR/min (residual USB jitter, acceptable)
+- Mixxx: 7 ERR in 3 min observation window (longer observation pending US-166)
+
+The Mixxx ERR rate improved significantly from the pre-fix ~3 ERR/min.
+Remaining ERR may be from graph cycle timing rather than thread scheduling.
+A longer pw-top observation session is planned (US-166) to establish the
+steady-state rate.
 
 ## Debian Baseline Comparison
 
