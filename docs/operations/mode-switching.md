@@ -1,7 +1,7 @@
 # Mode Switching: DJ ↔ Live
 
 Automated mode switching via the `pi4audio-mode-switch` command. One command
-triggers the full transition: stop old app → GM mode change → start new app.
+triggers the full transition: stop old app → GM mode change → await settlement → start new app.
 
 **Pre-requisite:** Audio stack must be verified before any mode switch.
 See `docs/operations/pre-flight-checklist.md` Section 2.
@@ -38,22 +38,24 @@ The web UI mode dropdown triggers the same sequence via the web-ui backend.
 1. **Stop Mixxx** — `systemctl --user stop pi4audio-mixxx`
 2. **GM set_mode live** — tears down DJ links (Mixxx→convolver), creates live
    links (Reaper→convolver, ada8200-in→Reaper, IEM), sets quantum to 256
-3. **Start Reaper** — `systemctl --user start pi4audio-reaper` (FIFO/70)
-4. GM reconciler creates remaining links once Reaper registers its JACK ports
+3. **GM await_settled** — blocks until reconciler links converge (US-140,
+   typically 2-42ms). The script does not start the app until links are stable.
+4. **Start Reaper** — `systemctl --user start pi4audio-reaper` (FIFO/70)
 
 ### Live → DJ
 
 1. **Stop Reaper** — `systemctl --user stop pi4audio-reaper`
 2. **GM set_mode dj** — tears down live links, creates DJ links
    (Mixxx→convolver), sets quantum to 1024
-3. **Start Mixxx** — `systemctl --user start pi4audio-mixxx` (FIFO/70)
-4. GM reconciler creates remaining links once Mixxx registers its JACK ports
+3. **GM await_settled** — blocks until reconciler links converge (US-140)
+4. **Start Mixxx** — `systemctl --user start pi4audio-mixxx` (FIFO/70)
 
 ### → Standby
 
 1. **Stop current app** (Mixxx or Reaper)
 2. **GM set_mode standby** — tears down app links, closes gain gate (D-063),
    keeps convolver→USBStreamer links, sets quantum to 256
+3. **GM await_settled** — blocks until link settlement
 
 ---
 
@@ -83,10 +85,11 @@ pw-top -b -n 2
 
 ### Links not created after mode switch
 
-GraphManager creates links when both endpoints exist. After the mode switch,
-the new application (Mixxx/Reaper) takes a few seconds to start and register
-its JACK ports. The GM reconciler runs on a timer and will create links
-automatically when the ports appear. Wait 5-10 seconds, then verify.
+The mode-switch script uses `await_settled` (US-140) to block until GM's
+reconciler converges. If the script reports "GM settled" but links are still
+missing, the application (Mixxx/Reaper) may not have registered its JACK
+ports yet — GM will create app-specific links when the ports appear via the
+reconciler timer.
 
 If links are still missing:
 
