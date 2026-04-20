@@ -2604,6 +2604,100 @@ constraint. D-059 broadens this to all Rust code project-wide.
 
 **Related:** D-058 (GM threads), D-040 (PW filter-chain architecture).
 
+## D-060: Local CA for TLS — replacing self-signed certificates (2026-03-29)
+
+**Context:** D-032 established HTTPS for the web UI using a self-signed certificate. This was sufficient for AudioWorklet secure context requirements but creates a critical blocker for US-110 (passkey authentication). WebAuthn requires `SecurityLevel::SECURE` in the browser. Self-signed certificates get `DANGEROUS` security level even after the user clicks through the warning. Confirmed from Chromium source: Chrome BLOCKED, Safari BLOCKED, Firefox unreliable. Without a valid certificate chain, passkey registration and login ceremonies fail on the two most common browsers.
+
+**Decision:** Replace self-signed certificates with a **local Certificate Authority (CA)** generated on the Pi. The CA signs the web UI server certificate, and the owner installs the CA certificate on their devices once.
+
+**Implementation:** (1) `mugge-auth init` generates local CA key pair + self-signs CA cert. CA key at `/var/lib/pi4audio/ca/ca.key` (0600). (2) `mugge-auth init` generates server key + cert signed by local CA, with SANs for hostname and IPs. (3) CA cert distributed via dedicated endpoint or invite flow — owner installs once per device. (4) CA cert validity 10 years; server cert 1 year, renewable via `mugge-auth renew` without device reinstall. (5) Per-platform install docs in SETUP-MANUAL.md.
+
+**What this enables:** Browsers see valid cert chain → `SecurityLevel::SECURE` → WebAuthn ceremonies succeed. No browser warnings on trusted devices. HTTPS remains mandatory (D-032 still applies).
+
+**What this does NOT change:** Local-only CA provides no MITM protection if CA key is compromised on Pi (acceptable for venue threat model). Untrusted devices still see browser warnings and cannot use passkeys. Standard pattern for LAN appliances (Home Assistant, Synology, UniFi).
+
+**Amends:** D-032 (self-signed cert approach replaced by local CA-signed certs; HTTPS requirement unchanged).
+
+**Related:** D-032 (HTTPS), US-110 (passkey auth — unblocked), F-037 (web UI no auth), US-000a (platform security).
+
+## D-061: GM manages PipeWire and WirePlumber lifecycle — target architecture amendment (2026-03-30)
+
+**Context:** D-058 established GM as process supervisor for signal-chain services (pcm-bridge, level-bridge, signal-gen) as internal threads. D-058 explicitly listed PipeWire and WirePlumber as systemd-managed singletons. Session 5 discussion challenged this: no fundamental reason PipeWire must be managed by systemd when GM is already the audio session owner (D-050) and service supervisor (D-058). Immediate trigger: F-220/F-221 — filter deploy panel uses `systemctl --user restart pipewire.service`, killing all PW clients. If GM owned PW lifecycle, it could coordinate the entire restart/reload sequence internally.
+
+**Decision:** Amend D-058 — the **target architecture** moves PipeWire and WirePlumber from "systemd-managed" to "GM-managed." GM spawns PW (and WP if needed) as child processes, gaining full lifecycle control.
+
+**What this enables:** (1) Deterministic startup ordering: GM → PW → WP → filter-chain ports → bridges → links. No race conditions. (2) Coordinated restart: GM restarts PW, waits for ports, re-links — all internally. (3) Coordinated coefficient reload: GM destroys convolver node via `pw-cli destroy`, waits for recreate, re-establishes links. (4) Clean shutdown: one SIGTERM to GM tears down everything. (5) Single systemd unit: `graph-manager.service`. (6) Local-demo simplification: `local-demo.sh` reduces to "start GM."
+
+**Updated D-058 table:** PipeWire → GM child process. WirePlumber → GM child process (if needed for port activation on PW 1.6.x). pcm-bridge/level-bridge/signal-gen → GM threads. GraphManager → sole systemd unit. Web UI → systemd unit (no PW dependency).
+
+**PW filter-chain limitation (C-011):** PW filter-chain does NOT support hot-reloading coefficient WAV files. Only path to swap coefficients is destroy-and-recreate (`pw-cli destroy`), breaking all links. GM must re-link after recreation.
+
+**Amends:** D-058 table (PW/WP moved from systemd to GM-managed). Does NOT amend D-043 (WP retained for port activation).
+
+**Related:** D-058, D-050, D-040, D-043, C-011, F-220, F-221.
+
+## D-062: First-Boot / Active Config Architecture — Symlink-Based Coefficient Management (2026-03-30)
+
+**Context:** Previously, coefficient files were generated and placed directly in `/etc/pi4audio/coeffs/`. This created ambiguity about which profile/venue was active, risked desync between config and coefficients, and had no clear first-boot or FoH passthrough story. The local-demo also generated Dirac impulses at startup, violating the mock boundary (US-075 audit).
+
+**Decision:** Two-layer config model with symlink-based activation. Three authoritative sources produce two derived artifacts. No file copying.
+
+**Two config layers:** (1) **Speaker Profile** (hardware layer) — defines speakers, crossover, gain staging limits, protection params. Generates crossover FIR coefficients. (2) **Venue Config** (measurement layer) — room correction, time alignment, per-channel gain trims from measurement data.
+
+**Three authoritative sources:** Speaker profile YAML, venue measurement data, `active.yml` pointer (declares which profile + venue is active).
+
+**Two derived artifacts:** `/etc/pi4audio/coeffs` symlink → active venue's coefficient directory. PW filter-chain `.conf` file generated from active profile topology.
+
+**Activation = `ln -sfn` + regenerate `.conf`.** Symlink ensures coefficients and config cannot desync.
+
+**FoH passthrough as baseline:** Built-in speaker profile using Dirac (identity) coefficients with unity gain. Fresh system defaults to this. **Own speakers add safety:** default gain mute (`Mult=0.0`), explicit gain staging gate before audio flows.
+
+**Rationale:** (1) Symlink activation eliminates desync bugs. (2) FoH passthrough as built-in profile enables immediate audio after deployment. (3) Mute-default for own speakers prevents accidental speaker damage. (4) Two-layer model separates "what speakers" from "what room."
+
+**Amends:** D-010 (speaker profiles include FoH passthrough), D-051 (config generator consumes active.yml), D-053 (profile switching safety incorporates mute-default).
+
+**Related:** D-010, D-040, D-051, D-053, US-089, US-011b, US-075.
+
+## D-063: 8-Channel Filter-Chain Convolver with Universal Audio Gate (2026-03-30)
+
+**Context:** Previous architecture (D-040, D-051) used a 4-channel convolver for speaker outputs; headphone and IEM channels (5-8) bypassed via direct PipeWire links. Three options evaluated: Architect (keep 4ch), AE (2ch FoH — D-031 concern about unprotected full-range on sub channels), Owner (8ch with universal audio gate).
+
+**Decision:** Adopt an 8-channel filter-chain convolver with a mandatory universal audio gate that applies to ALL profiles.
+
+**8ch architecture:** All 8 USBStreamer output channels pass through the convolver. Own-speaker profiles: ch 1-2 HP+correction FIR, ch 3-4 LP+correction FIR, ch 5-8 Dirac. FoH passthrough: all 8 channels Dirac. Eliminates bypass links entirely — GM routing simplifies to a single uniform pattern.
+
+**Universal audio gate:** ALL profiles start with `Mult=0.0` on all gain nodes. No audio until operator explicitly opens. Per-boot safety reset — `audio_enabled` in `active.yml` resets to `false` on every boot. **Cosine ramp-up:** 3 seconds, 30 steps (100ms each), `gain(t) = 0.5 * (1 - cos(pi * t / T))` — smooth derivatives, avoids cone excursion transients. Emergency mute: immediate `Mult=0.0` at any time.
+
+**D-031 implications:** FoH passthrough sends full-range Dirac to sub channels — no HPF in coefficients. Universal audio gate mitigates: operator must explicitly confirm before signal flows. Own-speaker profiles remain fully D-031 compliant.
+
+**Rationale:** (1) Uniform 8ch routing eliminates bypass-link bugs. (2) Universal gate strictly safer than previous split model. (3) Cosine ramp-up avoids transients. (4) Per-boot reset guarantees no accidental audio. (5) Forward-compatible with future channel topology changes.
+
+**Amends:** D-051 (8 convolver nodes for all profiles), D-053 (profile switch triggers re-gate), D-062 (FoH uses 8ch Dirac, Mult=0.0 for all profiles), D-031 (FoH exception documented).
+
+**Related:** D-062, D-051, D-053, D-040, D-031, D-010, US-113.
+
+## D-064: NixOS VM Test Framework for CI Smoke Testing (2026-04-04)
+
+**Status:** DRAFT
+
+**Context:** CI gap between T2 (E2E tests in local-demo) and T3 (SD card image build). Missing verification: "do NixOS modules wire services correctly via systemd?" Currently only caught by manual smoke testing on real Pi hardware (Gate 3).
+
+**Two approaches evaluated:** (1) NixOS VM Test Framework (`pkgs.nixosTest`) — boots QEMU VM with production NixOS modules + hardware overrides. Tests systemd wiring, service health, API responses, user session, file permissions. ~3-5 min runtime, ~1 day implementation. (2) Boot actual SD image in QEMU — requires building QEMU-compatible variant (Pi kernel lacks virtio drivers, DTB mismatch). ~10-15 min, ~3-5 days implementation, same coverage as approach 1.
+
+**Decision:** Adopt Approach 1 — `pkgs.nixosTest`. Approach 2 provides no additional coverage. Both cannot test Pi 4 hardware boot chain (firmware, U-Boot, RT kernel, DTB) — that inherently requires real hardware (Gate 3).
+
+**Test scope:** systemd wiring (all audio-stack units reach `active`), service health (GM port 4002, signal-gen 4001, pcm-bridge 9100), web UI (HTTPS 8080, API endpoints), user session (greetd, labwc, Wayland env), PipeWire (`pw-cli info`, convolver node, 8 gain nodes), filesystem (coefficients, `active.yml`, SSL certs).
+
+**CI integration:** Stage T1.5 (after eval, before E2E). ARM runner with KVM. Hard gate — failure blocks pipeline. Flake output: `checks.aarch64-linux.smoke`.
+
+**Hardware override pattern:** Import production NixOS modules, override Pi-specific settings (kernel, boot loader, hardware config) with VM-compatible equivalents.
+
+**Rationale:** (1) Battle-tested NixOS infrastructure. (2) Same systemd wiring as production. (3) Fast enough for CI. (4) KVM available on GitHub ARM runners. (5) 1-day implementation proportional to value.
+
+**Consequences:** New flake output `checks.aarch64-linux.smoke`. CI gains T1.5 stage. Gate 3 manual test remains for hardware boot chain. NixOS module wiring regressions caught automatically.
+
+**Related:** D-023 (reproducible test protocol), US-070 (CI pipeline), US-072 (NixOS reproducible build).
+
 ## D-065: Amend D-043 — Remove `90-no-auto-link.conf`, WP format negotiation restored (2026-04-13)
 
 **Context:** F-292 (Critical: GM fails to create links on startup) root cause
