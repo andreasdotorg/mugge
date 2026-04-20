@@ -2603,3 +2603,146 @@ elevated this to a blanket project rule.
 constraint. D-059 broadens this to all Rust code project-wide.
 
 **Related:** D-058 (GM threads), D-040 (PW filter-chain architecture).
+
+## D-065: Amend D-043 — Remove `90-no-auto-link.conf`, WP format negotiation restored (2026-04-13)
+
+**Context:** F-292 (Critical: GM fails to create links on startup) root cause
+analysis revealed that `90-no-auto-link.conf` with `policy.standard = disabled`
+was disabling ALL WirePlumber format negotiation — not just linking. This
+prevented WP from activating ALSA adapter nodes (setting `SPA_PARAM_PortConfig`,
+negotiating formats), which left nodes in `suspended` state with zero ports.
+Without ports, the GraphManager reconciler had nothing to link.
+
+This is the same failure mode as GM-12 Finding 2 ("ALL PipeWire nodes went to
+suspended state with 0 ports"), but caused by an overly broad WP config override
+rather than WP being masked entirely.
+
+**Decision:** Amend D-043 point 1. The revised anti-bypass architecture is now
+**two layers** instead of three:
+
+1. **`node.autoconnect = false`** on each managed node + `80-jack-no-autoconnect.conf`
+   — suppresses PipeWire stream autoconnect and JACK client autoconnect at the
+   property level. This is the primary prevention layer.
+
+2. **GraphManager reconciler cleanup** — actively destroys links not in the
+   desired set for the current mode. This catches any bypass links that slip
+   through layer 1 (e.g., JACK `jack_connect()` calls that ignore node
+   properties).
+
+**Removed:** `90-no-auto-link.conf` (`policy.standard = disabled`). This file
+disabled WP's standard policy engine entirely, which is too broad — it prevented
+format negotiation and node activation, not just linking. The two remaining
+layers provide sufficient anti-bypass protection without breaking WP's core
+device management responsibilities.
+
+**Additional change:** Add `node.always-process = true` to the PipeWire
+filter-chain convolver configuration. This ensures the convolver node stays
+active and processing even when no clients are connected, preventing it from
+entering suspended state during mode transitions.
+
+**Rationale:** The three-layer architecture (D-043) was designed to prevent
+auto-linking from three sources: WP policy, PW stream autoconnect, and JACK
+client connects. The WP policy layer (`90-no-auto-link.conf`) was a blunt
+instrument that also disabled WP's device management functions. The remaining
+two layers are sufficient — `node.autoconnect = false` prevents policy-driven
+linking, and GM reconciler cleanup handles JACK bypasses. WP's format
+negotiation and node activation must remain functional.
+
+**Consequences:**
+
+1. `90-no-auto-link.conf` removed from flake (WP configPackages).
+2. `node.always-process = true` added to filter-chain convolver config.
+3. WirePlumber now provides full device management: format negotiation, port
+   activation, profile selection, AND policy-based session management. Only
+   linking is prevented by node-level `autoconnect = false`.
+4. F-292 resolved: nodes activate properly, GM reconciler creates links.
+5. Boot-to-audio restored: GM can establish link topology on startup.
+
+**Amends:** D-043 point 1 (WP linking disabled mechanism). D-043 points 2
+and 3 (GM sole link manager, three auto-connect mechanisms addressed) remain
+in effect with the mechanism change documented here.
+
+**Related:** D-043 (original three-layer architecture), D-039 (WP removal,
+superseded by D-043), F-292 (GM link creation failure — resolved by this
+change), GM-12 Finding 2 (same failure mode from WP masking).
+
+## D-066: Amend D-031 — Sealed enclosure subwoofers exempt from mandatory subsonic HPF (2026-04-19)
+
+**Context:** D-031 mandates a subsonic highpass filter (IIR safety-net HPF) on
+every speaker channel, with the cutoff frequency set by `mandatory_hpf_hz` in
+the speaker identity. This was designed to prevent mechanical over-excursion
+damage to drivers receiving full-bandwidth content — particularly relevant for
+ported (bass-reflex) enclosures where cone excursion rises sharply below the
+port tuning frequency with no mechanical restoring force.
+
+Sealed (acoustic suspension) enclosures have fundamentally different excursion
+behavior. The sealed air volume acts as a pneumatic spring that provides a
+mechanical restoring force at all frequencies. Below resonance (Fs), cone
+excursion in a sealed enclosure is displacement-limited by the air spring —
+it reaches a maximum and does not increase further as frequency decreases.
+This is in contrast to ported enclosures, where excursion below port tuning
+is essentially uncontrolled.
+
+For sealed enclosure subwoofers with adequate mechanical excursion limits
+(Xmax), the subsonic HPF mandated by D-031 is unnecessary for driver
+protection and actively harmful to sub-bass extension. These drivers are
+designed to operate safely at frequencies below the HPF cutoff that D-031
+would impose.
+
+**Decision:** Amend D-031 to add a sealed enclosure exception:
+
+1. **Sealed enclosure subwoofers with mechanical excursion limiting are
+   exempt from the mandatory subsonic HPF** (D-031 point 2, the IIR
+   safety-net HPF). The speaker identity MAY declare `mandatory_hpf_hz: 0`
+   or omit the field to indicate no subsonic protection is required.
+
+2. **The exemption applies ONLY when ALL of the following are true:**
+   - The enclosure is sealed (acoustic suspension), not ported or passive
+     radiator
+   - The driver has adequate Xmax for the intended operating bandwidth
+   - The amplifier power does not exceed the driver's thermal rating at
+     sustained subsonic frequencies
+
+3. **Ported and passive radiator enclosures remain subject to D-031** with
+   no exceptions. The `mandatory_hpf_hz` field remains required for these
+   enclosure types and must be set at or above the port/PR tuning frequency.
+
+4. **The speaker identity schema gains an `enclosure_type` field** with
+   values `sealed`, `ported`, or `passive_radiator`. Config validation uses
+   this field to enforce the correct HPF policy:
+   - `ported` / `passive_radiator`: `mandatory_hpf_hz` required, must be > 0
+   - `sealed`: `mandatory_hpf_hz` optional, may be 0
+
+5. **The combined FIR filter for exempt sealed subs** still includes the
+   crossover lowpass slope — it simply does not include an additional HPF
+   below the crossover frequency. The crossover slope itself provides
+   natural rolloff; the exemption removes only the explicit subsonic
+   protection HPF that D-031 mandated.
+
+**Rationale:**
+- The D-031 HPF was designed for the Bose PS28 III (5.25" isobaric, ported
+  enclosure, 42Hz tuning). Applying the same rule to sealed enclosure
+  subwoofers with 15mm+ Xmax and natural air-spring limiting is
+  over-protective and sacrifices usable sub-bass extension.
+- Psytrance kick drums contain significant energy in the 25-40Hz range.
+  An unnecessary HPF at 40Hz on a sealed sub audibly reduces impact.
+- The air spring in a sealed enclosure provides inherent protection that
+  ported enclosures lack. The physics are different; the safety rule should
+  reflect this.
+
+**Consequences:**
+1. Speaker identity schema updated: `enclosure_type` field added.
+2. Config validation logic updated: HPF requirement conditional on
+   enclosure type.
+3. Existing ported sub identities (e.g., `bose-ps28-iii-sub.yml`)
+   unchanged — `mandatory_hpf_hz` still required and enforced.
+4. Sealed sub identities may set `mandatory_hpf_hz: 0` to opt out of
+   subsonic HPF.
+5. D-031 points 1, 3, and 4 remain in effect for all enclosure types.
+   Only point 2 (mandatory IIR safety-net HPF) is amended with the
+   sealed enclosure exception.
+
+**Amends:** D-031 point 2 (mandatory IIR safety-net HPF per channel).
+
+**Related:** D-031 (original mandatory subsonic protection), D-029
+(boost + HPF requirement), US-011b (config generator + validation).
