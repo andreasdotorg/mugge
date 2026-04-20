@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-04-04 (session 9). Individual
+Last updated: 2026-04-20 (session 16). Individual
 story/defect/decision details now in `stories/`, `defects/`, `decisions/`
 directories with corresponding index files.
 
@@ -12,92 +12,52 @@ BM-2 benchmark showed PipeWire's built-in convolver is 3-5.6x more CPU-efficient
 than CamillaDSP on Pi 4B ARM (1.70% vs 5.23% at comparable buffer sizes). First
 successful PW-native DJ session (GM-12): 40+ minutes, zero xruns, 58% idle, 71C.
 
-**US-072 (NixOS Build) reactivated** — 20 tasks filed, IMPLEMENT phase. Hardware
-validation complete on test Pi (`192.168.178.35`): PREEMPT_RT 6.12.62, VC4 hardware
-GPU, greetd + labwc + wayvnc, PipeWire + WirePlumber running, zero kernel WARNINGs.
-Production Pi at venue (unreachable).
+**US-072 (NixOS Build) deployed.** Pi running NixOS with PREEMPT_RT 6.12.62, PipeWire
+1.6.2 at SCHED_FIFO/88, Mixxx auto-launch, GM auto-linking. DJ parity with Debian
+baseline achieved (all gaps closed except G-02 hardware controller verification).
+F-295 xrun clicks resolved (period-num 4→5, 94% ERR reduction).
 
 ## Active Work
 
 | Story | Phase | Summary | Blocker |
 |-------|-------|---------|---------|
-| US-072 | IMPLEMENT (HW validated) | NixOS reproducible build | SD card image built (6.57 GiB, 1.95 GiB zstd). Hardware validation complete on test Pi: PREEMPT_RT 6.12.62, VC4 HW GPU, greetd + labwc + wayvnc, PipeWire + WirePlumber, zero kernel WARNINGs. 11 fix commits this session. |
-| US-075 | COMPLETE | Local PW integration test env | Done. 35 E2E production-replica tests committed (`7b43222`). |
-| US-088 | REVIEW | Direct WS from Rust (CPU fix) | Owner Pi session for deploy |
-| US-089 | TEST | Speaker config management web UI | Blocked by F-198 |
-| US-090 | REVIEW (Gate 3) | FIR filter generation web UI | E2E baseline clean (F-249 resolved). Awaiting formal owner re-acceptance. |
-| US-091 | IMPLEMENT | Multi-way crossover support | Core engine done; 4 integration defects open (F-188, F-189, F-190, F-191 — N-way topology) |
-| US-092 | REVIEW (Gate 3) | Per-driver thermal/mechanical protection | E2E baseline clean. Awaiting formal owner re-acceptance. F-244 cross-cutting, non-blocking. |
-| US-093 | REVIEW (Gate 3) | Amplifier sensitivity calibration | E2E baseline clean. Awaiting formal owner re-acceptance. |
-| US-094 | REVIEW (Gate 3) | ISO 226 equal loudness compensation | E2E baseline clean. Awaiting formal owner re-acceptance. |
-| US-095 | REVIEW (Gate 3) | Graph viz — truthful PW topology | E2E baseline clean. Awaiting formal owner re-acceptance. |
-| US-096 | REVIEW (Gate 3) | UMIK-1 full calibration pipeline | E2E baseline clean. Awaiting formal owner re-acceptance. |
-| US-097 | REVIEW (Gate 3) | Room compensation web UI workflow | E2E baseline clean. Awaiting formal owner re-acceptance. |
-| US-098 | TEST (P1/P2 verified) | Room correction pipeline verification | P0 done; F-235 RESOLVED. P1/P2 verified: 41/41 pass. |
-| US-077 | TEST 6/9 | Single-clock timestamp arch | DoD #2-3 in progress, #4 Pi perf regression |
-| US-070 | TEST 3/7 | GitHub Actions CI pipeline | Branch protection, QE sign-off |
-| US-044 | IMPLEMENT/TEST | Safety protection suite | AC #3-5 implemented (54 tests), AC #1-2/6-8 need Pi. Local-demo verification in progress. |
-| US-071 | REVIEW 9/9 | SETUP-MANUAL doc quality | Gate 3 failed: prose rewrite |
-| US-084 | IMPLEMENT 10/13 | Level-bridge crate extraction | Pi systemd templates + owner acceptance |
-| US-079 | IMPLEMENT | Pre-convolver capture point | Owner re-validation |
-| US-080 | IMPLEMENT | Multi-point spectrum analyzer | Owner re-validation |
-| US-081 | IMPLEMENT | Peak+RMS meters with clip indicator | Owner re-validation |
-| US-082 | IMPLEMENT | Audio file playback in signal-gen | Owner re-validation |
-| US-083 | draft | Integration smoke tests | Depends US-075 (now COMPLETE) |
-| US-110 | IMPLEMENT 0/17 | Web UI passkey authentication | Architect decomposed 17 tasks |
-| US-111 | IMPLEMENT 8/13 | Local-demo PW graph topology redesign | AC #1,2,3,5,7,10,11 done. #4,6 dropped. #8 manual verify. #9 under investigation (T-111-10). |
-| US-113 | IN PROGRESS (PR #22) | First-boot active config + FoH passthrough | PR #22: first-boot default venue loading (foh-passthrough.yml, GM auto-load, D-063 gate closed). Prior 5 phases committed. 34/34 mock E2E pass. Real-stack E2E still required for full acceptance (L-QE-002). F-271 tracks D-031 protection WAVs for ch 1-4. |
-| US-114 | TEST (Pi validated) | Minimal kernel config for Pi 4B | ~100 overrides committed + session 9 fixes (`7976ee0`, `c791ada`, `4c17ebb`: SND_SOC/DRM_VC4 deps, initrd strip, NVMe disable). Kernel boots on test Pi with all required hardware. Remaining: build time/size docs (AC #6-7), upgrade procedure (AC #9). |
-| US-115 | IMPLEMENT (Phase 0 done) | 8-channel filter-chain convolver (D-063) | Phase 0 complete: 8ch configs, dirac.wav, gain nodes, routing. Critical path — blocks US-113 E2E. |
-| US-116 | ready | Per-channel time delay measurement + compensation | Depends US-115, US-113. 8 AC, 8 tasks. AE-consulted detection improvements. |
-| US-117 | draft | Tier 1 image size: firmware/locale/git/registry trim | ~1.1 GiB savings, zero functional impact. Depends US-072. |
-| US-118 | draft | Tier 2 image size: Reaper closure optimization | ~800 MiB savings. Reaper pulls VLC (1.4 GiB closure). Owner option decision needed. Depends US-072. |
-| US-119 | IMPLEMENT (partial) | Tier 3 image size: Mesa without LLVM, PipeWire without bluez | libcamera disable committed (`1f3e865`). Mesa V3D-only + PW no-bluez done earlier. ~500-800 MiB savings. |
-| US-120 | IMPLEMENT (complete) | Real-time transfer function measurement | All 7 tasks done (T-120-01 through T-120-07). Dual-FFT engine, delay finder, WS endpoint, design/verify mode, TF view, 11 Playwright + 19 integration tests. Awaiting Rule 13 review. |
-| US-121 | draft | Real-time multichannel delay measurement | Theory docs committed. |
-| US-122 | draft | Real-time phase correction analysis | Theory docs committed. Minimum-phase optimal for PA transient fidelity. |
-| US-123 | IMPLEMENT (done) | GM deterministic boot state | Implemented (`6ef8f93`): F-249 fix (quantum on startup), NixOS default standby, venue persistence, enhanced get_state RPC. 277 tests pass. |
-| US-124 | draft | First-boot UX | Filed (`b391c98`). Depends US-113. |
-| US-125 | IMPLEMENT (in progress) | Explicit mode arming | Worker-4 verifying existing behavior, may need minimal changes. |
-| US-112 | REVIEW (Rule 13 PASSED) | PipeWire convolver hot-reload patch | **Rule 13 passed retroactively** — all 5 advisors approved. 2 AD findings need fix: AD-R13-003 (atomic write in deploy_filters), AD-R13-004 (double-Reload leak). NixOS build needs patch regen for PW 1.6.2 (US-128). |
-| US-126 | IMPLEMENT (Rule 13 conditional) | Persistent audio gate banner | QE CONDITIONAL — needs `_gate_section()` unit test, mock gate key, banner integration test. Architect/UX/AD/AE approved. |
-| US-127 | draft (deferred) | Runtime coefficient switching (D-053) | Filed (`1b9b7b9`). **Deferred until US-112 complete.** If US-112 succeeds, destroy-and-recreate approach unnecessary. |
-| US-128 | draft | Upgrade PipeWire to 1.6.2 | nixpkgs already ships 1.6.2. Regenerate US-112 patch for new API. Investigate F-020 RT self-promotion. ~2.25 worker days. |
-| US-131 | REVIEW (PR #13) | Parallel local-demo instances | Instance ID isolation (0-9), port offset scheme (base + id*100), JSON manifest, PID-scoped cleanup. All T0+T1+T2+E2E pass. |
+| US-155 | IMPLEMENT (AC#1 done) | Venue config: Markaudio+Ultimax 200Hz | AC#1 FIR coefficients generated. AC#2-5 pending (identity YAML, venue profile, deploy+verify). |
+| US-156 | DEPLOYED | Static route persistence (NixOS) | Done. dhcpcd exit hook deployed, route survives reboot. |
+| US-157 | DEPLOYED | Mixxx auto-launch NixOS service | Done. pw-jack mixxx, labwc autostart, tmpfiles config seeding. |
+| US-158 | ready | GM manages ada8200-in lifecycle per mode | Graph hygiene improvement, not F-295 fix. |
+| US-072 | DEPLOYED | NixOS reproducible build | SD card image deployed on Pi. DJ parity achieved. |
+| US-075 | COMPLETE | Local PW integration test env | Done. 35 E2E production-replica tests. |
+| US-113 | IN PROGRESS (PR #22) | First-boot active config + FoH passthrough | Real-stack E2E still required (L-QE-002). |
+| US-112 | REVIEW (Rule 13 PASSED) | PipeWire convolver hot-reload patch | NixOS build needs patch regen for PW 1.6.2. |
+| US-120 | IMPLEMENT (complete) | Real-time transfer function measurement | Awaiting Rule 13 review. |
+| US-131 | REVIEW (PR #13) | Parallel local-demo instances | All T0+T1+T2+E2E pass. |
 
 
 ### Owner-Blocking Items
 
 | Item | Blocked on |
 |------|-----------|
-| US-088 deploy + acceptance | Owner Pi session |
-| US-079/080/081/082 re-validation | Owner local-demo test |
-| US-084 Pi deployment | Owner Pi session |
-| US-044 Pi tests (T-044-6/7) | Owner Pi session |
-| US-077 DoD #4 Pi perf test | Owner Pi session |
-| US-063 DoD #6 DJ soak test | Owner Pi session |
-| US-113 acceptance | PR #22 (first-boot default venue) in Rule 13 review. Full acceptance still requires real-stack E2E (L-QE-002). F-271 (D-031 protection WAVs) tracked separately. |
-| US-090/092-097 re-acceptance | E2E baseline clean (F-249 resolved by US-123). Ready for formal owner re-acceptance. |
-| ~~F-249 prioritization~~ | ~~RESOLVED by US-123 (`6ef8f93`).~~ |
-| US-112 / US-127 sequencing | **Owner decision: US-112 (PW hot-reload patch) before US-127 (destroy-and-recreate).** US-112 in progress. If successful, US-127 simplifies dramatically. |
-| US-089 acceptance | Owner prioritization + Pi deploy |
-| US-099-104 (Tier 13 venue workflow) | Owner prioritization |
+| US-155 AC#2-5 | Speaker identity YAML, venue profile, deploy + verify on Pi |
+| US-113 acceptance | Real-stack E2E (L-QE-002) |
+| G-02 (Hercules controller) | Hardware not plugged in — USB-MIDI verification pending |
+| PR #40 merge | Owner review + Rule 13 approvals (sprint/session-16 branch) |
 
 ## Component Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| PW filter-chain config | deployed | 8ch FIR convolver + gain nodes on Pi (D-063) |
-| GraphManager | deployed | Link topology + mode transitions (port 4002) |
+| PW filter-chain config | deployed | 8ch FIR convolver + gain nodes on Pi (D-063). period-num=5 (F-295 fix). |
+| GraphManager | deployed | Link topology + mode transitions (port 4002). Auto-linking restored (D-065). |
 | signal-gen | deployed | RT measurement audio (port 4001) |
-| pcm-bridge | deployed | Lock-free level metering (port 9100) |
+| pcm-bridge | deployed | Lock-free level metering (port 9100). node.passive fix deployed. |
+| level-bridge | deployed | Browser-side level metering |
 | Web UI platform | Stage 1+2 deployed | Dashboard, spectrum, config tab, graph viz. HTTPS (D-032) |
 | Room correction pipeline | done (TK-071) | 13 DSP modules. Bose profiles measured |
-| SETUP-MANUAL.md | draft | ~2200 lines. Gate 3 prose rewrite pending |
-| Core software | installed | PipeWire 1.4.9, Mixxx 2.5.0, Reaper 7.64, wayvnc |
-| Platform security | partial | Firewall active, SSH hardened. Web UI auth: US-110 (ready, passkey design, D-060 local CA) |
-| GitHub Actions CI | merged | Two parallel jobs, Nix store caching. Branch protection pending |
-| NixOS build (US-072) | HW validated on test Pi | 6.57 GiB (1.95 GiB zstd). PREEMPT_RT 6.12.62, VC4 HW GPU, greetd + labwc + wayvnc, PipeWire + WirePlumber. 11 fix commits session 9. Zero kernel WARNINGs. |
+| Mixxx auto-launch | deployed | US-157: pw-jack mixxx systemd user service, labwc autostart, tmpfiles seeding |
+| Core software | installed | PipeWire 1.6.2 (US-128), Mixxx 2.5.0, Reaper 7.64, wayvnc |
+| Platform security | partial | Firewall active, SSH hardened. PipeWire at FIFO/88 (F-291 three-part fix). |
+| GitHub Actions CI | merged | Two parallel jobs, Nix store caching. Branch protection on main. |
+| NixOS build (US-072) | DEPLOYED | PREEMPT_RT 6.12.62, VC4 HW GPU, labwc + wayvnc, PipeWire 1.6.2, DJ parity. |
 
 ## Completed Stories
 
@@ -116,6 +76,8 @@ Production Pi at venue (unreachable).
 | US-062 | Boot-to-DJ mode | 2026-03-20 |
 | US-076 | Web UI visual polish | 2026-03-25 |
 | US-109 | Playwright MCP integration | 2026-03-29 |
+| US-156 | Static route persistence (NixOS) | 2026-04-19 |
+| US-157 | Mixxx auto-launch NixOS service | 2026-04-19 |
 
 ## Deferred / Cancelled
 
@@ -131,25 +93,23 @@ Production Pi at venue (unreachable).
 | ID | Severity | Summary |
 |----|----------|---------|
 | F-187 | Critical | Noise on 4 channels + broken spectrum after multiple PW restarts. Blocked — needs Pi at venue. |
+| ~~F-291~~ | ~~High~~ | ~~RESOLVED (session 16): PW at FIFO/88 via three-part fix (NNP + PAM nice + mod.rt override).~~ |
+| ~~F-292~~ | ~~Critical~~ | ~~RESOLVED (session 15/16): GM auto-linking restored via D-065 (remove 90-no-auto-link.conf).~~ |
+| ~~F-294~~ | ~~Medium~~ | ~~RESOLVED (session 16): local-demo.sh policy.standard=disabled removed (D-065 alignment).~~ |
+| ~~F-295~~ | ~~High~~ | ~~RESOLVED (session 16): USBStreamer period-num 4→5, 94% ERR reduction (16/min→1/min).~~ |
+| F-288 | Medium | disko uses MBR partition table — Pi 4 supports GPT with 2024+ EEPROM. Research complete, migration pending. |
+| F-289 | Medium | /boot/firmware mount has `noauto` — blocks firmware updates. Fix committed (sprint branch). |
+| F-293 | Medium | NoNewPrivileges in graph-manager, signal-gen, pcm-bridge, level-bridge units. |
 | F-037 | High | Web UI no auth — converted to US-110 (ready, blocked on D-060 implementation) |
 | F-222 | High | Zombie process accumulation in container dev environment (PID 1 = sleep infinity) |
-| ~~F-235~~ | ~~High~~ | ~~RESOLVED (`94fbf2a`, `1bb85ec`): pw-record activation without WP linking. 36/36 tests pass.~~ |
-| F-244 | High | All entity DELETE buttons in config tab lack confirmation dialogs. Cross-cutting UX (US-089/US-093). |
-| F-245 | High | Measurement error UI shows raw Python/NumPy exception. Overlaps F-235. |
-| ~~F-249~~ | ~~Medium~~ | ~~RESOLVED (`6ef8f93`, US-123): GM quantum on startup + mode switch fixed. 277 tests pass.~~ |
+| F-244 | High | All entity DELETE buttons in config tab lack confirmation dialogs. Cross-cutting UX. |
+| F-245 | High | Measurement error UI shows raw Python/NumPy exception. |
 | F-234 | Medium | Only 35/39 DJ links in local-demo (4 missing). Investigation needed. |
-| ~~F-236~~ | ~~Medium~~ | ~~RESOLVED (`a06dd18`): stale 48-byte coefficient stubs. 4 screenshots verify flat response.~~ |
-| F-237 | Medium | Speaker config activation UX unclear / no venue config management (relates to US-113/D-062). |
+| F-237 | Medium | Speaker config activation UX unclear / no venue config management. |
 | F-016 | Medium | Audible glitches after PW restart with capture adapter |
 | F-013 | Medium | wayvnc TLS needed before US-018 guest devices |
-| F-239 | Medium | Default profile 2way-80hz-ported fails: missing sub-ported-15.yml (US-090). |
-| F-240 | Medium | Unknown filter_type "fullrange" not handled by backend (US-090). |
-| F-241 | Medium | DRIVER PROTECTION stale state after profile activation (US-092). |
-| F-246 | Medium | Mixxx invisible in graph viz — classifyNode() drops JACK clients with empty media_class (US-095). Affects production. |
-| F-247 | Medium | pcm-bridge 4ch/8ch channel mismatch — zero audio in local-demo spectrum (US-115 regression). |
+| F-246 | Medium | Mixxx invisible in graph viz — classifyNode() drops JACK clients with empty media_class. |
 | F-039 | Medium | DSP load gauge 0% — needs pw-top BUSY parsing |
-| F-242 | Low | Negative sensitivity returns opaque "write_failed" (US-093). |
-| F-243 | Low | Negative phon values accepted client-side (US-094). |
 
 ### Defects Resolved in Session 6 (9 total)
 
@@ -169,47 +129,97 @@ Production Pi at venue (unreachable).
 
 | Metric | Value |
 |--------|-------|
-| Git commits | ~267 (15 session 6, 5 session 7, 5 session 8, ~45 session 9) |
-| Total stories filed | 131 (US-120-127 filed session 9: measurement, boot state, D-053) |
-| Stories done | 13 |
-| Stories in TEST | 5 (US-089, US-077, US-070, US-044, US-098) |
-| Stories in REVIEW | 10 (US-088, US-071, US-113, US-090, US-092-097 — 8 awaiting owner acceptance) |
-| Stories in IMPLEMENT | ~9 (US-114 heading to TEST, US-115 Phase 0 done, US-072 HW validated) |
-| Stories ready | 0 |
-| Open defects (HIGH+) | 5 (F-187, F-037, F-222, F-244, F-245) |
-| Defects resolved session 8 | 1 (F-235) |
-| Session 9 commits | ~45 (US-072 HW validation, US-113 Phase 4/5, US-114 fixes, US-119, service fixes, test infra, E2E baseline, theory docs, US-120-127, US-123 impl) |
-| Open defects (Medium) | ~30 (F-234, F-237 session 6; F-239, F-240, F-241 session 7) |
-| Open defects (Low) | F-242, F-243 (session 7) |
-| Total defects filed | 249 (F-248 spectrum hiccup, F-249 GM quantum — session 9). F-249 RESOLVED. |
-| Test suites | test-all (537), test-integration-browser (229 — 35 new US-075 production-replica tests) |
+| Sprint branch commits (session 16) | 40 (sprint/session-16 branch, PR #40 open) |
+| Total stories filed | 158 (US-155-158 filed session 15/16) |
+| Stories deployed (session 16) | US-156, US-157 (+ US-072 fully operational) |
+| Defects resolved (session 15/16) | 4 (F-291, F-292, F-294, F-295) |
+| Open defects (HIGH+) | 4 (F-187, F-037, F-222, F-244) |
+| Open defects (Medium) | ~10 (F-288, F-289, F-293, F-234, F-237, F-016, F-013, F-246, F-039) |
+| Total defects filed | 295 (F-288-F-295 filed session 15/16) |
+| DJ parity gaps | 6/7 closed (G-02 hardware controller pending) |
+| E2E tests (local-demo) | 139 pass, 23 skip, 2 xfail, 0 fail |
 | PW convolver CPU (q1024) | 1.70% |
 | PW convolver CPU (q256) | 3.47% |
 | PA path latency (q256) | ~5.3ms |
-| Longest stable run | 13h 39m, zero xruns (O-018) |
+| ERR rate (q1024, post-fix) | ~1/min (was 25/min pre-fix) |
+| PW scheduling | SCHED_FIFO/88 (cold boot, no manual intervention) |
 
 ## External Dependencies
 
 | Dependency | Status |
 |------------|--------|
-| Pi 4B hardware | Available (test Pi at 192.168.178.35) |
-| Core software | Installed (PW 1.4.9, Mixxx 2.5.0, Reaper 7.64) |
-| Hercules USB-MIDI | Enumeration confirmed, full test pending |
+| Pi 4B hardware | Available (NixOS Pi at 192.168.178.35) |
+| Core software | Installed (PW 1.6.2, Mixxx 2.5.0, Reaper 7.64) |
+| Hercules USB-MIDI | Mappings deployed, hardware verification pending (G-02) |
 | APCmini mk2 mapping | Research needed |
 
 ## Key Decisions
 
-See `decisions/` directory and `decisions-index.md` for all 63 decisions (D-001
-through D-063). Most significant recent decisions:
+See `decisions/` directory and `decisions-index.md` for all 66 decisions (D-001
+through D-066). Most significant recent decisions:
 
 - **D-040** (2026-03-16): Abandon CamillaDSP — pure PipeWire filter-chain pipeline
 - **D-043** (2026-03-20): WirePlumber retained for device management, linking disabled
-- **D-045** (2026-03-24): Project rename to mugge
-- **D-058** (2026-03-28): GM supervises services — target arch (static units interim)
-- **D-060** (2026-03-29): Local CA for TLS — replaces D-032 self-signed (unblocks US-110 passkeys)
-- **D-061** (2026-03-30): GM manages PW/WP lifecycle — amends D-058 (PW/WP move from systemd to GM-managed)
-- **D-062** (2026-03-30): First-boot / active config — symlink-based coefficient management, FoH passthrough baseline, mute-default safety (amends D-010, D-051, D-053)
-- **D-063** (2026-03-30): 8ch filter-chain convolver + universal audio gate — owner directive: 8ch passthrough, mandatory gate, cosine ramp-up (amends D-062)
+- **D-063** (2026-03-30): 8ch filter-chain convolver + universal audio gate
+- **D-065** (2026-04-13): Amend D-043 — remove `90-no-auto-link.conf`, two-layer anti-bypass (fixes F-292)
+- **D-066** (2026-04-19): Amend D-031 — sealed enclosure HPF exception for dedicated subwoofer channels
+
+## Session 15/16 Summary (2026-04-19 — 2026-04-20)
+
+### Key Accomplishments
+
+1. **F-291 RESOLVED** — PipeWire FIFO/88 on cold boot via three-part fix: NNP re-enabled
+   (blocks mod.rt sched_setscheduler), PAM nice limit (prevents mod.rt error cascade),
+   mod.rt nice.level=0 override (belt-and-suspenders). Zero manual intervention needed.
+2. **F-292 RESOLVED** — GM auto-linking restored. D-065 removes `90-no-auto-link.conf`,
+   restoring WP format negotiation while keeping two-layer anti-bypass
+   (node.autoconnect=false + GM reconciler cleanup).
+3. **F-294 RESOLVED** — local-demo.sh aligned with D-065 production architecture.
+   `policy.standard=disabled` removed. 139 E2E tests pass.
+4. **F-295 RESOLVED** — Audible DJ clicks fixed. Root cause: USB isochronous transfer
+   jitter on VL805 xHCI with tight ALSA buffer margin. Fix: period-num 4→5
+   (zero latency impact). 94% ERR reduction (25/min → 1/min combined with pcm-bridge
+   node.passive fix).
+5. **US-156 DEPLOYED** — Static route via dhcpcd exit hook. `networking.interfaces.routes`
+   fires before DHCP — dhcpcd hook adds route on BOUND/REBOOT/RENEW/REBIND.
+6. **US-157 DEPLOYED** — Mixxx auto-launch as NixOS systemd user service. pw-jack mixxx,
+   labwc autostart trigger, tmpfiles seeding for controller mappings + soundconfig.
+7. **DJ parity achieved** — 6/7 functional gaps closed: Mixxx auto-launch (G-01),
+   GM DJ routing (G-03), soundconfig.xml (G-04), RT scheduling (G-05),
+   controller mapping deploy (G-06), mixxx.cfg seeding (G-07). G-02 (Hercules
+   hardware verification) pending — controller not plugged in.
+8. **pcm-bridge node.passive fix** — Missing `node.passive=true` in bare Capture mode
+   caused self-promotion to driver, accounting for ~45% of ERR count. One-line Rust fix.
+9. **US-155 AC#1 done** — FIR crossover coefficients generated for Markaudio CHN-50P +
+   Dayton Ultimax UMII18-22 at 200Hz. Speaker identity YAMLs and profile created.
+10. **F-288 researched** — Pi 4 GPT boot feasible with 2024+ EEPROM. Migration path documented.
+11. **Architecture docs updated** — D-065 + F-295 changes reflected in rt-audio-stack.md.
+12. **New tests** — Smoke test for generate-crossover-coeffs.py, schema validation for
+    speaker profiles/identities. E2E baseline: 139 pass.
+
+### Sprint Branch (sprint/session-16)
+
+40 commits on `sprint/session-16` branch. PR #40 open. Includes: F-291/F-292/F-294/F-295
+fixes, US-155/US-156/US-157 implementation, pcm-bridge fix, architecture doc updates,
+crossover smoke test, schema validation tests, labwc window rules, Mixxx config seeding,
+Debian Pi baseline audit, and documentation.
+
+### PRs Merged This Session
+
+- PR #37 — merged with Rule 13 approvals
+- PR #38 — merged with Rule 13 approvals
+- PR #39 — merged with Rule 13 approvals
+
+### Pi State
+
+- IP: 192.168.178.35 (NixOS)
+- Kernel: PREEMPT_RT 6.12.62+rpt-rpi-v8-rt
+- PipeWire: 1.6.2 at SCHED_FIFO/88
+- Quantum: 1024 (DJ mode)
+- USBStreamer: period-num=5
+- Mixxx: auto-launching, playing looping track
+- ERR rate: ~1/min at q1024
+- PA: OFF (confirmed by owner)
 
 ## Session 9 Summary (2026-04-02)
 
