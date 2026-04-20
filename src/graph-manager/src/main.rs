@@ -31,6 +31,7 @@
 //! - `rpc` — TCP JSON-RPC server (port 4002), cross-thread commands
 
 // Pure-logic modules — compile on all platforms.
+mod app_lifecycle;
 mod gain_integrity;
 mod graph;
 mod lifecycle;
@@ -596,6 +597,15 @@ fn dispatch_rpc_command(
             let _ = event_tx.send(GraphEvent::ModeChanged {
                 from: old_mode.to_string(),
                 to: mode.to_string(),
+            });
+
+            // 6. US-085: Transition app services on a background thread.
+            // MUST NOT block the PW main loop — safety watchdog would stall.
+            let new_mode = mode;
+            std::thread::spawn(move || {
+                if let Err(e) = app_lifecycle::transition_apps(new_mode) {
+                    log::error!("App lifecycle transition failed: {}", e);
+                }
             });
         }
 

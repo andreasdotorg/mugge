@@ -1,7 +1,8 @@
 # Mode Switching: DJ ↔ Live
 
-Automated mode switching via the `pi4audio-mode-switch` command. One command
-triggers the full transition: stop old app → GM mode change → await settlement → start new app.
+Mode switching is fully automatic. Sending a `set_mode` command to GraphManager
+(JSON-RPC on port 4002) triggers the complete transition: graph reconciliation,
+quantum change, and application lifecycle (stop old app, start new app).
 
 **Pre-requisite:** Audio stack must be verified before any mode switch.
 See `docs/operations/pre-flight-checklist.md` Section 2.
@@ -16,46 +17,53 @@ mode switch completed correctly.
 
 ## Quick Reference
 
+From the web UI: use the mode dropdown (triggers `set_mode` via the web-ui backend).
+
+From the command line:
+
 ```bash
 # Switch to DJ mode (stops Reaper, starts Mixxx, quantum 1024)
-pi4audio-mode-switch dj
+echo '{"cmd":"set_mode","mode":"dj"}' | nc -w5 127.0.0.1 4002
 
 # Switch to live mode (stops Mixxx, starts Reaper, quantum 256)
-pi4audio-mode-switch live
+echo '{"cmd":"set_mode","mode":"live"}' | nc -w5 127.0.0.1 4002
 
 # Switch to standby (stops any running app, no audio)
-pi4audio-mode-switch standby
+echo '{"cmd":"set_mode","mode":"standby"}' | nc -w5 127.0.0.1 4002
 ```
-
-The web UI mode dropdown triggers the same sequence via the web-ui backend.
 
 ---
 
-## What Happens Automatically
+## What Happens Automatically (US-085)
+
+When GM receives `set_mode`, it executes in order:
+
+1. **Update mode** and set quantum (DJ=1024, Live/Standby=256)
+2. **Reconcile links** — destroy old links, create new ones
+3. **Send RPC reply** with epoch (caller can use `await_settled` to block)
+4. **Emit ModeChanged event** to all connected TCP clients
+5. **Transition apps** (background thread, does not block PW main loop):
+   - Stop services not needed in the new mode
+   - Start services needed for the new mode
 
 ### DJ → Live
 
-1. **Stop Mixxx** — `systemctl --user stop pi4audio-mixxx`
-2. **GM set_mode live** — tears down DJ links (Mixxx→convolver), creates live
-   links (Reaper→convolver, ada8200-in→Reaper, IEM), sets quantum to 256
-3. **GM await_settled** — blocks until reconciler links converge (US-140,
-   typically 2-42ms). The script does not start the app until links are stable.
-4. **Start Reaper** — `systemctl --user start pi4audio-reaper` (FIFO/70)
+- GM tears down DJ links (Mixxx→convolver), creates live links
+  (Reaper→convolver, ada8200-in→Reaper, IEM), sets quantum to 256
+- Background thread: stops `pi4audio-mixxx.service`, starts `pi4audio-reaper.service`
+- GM reconciler creates remaining links once Reaper registers its JACK ports
 
 ### Live → DJ
 
-1. **Stop Reaper** — `systemctl --user stop pi4audio-reaper`
-2. **GM set_mode dj** — tears down live links, creates DJ links
-   (Mixxx→convolver), sets quantum to 1024
-3. **GM await_settled** — blocks until reconciler links converge (US-140)
-4. **Start Mixxx** — `systemctl --user start pi4audio-mixxx` (FIFO/70)
+- GM tears down live links, creates DJ links (Mixxx→convolver), sets quantum to 1024
+- Background thread: stops `pi4audio-reaper.service`, starts `pi4audio-mixxx.service`
+- GM reconciler creates remaining links once Mixxx registers its JACK ports
 
 ### → Standby
 
-1. **Stop current app** (Mixxx or Reaper)
-2. **GM set_mode standby** — tears down app links, closes gain gate (D-063),
-   keeps convolver→USBStreamer links, sets quantum to 256
-3. **GM await_settled** — blocks until link settlement
+- GM tears down app links, closes gain gate (D-063), keeps convolver→USBStreamer
+  links, sets quantum to 256
+- Background thread: stops all managed services
 
 ---
 
@@ -85,11 +93,10 @@ pw-top -b -n 2
 
 ### Links not created after mode switch
 
-The mode-switch script uses `await_settled` (US-140) to block until GM's
-reconciler converges. If the script reports "GM settled" but links are still
-missing, the application (Mixxx/Reaper) may not have registered its JACK
-ports yet — GM will create app-specific links when the ports appear via the
-reconciler timer.
+GM reconciles links immediately on `set_mode`. If some links are missing,
+the application (Mixxx/Reaper) may not have registered its JACK ports yet.
+GM's reconciler timer retries periodically and will create app-specific
+links when the ports appear.
 
 If links are still missing:
 
@@ -132,6 +139,7 @@ Common causes:
 - PipeWire not ready — ExecStartPre probe should handle this, but check
   `pw-cli info 0` manually
 - Display not available — Mixxx and Reaper need the labwc Wayland session
+- App lifecycle errors are logged by GM: `journalctl -u pi4audio-graph-manager -n 20 --no-pager`
 
 ---
 
@@ -139,7 +147,7 @@ Common causes:
 
 - `docs/operations/pre-flight-checklist.md` — Full verification checklists per mode
 - `docs/operations/safety.md` — Safety constraints
-- US-085 — Clean GM-native app lifecycle (deferred, future)
+- US-085 — GM-native app lifecycle management (this implementation)
 - US-165 — Story tracking mode switching procedure
 - US-157 — Mixxx systemd service
 - US-162 — Reaper systemd service
