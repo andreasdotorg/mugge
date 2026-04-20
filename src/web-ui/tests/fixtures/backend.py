@@ -386,14 +386,26 @@ def _switch_gm_mode(mode: str, gm_port: int = GM_PORT, timeout: float = 5.0) -> 
 
 
 @pytest.fixture(scope="session")
-def ensure_dj_mode(gm_port):
-    """Switch GM to DJ mode once for the entire test session.
+def ensure_dj_mode(gm_port, siggen_port):
+    """Switch GM to DJ mode and start signal-gen for the test session.
 
     Tests that need audio signal (level-bridge, measurement) require
     the GM to be in DJ mode so that signal-gen and Mixxx links are
     established through the convolver.
+
+    Signal-gen starts in stopped (silence) mode.  Without an explicit
+    play command, no audio flows through the graph and level-bridge
+    reads -120 dB on all channels.  We start pink noise here so that
+    the audio path is exercised.
     """
     if not _switch_gm_mode("dj", gm_port):
         pytest.skip("Could not switch GM to DJ mode")
+    # Start signal-gen so audio flows through the convolver to level-bridges.
+    _rpc_call("127.0.0.1", siggen_port, {
+        "cmd": "play", "signal": "pink",
+    })
+    # Give the graph a moment to propagate audio through the convolver.
+    time.sleep(0.5)
     yield
+    _rpc_call("127.0.0.1", siggen_port, {"cmd": "stop"})
     _switch_gm_mode("standby", gm_port)
