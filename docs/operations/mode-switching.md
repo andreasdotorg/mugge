@@ -1,150 +1,98 @@
-# Manual Mode Switching: DJ ↔ Live
+# Mode Switching: DJ ↔ Live
 
-Manual procedure for switching between DJ/PA mode and live vocal mode.
-
-Per owner decision (US-085 deferred), mode switching is a manual operator
-workflow. The operator stops/starts applications and triggers GraphManager
-mode transitions. Automated switching is a future nice-to-have.
+Automated mode switching via the `pi4audio-mode-switch` command. One command
+triggers the full transition: stop old app → GM mode change → start new app.
 
 **Pre-requisite:** Audio stack must be verified before any mode switch.
 See `docs/operations/pre-flight-checklist.md` Section 2.
 
 **Safety:** Mode switching does NOT restart PipeWire and does NOT cause
-USBStreamer transients. The audio path remains connected throughout -- only
-link topology and quantum change. Amplifiers can stay on, but should be at
-a safe level during the switch. Gain defaults (0.001 mains, 0.000631 subs)
-prevent transient damage, but operator awareness is important -- there will
-be a brief period with no application producing audio between stop and start.
+USBStreamer transients. The audio path remains connected throughout — only
+link topology and quantum change. D-063: gain gate stays closed during
+transition. The operator opens the gate separately after verifying the
+mode switch completed correctly.
 
 ---
 
-## DJ → Live
-
-### Step 1: Stop Mixxx
+## Quick Reference
 
 ```bash
-systemctl --user stop pi4audio-mixxx
+# Switch to DJ mode (stops Reaper, starts Mixxx, quantum 1024)
+pi4audio-mode-switch dj
+
+# Switch to live mode (stops Mixxx, starts Reaper, quantum 256)
+pi4audio-mode-switch live
+
+# Switch to standby (stops any running app, no audio)
+pi4audio-mode-switch standby
 ```
 
-Verify:
-
-```bash
-systemctl --user is-active pi4audio-mixxx.service
-# Expected: inactive
-```
-
-### Step 2: Trigger GM Live Mode
-
-Via web UI mode dropdown, or via HTTP RPC:
-
-```bash
-curl -X POST http://localhost:4002/mode/live
-```
-
-GraphManager will:
-- Tear down DJ links (Mixxx → convolver)
-- Create live links (Reaper → convolver, ada8200-in → Reaper)
-- Set quantum to 256 (`pw-metadata -n settings 0 clock.force-quantum 256`)
-- Create ada8200-in capture adapter node (US-158)
-
-### Step 3: Start Reaper
-
-```bash
-systemctl --user start pi4audio-reaper
-```
-
-Verify:
-
-```bash
-systemctl --user is-active pi4audio-reaper.service
-# Expected: active
-
-chrt -p $(pgrep -f reaper)
-# Expected: SCHED_FIFO, priority 70
-```
-
-### Step 4: Verify Live Mode
-
-- [ ] Quantum is 256 — `pw-metadata -n settings | grep quantum`
-- [ ] ada8200-in node present — `pw-cli ls Node | grep ada8200-in`
-- [ ] GM live links established — `pw-link -l | grep -E 'Reaper|ada8200-in'`
-- [ ] IEM routing to ch 6-7 — `pw-link -l | grep -E 'ch[67]|IEM'` (direct bypass, no convolver)
-- [ ] pw-top ERR baseline — `pw-top -b -n 2` (use second sample) — ERR < 2/min
-
-For the full live mode verification suite, see `pre-flight-checklist.md` Section 4.
+The web UI mode dropdown triggers the same sequence via the web-ui backend.
 
 ---
 
-## Live → DJ
+## What Happens Automatically
 
-### Step 1: Stop Reaper
+### DJ → Live
 
-```bash
-systemctl --user stop pi4audio-reaper
-```
+1. **Stop Mixxx** — `systemctl --user stop pi4audio-mixxx`
+2. **GM set_mode live** — tears down DJ links (Mixxx→convolver), creates live
+   links (Reaper→convolver, ada8200-in→Reaper, IEM), sets quantum to 256
+3. **Start Reaper** — `systemctl --user start pi4audio-reaper` (FIFO/70)
+4. GM reconciler creates remaining links once Reaper registers its JACK ports
 
-Verify:
+### Live → DJ
 
-```bash
-systemctl --user is-active pi4audio-reaper.service
-# Expected: inactive
-```
+1. **Stop Reaper** — `systemctl --user stop pi4audio-reaper`
+2. **GM set_mode dj** — tears down live links, creates DJ links
+   (Mixxx→convolver), sets quantum to 1024
+3. **Start Mixxx** — `systemctl --user start pi4audio-mixxx` (FIFO/70)
+4. GM reconciler creates remaining links once Mixxx registers its JACK ports
 
-### Step 2: Trigger GM DJ Mode
+### → Standby
 
-Via web UI mode dropdown, or via HTTP RPC:
+1. **Stop current app** (Mixxx or Reaper)
+2. **GM set_mode standby** — tears down app links, closes gain gate (D-063),
+   keeps convolver→USBStreamer links, sets quantum to 256
 
-```bash
-curl -X POST http://localhost:4002/mode/dj
-```
+---
 
-GraphManager will:
-- Tear down live links (Reaper → convolver, ada8200-in → Reaper)
-- Create DJ links (Mixxx → convolver)
-- Set quantum to 1024 (`pw-metadata -n settings 0 clock.force-quantum 1024`)
-- Destroy ada8200-in capture adapter node
+## Post-Switch Verification
 
-### Step 3: Start Mixxx
+After the mode switch completes, verify with the pre-flight checklist:
 
-```bash
-systemctl --user start pi4audio-mixxx
-```
+- DJ mode: `pre-flight-checklist.md` Section 3
+- Live mode: `pre-flight-checklist.md` Section 4
 
-Verify:
+Key checks:
 
 ```bash
-systemctl --user is-active pi4audio-mixxx.service
-# Expected: active
+# Verify mode and quantum
+echo '{"cmd":"get_state"}' | nc -w2 127.0.0.1 4002 | head -c 200
 
-chrt -p $(pgrep -f '.mixxx-wrapped')
-# Expected: SCHED_FIFO, priority 70
+# Verify links created
+echo '{"cmd":"get_links"}' | nc -w2 127.0.0.1 4002 | head -c 200
+
+# Check ERR baseline (use second sample)
+pw-top -b -n 2
 ```
-
-### Step 4: Verify DJ Mode
-
-- [ ] Quantum is 1024 — `pw-metadata -n settings | grep quantum`
-- [ ] GM DJ links established — `pw-link -l | grep Mixxx` (Mixxx output linked to convolver inputs)
-- [ ] Hercules controller detected — `aconnect -l | grep -i hercules` or `lsusb | grep -i hercules`
-- [ ] pw-Mixxx threads at FIFO — `ps -eLo pid,tid,cls,rtprio,comm | grep pw-Mixxx` shows priority 70
-- [ ] pw-top ERR baseline — `pw-top -b -n 2` (use second sample) — ERR < 2/min
-
-For the full DJ mode verification suite, see `pre-flight-checklist.md` Section 3.
 
 ---
 
 ## Troubleshooting
 
-### Links not created after GM mode switch
+### Links not created after mode switch
 
-GraphManager may need the target application running before it can create
-links. If links are missing after step 2, wait for the application to start
-(step 3), then check again. GM reconciles links on node appearance events.
+GraphManager creates links when both endpoints exist. After the mode switch,
+the new application (Mixxx/Reaper) takes a few seconds to start and register
+its JACK ports. The GM reconciler runs on a timer and will create links
+automatically when the ports appear. Wait 5-10 seconds, then verify.
 
 If links are still missing:
 
 ```bash
-# Check GM status
-echo '{"cmd":"status"}' | nc -q1 127.0.0.1 4002
+# Check GM state
+echo '{"cmd":"get_state"}' | nc -w2 127.0.0.1 4002
 
 # Manual link creation (fallback)
 pw-link <source-port> <sink-port>
@@ -186,10 +134,9 @@ Common causes:
 
 ## Cross-References
 
-- `docs/operations/pre-flight-checklist.md` -- Full verification checklists per mode
-- `docs/operations/safety.md` -- Safety constraints
-- US-085 -- Automated mode switching (deferred)
-- US-165 -- Story tracking this procedure
-- US-158 -- GM manages ada8200-in lifecycle per mode
-- US-162 -- Reaper systemd service
-- US-157 -- Mixxx systemd service
+- `docs/operations/pre-flight-checklist.md` — Full verification checklists per mode
+- `docs/operations/safety.md` — Safety constraints
+- US-085 — Clean GM-native app lifecycle (deferred, future)
+- US-165 — Story tracking mode switching procedure
+- US-157 — Mixxx systemd service
+- US-162 — Reaper systemd service

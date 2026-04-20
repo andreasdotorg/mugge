@@ -38,6 +38,7 @@
     ./services/web-ui.nix
     ./services/mixxx.nix
     ./services/reaper.nix
+    ./services/mode-switch.nix
     # Production defaults: enables all services with correct parameters
     ./production.nix
   ];

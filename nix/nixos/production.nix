@@ -107,6 +107,10 @@
   # Enabled but NOT auto-started — manual: systemctl --user start pi4audio-reaper
   services.pi4audio.reaper.enable = true;
 
+  # ── Mode Switch ────────────────────────────────────────────────
+  # Provides pi4audio-mode-switch command for automated DJ↔Live transitions.
+  services.pi4audio.mode-switch.enable = true;
+
   # ── Web UI ───────────────────────────────────────────────────────
   services.pi4audio.web-ui = {
     enable = true;
