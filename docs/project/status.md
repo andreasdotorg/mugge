@@ -13,9 +13,10 @@ than CamillaDSP on Pi 4B ARM (1.70% vs 5.23% at comparable buffer sizes). First
 successful PW-native DJ session (GM-12): 40+ minutes, zero xruns, 58% idle, 71C.
 
 **US-072 (NixOS Build) deployed.** Pi running NixOS with PREEMPT_RT 6.12.62, PipeWire
-1.6.2 at SCHED_FIFO/88, Mixxx auto-launch, GM auto-linking. DJ parity with Debian
+1.6.2 at SCHED_FIFO/88, Mixxx at FIFO/70, GM auto-linking. DJ parity with Debian
 baseline achieved (all gaps closed except G-02 hardware controller verification).
-F-295 xrun clicks resolved (period-num 4→5, 94% ERR reduction).
+F-295 xrun clicks resolved (period-num 4→5, 94% ERR reduction). F-296 Mixxx thread
+scheduling resolved (FIFO/70 via systemd). Gig sprint active (US-160-168).
 
 ## Active Work
 
@@ -25,6 +26,15 @@ F-295 xrun clicks resolved (period-num 4→5, 94% ERR reduction).
 | US-156 | DEPLOYED | Static route persistence (NixOS) | Done. dhcpcd exit hook deployed, route survives reboot. |
 | US-157 | DEPLOYED | Mixxx auto-launch NixOS service | Done. pw-jack mixxx, labwc autostart, tmpfiles config seeding. |
 | US-158 | ready | GM manages ada8200-in lifecycle per mode | Graph hygiene improvement, not F-295 fix. |
+| US-160 | READY | Hercules DJControl Mix Ultra verification | Hardware not plugged in (G-02). |
+| US-161 | DONE | Mixxx xrun elimination (F-296 FIFO/70) | Commit `87e4ab96`. All threads at RT. |
+| US-162 | DONE | Reaper systemd user service | Commit `5eccdaf5`. Manual start, pw-jack, FIFO/70. |
+| US-163 | READY | ADA8200 capture adapter re-enable | Live mode prerequisite. |
+| US-164 | READY | Live mode E2E verification | Depends US-162, US-163. |
+| US-165 | DONE (doc) | Mode switching DJ↔Live procedure | `docs/operations/mode-switching.md` drafted. |
+| US-166 | IN PROGRESS | USBStreamer residual ERR assessment | Longer pw-top observation pending. |
+| US-167 | DONE (doc) | Pre-flight checklist | `docs/operations/pre-flight-checklist.md` drafted. |
+| US-168 | READY | Room correction dry run | Nice-to-have. |
 | US-072 | DEPLOYED | NixOS reproducible build | SD card image deployed on Pi. DJ parity achieved. |
 | US-075 | COMPLETE | Local PW integration test env | Done. 35 E2E production-replica tests. |
 | US-113 | IN PROGRESS (PR #22) | First-boot active config + FoH passthrough | Real-stack E2E still required (L-QE-002). |
@@ -53,7 +63,9 @@ F-295 xrun clicks resolved (period-num 4→5, 94% ERR reduction).
 | level-bridge | deployed | Browser-side level metering |
 | Web UI platform | Stage 1+2 deployed | Dashboard, spectrum, config tab, graph viz. HTTPS (D-032) |
 | Room correction pipeline | done (TK-071) | 13 DSP modules. Bose profiles measured |
-| Mixxx auto-launch | deployed | US-157: pw-jack mixxx systemd user service, labwc autostart, tmpfiles seeding |
+| Mixxx auto-launch | deployed | US-157: pw-jack mixxx systemd user service, FIFO/70 (F-296), labwc autostart, tmpfiles seeding |
+| Reaper service | committed | US-162: pw-jack reaper systemd user service, FIFO/70, manual start only |
+| Operational docs | drafted | Pre-flight checklist (US-167), mode switching procedure (US-165) |
 | Core software | installed | PipeWire 1.6.2 (US-128), Mixxx 2.5.0, Reaper 7.64, wayvnc |
 | Platform security | partial | Firewall active, SSH hardened. PipeWire at FIFO/88 (F-291 three-part fix). |
 | GitHub Actions CI | merged | Two parallel jobs, Nix store caching. Branch protection on main. |
@@ -78,6 +90,8 @@ F-295 xrun clicks resolved (period-num 4→5, 94% ERR reduction).
 | US-109 | Playwright MCP integration | 2026-03-29 |
 | US-156 | Static route persistence (NixOS) | 2026-04-19 |
 | US-157 | Mixxx auto-launch NixOS service | 2026-04-19 |
+| US-161 | Mixxx xrun elimination — FIFO/70 (F-296) | 2026-04-20 |
+| US-162 | Reaper systemd user service | 2026-04-20 |
 
 ## Deferred / Cancelled
 
@@ -98,7 +112,8 @@ F-295 xrun clicks resolved (period-num 4→5, 94% ERR reduction).
 | ~~F-294~~ | ~~Medium~~ | ~~RESOLVED (session 16): local-demo.sh policy.standard=disabled removed (D-065 alignment).~~ |
 | ~~F-295~~ | ~~High~~ | ~~RESOLVED (session 16): USBStreamer period-num 4→5, 94% ERR reduction (16/min→1/min).~~ |
 | F-288 | Medium | disko uses MBR partition table — Pi 4 supports GPT with 2024+ EEPROM. Research complete, migration pending. |
-| F-289 | Medium | /boot/firmware mount has `noauto` — blocks firmware updates. Fix committed (sprint branch). |
+| ~~F-296~~ | ~~High~~ | ~~RESOLVED (session 16): Mixxx JACK bridge threads at SCHED_OTHER — fix: FIFO/70 via systemd CPUSchedulingPolicy.~~ |
+| ~~F-289~~ | ~~Medium~~ | ~~RESOLVED (session 16): /boot/firmware noauto removed — firmware updates no longer silently skipped.~~ |
 | F-293 | Medium | NoNewPrivileges in graph-manager, signal-gen, pcm-bridge, level-bridge units. |
 | F-037 | High | Web UI no auth — converted to US-110 (ready, blocked on D-060 implementation) |
 | F-222 | High | Zombie process accumulation in container dev environment (PID 1 = sleep infinity) |
@@ -129,13 +144,13 @@ F-295 xrun clicks resolved (period-num 4→5, 94% ERR reduction).
 
 | Metric | Value |
 |--------|-------|
-| Sprint branch commits (session 16) | 40 (sprint/session-16 branch, PR #40 open) |
-| Total stories filed | 158 (US-155-158 filed session 15/16) |
-| Stories deployed (session 16) | US-156, US-157 (+ US-072 fully operational) |
-| Defects resolved (session 15/16) | 4 (F-291, F-292, F-294, F-295) |
+| Sprint branch commits (session 16) | 53 (sprint/session-16 branch, PR #40 open) |
+| Total stories filed | 168 (US-159-168 filed session 16 gig sprint) |
+| Stories completed (session 16) | US-156, US-157, US-161, US-162, US-165 (doc), US-167 (doc) |
+| Defects resolved (session 15/16) | 6 (F-289, F-291, F-292, F-294, F-295, F-296) |
 | Open defects (HIGH+) | 4 (F-187, F-037, F-222, F-244) |
-| Open defects (Medium) | ~10 (F-288, F-289, F-293, F-234, F-237, F-016, F-013, F-246, F-039) |
-| Total defects filed | 295 (F-288-F-295 filed session 15/16) |
+| Open defects (Medium) | ~9 (F-288, F-293, F-234, F-237, F-016, F-013, F-246, F-039, F-290) |
+| Total defects filed | 296 (F-296 filed session 16) |
 | DJ parity gaps | 6/7 closed (G-02 hardware controller pending) |
 | E2E tests (local-demo) | 139 pass, 23 skip, 2 xfail, 0 fail |
 | PW convolver CPU (q1024) | 1.70% |
@@ -196,13 +211,33 @@ through D-066). Most significant recent decisions:
 11. **Architecture docs updated** — D-065 + F-295 changes reflected in rt-audio-stack.md.
 12. **New tests** — Smoke test for generate-crossover-coeffs.py, schema validation for
     speaker profiles/identities. E2E baseline: 139 pass.
+13. **F-296 RESOLVED** — Mixxx JACK bridge threads at SCHED_OTHER due to NNP blocking
+    mod.rt. Fix: CPUSchedulingPolicy=fifo/70 in Mixxx systemd service (commit `87e4ab96`).
+    All Mixxx threads (.mixxx-wrapped, pw-Mixxx, QDBusConnection, WaylandEventThr,
+    LibraryScanner) now at FIFO/70.
+14. **US-162 DONE** — Reaper systemd user service (commit `5eccdaf5`). Manual start only,
+    pw-jack reaper, FIFO/70, VLC stub override, PipeWire readiness probe.
+15. **US-167 DONE** — Pre-flight checklist for gig deployment drafted
+    (`docs/operations/pre-flight-checklist.md`). 7 sections: power-on, audio stack,
+    DJ mode, live mode, safety, monitoring, teardown.
+16. **US-165 DONE** — Manual mode switching procedure drafted
+    (`docs/operations/mode-switching.md`). DJ→Live and Live→DJ step-by-step with
+    verification commands.
+17. **F-289 RESOLVED** — /boot/firmware `noauto` mount option removed. Firmware
+    activation script can now update VideoCore blobs and config.txt.
+18. **Gig sprint planned** — US-160 through US-168 filed. PM sprint plan active.
+    2-week timeline targeting gig readiness.
+19. **Indexes updated** — defects-index.md backfilled F-248-F-296 (44 entries),
+    stories-index.md backfilled US-115-US-168 (54 entries).
 
 ### Sprint Branch (sprint/session-16)
 
-40 commits on `sprint/session-16` branch. PR #40 open. Includes: F-291/F-292/F-294/F-295
-fixes, US-155/US-156/US-157 implementation, pcm-bridge fix, architecture doc updates,
-crossover smoke test, schema validation tests, labwc window rules, Mixxx config seeding,
-Debian Pi baseline audit, and documentation.
+53 commits on `sprint/session-16` branch. PR #40 open. Includes: F-289/F-291/F-292/F-294/
+F-295/F-296 fixes, US-155/US-156/US-157/US-161/US-162 implementation, US-165/US-167
+operational docs, pcm-bridge fix, architecture doc updates, crossover smoke test, schema
+validation tests, labwc window rules, Mixxx config seeding, Reaper service, gig sprint
+stories (US-159-168), Debian Pi baseline audit, defects/stories index backfill, and
+documentation.
 
 ### PRs Merged This Session
 
@@ -215,10 +250,10 @@ Debian Pi baseline audit, and documentation.
 - IP: 192.168.178.35 (NixOS)
 - Kernel: PREEMPT_RT 6.12.62+rpt-rpi-v8-rt
 - PipeWire: 1.6.2 at SCHED_FIFO/88
+- Mixxx: SCHED_FIFO/70, auto-launching (F-296 fix deployed)
 - Quantum: 1024 (DJ mode)
 - USBStreamer: period-num=5
-- Mixxx: auto-launching, playing looping track
-- ERR rate: ~1/min at q1024
+- ERR rate: ~1/min USBStreamer, Mixxx ~2.3/min (longer observation pending US-166)
 - PA: OFF (confirmed by owner)
 
 ## Session 9 Summary (2026-04-02)
