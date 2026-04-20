@@ -51,7 +51,9 @@
   fileSystems."/boot/firmware" = lib.mkForce {
     device = "/dev/disk/by-label/FIRMWARE";
     fsType = "vfat";
-    options = [ "nofail" "noauto" ];
+    # F-289: noauto removed — partition must be mounted for firmware.nix
+    # activation script to update firmware files during nixos-rebuild.
+    options = [ "nofail" ];
   };
 
   disko.devices.disk.main = {
@@ -78,7 +80,7 @@
             # F-273: Filesystem label matching repart-image.nix.
             extraArgs = [ "-n" "FIRMWARE" ];
             mountpoint = "/boot/firmware";
-            mountOptions = [ "nofail" "noauto" ];
+            mountOptions = [ "nofail" ];
           };
         }
 
