@@ -49,11 +49,13 @@ in
         Restart = "on-failure";
         RestartSec = 5;
 
-        # RT scheduling: FIFO/70 set by systemd at exec time (before NNP).
-        # pw-Reaper JACK bridge threads inherit RT from parent process.
-        # Priority 70: below PipeWire (88) and GraphManager (80).
-        CPUSchedulingPolicy = "fifo";
-        CPUSchedulingPriority = 70;
+        # RT scheduling: let PipeWire's mod.rt promote only the data-loop
+        # thread to FIFO/83. All other threads (GUI, Wayland, D-Bus) stay
+        # at SCHED_OTHER where CFS balances them fairly.
+        # Blanket CPUSchedulingPolicy=fifo promoted ALL threads to the same
+        # FIFO priority — causing priority inversion (F-296).
+        LimitRTPRIO = 88;
+        LimitMEMLOCK = "infinity";
 
         # Reaper needs GPU access (hardware V3D GL) and Wayland display.
         # No security hardening — GUI application with broad system access.
