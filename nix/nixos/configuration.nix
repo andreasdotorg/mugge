@@ -209,5 +209,6 @@
   environment.systemPackages = with pkgs; [
     vim
     htop
+    alsa-utils
   ];
 }
