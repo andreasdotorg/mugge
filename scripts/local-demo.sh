@@ -200,12 +200,15 @@ context.properties = {
 }
 EOF
 
-    # WirePlumber: node activation only, no linking policy (F-210).
+    # WirePlumber: node activation only, no linking policy (D-065, F-294).
+    # Two-layer anti-bypass: node.autoconnect=false (above) prevents WP from
+    # auto-linking; GM reconciler cleans up any stale links.
+    # policy.standard is NOT disabled — D-065 found that disabling it prevents
+    # WP from activating nodes and negotiating formats (F-292 class issue).
     mkdir -p "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d"
     cat > "$XDG_CONFIG_DIR/wireplumber/wireplumber.conf.d/90-local-demo-policy.conf" << 'EOF'
 wireplumber.profiles = {
   main = {
-    policy.standard = disabled
     policy.node = required
     support.standard-event-source = required
   }
