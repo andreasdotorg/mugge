@@ -63,6 +63,12 @@ in
         Restart = "on-failure";
         RestartSec = 5;
 
+        # RT scheduling: FIFO/70 set by systemd at exec time (before NNP).
+        # pw-Mixxx JACK bridge threads inherit RT from parent process.
+        # Priority 70: below PipeWire (88) and GraphManager (80).
+        CPUSchedulingPolicy = "fifo";
+        CPUSchedulingPriority = 70;
+
         # Mixxx needs GPU access (hardware V3D GL) and Wayland display.
         # No security hardening — GUI application with broad system access.
       };
